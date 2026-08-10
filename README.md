@@ -16,6 +16,8 @@ The compiler handles:
 - `lambda` (closures that self-bind arguments to an environment)
 - Standard primitives (`cons`, `car`, `cdr`, `eq`, `atom`)
 
+[View Test Results](test_results.md)
+
 ### Build and Run
 
 ```bash
@@ -35,6 +37,8 @@ cargo run -- path/to/source.my
 - `lambda` (замикання, які самостійно прив'язують аргументи до середовища)
 - Стандартні примітиви (`cons`, `car`, `cdr`, `eq`, `atom`)
 
+[Переглянути результати тестів](test_results.md)
+
 ### Збірка та Запуск
 
 ```bash
@@ -53,6 +57,8 @@ Der Compiler verarbeitet:
 - `cond` (Verzweigungslogik, kompiliert zu `JF`/`JMP`)
 - `lambda` (Closures, die ihre Argumente selbst an eine Umgebung binden)
 - Standardprimitiven (`cons`, `car`, `cdr`, `eq`, `atom`)
+
+[Testergebnisse anzeigen](test_results.md)
 
 ### Erstellen und Ausführen
 
