@@ -1,2 +1,1 @@
-(cond (t 'a) (nil 'b))
-(lambda (x y) (cons x y))
+(atom '(radio antenna))

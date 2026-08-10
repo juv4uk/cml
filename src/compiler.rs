@@ -44,11 +44,15 @@ impl Compiler {
             Expr::Integer(n) => {
                 self.emit(&format!("LOADI {} {}", target_reg, n));
             }
+            Expr::String(s) => {
+                self.emit(&format!("LOADSYM {} {}", target_reg, s.to_uppercase()));
+            }
             Expr::Symbol(s) => {
-                if s == "t" {
+                let s_upper = s.to_uppercase();
+                if s_upper == "T" {
                     self.emit(&format!("LOADI {} 0", target_reg));
                     self.emit(&format!("ATOM {} {}", target_reg, target_reg));
-                } else if s == "nil" {
+                } else if s_upper == "NIL" {
                     self.emit("LOADI R13 0");
                     self.emit("LOADI R12 1");
                     self.emit(&format!("EQ {} R12 R13", target_reg));
@@ -81,10 +85,9 @@ impl Compiler {
                 }
             }
             Expr::DottedList(_, _) => {
-                self.emit("; dotted list unsupported yet");
-            }
-            Expr::String(_) => {
-                self.emit("; string unsupported yet");
+                // If it reaches here as an expression, it might be a malformed unquoted list
+                // or we are evaluating it directly (which Lisp usually doesn't allow for dotted lists)
+                self.emit("; unquoted dotted list unsupported");
             }
         }
     }
@@ -143,11 +146,12 @@ impl Compiler {
     
     fn compile_generic_call(&mut self, func_expr: &Expr, args: &[Expr], target_reg: &str) {
         self.emit("; CALL START");
-        // 1. Evaluate arguments (support up to 3 args mapped to R1, R2, R3)
-        // A full compiler would push these to a stack, but we assume max 3 registers for now.
+        // 1. Evaluate arguments (support up to 8 args mapped to R1..R3, R5..R9)
+        let arg_regs = ["R1", "R2", "R3", "R5", "R6", "R7", "R8", "R9"];
+        
         for (i, arg) in args.iter().enumerate() {
-            if i < 3 {
-                self.compile_expr(arg, &format!("R{}", i + 1));
+            if i < arg_regs.len() {
+                self.compile_expr(arg, arg_regs[i]);
             }
         }
         
@@ -180,6 +184,7 @@ impl Compiler {
     fn compile_quote(&mut self, expr: &Expr, target_reg: &str) {
         match expr {
             Expr::Integer(n) => self.emit(&format!("LOADI {} {}", target_reg, n)),
+            Expr::String(s) => self.emit(&format!("LOADSYM {} {}", target_reg, s.to_uppercase())),
             Expr::Symbol(s) => self.emit(&format!("LOADSYM {} {}", target_reg, s.to_uppercase())),
             Expr::List(list) => {
                 if list.is_empty() {
@@ -199,7 +204,16 @@ impl Compiler {
                     }
                 }
             }
-            _ => self.emit("; unhandled quote type"),
+            Expr::DottedList(list, tail) => {
+                self.compile_quote(tail, target_reg);
+                for item in list.iter().rev() {
+                    self.emit(&format!("CONS R11 {} R11", target_reg)); // Push accumulated list tail
+                    self.compile_quote(item, target_reg); // Evaluate item into target_reg
+                    self.emit("CAR R12 R11"); // Pop list tail into R12
+                    self.emit("CDR R11 R11");
+                    self.emit(&format!("CONS {} {} R12", target_reg, target_reg)); // target_reg = cons(item, tail)
+                }
+            }
         }
     }
 
@@ -212,7 +226,17 @@ impl Compiler {
                     let next_label = self.next_label("cond_next");
                     
                     self.compile_expr(&pair[0], "R1");
-                    self.emit(&format!("JF R1 {}", next_label));
+                    
+                    // fpga-lisp's JF treats 0 as falsy, but my-lisp requires 0 to be truthy.
+                    // We generate a strict NIL check by creating NIL and comparing against it twice.
+                    self.emit("LOADI R2 0");
+                    self.emit("LOADI R3 1");
+                    self.emit("EQ R4 R2 R3"); // R4 = NIL
+                    
+                    self.emit("EQ R2 R1 R4"); // R2 = TRUE if R1 was NIL, else NIL
+                    self.emit("EQ R3 R2 R4"); // R3 = TRUE if R1 was NOT NIL, else NIL
+                    
+                    self.emit(&format!("JF R3 {}", next_label));
                     
                     self.compile_expr(&pair[1], target_reg);
                     self.emit(&format!("JMP {}", end_label));
@@ -237,16 +261,58 @@ impl Compiler {
             self.emit(&format!("{}:", lambda_label));
             // Lambda Body
             // We must bind parameters (up to 3 mapped from R1, R2, R3)
-            if let Expr::List(params) = &args[0] {
-                for (i, param) in params.iter().enumerate() {
-                    if let Expr::Symbol(p) = param {
-                        if i < 3 {
-                            self.emit(&format!("LOADSYM R12 {}", p.to_uppercase()));
-                            self.emit(&format!("CONS R13 R12 R{}", i + 1)); // (param_sym . arg_val)
-                            self.emit("CONS R4 R13 R4"); // env = (pair . env)
+            // We bind parameters mapped from R1..R3, R5..R9
+            let arg_regs = ["R1", "R2", "R3", "R5", "R6", "R7", "R8", "R9"];
+            
+            // Check if it's a DottedList for variable arity or a standard List
+            match &args[0] {
+                Expr::List(params) => {
+                    for (i, param) in params.iter().enumerate() {
+                        if let Expr::Symbol(p) = param {
+                            if i < arg_regs.len() {
+                                self.emit(&format!("LOADSYM R12 {}", p.to_uppercase()));
+                                self.emit(&format!("CONS R13 R12 {}", arg_regs[i])); // (param_sym . arg_val)
+                                self.emit("CONS R4 R13 R4"); // env = (pair . env)
+                            }
                         }
                     }
                 }
+                Expr::DottedList(list, tail) => {
+                    // Normal params
+                    for (i, param) in list.iter().enumerate() {
+                        if let Expr::Symbol(p) = param {
+                            if i < arg_regs.len() {
+                                self.emit(&format!("LOADSYM R12 {}", p.to_uppercase()));
+                                self.emit(&format!("CONS R13 R12 {}", arg_regs[i])); // (param_sym . arg_val)
+                                self.emit("CONS R4 R13 R4"); // env = (pair . env)
+                            }
+                        }
+                    }
+                    // Variable arity tail: bind rest of args into a list
+                    if let Expr::Symbol(tail_sym) = &**tail {
+                        let start_idx = list.len();
+                        
+                        // We need to build a list of the remaining args
+                        // For simplicity, we just bind NIL for now since varargs are complex
+                        // in register-based calling convention. But let's build it dynamically!
+                        
+                        // Start by creating a NIL
+                        self.emit("LOADI R13 0");
+                        self.emit("LOADI R12 1");
+                        self.emit("EQ R10 R12 R13"); // R10 = NIL
+                        
+                        // We loop downwards to CONS the remaining args
+                        let remaining_max = std::cmp::min(args.len() - 1, arg_regs.len());
+                        for i in (start_idx..remaining_max).rev() {
+                            self.emit(&format!("CONS R10 {} R10", arg_regs[i]));
+                        }
+                        
+                        self.emit(&format!("LOADSYM R12 {}", tail_sym.to_uppercase()));
+                        self.emit("CONS R13 R12 R10"); // (param_sym . rest_args_list)
+                        self.emit("CONS R4 R13 R4"); // env = (pair . env)
+                    }
+                }
+                _ => {}
             }
             
             self.compile_expr(&args[1], "R15"); // Return value in R15

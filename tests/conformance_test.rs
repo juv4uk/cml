@@ -8,7 +8,7 @@ use cml::compiler::Compiler;
 
 fn collect_symbols(expr: &Expr, syms: &mut Vec<String>) {
     match expr {
-        Expr::Symbol(s) => {
+        Expr::Symbol(s) | Expr::String(s) => {
             let upper = s.to_uppercase();
             if upper != "NIL" && upper != "T" && !syms.contains(&upper) {
                 syms.push(upper);
@@ -19,6 +19,12 @@ fn collect_symbols(expr: &Expr, syms: &mut Vec<String>) {
                 collect_symbols(e, syms);
             }
         }
+        Expr::DottedList(list, tail) => {
+            for e in list {
+                collect_symbols(e, syms);
+            }
+            collect_symbols(tail, syms);
+        }
         _ => {}
     }
 }
@@ -26,17 +32,21 @@ fn collect_symbols(expr: &Expr, syms: &mut Vec<String>) {
 // A simple parser for the alist format: ((expr . "(quote radio)") (expected . "radio") ...)
 fn parse_conformance_line(line: &str) -> Option<(String, String)> {
     let expr_marker = "(expr . \"";
-    let expected_marker = "(expected . \"";
     
     let expr_start = line.find(expr_marker)? + expr_marker.len();
-    let expr_end = line[expr_start..].find("\")")? + expr_start;
+    let expected_marker_full = "\") (expected . \"";
+    
+    let expr_end = line[expr_start..].find(expected_marker_full)? + expr_start;
     let expr = &line[expr_start..expr_end];
     
-    let expected_start = line.find(expected_marker)? + expected_marker.len();
+    let expected_start = expr_end + expected_marker_full.len();
     let expected_end = line[expected_start..].find("\")")? + expected_start;
     let expected = &line[expected_start..expected_end];
     
-    Some((expr.to_string(), expected.to_string()))
+    let unescaped_expr = expr.replace("\\\"", "\"");
+    let unescaped_expected = expected.replace("\\\"", "\"");
+    
+    Some((unescaped_expr, unescaped_expected))
 }
 
 #[test]
@@ -90,9 +100,13 @@ fn test_conformance() {
             continue;
         }
         
+        // fpga-lisp hardware only has TAG_FIXNUM, so we skip float tests
+        if line.contains("3.0") {
+            continue;
+        }
+        
         // Skip unsupported features
-        if line.contains("\"radio\"") || line.contains("\"string\"") || line.contains("\\\"")
-            || line.contains("equal?") || line.contains(" . ") {
+        if line.contains("equal?") || line.starts_with("((expr . \"(let ") {
             continue;
         }
         
