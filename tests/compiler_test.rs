@@ -115,3 +115,86 @@ fn test_compile_quoted_list() {
     
     run_assembler(&asm, "test_quoted_list");
 }
+
+#[test]
+fn test_end_to_end_execution() {
+    let code = "((lambda (x) x) 'test)";
+    let exprs = parser::parse(code).unwrap();
+    let mut compiler = Compiler::new();
+    let asm = compiler.compile(&exprs);
+
+    let mut full_asm = String::new();
+    // Prepend basic symbols
+    full_asm.push_str(".define NIL 0\n");
+    full_asm.push_str(".define TRUE 1\n");
+    full_asm.push_str(".define X 4\n");
+    full_asm.push_str(".define TEST 7\n");
+    full_asm.push_str(&asm);
+
+    let test_name = "cml_e2e";
+    let asm_path = format!("{}.asm", test_name);
+    fs::write(&asm_path, full_asm).unwrap();
+
+    // 1. Assemble to cml_e2e.bin
+    let asm_output = Command::new("python")
+        .arg("../fpga-lisp/assembler.py")
+        .arg(&asm_path)
+        .output()
+        .expect("Failed to run python assembler");
+
+    if !asm_output.status.success() {
+        let stderr = String::from_utf8_lossy(&asm_output.stderr);
+        let stdout = String::from_utf8_lossy(&asm_output.stdout);
+        panic!("Assembler failed:\nSTDOUT: {}\nSTDERR: {}", stdout, stderr);
+    }
+
+    // 2. Compile simulation testbench with iverilog
+    let fpga_sim_dir = "../fpga-lisp";
+    let iv_output = Command::new("iverilog")
+        .current_dir(fpga_sim_dir)
+        .arg("-g2012")
+        .arg("-I").arg("fpga/rtl")
+        .arg("-o").arg("tb_cml_e2e.vvp")
+        .arg("fpga/rtl/lisp_word.sv")
+        .arg("fpga/rtl/heap.sv")
+        .arg("fpga/rtl/lisp_data_unit.sv")
+        .arg("fpga/rtl/registers.sv")
+        .arg("fpga/rtl/instruction_decoder.sv")
+        .arg("fpga/rtl/control.sv")
+        .arg("fpga/rtl/uart.sv")
+        .arg("fpga/rtl/bootloader.sv")
+        .arg("fpga/rtl/lisp_machine.sv")
+        .arg("fpga/sim/tb_cml_e2e.sv")
+        .output()
+        .expect("Failed to run iverilog");
+
+    if !iv_output.status.success() {
+        let stderr = String::from_utf8_lossy(&iv_output.stderr);
+        let stdout = String::from_utf8_lossy(&iv_output.stdout);
+        panic!("Icarus Verilog compilation failed:\nSTDOUT: {}\nSTDERR: {}", stdout, stderr);
+    }
+
+    // Move the generated cml_e2e.bin to the fpga-lisp folder so the testbench can find it
+    let bin_path = format!("{}.bin", test_name);
+    let target_bin = format!("{}/{}", fpga_sim_dir, bin_path);
+    fs::copy(&bin_path, &target_bin).expect("Failed to copy .bin");
+
+    // 3. Run simulation with vvp
+    let vvp_output = Command::new("vvp")
+        .current_dir(fpga_sim_dir)
+        .arg("tb_cml_e2e.vvp")
+        .output()
+        .expect("Failed to run vvp");
+
+    let stdout = String::from_utf8_lossy(&vvp_output.stdout);
+    
+    // Clean up
+    let _ = fs::remove_file(asm_path);
+    let _ = fs::remove_file(bin_path);
+    let _ = fs::remove_file(target_bin);
+    let _ = fs::remove_file(format!("{}/tb_cml_e2e.vvp", fpga_sim_dir));
+
+    if !stdout.contains("CML E2E PASSED") {
+        panic!("E2E Simulation failed or did not print PASSED.\nSTDOUT:\n{}", stdout);
+    }
+}
