@@ -1,7 +1,5 @@
-pub mod ast;
-pub mod parser;
-pub mod compiler;
-
+use cml::parser;
+use cml::compiler::Compiler;
 use std::env;
 use std::fs;
 
@@ -11,24 +9,17 @@ fn main() {
         eprintln!("Usage: cml <file.my>");
         std::process::exit(1);
     }
-
+    
     let filename = &args[1];
-    let code = match fs::read_to_string(filename) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Error reading file {}: {}", filename, e);
+    let contents = fs::read_to_string(filename)
+        .unwrap_or_else(|err| {
+            eprintln!("Error reading file {}: {}", filename, err);
             std::process::exit(1);
-        }
-    };
-
-    match parser::parse(&code) {
-        Ok(exprs) => {
-            let mut comp = compiler::Compiler::new();
-            let asm = comp.compile(&exprs);
-            println!("{}", asm);
-        }
-        Err(e) => {
-            eprintln!("Parse error: {:?}", e);
-        }
-    }
+        });
+        
+    let exprs = parser::parse(&contents).unwrap();
+    let mut compiler = Compiler::new();
+    let asm = compiler.compile(&exprs);
+    
+    println!("{}", asm);
 }
