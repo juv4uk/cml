@@ -12,11 +12,18 @@ This approach bypasses the runtime interpretation overhead and allows complex pr
 
 The compiler handles:
 - Variables (via compile-time environment lookup injection)
-- `cond` (branching logic compiled to `JF`/`JMP`)
+- `cond` (branching logic compiled to `JF`/`RET`)
 - `lambda` (closures that self-bind arguments to an environment)
 - Standard primitives (`cons`, `car`, `cdr`, `eq`, `atom`)
+- Quoted lists (`'(a b c)`)
+- Call Stack (`R11` software stack for environment and link preservation)
 
 [View Test Results](test_results.md)
+
+### Related Repositories
+- [fpga-lisp](https://github.com/juv4uk/fpga-lisp): The hardware architecture and assembler.
+- [my-lisp](https://github.com/juv4uk/my-lisp): The Lisp dialect.
+- [cml](https://github.com/juv4uk/cml): This compiler.
 
 ### Build and Run
 
@@ -33,11 +40,18 @@ cargo run -- path/to/source.my
 
 Компілятор підтримує:
 - Змінні (через ін'єкцію пошуку в середовищі на етапі компіляції)
-- `cond` (логіка розгалуження, скомпільована в `JF`/`JMP`)
+- `cond` (логіка розгалуження, скомпільована в `JF`/`RET`)
 - `lambda` (замикання, які самостійно прив'язують аргументи до середовища)
 - Стандартні примітиви (`cons`, `car`, `cdr`, `eq`, `atom`)
+- Списки з квотуванням (Quoted lists, `'(a b c)`)
+- Стек викликів (програмний стек `R11` для збереження середовища та адреси повернення)
 
 [Переглянути результати тестів](test_results.md)
+
+### Пов'язані репозиторії
+- [fpga-lisp](https://github.com/juv4uk/fpga-lisp): Апаратна архітектура та асемблер.
+- [my-lisp](https://github.com/juv4uk/my-lisp): Діалект Lisp.
+- [cml](https://github.com/juv4uk/cml): Цей компілятор.
 
 ### Збірка та Запуск
 
@@ -54,11 +68,18 @@ Dieser Ansatz umgeht den Overhead der Laufzeitinterpretation und ermöglicht es,
 
 Der Compiler verarbeitet:
 - Variablen (über beim Kompilieren injiziertes Umgebungs-Lookup)
-- `cond` (Verzweigungslogik, kompiliert zu `JF`/`JMP`)
+- `cond` (Verzweigungslogik, kompiliert zu `JF`/`RET`)
 - `lambda` (Closures, die ihre Argumente selbst an eine Umgebung binden)
 - Standardprimitiven (`cons`, `car`, `cdr`, `eq`, `atom`)
+- Zitierte Listen (`'(a b c)`)
+- Aufrufstapel (`R11` Software-Stack für Umgebungs- und Rücksprungadressenspeicherung)
 
 [Testergebnisse anzeigen](test_results.md)
+
+### Verwandte Repositories
+- [fpga-lisp](https://github.com/juv4uk/fpga-lisp): Die Hardwarearchitektur und Assembler.
+- [my-lisp](https://github.com/juv4uk/my-lisp): Der Lisp-Dialekt.
+- [cml](https://github.com/juv4uk/cml): Dieser Compiler.
 
 ### Erstellen und Ausführen
 
