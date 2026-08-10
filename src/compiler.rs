@@ -22,8 +22,10 @@ impl Compiler {
 
     pub fn compile(&mut self, exprs: &[Expr]) -> String {
         // Initialize R4 (ENV) and R11 (Stack) to NIL at program start
-        self.emit("LOADSYM R4 NIL");
-        self.emit("LOADSYM R11 NIL");
+        self.emit("LOADI R13 0");
+        self.emit("LOADI R12 1");
+        self.emit("EQ R4 R12 R13"); // R4 = NIL
+        self.emit("MOV R11 R4"); // R11 = NIL
         
         for expr in exprs {
             self.compile_expr(expr, "R15");
@@ -44,9 +46,12 @@ impl Compiler {
             }
             Expr::Symbol(s) => {
                 if s == "t" {
-                    self.emit(&format!("LOADSYM {} TRUE", target_reg));
+                    self.emit(&format!("LOADI {} 0", target_reg));
+                    self.emit(&format!("ATOM {} {}", target_reg, target_reg));
                 } else if s == "nil" {
-                    self.emit(&format!("LOADSYM {} NIL", target_reg));
+                    self.emit("LOADI R13 0");
+                    self.emit("LOADI R12 1");
+                    self.emit(&format!("EQ {} R12 R13", target_reg));
                 } else {
                     // Variable lookup
                     self.used_lookup = true;
@@ -65,7 +70,9 @@ impl Compiler {
             }
             Expr::List(list) => {
                 if list.is_empty() {
-                    self.emit(&format!("LOADSYM {} NIL", target_reg));
+                    self.emit("LOADI R13 0");
+                    self.emit("LOADI R12 1");
+                    self.emit(&format!("EQ {} R12 R13", target_reg));
                 } else if let Expr::Symbol(func) = &list[0] {
                     self.compile_call(func, &list[1..], target_reg);
                 } else {
@@ -176,9 +183,13 @@ impl Compiler {
             Expr::Symbol(s) => self.emit(&format!("LOADSYM {} {}", target_reg, s.to_uppercase())),
             Expr::List(list) => {
                 if list.is_empty() {
-                    self.emit(&format!("LOADSYM {} NIL", target_reg));
+                    self.emit("LOADI R13 0");
+                    self.emit("LOADI R12 1");
+                    self.emit(&format!("EQ {} R12 R13", target_reg));
                 } else {
-                    self.emit(&format!("LOADSYM {} NIL", target_reg));
+                    self.emit("LOADI R13 0");
+                    self.emit("LOADI R12 1");
+                    self.emit(&format!("EQ {} R12 R13", target_reg));
                     for item in list.iter().rev() {
                         self.emit(&format!("CONS R11 {} R11", target_reg)); // Push accumulated list tail
                         self.compile_quote(item, target_reg); // Evaluate item into target_reg
