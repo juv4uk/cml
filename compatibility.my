@@ -12,8 +12,9 @@
             (tested-sha . "36738759f281991646c45487ae6722fea561ea2b")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
  (supported . (integer symbol nil true quote proper-list dotted-list
-               cond lambda application cons car cdr eq atom equal? defmacro
+               cond lambda application cons car cdr eq atom defmacro
                let-as-lambda-lowering variadic-up-to-eight-arguments))
+ (known-broken . (equal?))
  (representational-substitutions . ((source-string . target-symbol)))
  (conformance . ((tier-1 . partial)
                  (tier-1-fixtures-tagged . 35)
@@ -38,8 +39,12 @@
             (implementation . "cml_equal in src/compiler.rs")
             (algorithm . worklist-on-r11-no-call-ret-recursion)
             (rationale . "avoids depending on the still-unverified letrec/self-referential-closure mechanism (fpga-lisp plan item 24)")
-            (example . "(equal? '(p . 0) (cons 'p 0)) => TRUE")))
- (verification . ((equal? . ci-green-6b884a8)
-                  (defmacro . ci-green-a8e6cdf)
+            (example . "(equal? '(p . 0) (cons 'p 0)) => TRUE")
+            (status . known-broken-skipped)
+            (known-issues . ((r1-clobber-in-nested-two-arg-primitive-calls . fixed-af64449)
+                             (cml_equal-hangs-on-real-hardware-for-equal-nested-structures . open-suspected-JF-raw-value-vs-tag-semantics)))))
+ (verification . ((equal? . real-iverilog-run-hangs-af64449-skipped-not-green)
+                  (defmacro . real-iverilog-run-passed-locally-af64449)
                   (ci-workflow . ".github/workflows/ci.yml")
+                  (ci-status-check-method . "REST API conclusion field via /repos/.../actions/runs?head_sha=..., never the rendered HTML /actions page")
                   (log . "ecosystem-status.md"))))
