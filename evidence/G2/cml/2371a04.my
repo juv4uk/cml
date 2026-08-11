@@ -1,0 +1,11 @@
+(evidence
+  (fixture . "(equal? '(p . 0) (cons 'p 0))")
+  (requirement . G2)
+  (implementation . cml)
+  (commit . "2371a04")
+  (runner . iverilog)
+  (expected . "t")
+  (actual . "t")
+  (result . pass)
+  (timestamp . "2026-08-11")
+  (note . "cml_equal native subroutine; a prior af64449 register-clobber bug (nested cons/eq/equal? calls overwrote R1) was fixed and independently confirmed here; a separate hang report against this same fixture was retracted as an insufficient-timeout false alarm, not a real defect"))

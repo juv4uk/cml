@@ -1,0 +1,11 @@
+(evidence
+  (fixture . "(defmacro my-list items (cons 'quote (cons items '()))) (my-list 1 2 3)")
+  (requirement . G4)
+  (implementation . cml)
+  (commit . "af64449")
+  (runner . iverilog)
+  (expected . "(1 2 3)")
+  (actual . "(1 2 3)")
+  (result . pass)
+  (timestamp . "2026-08-11")
+  (note . "defmacro is a compile-time-only source transform (src/macros.rs); never reaches the FPGA compiler"))
