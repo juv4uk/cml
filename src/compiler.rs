@@ -115,8 +115,18 @@ impl Compiler {
             }
             "cons" => {
                 if args.len() == 2 {
+                    // args[1] may itself be a two-arg primitive call, which
+                    // also hardcodes R1 as scratch -- save R1 on the R11
+                    // stack across evaluating args[1] so it can't clobber
+                    // the already-computed first operand.
+                    // args[1] може сам бути викликом двоаргументної примітиви,
+                    // яка теж хардкодить R1 як scratch -- зберігаємо R1 на
+                    // стеку R11.
                     self.compile_expr(&args[0], "R1");
+                    self.emit("CONS R11 R1 R11");
                     self.compile_expr(&args[1], "R2");
+                    self.emit("CAR R1 R11");
+                    self.emit("CDR R11 R11");
                     self.emit(&format!("CONS {} R1 R2", target_reg));
                 }
             }
@@ -135,7 +145,10 @@ impl Compiler {
             "eq" => {
                 if args.len() == 2 {
                     self.compile_expr(&args[0], "R1");
+                    self.emit("CONS R11 R1 R11");
                     self.compile_expr(&args[1], "R2");
+                    self.emit("CAR R1 R11");
+                    self.emit("CDR R11 R11");
                     self.emit(&format!("EQ {} R1 R2", target_reg));
                 }
             }
@@ -148,7 +161,10 @@ impl Compiler {
             "equal?" => {
                 if args.len() == 2 {
                     self.compile_expr(&args[0], "R1");
+                    self.emit("CONS R11 R1 R11");
                     self.compile_expr(&args[1], "R2");
+                    self.emit("CAR R1 R11");
+                    self.emit("CDR R11 R11");
                     self.used_equal = true;
                     self.emit("CALL R14 cml_equal");
                     self.emit(&format!("MOV {} R15", target_reg));
