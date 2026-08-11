@@ -47,7 +47,7 @@ impl Compiler {
     fn compile_expr(&mut self, expr: &Expr, target_reg: &str) {
         match expr {
             Expr::Integer(n) => {
-                self.emit(&format!("LOADI {} {}", target_reg, n));
+                self.emit_integer_literal(*n, target_reg);
             }
             Expr::String(s) => {
                 self.emit(&format!("LOADSYM {} {}", target_reg, s.to_uppercase()));
@@ -326,7 +326,7 @@ impl Compiler {
 
     fn compile_quote(&mut self, expr: &Expr, target_reg: &str) {
         match expr {
-            Expr::Integer(n) => self.emit(&format!("LOADI {} {}", target_reg, n)),
+            Expr::Integer(n) => self.emit_integer_literal(*n, target_reg),
             Expr::String(s) => self.emit(&format!("LOADSYM {} {}", target_reg, s.to_uppercase())),
             Expr::Symbol(s) => self.emit(&format!("LOADSYM {} {}", target_reg, s.to_uppercase())),
             Expr::List(list) => {
@@ -541,6 +541,29 @@ impl Compiler {
 
         self.emit("cml_equal_done:");
         self.emit("RET R14");
+    }
+
+    // fpga-lisp's assembler encodes LOADI's immediate as a bare 16-bit
+    // field (`imm & 0xFFFF`), with no sign extension into the fixnum
+    // value's wider field -- `LOADI R2 -1` loads 0xFFFF (65535), not the
+    // register-width two's-complement -1. Negative literals must instead
+    // be built with a real ALU op (SUB is register-register, no immediate
+    // truncation) so the tagged word downstream ops see is the hardware's
+    // actual negative representation. R13 is this codebase's established
+    // disposable scratch register (see the NIL/TRUE-construction idiom
+    // used throughout).
+    // Асемблер fpga-lisp кодує LOADI-immediate як голе 16-бітне поле, без
+    // sign extension -- `LOADI R2 -1` завантажує 0xFFFF, не справжнє
+    // two's-complement -1. Від'ємні літерали будуємо через SUB (rr-опція,
+    // без обрізання immediate).
+    fn emit_integer_literal(&mut self, n: i64, target_reg: &str) {
+        if n >= 0 {
+            self.emit(&format!("LOADI {} {}", target_reg, n));
+        } else {
+            self.emit(&format!("LOADI {} 0", target_reg));
+            self.emit(&format!("LOADI R13 {}", -n));
+            self.emit(&format!("SUB {} {} R13", target_reg, target_reg));
+        }
     }
 
     fn emit(&mut self, instr: &str) {

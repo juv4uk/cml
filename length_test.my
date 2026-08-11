@@ -1,1 +1,0 @@
-(def length-onto (lambda (values acc) (cond ((eq values NIL) acc) (t (length-onto (cdr values) (+ acc 1)))))) (def length (lambda (values) (length-onto values 0))) (length (quote (a b c)))
