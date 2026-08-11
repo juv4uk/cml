@@ -78,6 +78,25 @@ call. The my-lisp session can start it on request; connect to
   `+stable-x86_64-pc-windows-gnu` (this repo builds GNU-target) rather than
   relying on the default.
 
+## Environment: WSL2 + Guix
+
+Work in this repo from inside WSL2, under the Linux user named after this
+repo (`cml`), not directly from Windows. Repos stay on the Windows
+filesystem (`/mnt/c/GitHub/...`), not `~/projects` — enter the declared
+environment before running anything:
+
+```
+wsl -u cml
+cd /mnt/c/GitHub/cml
+guix shell -m manifest.scm
+```
+
+[`manifest.scm`](manifest.scm) pins the toolchain (rust, cargo, git, make);
+don't rely on whatever happens to be on `$PATH` outside the shell. A shared
+Guix profile (`/var/guix/profiles/shared/guix-profile`) also provides
+`iverilog`/`verilator`/`yosys`/`node`/`openjdk` across all four repos'
+users.
+
 ## Cross-session coordination protocol (agreed with my-lisp/fpga-lisp)
 
 1. Durable facts go in `ecosystem-status.md`/`ecosystem-status.my` —
