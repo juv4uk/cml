@@ -105,6 +105,9 @@ impl Compiler {
             "lambda" => {
                 self.compile_lambda(args, target_reg);
             }
+            "let" => {
+                self.compile_let(args, target_reg);
+            }
             "cons" => {
                 if args.len() == 2 {
                     self.compile_expr(&args[0], "R1");
@@ -191,6 +194,39 @@ impl Compiler {
         
         self.emit(&format!("MOV {} R15", target_reg)); // Lambda returns in R15 by convention
         self.emit("; CALL END");
+    }
+
+    // `let` is a derived Lisp form, not an FPGA primitive. Lower
+    // (let ((name value) ...) body) to ((lambda (name ...) body) value ...).
+    // `let` — похідна форма Lisp, а не примітив FPGA.
+    // `let` ist eine abgeleitete Lisp-Form, keine FPGA-Primitive.
+    fn compile_let(&mut self, args: &[Expr], target_reg: &str) {
+        let [Expr::List(bindings), body] = args else {
+            self.emit("; malformed let");
+            return;
+        };
+
+        let mut parameters = Vec::with_capacity(bindings.len());
+        let mut values = Vec::with_capacity(bindings.len());
+        for binding in bindings {
+            let Expr::List(pair) = binding else {
+                self.emit("; malformed let binding");
+                return;
+            };
+            let [Expr::Symbol(name), value] = pair.as_slice() else {
+                self.emit("; malformed let binding");
+                return;
+            };
+            parameters.push(Expr::Symbol(name.clone()));
+            values.push(value.clone());
+        }
+
+        let lambda = Expr::List(vec![
+            Expr::Symbol("lambda".to_string()),
+            Expr::List(parameters),
+            body.clone(),
+        ]);
+        self.compile_generic_call(&lambda, &values, target_reg);
     }
 
     fn compile_quote(&mut self, expr: &Expr, target_reg: &str) {

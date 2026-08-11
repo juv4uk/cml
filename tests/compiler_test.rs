@@ -79,6 +79,18 @@ fn test_compile_lambda() {
 }
 
 #[test]
+fn test_compile_let_as_lambda_application() {
+    let exprs = parser::parse("(let ((x 'test)) x)").unwrap();
+    let mut compiler = Compiler::new();
+    let asm = compiler.compile(&exprs);
+
+    assert!(asm.contains("; LAMBDA START"));
+    assert!(asm.contains("LOADSYM R12 X"));
+    assert!(asm.contains("LOADSYM R1 TEST"));
+    run_assembler(&asm, "test_let");
+}
+
+#[test]
 fn test_compile_apply() {
     let code = "((lambda (x) x) 'test)";
     let exprs = parser::parse(code).unwrap();

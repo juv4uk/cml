@@ -86,7 +86,7 @@ fn static_error(expr: &Expr) -> Option<&'static str> {
     let arity = match operator.as_str() {
         "quote" | "car" | "cdr" | "atom" => Some(1),
         "cons" | "eq" => Some(2),
-        "cond" | "lambda" => None,
+        "cond" | "lambda" | "let" => None,
         _ => return Some("UnknownSymbol"),
     };
     if arity.is_some_and(|required| arguments.len() != required) {
@@ -246,7 +246,7 @@ fn test_conformance() {
         }
         
         // Skip unsupported features
-        if line.contains("equal?") || line.contains("defmacro") || line.starts_with("((expr . \"(let ") {
+        if line.contains("equal?") || line.contains("defmacro") {
             continue;
         }
         

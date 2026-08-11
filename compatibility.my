@@ -13,9 +13,10 @@
  (pipeline . (parse compile assemble simulate compare))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom
-               variadic-up-to-eight-arguments))
+               let-as-lambda-lowering variadic-up-to-eight-arguments))
  (representational-substitutions . ((source-string . target-symbol)))
  (conformance . ((tier-1 . partial)
+                 (tier-1-fixtures-executed . (29 34))
                  (structured-result-decoder . atoms-fixnums-proper-and-dotted-lists)
                  (error-results . static-arity-and-symbol-plus-fpga-runtime-type)
                  (fixture-specific-skips . present)))

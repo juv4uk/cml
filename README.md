@@ -14,6 +14,7 @@ The compiler handles:
 - Variables (via compile-time environment lookup injection)
 - `cond` (branching logic compiled to `JF`/`RET`)
 - `lambda` (closures that self-bind arguments to an environment)
+- `let` lowered as an immediately invoked `lambda`, without a new FPGA primitive
 - Standard primitives (`cons`, `car`, `cdr`, `eq`, `atom`)
 - Quoted lists (`'(a b c)`)
 - Call Stack (`R11` software stack for environment and link preservation)
@@ -51,6 +52,7 @@ cargo run -- path/to/source.my
 - Змінні (через ін'єкцію пошуку в середовищі на етапі компіляції)
 - `cond` (логіка розгалуження, скомпільована в `JF`/`RET`)
 - `lambda` (замикання, які самостійно прив'язують аргументи до середовища)
+- `let`, знижений до негайно викликаної `lambda` без нової FPGA-примітиви
 - Стандартні примітиви (`cons`, `car`, `cdr`, `eq`, `atom`)
 - Списки з квотуванням (Quoted lists, `'(a b c)`)
 - Стек викликів (програмний стек `R11` для збереження середовища та адреси повернення)
@@ -88,6 +90,7 @@ Der Compiler verarbeitet:
 - Variablen (über beim Kompilieren injiziertes Umgebungs-Lookup)
 - `cond` (Verzweigungslogik, kompiliert zu `JF`/`RET`)
 - `lambda` (Closures, die ihre Argumente selbst an eine Umgebung binden)
+- `let`, abgesenkt zu einer sofort aufgerufenen `lambda` ohne neue FPGA-Primitive
 - Standardprimitiven (`cons`, `car`, `cdr`, `eq`, `atom`)
 - Zitierte Listen (`'(a b c)`)
 - Aufrufstapel (`R11` Software-Stack für Umgebungs- und Rücksprungadressenspeicherung)
