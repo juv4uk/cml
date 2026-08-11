@@ -28,7 +28,7 @@ The compiler handles:
 
 [`compatibility.my`](compatibility.my) records the exact my-lisp language contract, fpga-lisp ISA contract, tested SHAs, supported surface, and known gaps for this compiler revision.
 
-[View Test Results](test_results.md)
+[View Test Results](test_results.md) · [Testing](docs/testing.md)
 
 ### Related Repositories
 - [fpga-lisp](https://github.com/juv4uk/fpga-lisp): The hardware architecture and assembler.
@@ -66,7 +66,7 @@ cargo run -- path/to/source.my
 
 [`compatibility.my`](compatibility.my) фіксує точний language contract my-lisp, ISA contract fpga-lisp, перевірені SHA, підтриману поверхню й відомі прогалини цієї ревізії компілятора.
 
-[Переглянути результати тестів](test_results.md)
+[Переглянути результати тестів](test_results.md) · [Тестування](docs/testing.md)
 
 ### Пов'язані репозиторії
 - [fpga-lisp](https://github.com/juv4uk/fpga-lisp): Апаратна архітектура та асемблер.
@@ -104,7 +104,7 @@ Der Compiler verarbeitet:
 
 [`compatibility.my`](compatibility.my) hält den genauen my-lisp-Sprachvertrag, fpga-lisp-ISA-Vertrag, geprüfte SHAs, die unterstützte Oberfläche und bekannte Lücken dieser Compilerrevision fest.
 
-[Testergebnisse anzeigen](test_results.md)
+[Testergebnisse anzeigen](test_results.md) · [Testen](docs/testing.md)
 
 ### Verwandte Repositories
 - [fpga-lisp](https://github.com/juv4uk/fpga-lisp): Die Hardwarearchitektur und Assembler.
