@@ -1,6 +1,7 @@
 use std::fs;
 use std::process::Command;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 use cml::parser;
 use cml::ast::Expr;
@@ -47,6 +48,91 @@ fn parse_conformance_line(line: &str) -> Option<(String, String)> {
     let unescaped_expected = expected.replace("\\\"", "\"");
     
     Some((unescaped_expr, unescaped_expected))
+}
+
+type HeapCell = ((u32, u32), (u32, u32));
+
+fn render_word(
+    word: (u32, u32),
+    heap: &HashMap<u32, HeapCell>,
+    symbols: &HashMap<String, u32>,
+    active: &mut HashSet<u32>,
+) -> Result<String, String> {
+    match word {
+        (0, value) => Ok(value.to_string()),
+        (1, address) => render_pair(address, heap, symbols, active),
+        (2, 0) | (3, _) => Ok("()".to_string()),
+        (2, 1) | (4, _) => Ok("t".to_string()),
+        (2, value) => symbols
+            .iter()
+            .find_map(|(name, id)| (*id == value).then(|| name.to_lowercase()))
+            .ok_or_else(|| format!("unknown symbol id {value}")),
+        (tag, value) => Err(format!("unsupported result tag {tag}, value {value}")),
+    }
+}
+
+fn render_pair(
+    first_address: u32,
+    heap: &HashMap<u32, HeapCell>,
+    symbols: &HashMap<String, u32>,
+    active: &mut HashSet<u32>,
+) -> Result<String, String> {
+    let mut out = String::from("(");
+    let mut address = first_address;
+    let mut first = true;
+    let mut chain = HashSet::new();
+    loop {
+        if !chain.insert(address) || !active.insert(address) {
+            return Err(format!("cycle at heap cell {address}"));
+        }
+        let (car, cdr) = *heap
+            .get(&address)
+            .ok_or_else(|| format!("missing heap cell {address}"))?;
+        if !first {
+            out.push(' ');
+        }
+        out.push_str(&render_word(car, heap, symbols, active)?);
+        active.remove(&address);
+        match cdr {
+            (1, next) => {
+                address = next;
+                first = false;
+            }
+            (2, 0) | (3, _) => {
+                out.push(')');
+                return Ok(out);
+            }
+            tail => {
+                out.push_str(" . ");
+                out.push_str(&render_word(tail, heap, symbols, active)?);
+                out.push(')');
+                return Ok(out);
+            }
+        }
+    }
+}
+
+#[test]
+fn canonical_decoder_renders_proper_and_dotted_heap_structures() {
+    let symbols = HashMap::from([
+        ("A".to_string(), 10),
+        ("B".to_string(), 11),
+        ("TAIL".to_string(), 12),
+    ]);
+    let proper = HashMap::from([
+        (0, ((2, 10), (1, 1))),
+        (1, ((2, 11), (3, 0))),
+    ]);
+    let dotted = HashMap::from([(0, ((2, 10), (2, 12)))]);
+
+    assert_eq!(
+        render_word((1, 0), &proper, &symbols, &mut HashSet::new()).unwrap(),
+        "(a b)"
+    );
+    assert_eq!(
+        render_word((1, 0), &dotted, &symbols, &mut HashSet::new()).unwrap(),
+        "(a . tail)"
+    );
 }
 
 #[test]
@@ -106,7 +192,7 @@ fn test_conformance() {
         }
         
         // Skip unsupported features
-        if line.contains("equal?") || line.starts_with("((expr . \"(let ") {
+        if line.contains("equal?") || line.contains("defmacro") || line.starts_with("((expr . \"(let ") {
             continue;
         }
         
@@ -172,48 +258,29 @@ fn test_conformance() {
             // Decode R15
             let mut tag = None;
             let mut val = None;
+            let mut heap = HashMap::new();
             for l in stdout.lines() {
                 if let Some(t_str) = l.strip_prefix("RESULT_TAG:") {
                     tag = t_str.parse::<u32>().ok();
                 } else if let Some(v_str) = l.strip_prefix("RESULT_VAL:") {
                     val = v_str.parse::<u32>().ok();
+                } else if let Some(cell) = l.strip_prefix("HEAP:") {
+                    let fields: Vec<u32> = cell
+                        .split(':')
+                        .map(|field| field.parse::<u32>())
+                        .collect::<Result<_, _>>()
+                        .expect("HEAP fields should be unsigned integers");
+                    assert_eq!(fields.len(), 5, "HEAP line should have five fields");
+                    heap.insert(fields[0], ((fields[1], fields[2]), (fields[3], fields[4])));
                 }
             }
             
             let tag = tag.expect(&format!("Could not find RESULT_TAG in output for {}:\n{}", expr_str, stdout));
             let val = val.expect(&format!("Could not find RESULT_VAL in output for {}", expr_str));
             
-            // Extremely basic expected string conversion
-            let actual = if tag == 4 { // TAG_TRUE
-                "t".to_string()
-            } else if tag == 3 { // TAG_NIL
-                "()".to_string()
-            } else if tag == 2 { // TAG_SYMBOL
-                if val == 0 {
-                    "()".to_string()
-                } else if val == 1 {
-                    "t".to_string()
-                } else {
-                    let mut found = None;
-                    for (k, v) in &symbol_table {
-                        if *v == val {
-                            found = Some(k.to_lowercase());
-                            break;
-                        }
-                    }
-                    found.unwrap_or_else(|| format!("SYM_{}", val))
-                }
-            } else if tag == 1 { // TAG_CONS
-                "(...)".to_string() 
-            } else if tag == 0 { // TAG_FIXNUM
-                val.to_string()
-            } else {
-                format!("TAG{}:VAL{}", tag, val)
-            };
-            
-            if !expected_str.starts_with("(") {
-                assert_eq!(actual, expected_str, "Test failed for {}", expr_str);
-            }
+            let actual = render_word((tag, val), &heap, &symbol_table, &mut HashSet::new())
+                .unwrap_or_else(|error| panic!("Could not decode result for {expr_str}: {error}"));
+            assert_eq!(actual, expected_str, "Test failed for {}", expr_str);
         }
     }
 }

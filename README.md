@@ -20,7 +20,7 @@ The compiler handles:
 
 ### Current Limitations
 - Generic calls bind at most 8 arguments; additional arguments are not yet rejected explicitly.
-- Quoted dotted lists compile, but the conformance runner cannot yet decode structured FPGA results canonically.
+- The conformance runner canonically decodes atoms, fixnums, proper lists, and dotted lists from the FPGA heap; unsupported language forms are still skipped explicitly.
 - Source strings currently lower to target symbols; fpga-lisp has no distinct runtime string tag yet.
 - Inexact numbers and exact rationals are not supported by the target representation.
 
@@ -56,7 +56,7 @@ cargo run -- path/to/source.my
 
 ### Поточні обмеження
 - Generic calls зв'язують щонайбільше 8 аргументів; зайві аргументи ще не відхиляються явно.
-- Quoted dotted lists компілюються, але conformance runner ще не декодує структуровані FPGA-результати канонічно.
+- Conformance runner канонічно декодує atoms, fixnums, proper lists і dotted lists із FPGA heap; непідтримані мовні форми досі пропускаються явно.
 - Сирцеві strings поки знижуються до target symbols; fpga-lisp ще не має окремого runtime string tag.
 - Inexact numbers і точні rationals не підтримуються цільовим представленням.
 
@@ -92,7 +92,7 @@ Der Compiler verarbeitet:
 
 ### Aktuelle Einschränkungen
 - Generische Aufrufe binden höchstens 8 Argumente; zusätzliche Argumente werden noch nicht explizit abgelehnt.
-- Zitierte Dotted Lists werden kompiliert, aber der Konformitätsrunner dekodiert strukturierte FPGA-Ergebnisse noch nicht kanonisch.
+- Der Konformitätsrunner dekodiert Atome, Fixnums, echte Listen und Dotted Lists aus dem FPGA-Heap kanonisch; nicht unterstützte Sprachformen werden weiterhin explizit übersprungen.
 - Quell-Strings werden derzeit zu Zielsymbolen abgesenkt; fpga-lisp besitzt noch kein eigenes Laufzeit-String-Tag.
 - Inexakte Zahlen und exakte rationale Zahlen werden von der Zieldarstellung nicht unterstützt.
 

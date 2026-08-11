@@ -157,6 +157,18 @@ impl Compiler {
         
         // 2. Evaluate the closure expression (into R15)
         self.compile_expr(func_expr, "R15");
+
+        // R0 carries the complete evaluated argument list. Fixed-arity
+        // lambdas keep using the fast argument registers; dotted and bare
+        // parameter lists take their rest value from this structural form.
+        // R0 несе повний список аргументів для variadic lambda.
+        // R0 traegt die vollstaendige Argumentliste fuer variadische Lambdas.
+        self.emit("LOADI R13 0");
+        self.emit("LOADI R12 1");
+        self.emit("EQ R0 R12 R13"); // R0 = NIL
+        for reg in arg_regs.iter().take(args.len()).rev() {
+            self.emit(&format!("CONS R0 {} R0", reg));
+        }
         
         // Save ENV (R4) and Link Register (R14) to stack (R11)
         self.emit("CONS R11 R4 R11"); // Push R4
@@ -290,27 +302,20 @@ impl Compiler {
                     }
                     // Variable arity tail: bind rest of args into a list
                     if let Expr::Symbol(tail_sym) = &**tail {
-                        let start_idx = list.len();
-                        
-                        // We need to build a list of the remaining args
-                        // For simplicity, we just bind NIL for now since varargs are complex
-                        // in register-based calling convention. But let's build it dynamically!
-                        
-                        // Start by creating a NIL
-                        self.emit("LOADI R13 0");
-                        self.emit("LOADI R12 1");
-                        self.emit("EQ R10 R12 R13"); // R10 = NIL
-                        
-                        // We loop downwards to CONS the remaining args
-                        let remaining_max = std::cmp::min(args.len() - 1, arg_regs.len());
-                        for i in (start_idx..remaining_max).rev() {
-                            self.emit(&format!("CONS R10 {} R10", arg_regs[i]));
+                        self.emit("MOV R10 R0");
+                        for _ in 0..list.len() {
+                            self.emit("CDR R10 R10");
                         }
                         
                         self.emit(&format!("LOADSYM R12 {}", tail_sym.to_uppercase()));
                         self.emit("CONS R13 R12 R10"); // (param_sym . rest_args_list)
                         self.emit("CONS R4 R13 R4"); // env = (pair . env)
                     }
+                }
+                Expr::Symbol(tail_sym) => {
+                    self.emit(&format!("LOADSYM R12 {}", tail_sym.to_uppercase()));
+                    self.emit("CONS R13 R12 R0");
+                    self.emit("CONS R4 R13 R4");
                 }
                 _ => {}
             }
