@@ -6,7 +6,7 @@
  (compiler-version . (0 1 0))
  (language . ((repository . juv4uk/my-lisp)
               (contract . (1 0))
-              (tested-sha . "6943f51afcdcd9bf41bf083e1a7ae2cd5aedbd3c")))
+              (tested-sha . "172b633377683f6d111eaa8b8ff5c10c1b555ed6")))
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (1 0))
             (tested-sha . "36738759f281991646c45487ae6722fea561ea2b")))

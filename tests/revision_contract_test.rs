@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const MY_LISP_SHA: &str = "6943f51afcdcd9bf41bf083e1a7ae2cd5aedbd3c";
+const MY_LISP_SHA: &str = "172b633377683f6d111eaa8b8ff5c10c1b555ed6";
 const FPGA_LISP_SHA: &str = "36738759f281991646c45487ae6722fea561ea2b";
 
 fn sibling(name: &str) -> PathBuf {

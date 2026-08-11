@@ -1,5 +1,6 @@
 use cml::parser;
 use cml::compiler::Compiler;
+use std::env;
 use std::fs;
 use std::process::Command;
 
@@ -164,13 +165,23 @@ fn test_end_to_end_execution() {
         panic!("Assembler failed:\nSTDOUT: {}\nSTDERR: {}", stdout, stderr);
     }
 
-    // 2. Compile simulation testbench with iverilog
+    // 2. Compile simulation testbench with iverilog. Sources are read from
+    // ../fpga-lisp (current_dir), but the compiled .vvp is written back into
+    // this crate's own directory via an absolute -o path, so nothing is
+    // written under the sibling repo (its own WSL/Guix user may not have
+    // write access there).
+    let cwd = env::current_dir().unwrap();
+    let bin_path = format!("{}.bin", test_name);
+    let bin_abs = cwd.join(&bin_path);
+    let vvp_path = format!("{}.vvp", test_name);
+    let vvp_abs = cwd.join(&vvp_path);
+
     let fpga_sim_dir = "../fpga-lisp";
     let iv_output = Command::new("iverilog")
         .current_dir(fpga_sim_dir)
         .arg("-g2012")
         .arg("-I").arg("fpga/rtl")
-        .arg("-o").arg("tb_cml_e2e.vvp")
+        .arg("-o").arg(&vvp_abs)
         .arg("fpga/rtl/lisp_word.sv")
         .arg("fpga/rtl/heap.sv")
         .arg("fpga/rtl/lisp_data_unit.sv")
@@ -190,25 +201,20 @@ fn test_end_to_end_execution() {
         panic!("Icarus Verilog compilation failed:\nSTDOUT: {}\nSTDERR: {}", stdout, stderr);
     }
 
-    // Move the generated cml_e2e.bin to the fpga-lisp folder so the testbench can find it
-    let bin_path = format!("{}.bin", test_name);
-    let target_bin = format!("{}/{}", fpga_sim_dir, bin_path);
-    fs::copy(&bin_path, &target_bin).expect("Failed to copy .bin");
-
-    // 3. Run simulation with vvp
+    // 3. Run simulation with vvp, pointing it at the .bin via the testbench's
+    // +bin_file= plusarg instead of copying the .bin into the sibling repo.
     let vvp_output = Command::new("vvp")
-        .current_dir(fpga_sim_dir)
-        .arg("tb_cml_e2e.vvp")
+        .arg(&vvp_abs)
+        .arg(format!("+bin_file={}", bin_abs.display()))
         .output()
         .expect("Failed to run vvp");
 
     let stdout = String::from_utf8_lossy(&vvp_output.stdout);
-    
+
     // Clean up
     let _ = fs::remove_file(asm_path);
-    let _ = fs::remove_file(bin_path);
-    let _ = fs::remove_file(target_bin);
-    let _ = fs::remove_file(format!("{}/tb_cml_e2e.vvp", fpga_sim_dir));
+    let _ = fs::remove_file(&bin_path);
+    let _ = fs::remove_file(&vvp_path);
 
     if !stdout.contains("CML E2E PASSED") {
         panic!("E2E Simulation failed or did not print PASSED.\nSTDOUT:\n{}", stdout);
