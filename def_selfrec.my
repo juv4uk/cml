@@ -1,0 +1,1 @@
+(def count (lambda (n) (cond ((eq n 0) 99) (t (count (+ n -1)))))) (count 1)
