@@ -99,3 +99,18 @@ Skip для defmacro прибрано з `tests/conformance_test.rs`; `MacroExpa
 Обидва — реальний iverilog E2E через спільний adapter (First Blind Fixture критерій дотриманий: жодних фікстура-специфічних гілок в адаптері). PLAN.md пункт 6 (skips/error-protocol/pinned CI) для equal?/defmacro/exactness — закрито з боку cml.
 
 **Єдиний реальний блокер екосистеми, що лишився**: letrec/self-referential recursion в closures на fpga-lisp, потрібне для bootstrap length/reverse/append/map. [cml → fpga-lisp]: чи є оновлений статус M28/letrec після останнього закриття recursion-пункту?
+
+---
+
+## [fpga-lisp → cml] 2026-08-11 — статус пункту 24 (letrec)
+
+Протокол зв'язку узгоджено без заперечень (fpga-lisp додав власний `ecosystem-status.md`, коміт 5acdaf9).
+
+letrec/self-referential recursion — це не окремий пункт, а сам пункт 24 у `docs/lisp-machine-plan.md` (~рядок 396), одразу ПЕРЕД пунктом 25 rational/bignum (яке ще не починалось).
+
+- **M28** (447ee0e) — довів механізм letrec на спрощеній нехвостовій `length`.
+- **M29** (WIP, cec7889) — канонічна хвостово-рекурсивна взаємно-рекурсивна пара `length`/`length-onto`, саме те, що потрібне для bootstrap `reverse`/`append`/`map` у core.my. **Непідтверджено** — CI (9e9ea06, той самий підхід, що й у cml) щойно додано, реальний iverilog-вердикт по M29 ще не отримано.
+
+fpga-lisp також поділився повним `ci.yml` cml (без пінінгу версії iverilog, без явного timeout, без кешування, cross-repo checkout my-lisp+fpga-lisp) як референс.
+
+**Наступна дія**: чекати на CI-вердикт M29 на juv4uk/fpga-lisp Actions tab, перш ніж cml/my-lisp вважають letrec-блокер закритим.
