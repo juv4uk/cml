@@ -1,5 +1,6 @@
 use cml::parser;
 use cml::compiler::Compiler;
+use cml::macros::MacroExpander;
 use std::env;
 use std::fs;
 
@@ -18,6 +19,7 @@ fn main() {
         });
         
     let exprs = parser::parse(&contents).unwrap();
+    let exprs = MacroExpander::new().process(&exprs);
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs);
     

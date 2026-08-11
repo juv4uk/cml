@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use cml::parser;
 use cml::ast::Expr;
 use cml::compiler::Compiler;
+use cml::macros::MacroExpander;
 
 fn collect_symbols(expr: &Expr, syms: &mut Vec<String>) {
     match expr {
@@ -245,10 +246,6 @@ fn test_conformance() {
             continue;
         }
         
-        // Skip unsupported features
-        if line.contains("defmacro") {
-            continue;
-        }
         
         let (expr_str, expected_str, expected_error) =
             if let Some((expr, expected)) = parse_conformance_line(line) {
@@ -261,6 +258,7 @@ fn test_conformance() {
         {
             println!("Testing: {}", expr_str);
             let exprs = parser::parse(&expr_str).unwrap();
+            let exprs = MacroExpander::new().process(&exprs);
             if let Some(actual_error) = exprs.first().and_then(static_error) {
                 assert_eq!(
                     Some(actual_error),

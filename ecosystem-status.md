@@ -1,5 +1,7 @@
 # Ecosystem status — my-lisp / cml / fpga-lisp
 
+**Роль цього файлу**: append-only хронологічний лог (повна історія обміну, verbatim). Для курованого поточного знімка (без історії) див. `my-lisp`'s `ecosystem-status.md` (`C:\Users\user\Documents\GitHub\my-lisp\ecosystem-status.md`) — розподіл ролей узгоджено 2026-08-11.
+
 Спільний асинхронний канал координації між сесіями. Кожна сесія на старті
 читає цей файл (з локального шляху репозиторію-сусіда або по git),
 дописує власну секцію датованим записом і за потреби лишає питання
@@ -57,6 +59,21 @@
 **Стан перевірено (2026-08-11)**: у `tests/conformance_test.rs:239-251` skips (`3.0`, `equal?`, `defmacro`) — на рівні відбору фікстур у тестовому гарнесі, а не в самому adapter (parse→compile→assemble→simulate→compare — спільний код для всіх фікстур). Тобто критерій First Blind Fixture структурно вже дотриманий; залишок роботи — прибрати ці рядки-фільтри й реалізувати компіляцію самих форм.
 
 **Наступне після поточної роботи**: коли letrec закриє блокер fpga-lisp (bootstrap length/reverse/append/map) — прогнати Tier-3-суміжні (core.my-похідні) фікстури. Далі — pinned interface CI (item 7, docs/ecosystem-roadmap.md).
+
+---
+
+## [cml] 2026-08-11 — defmacro implementation
+
+Реалізовано в `src/macros.rs`: окремий compile-time-only прохід (`MacroExpander`), що виконується ДО `Compiler::compile`. `defmacro` не компілюється в FPGA-код — це чисто хостовий/compile-time механізм:
+
+- Збирає всі top-level `(defmacro name params body)` у таблицю, прибирає їх з потоку виразів.
+- На кожному виклику відомого макросу параметри зв'язуються з СИРИМИ (невивченими) AST-аргументами (підтримує fixed/variadic/dotted-параметри — той самий патерн, що вже є в `compile_lambda`).
+- `body` виконується міні-евалюатором над `Expr` (quote/cons/car/cdr/atom/eq/cond) — саме ці примітиви, що вже є compiled-примітивами компілятора, лише тут вони інтерпретуються напряму над деревом, а не компілюються в асемблер.
+- Результат виконання body підставляється на місце виклику й рекурсивно розгортається повторно (вкладені макроси).
+
+Skip для defmacro прибрано з `tests/conformance_test.rs`; `MacroExpander::process` викликається перед `static_error`-перевіркою і перед `Compiler::compile`.
+
+**Верифікація**: `cargo build` проходить чисто (GNU toolchain). `test_conformance` (реальний E2E прогін через FPGA-симулятор, включно з єдиною Tier-1 defmacro-фікстурою) досі не може прогнатись локально — бракує `iverilog`. Логіку вручну простежено для фікстури `(defmacro my-list items (cons 'quote (cons items '()))) (my-list 1 2 3)` → очікується `(1 2 3)`: items зв'язується з сирим `(1 2 3)`, body обчислюється в `(quote (1 2 3))`, що після повторного розгортання компілюється як звичайний quote. Статус: **готово до рев'ю, чекає на CI-прогін**, не merged-verified.
 
 ---
 
