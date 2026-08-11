@@ -50,6 +50,60 @@ fn parse_conformance_line(line: &str) -> Option<(String, String)> {
     Some((unescaped_expr, unescaped_expected))
 }
 
+fn parse_error_line(line: &str) -> Option<(String, String)> {
+    let expr_marker = "(expr . \"";
+    let expr_start = line.find(expr_marker)? + expr_marker.len();
+    let error_marker = "\") (error . \"";
+    let expr_end = line[expr_start..].find(error_marker)? + expr_start;
+    let error_start = expr_end + error_marker.len();
+    let error_end = line[error_start..].find("\")")? + error_start;
+    Some((
+        line[expr_start..expr_end].replace("\\\"", "\""),
+        line[error_start..error_end].to_string(),
+    ))
+}
+
+// Errors visible from syntax alone are compiler-front-end results; operand
+// type errors still run on FPGA and come back through RESULT_ERROR.
+// Синтаксично видимі помилки повертає front-end, type errors — FPGA.
+// Syntaxsichtbare Fehler liefert das Frontend, Typfehler das FPGA.
+fn static_error(expr: &Expr) -> Option<&'static str> {
+    let Expr::List(items) = expr else { return None };
+    let Some(Expr::Symbol(operator)) = items.first() else {
+        if let Some(Expr::List(lambda)) = items.first() {
+            if matches!(lambda.first(), Some(Expr::Symbol(name)) if name == "lambda") {
+                let supplied = items.len() - 1;
+                match lambda.get(1) {
+                    Some(Expr::List(params)) if supplied != params.len() => return Some("Arity"),
+                    Some(Expr::DottedList(fixed, _)) if supplied < fixed.len() => return Some("Arity"),
+                    _ => {}
+                }
+            }
+        }
+        return None;
+    };
+    let arguments = &items[1..];
+    let arity = match operator.as_str() {
+        "quote" | "car" | "cdr" | "atom" => Some(1),
+        "cons" | "eq" => Some(2),
+        "cond" | "lambda" => None,
+        _ => return Some("UnknownSymbol"),
+    };
+    if arity.is_some_and(|required| arguments.len() != required) {
+        return Some("Arity");
+    }
+    if operator == "eq"
+        && arguments.iter().any(|argument| {
+            matches!(argument, Expr::List(parts)
+                if matches!(parts.first(), Some(Expr::Symbol(name)) if name == "quote")
+                && matches!(parts.get(1), Some(Expr::List(_) | Expr::DottedList(_, _))))
+        })
+    {
+        return Some("Type");
+    }
+    None
+}
+
 type HeapCell = ((u32, u32), (u32, u32));
 
 fn render_word(
@@ -196,9 +250,26 @@ fn test_conformance() {
             continue;
         }
         
-        if let Some((expr_str, expected_str)) = parse_conformance_line(line) {
+        let (expr_str, expected_str, expected_error) =
+            if let Some((expr, expected)) = parse_conformance_line(line) {
+                (expr, Some(expected), None)
+            } else if let Some((expr, error)) = parse_error_line(line) {
+                (expr, None, Some(error))
+            } else {
+                continue;
+            };
+        {
             println!("Testing: {}", expr_str);
             let exprs = parser::parse(&expr_str).unwrap();
+            if let Some(actual_error) = exprs.first().and_then(static_error) {
+                assert_eq!(
+                    Some(actual_error),
+                    expected_error.as_deref(),
+                    "Static error mismatch for {}",
+                    expr_str
+                );
+                continue;
+            }
             let mut compiler = Compiler::new();
             let asm = compiler.compile(&exprs);
             
@@ -258,6 +329,7 @@ fn test_conformance() {
             // Decode R15
             let mut tag = None;
             let mut val = None;
+            let mut result_error = None;
             let mut heap = HashMap::new();
             for l in stdout.lines() {
                 if let Some(t_str) = l.strip_prefix("RESULT_TAG:") {
@@ -272,7 +344,13 @@ fn test_conformance() {
                         .expect("HEAP fields should be unsigned integers");
                     assert_eq!(fields.len(), 5, "HEAP line should have five fields");
                     heap.insert(fields[0], ((fields[1], fields[2]), (fields[3], fields[4])));
+                } else if let Some(error) = l.strip_prefix("RESULT_ERROR:") {
+                    result_error = Some(error.to_string());
                 }
+            }
+            if let Some(expected) = expected_error {
+                assert_eq!(result_error.as_deref(), Some(expected.as_str()), "Error mismatch for {}", expr_str);
+                continue;
             }
             
             let tag = tag.expect(&format!("Could not find RESULT_TAG in output for {}:\n{}", expr_str, stdout));
@@ -280,7 +358,7 @@ fn test_conformance() {
             
             let actual = render_word((tag, val), &heap, &symbol_table, &mut HashSet::new())
                 .unwrap_or_else(|error| panic!("Could not decode result for {expr_str}: {error}"));
-            assert_eq!(actual, expected_str, "Test failed for {}", expr_str);
+            assert_eq!(actual, expected_str.unwrap(), "Test failed for {}", expr_str);
         }
     }
 }

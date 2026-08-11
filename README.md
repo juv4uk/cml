@@ -21,6 +21,7 @@ The compiler handles:
 ### Current Limitations
 - Generic calls bind at most 8 arguments; additional arguments are not yet rejected explicitly.
 - The conformance runner canonically decodes atoms, fixnums, proper lists, and dotted lists from the FPGA heap; unsupported language forms are still skipped explicitly.
+- Tier-1 error fixtures are observable too: the compiler classifies static arity/unknown-symbol failures, while FPGA execution reports runtime type failures through a machine-readable result channel.
 - Source strings currently lower to target symbols; fpga-lisp has no distinct runtime string tag yet.
 - Inexact numbers and exact rationals are not supported by the target representation.
 
@@ -57,6 +58,7 @@ cargo run -- path/to/source.my
 ### Поточні обмеження
 - Generic calls зв'язують щонайбільше 8 аргументів; зайві аргументи ще не відхиляються явно.
 - Conformance runner канонічно декодує atoms, fixnums, proper lists і dotted lists із FPGA heap; непідтримані мовні форми досі пропускаються явно.
+- Tier-1 error fixtures теж спостережувані: компілятор класифікує статичні помилки арності/невідомого символу, а FPGA повертає runtime-помилки типу через машинозчитуваний канал результату.
 - Сирцеві strings поки знижуються до target symbols; fpga-lisp ще не має окремого runtime string tag.
 - Inexact numbers і точні rationals не підтримуються цільовим представленням.
 
@@ -93,6 +95,7 @@ Der Compiler verarbeitet:
 ### Aktuelle Einschränkungen
 - Generische Aufrufe binden höchstens 8 Argumente; zusätzliche Argumente werden noch nicht explizit abgelehnt.
 - Der Konformitätsrunner dekodiert Atome, Fixnums, echte Listen und Dotted Lists aus dem FPGA-Heap kanonisch; nicht unterstützte Sprachformen werden weiterhin explizit übersprungen.
+- Auch Tier-1-Fehler-Fixtures sind beobachtbar: Der Compiler klassifiziert statische Stelligkeits- und Unbekanntes-Symbol-Fehler, während das FPGA Laufzeit-Typfehler über einen maschinenlesbaren Ergebniskanal meldet.
 - Quell-Strings werden derzeit zu Zielsymbolen abgesenkt; fpga-lisp besitzt noch kein eigenes Laufzeit-String-Tag.
 - Inexakte Zahlen und exakte rationale Zahlen werden von der Zieldarstellung nicht unterstützt.
 
