@@ -6,10 +6,10 @@
  (compiler-version . (0 1 0))
  (language . ((repository . juv4uk/my-lisp)
               (contract . (1 0))
-              (tested-sha . "172b633377683f6d111eaa8b8ff5c10c1b555ed6")))
+              (tested-sha . "c1299f3fe4157e4aee1e1ee8bb66805b0a9e1265")))
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (1 0))
-            (tested-sha . "36738759f281991646c45487ae6722fea561ea2b")))
+            (tested-sha . "4a4f032f42cd61bec516e81c510a7dec7bb5be44")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom equal? defmacro
