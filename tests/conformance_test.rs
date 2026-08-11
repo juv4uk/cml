@@ -86,7 +86,7 @@ fn static_error(expr: &Expr) -> Option<&'static str> {
     let arguments = &items[1..];
     let arity = match operator.as_str() {
         "quote" | "car" | "cdr" | "atom" => Some(1),
-        "cons" | "eq" => Some(2),
+        "cons" | "eq" | "equal?" => Some(2),
         "cond" | "lambda" | "let" => None,
         _ => return Some("UnknownSymbol"),
     };
