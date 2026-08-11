@@ -21,7 +21,7 @@ fn run_assembler(asm_code: &str, test_name: &str) {
     let asm_path = format!("{}.asm", test_name);
     fs::write(&asm_path, full_asm).unwrap();
 
-    let output = Command::new("python")
+    let output = Command::new("python3")
         .arg("../fpga-lisp/assembler.py")
         .arg(&asm_path)
         .output();
@@ -49,10 +49,14 @@ fn test_compile_cond() {
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs);
     
-    assert!(asm.contains("LOADSYM R1 TRUE"));
-    assert!(asm.contains("JF R1"));
+    // `t` is constructed through ATOM, matching the current target's TRUE
+    // representation; the old test still expected the pre-truthiness-fix
+    // `LOADSYM R1 TRUE` sequence.
+    // `t` будується через ATOM; старий тест очікував код до truthiness-фіксу.
+    // `t` wird über ATOM gebaut; der alte Test erwartete Code vor dem Fix.
+    assert!(asm.contains("ATOM R1 R1"));
+    assert!(asm.contains("JF R3"));
     assert!(asm.contains("LOADSYM R15 A"));
-    assert!(asm.contains("LOADSYM R1 NIL"));
     assert!(asm.contains("LOADSYM R15 B"));
     assert!(asm.contains("HALT"));
 
@@ -136,7 +140,7 @@ fn test_end_to_end_execution() {
     fs::write(&asm_path, full_asm).unwrap();
 
     // 1. Assemble to cml_e2e.bin
-    let asm_output = Command::new("python")
+    let asm_output = Command::new("python3")
         .arg("../fpga-lisp/assembler.py")
         .arg(&asm_path)
         .output()

@@ -140,7 +140,7 @@ fn test_conformance() {
             fs::write(&asm_path, &full_asm).unwrap();
             
             // Assemble
-            let asm_output = Command::new("python")
+            let asm_output = Command::new("python3")
                 .arg("../fpga-lisp/assembler.py")
                 .arg(&asm_path)
                 .output()

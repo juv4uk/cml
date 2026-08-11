@@ -19,9 +19,12 @@ The compiler handles:
 - Call Stack (`R11` software stack for environment and link preservation)
 
 ### Current Limitations
-- Maximum of 3 arguments for generic function calls.
-- Dotted lists are not supported.
-- Strings are not supported.
+- Generic calls bind at most 8 arguments; additional arguments are not yet rejected explicitly.
+- Quoted dotted lists compile, but the conformance runner cannot yet decode structured FPGA results canonically.
+- Source strings currently lower to target symbols; fpga-lisp has no distinct runtime string tag yet.
+- Inexact numbers and exact rationals are not supported by the target representation.
+
+[`compatibility.my`](compatibility.my) records the exact my-lisp language contract, fpga-lisp ISA contract, tested SHAs, supported surface, and known gaps for this compiler revision.
 
 [View Test Results](test_results.md)
 
@@ -52,9 +55,12 @@ cargo run -- path/to/source.my
 - Стек викликів (програмний стек `R11` для збереження середовища та адреси повернення)
 
 ### Поточні обмеження
-- Максимум 3 аргументи для викликів узагальнених функцій.
-- Dotted lists (крапкові списки) не підтримуються.
-- Рядки (Strings) не підтримуються.
+- Generic calls зв'язують щонайбільше 8 аргументів; зайві аргументи ще не відхиляються явно.
+- Quoted dotted lists компілюються, але conformance runner ще не декодує структуровані FPGA-результати канонічно.
+- Сирцеві strings поки знижуються до target symbols; fpga-lisp ще не має окремого runtime string tag.
+- Inexact numbers і точні rationals не підтримуються цільовим представленням.
+
+[`compatibility.my`](compatibility.my) фіксує точний language contract my-lisp, ISA contract fpga-lisp, перевірені SHA, підтриману поверхню й відомі прогалини цієї ревізії компілятора.
 
 [Переглянути результати тестів](test_results.md)
 
@@ -85,9 +91,12 @@ Der Compiler verarbeitet:
 - Aufrufstapel (`R11` Software-Stack für Umgebungs- und Rücksprungadressenspeicherung)
 
 ### Aktuelle Einschränkungen
-- Maximal 3 Argumente für generische Funktionsaufrufe.
-- Dotted Lists werden nicht unterstützt.
-- Strings werden nicht unterstützt.
+- Generische Aufrufe binden höchstens 8 Argumente; zusätzliche Argumente werden noch nicht explizit abgelehnt.
+- Zitierte Dotted Lists werden kompiliert, aber der Konformitätsrunner dekodiert strukturierte FPGA-Ergebnisse noch nicht kanonisch.
+- Quell-Strings werden derzeit zu Zielsymbolen abgesenkt; fpga-lisp besitzt noch kein eigenes Laufzeit-String-Tag.
+- Inexakte Zahlen und exakte rationale Zahlen werden von der Zieldarstellung nicht unterstützt.
+
+[`compatibility.my`](compatibility.my) hält den genauen my-lisp-Sprachvertrag, fpga-lisp-ISA-Vertrag, geprüfte SHAs, die unterstützte Oberfläche und bekannte Lücken dieser Compilerrevision fest.
 
 [Testergebnisse anzeigen](test_results.md)
 

@@ -1,0 +1,23 @@
+; compatibility.my — the explicit boundary tested by this CML revision
+; Явна межа, яку перевіряє ця ревізія CML.
+; Die von dieser CML-Revision geprüfte explizite Grenze.
+
+((kind . cml-compatibility)
+ (compiler-version . (0 1 0))
+ (language . ((repository . juv4uk/my-lisp)
+              (contract . (1 0))
+              (tested-sha . "ed10151")))
+ (target . ((repository . juv4uk/fpga-lisp)
+            (isa . (0 1))
+            (tested-sha . "29d7c50")))
+ (pipeline . (parse compile assemble simulate compare))
+ (supported . (integer symbol nil true quote proper-list dotted-list
+               cond lambda application cons car cdr eq atom
+               variadic-up-to-eight-arguments))
+ (representational-substitutions . ((source-string . target-symbol)))
+ (conformance . ((tier-1 . partial)
+                 (structured-result-decoder . pending)
+                 (fixture-specific-skips . present)))
+ (limitations . (no-inexact-numbers no-rationals no-canonical-strings
+                 no-more-than-eight-call-arguments
+                 no-complete-proper-or-dotted-list-result-comparison)))
