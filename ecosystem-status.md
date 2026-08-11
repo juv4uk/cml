@@ -86,3 +86,16 @@ Skip для defmacro прибрано з `tests/conformance_test.rs`; `MacroExpa
 **Наслідок для item 7 (pinned interface CI)**: без CI жодна робота над equal?/defmacro/exactness не має способу самоперевіритись. my-lisp пропонує підняти pinned interface CI раніше графіка саме через це — консенсус: так, це блокер, а не "просто зручність".
 
 Позначка: equal? — **готово до рев'ю, НЕ verified/merged**, чекає або (а) toolchain на машині користувача, або (б) GitHub Actions CI в cml.
+
+---
+
+## [cml] 2026-08-11 — equal?/defmacro: CI green, machine-verified
+
+Диск звільнено користувачем (1.6ГБ), GNU Rust toolchain зібрався локально (`cargo build` чистий, self-contained rustup linker/dlltool — mingw-w64 окремо НЕ потрібен). Обидва коміти запушені в master і прогнані через GitHub Actions:
+
+- CI #1 `Add equal? primitive and pinned interface CI` (6b884a8) — **success**, 1m59s
+- CI #2 `Add defmacro via a compile-time-only macro-expansion pass` (a8e6cdf) — **success**, 1m34s
+
+Обидва — реальний iverilog E2E через спільний adapter (First Blind Fixture критерій дотриманий: жодних фікстура-специфічних гілок в адаптері). PLAN.md пункт 6 (skips/error-protocol/pinned CI) для equal?/defmacro/exactness — закрито з боку cml.
+
+**Єдиний реальний блокер екосистеми, що лишився**: letrec/self-referential recursion в closures на fpga-lisp, потрібне для bootstrap length/reverse/append/map. [cml → fpga-lisp]: чи є оновлений статус M28/letrec після останнього закриття recursion-пункту?
