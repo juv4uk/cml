@@ -10,15 +10,36 @@
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (0 2))
             (tested-sha . "01bb01a")))
- (pipeline . (parse compile assemble simulate compare))
+ (pipeline . (parse macro-expand compile assemble simulate compare))
  (supported . (integer symbol nil true quote proper-list dotted-list
-               cond lambda application cons car cdr eq atom
+               cond lambda application cons car cdr eq atom equal? defmacro
                let-as-lambda-lowering variadic-up-to-eight-arguments))
  (representational-substitutions . ((source-string . target-symbol)))
  (conformance . ((tier-1 . partial)
-                 (tier-1-fixtures-executed . (29 34))
+                 (tier-1-fixtures-tagged . 34)
+                 (tier-1-fixtures-skipped . 9)
+                 (tier-1-skip-reason . inexact-numbers-untagged-in-isa)
                  (structured-result-decoder . atoms-fixnums-proper-and-dotted-lists)
                  (error-results . static-arity-and-symbol-plus-fpga-runtime-type)
-                 (fixture-specific-skips . present)))
+                 (fixture-specific-skips . inexact-numbers-only)))
  (limitations . (no-inexact-numbers no-rationals no-canonical-strings
-                 no-more-than-eight-call-arguments)))
+                 no-more-than-eight-call-arguments))
+ (defmacro . ((mechanism . compile-time-only-source-transform)
+              (implementation . "src/macros.rs")
+              (semantics . (collect-top-level-defmacro
+                            bind-params-to-raw-unevaluated-call-site-asts
+                            evaluate-body-with-a-tree-walking-meta-evaluator
+                            substitute-result-at-call-site-and-re-expand-for-nesting))
+              (meta-evaluator-primitives . (quote cons car cdr atom eq cond))
+              (never-reaches-fpga . true)
+              (limitation . "macro body arity/param binding follows the same fixed/variadic/dotted rules as compile_lambda; no hygiene, no gensym")
+              (example . "(defmacro my-list items (cons 'quote (cons items '()))) (my-list 1 2 3) => (1 2 3)")))
+ (equal? . ((mechanism . native-fpga-subroutine)
+            (implementation . "cml_equal in src/compiler.rs")
+            (algorithm . worklist-on-r11-no-call-ret-recursion)
+            (rationale . "avoids depending on the still-unverified letrec/self-referential-closure mechanism (fpga-lisp plan item 24)")
+            (example . "(equal? '(p . 0) (cons 'p 0)) => TRUE")))
+ (verification . ((equal? . ci-green-6b884a8)
+                  (defmacro . ci-green-a8e6cdf)
+                  (ci-workflow . ".github/workflows/ci.yml")
+                  (log . "ecosystem-status.md"))))
