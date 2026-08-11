@@ -369,15 +369,20 @@ impl Compiler {
                     let next_label = self.next_label("cond_next");
                     
                     self.compile_expr(&pair[0], "R1");
-                    
+
                     // fpga-lisp's JF treats 0 as falsy, but my-lisp requires 0 to be truthy.
                     // We generate a strict NIL check by creating NIL and comparing against it twice.
+                    // R9 is scratch here, not R4: R4 is the ENV register, and this NIL-check
+                    // runs unconditionally for every branch (even ones not taken), so clobbering
+                    // R4 here destroyed the environment before a taken branch's body could look
+                    // up any variable or recursive call in it -- the actual cause of self-recursive
+                    // `def` failing with RESULT_ERROR:Type (env lookups saw an empty/NIL env).
                     self.emit("LOADI R2 0");
                     self.emit("LOADI R3 1");
-                    self.emit("EQ R4 R2 R3"); // R4 = NIL
-                    
-                    self.emit("EQ R2 R1 R4"); // R2 = TRUE if R1 was NIL, else NIL
-                    self.emit("EQ R3 R2 R4"); // R3 = TRUE if R1 was NOT NIL, else NIL
+                    self.emit("EQ R9 R2 R3"); // R9 = NIL
+
+                    self.emit("EQ R2 R1 R9"); // R2 = TRUE if R1 was NIL, else NIL
+                    self.emit("EQ R3 R2 R9"); // R3 = TRUE if R1 was NOT NIL, else NIL
                     
                     self.emit(&format!("JF R3 {}", next_label));
                     
