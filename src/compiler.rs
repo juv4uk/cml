@@ -113,6 +113,9 @@ impl Compiler {
             "let" => {
                 self.compile_let(args, target_reg);
             }
+            "def" => {
+                self.compile_def(args, target_reg);
+            }
             "cons" => {
                 if args.len() == 2 {
                     // args[1] may itself be a two-arg primitive call, which
@@ -170,26 +173,52 @@ impl Compiler {
                     self.emit(&format!("MOV {} R15", target_reg));
                 }
             }
+            "+" => {
+                if args.len() == 2 {
+                    self.compile_expr(&args[0], "R1");
+                    self.emit("CONS R11 R1 R11");
+                    self.compile_expr(&args[1], "R2");
+                    self.emit("CAR R1 R11");
+                    self.emit("CDR R11 R11");
+                    self.emit(&format!("ADD {} R1 R2", target_reg));
+                }
+            }
             _ => {
                 // Call a user-defined function named `func`
                 self.compile_generic_call(&Expr::Symbol(func.to_string()), args, target_reg);
             }
         }
     }
-    
+
     fn compile_generic_call(&mut self, func_expr: &Expr, args: &[Expr], target_reg: &str) {
         self.emit("; CALL START");
         // 1. Evaluate arguments (support up to 8 args mapped to R1..R3, R5..R9)
         let arg_regs = ["R1", "R2", "R3", "R5", "R6", "R7", "R8", "R9"];
-        
+        let bound_arg_count = args.len().min(arg_regs.len());
+
         for (i, arg) in args.iter().enumerate() {
             if i < arg_regs.len() {
                 self.compile_expr(arg, arg_regs[i]);
             }
         }
-        
-        // 2. Evaluate the closure expression (into R15)
+
+        // 2. Evaluate the closure expression (into R15). If func_expr is a
+        // symbol, this calls cml_lookup, which uses R0/R1/R2 as scratch --
+        // the same registers the first two-three arguments were just
+        // computed into. Save them on the R11 stack first, or a named
+        // function call with 1-3 arguments (e.g. any self/mutually
+        // recursive `def`) silently corrupts its own arguments.
+        // Якщо func_expr — символ, обчислення йде через cml_lookup, який
+        // використовує R0/R1/R2 як scratch -- ті самі регістри перших
+        // аргументів. Зберігаємо їх на стеку R11 заздалегідь.
+        for reg in arg_regs.iter().take(bound_arg_count) {
+            self.emit(&format!("CONS R11 {} R11", reg));
+        }
         self.compile_expr(func_expr, "R15");
+        for reg in arg_regs.iter().take(bound_arg_count).rev() {
+            self.emit(&format!("CAR {} R11", reg));
+            self.emit("CDR R11 R11");
+        }
 
         // R0 carries the complete evaluated argument list. Fixed-arity
         // lambdas keep using the fast argument registers; dotted and bare
@@ -224,6 +253,42 @@ impl Compiler {
         
         self.emit(&format!("MOV {} R15", target_reg)); // Lambda returns in R15 by convention
         self.emit("; CALL END");
+    }
+
+    // (def name value) binds `name` in the current environment (R4) via the
+    // fpga-lisp letrec pattern proven in M28/M29: extend R4 with a
+    // placeholder pair (name . NIL) *before* compiling `value`, so a lambda
+    // captures the extended frame and can look itself up by name; then
+    // SETCDR-backpatch the placeholder's cdr to the compiled value. This is
+    // the only mutation permitted after CONS allocates a cell (see fpga-lisp
+    // M26). Only self-recursion is supported this way -- two mutually
+    // recursive defs where the first calls the second before the second is
+    // defined would need two-pass forward declaration, not implemented.
+    // (def name value) прив'язує `name` у поточному середовищі (R4) через
+    // letrec-патерн fpga-lisp (M28/M29): розширюємо R4 placeholder-парою
+    // ДО компіляції value, потім SETCDR-бекпатчимо її cdr на скомпільоване
+    // значення.
+    fn compile_def(&mut self, args: &[Expr], target_reg: &str) {
+        let [Expr::Symbol(name), value] = args else {
+            self.emit("; malformed def");
+            return;
+        };
+
+        self.emit("; DEF START");
+        self.emit("LOADI R13 0");
+        self.emit("LOADI R12 1");
+        self.emit("EQ R9 R12 R13"); // R9 = NIL
+        self.emit(&format!("LOADSYM R12 {}", name.to_uppercase()));
+        self.emit("CONS R13 R12 R9"); // R13 = ph_pair = (NAME . NIL)
+        self.emit("CONS R4 R13 R4"); // env = (ph_pair . env) -- captured by `value` if it's a lambda
+        self.emit("CONS R11 R13 R11"); // save ph_pair pointer across compiling `value`
+
+        self.compile_expr(value, target_reg);
+
+        self.emit("CAR R13 R11"); // restore ph_pair pointer
+        self.emit("CDR R11 R11");
+        self.emit(&format!("SETCDR R12 R13 {}", target_reg)); // backpatch: ph_pair.cdr = value
+        self.emit("; DEF END");
     }
 
     // `let` is a derived Lisp form, not an FPGA primitive. Lower
