@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout cml
+        uses: actions/checkout@v4
+        with:
+          path: cml
+
+      - name: Checkout my-lisp (sibling, provides conformance fixtures)
+        uses: actions/checkout@v4
+        with:
+          repository: juv4uk/my-lisp
+          path: my-lisp
+
+      - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
+        uses: actions/checkout@v4
+        with:
+          repository: juv4uk/fpga-lisp
+          path: fpga-lisp
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Icarus Verilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+
+      - name: cargo test
+        working-directory: cml
+        run: cargo test --verbose

@@ -4,6 +4,7 @@ pub struct Compiler {
     output: Vec<String>,
     label_counter: usize,
     used_lookup: bool,
+    used_equal: bool,
 }
 
 impl Compiler {
@@ -12,6 +13,7 @@ impl Compiler {
             output: Vec::new(),
             label_counter: 0,
             used_lookup: false,
+            used_equal: false,
         }
     }
 
@@ -34,6 +36,9 @@ impl Compiler {
 
         if self.used_lookup {
             self.emit_cml_lookup();
+        }
+        if self.used_equal {
+            self.emit_cml_equal();
         }
 
         self.output.join("\n")
@@ -138,6 +143,15 @@ impl Compiler {
                 if args.len() == 1 {
                     self.compile_expr(&args[0], "R1");
                     self.emit(&format!("ATOM {} R1", target_reg));
+                }
+            }
+            "equal?" => {
+                if args.len() == 2 {
+                    self.compile_expr(&args[0], "R1");
+                    self.compile_expr(&args[1], "R2");
+                    self.used_equal = true;
+                    self.emit("CALL R14 cml_equal");
+                    self.emit(&format!("MOV {} R15", target_reg));
                 }
             }
             _ => {
@@ -380,6 +394,72 @@ impl Compiler {
         self.emit("cml_lookup_next:");
         self.emit("CDR R13 R13");
         self.emit("JMP cml_lookup");
+    }
+
+    // Structural equality without letrec/recursion: an explicit worklist of
+    // (a . b) pairs pushed onto the shared stack register R11, drained
+    // iteratively. Type mismatches stop pushing new work but keep draining
+    // so R11 always returns balanced to its caller.
+    // Структурна рівність без letrec/рекурсії: явний worklist пар (a . b)
+    // на спільному регістрі-стеку R11.
+    // Strukturelle Gleichheit ohne letrec/Rekursion: explizite Arbeitsliste
+    // von (a . b)-Paaren auf dem gemeinsamen Stapelregister R11.
+    fn emit_cml_equal(&mut self) {
+        self.emit("");
+        self.emit("cml_equal:");
+        self.emit("; input: R1 = a, R2 = b");
+        self.emit("; output: R15 = TRUE/NIL");
+        self.emit("CONS R12 R1 R2");
+        self.emit("CONS R11 R12 R11"); // push initial (a . b)
+        self.emit("LOADI R15 0");
+        self.emit("ATOM R15 R15"); // R15 = TRUE (running result)
+
+        self.emit("cml_equal_loop:");
+        self.emit("LOADI R9 0");
+        self.emit("LOADI R8 1");
+        self.emit("EQ R7 R8 R9"); // R7 = NIL
+        self.emit("EQ R6 R11 R7"); // R6 = TRUE if worklist empty
+        self.emit("JF R6 cml_equal_pop");
+        self.emit("JMP cml_equal_done");
+
+        self.emit("cml_equal_pop:");
+        self.emit("CAR R12 R11"); // top pair
+        self.emit("CDR R11 R11"); // pop
+        self.emit("CAR R1 R12");
+        self.emit("CDR R2 R12");
+
+        self.emit("ATOM R5 R1");
+        self.emit("ATOM R6 R2");
+        self.emit("JF R5 cml_equal_a_not_atom");
+        self.emit("JF R6 cml_equal_mismatch"); // a atom, b cons
+        self.emit("EQ R7 R1 R2");
+        self.emit("JF R7 cml_equal_setfail");
+        self.emit("JMP cml_equal_loop");
+
+        self.emit("cml_equal_a_not_atom:");
+        self.emit("JF R6 cml_equal_both_cons"); // a cons, b atom -> mismatch below
+        self.emit("JMP cml_equal_mismatch");
+
+        self.emit("cml_equal_both_cons:");
+        self.emit("CAR R7 R1");
+        self.emit("CAR R8 R2");
+        self.emit("CONS R9 R7 R8");
+        self.emit("CONS R11 R9 R11"); // push (car a . car b)
+        self.emit("CDR R7 R1");
+        self.emit("CDR R8 R2");
+        self.emit("CONS R9 R7 R8");
+        self.emit("CONS R11 R9 R11"); // push (cdr a . cdr b)
+        self.emit("JMP cml_equal_loop");
+
+        self.emit("cml_equal_mismatch:");
+        self.emit("cml_equal_setfail:");
+        self.emit("LOADI R13 0");
+        self.emit("LOADI R12 1");
+        self.emit("EQ R15 R12 R13"); // R15 = NIL, keep draining
+        self.emit("JMP cml_equal_loop");
+
+        self.emit("cml_equal_done:");
+        self.emit("RET R14");
     }
 
     fn emit(&mut self, instr: &str) {

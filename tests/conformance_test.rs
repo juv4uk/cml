@@ -246,7 +246,7 @@ fn test_conformance() {
         }
         
         // Skip unsupported features
-        if line.contains("equal?") || line.contains("defmacro") {
+        if line.contains("defmacro") {
             continue;
         }
         
