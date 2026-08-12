@@ -3,16 +3,17 @@
 ; Die von dieser CML-Revision geprüfte explizite Grenze.
 
 ((kind . cml-compatibility)
- (compiler-version . (0 1 0))
+ (compiler-version . (0 2 0))
  (language . ((repository . juv4uk/my-lisp)
               (contract . (1 0))
-              (tested-sha . "c1299f3fe4157e4aee1e1ee8bb66805b0a9e1265")))
+              (tested-sha . "164608cc2b1c08b815362551d6a9483fa762db7b")))
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (1 0))
-            (tested-sha . "4a4f032f42cd61bec516e81c510a7dec7bb5be44")))
+            (tested-sha . "6c08e42975eb05eb143ee4cc66bcc759b6f92a1b")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom equal? defmacro
+               def recursive-def-letrec
                let-as-lambda-lowering variadic-up-to-eight-arguments))
  (representational-substitutions . ((source-string . target-symbol)))
  (conformance . ((tier-1 . partial)
@@ -34,6 +35,17 @@
               (never-reaches-fpga . true)
               (limitation . "macro body arity/param binding follows the same fixed/variadic/dotted rules as compile_lambda; no hygiene, no gensym")
               (example . "(defmacro my-list items (cons 'quote (cons items '()))) (my-list 1 2 3) => (1 2 3)")))
+ (def . ((mechanism . letrec-placeholder-pair-plus-setcdr-backpatch)
+         (implementation . "compile_def in src/compiler.rs")
+         (semantics . (extend-env-with-name-dot-nil-placeholder-before-compiling-value
+                       compile-value-so-a-lambda-captures-the-extended-env
+                       setcdr-backpatch-the-placeholders-cdr-to-the-compiled-value))
+         (supports . (self-recursion forward-reference-to-earlier-defs))
+         (does-not-support . "two mutually recursive defs where the first calls the second before the second is defined -- would need two-pass forward declaration, not implemented")
+         (status . working-real-iverilog-verified)
+         (known-issues . ((r4-env-clobber-in-compile-cond . fixed-e73f93a)
+                          (cross-argument-r1-r3-clobber-in-compile-generic-call . fixed-166dffa)))
+         (example . "(def length-onto (lambda (values acc) (cond ((atom values) acc) (t (length-onto (cdr values) (+ acc 1)))))) (def length (lambda (values) (length-onto values 0))) (length '(a b c)) => 3, verified end-to-end against core.my's own length/length-onto pair, see evidence/length/")))
  (equal? . ((mechanism . native-fpga-subroutine)
             (implementation . "cml_equal in src/compiler.rs")
             (algorithm . worklist-on-r11-no-call-ret-recursion)
