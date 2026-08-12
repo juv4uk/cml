@@ -14,4 +14,5 @@
     ((priority . 0.9)
      (capabilities . (compiler rust proof))
      (done . t)
+     (description . "Compile+run the real core.my length/length-onto pair end-to-end (my-lisp -> cml -> fpga-lisp) and file it as durable evidence.")
      (context . "done: evidence/length/{cml,fpga-lisp,my-lisp}/<sha>.my filed, RESULT_VAL:3 matching oracle; also retracted the false 2+-param-via-wrapper hang report as a testbench-watchdog artifact, docs/abi.md"))))))
