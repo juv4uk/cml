@@ -196,25 +196,30 @@ impl Compiler {
         let arg_regs = ["R1", "R2", "R3", "R5", "R6", "R7", "R8", "R9"];
         let bound_arg_count = args.len().min(arg_regs.len());
 
+        // Push each argument onto the R11 stack immediately after computing
+        // it, before compiling the next one. A primitive call used as an
+        // argument expression (+, cdr, eq, cons, equal?, ...) always
+        // hardcodes R1/R2/R3 as scratch, regardless of its own target_reg --
+        // so without this, evaluating argument i+1 could silently clobber
+        // argument i's already-computed value still sitting in arg_regs[i]
+        // (e.g. `(f (cdr values) (+ acc 1))`: `(+ acc 1)` clobbers R1, which
+        // `(cdr values)` had just written its result into).
+        // Пушимо кожен аргумент на стек R11 одразу після обчислення, до
+        // компіляції наступного -- інакше примітив-аргумент (напр. `+`)
+        // тихо затирає R1..R3 попереднього вже обчисленого аргументу.
         for (i, arg) in args.iter().enumerate() {
             if i < arg_regs.len() {
                 self.compile_expr(arg, arg_regs[i]);
+                self.emit(&format!("CONS R11 {} R11", arg_regs[i]));
             }
         }
 
-        // 2. Evaluate the closure expression (into R15). If func_expr is a
-        // symbol, this calls cml_lookup, which uses R0/R1/R2 as scratch --
-        // the same registers the first two-three arguments were just
-        // computed into. Save them on the R11 stack first, or a named
-        // function call with 1-3 arguments (e.g. any self/mutually
-        // recursive `def`) silently corrupts its own arguments.
-        // Якщо func_expr — символ, обчислення йде через cml_lookup, який
-        // використовує R0/R1/R2 як scratch -- ті самі регістри перших
-        // аргументів. Зберігаємо їх на стеку R11 заздалегідь.
-        for reg in arg_regs.iter().take(bound_arg_count) {
-            self.emit(&format!("CONS R11 {} R11", reg));
-        }
+        // 2. Evaluate the closure expression (into R15) while every computed
+        // argument sits safely on the stack -- this also protects them from
+        // cml_lookup's own R0/R1/R2 scratch use when func_expr is a symbol.
         self.compile_expr(func_expr, "R15");
+
+        // 3. Pop the arguments back off, in reverse push order.
         for reg in arg_regs.iter().take(bound_arg_count).rev() {
             self.emit(&format!("CAR {} R11", reg));
             self.emit("CDR R11 R11");
