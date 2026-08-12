@@ -83,9 +83,16 @@ it *one of three*, not to write it from scratch.
    `compiler.rs`'s existing `ast::Expr -> fpga-lisp-ISA` path is
    untouched; nothing consumes `Ir` yet, so this step proves the
    boundary is well-defined without risking the hardware-verified path.
-   Next: make `compiler.rs`'s fpga-lisp emission actually consume `Ir`
-   instead of `ast::Expr` directly (still zero external behavior change),
-   *then* start the C backend.
+   ✅ Done (`a88970e`): `compiler.rs` rewritten form-for-form against
+   `Ir`/`Params`/`PrimOp`/`Quoted` instead of `ast::Expr` -- same
+   register sequences, same labels, same emit order. Zero external
+   behavior change verified: full regression clean, and the real
+   `length`/`length-onto` pair assembles to the identical 218
+   instructions as before. Also fixed a real lowering bug this surfaced
+   (a source string literal was wrongly lowering to a variable lookup
+   instead of a `LOADSYM` literal). `Ir` is now the only thing
+   `compiler.rs` sees -- `ast::Expr` never reaches code generation.
+   Next: start the C backend.
 2. **C backend next, not CUDA.** C is the cheapest second target: the
    closure/env-chain lowering cml already does maps 1:1 onto C
    structures, and it validates the IR without any GPU involvement.

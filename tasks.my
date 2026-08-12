@@ -21,4 +21,10 @@
      (capabilities . (compiler rust))
      (done . t)
      (description . "Extract the backend boundary in cml: split the pipeline into ast -> IR -> fpga-lisp ISA emission so C/CUDA/FPGA share one middle-end. Design: docs/heterogeneous-backends.md.")
-     (context . "done (step 1 of the doc's incremental path): src/ir.rs + src/lower.rs, additive only -- compiler.rs's hardware-verified path untouched. tests/ir_lowering_test.rs proves coverage against every tier-1 conformance fixture and core.my's real length/length-onto pair. Next increment (not yet started): make compiler.rs's fpga-lisp emission actually consume Ir instead of ast::Expr directly, then start the C backend."))))))
+     (context . "done (step 1 of the doc's incremental path): src/ir.rs + src/lower.rs, additive only -- compiler.rs's hardware-verified path untouched. tests/ir_lowering_test.rs proves coverage against every tier-1 conformance fixture and core.my's real length/length-onto pair. Step 1.5 (compiler.rs consuming Ir for real) also now done, see CML-COMPILER-CONSUME-IR.")))
+   ("CML-COMPILER-CONSUME-IR" .
+    ((priority . 0.7)
+     (capabilities . (compiler rust lowering testing iverilog proof))
+     (done . t)
+     (description . "Make compiler.rs's fpga-lisp ISA emission actually consume Ir instead of ast::Expr directly, zero external behavior change, before starting a C backend against an IR nothing real consumes yet.")
+     (context . "done (a88970e): compiler.rs rewritten form-for-form against Ir/Params/PrimOp/Quoted. Fixed a real lowering bug this surfaced (string literal was lowering to a variable lookup instead of a LOADSYM literal). Zero behavior change verified: full regression clean, length/length-onto assembles to the identical 218 instructions as before. Next: start the C backend."))))))
