@@ -22,6 +22,48 @@ impl Compiler {
         format!("{}_{}", prefix, self.label_counter)
     }
 
+    // --- Register preservation helpers (see docs/abi.md) -------------
+    //
+    // No register allocator exists here; every compile_* function
+    // hardcodes its own scratch registers. These three helpers are the
+    // only mechanism this codebase has for protecting a value across a
+    // nested compile_* call that might clobber it as scratch.
+
+    fn push(&mut self, reg: &str) {
+        self.emit(&format!("CONS R11 {} R11", reg));
+    }
+
+    fn pop(&mut self, reg: &str) {
+        self.emit(&format!("CAR {} R11", reg));
+        self.emit("CDR R11 R11");
+    }
+
+    /// Runs `body`, having pushed `reg`'s current value onto R11 first and
+    /// popped it back after -- protects `reg` across any compile_* call
+    /// inside `body` that might use it as scratch (docs/abi.md's "one rule
+    /// that matters"), regardless of that call's own target_reg.
+    fn preserve_across(&mut self, reg: &str, body: impl FnOnce(&mut Self)) {
+        self.push(reg);
+        body(self);
+        self.pop(reg);
+    }
+
+    /// Emits a protected `CALL R14 <label>` for a subroutine (cml_lookup,
+    /// cml_equal) that itself returns via `RET R14` -- preserves the
+    /// *caller's* pending return address (already sitting in R14) across
+    /// the nested call, since `CALL` unconditionally overwrites R14 with
+    /// its own return address on real hardware (see docs/abi.md). Without
+    /// this, a subroutine call from inside a function body silently
+    /// destroys that function's own eventual `RET R14` target.
+    fn call_subroutine(&mut self, label: &str) {
+        self.preserve_across("R14", |c| {
+            let ret_label = c.next_label("call_ret");
+            c.emit(&format!("LOADI R14 {}", ret_label));
+            c.emit(&format!("CALL R14 {}", label));
+            c.emit(&format!("{}:", ret_label));
+        });
+    }
+
     pub fn compile(&mut self, exprs: &[Expr]) -> String {
         // Initialize R4 (ENV) and R11 (Stack) to NIL at program start
         self.emit("LOADI R13 0");
@@ -67,13 +109,7 @@ impl Compiler {
                     self.emit(&format!("; LOOKUP {}", s));
                     self.emit(&format!("LOADSYM R12 {}", s.to_uppercase()));
                     self.emit("MOV R13 R4"); // R4 is our standard ENV register
-                    self.emit("CONS R11 R14 R11"); // Push R14
-                    let ret_label = self.next_label("cml_lookup_ret");
-                    self.emit(&format!("LOADI R14 {}", ret_label)); 
-                    self.emit("CALL R14 cml_lookup");
-                    self.emit(&format!("{}:", ret_label));
-                    self.emit("CAR R14 R11"); // Pop R14
-                    self.emit("CDR R11 R11");
+                    self.call_subroutine("cml_lookup");
                     self.emit(&format!("MOV {} R15", target_reg));
                 }
             }
@@ -119,17 +155,11 @@ impl Compiler {
             "cons" => {
                 if args.len() == 2 {
                     // args[1] may itself be a two-arg primitive call, which
-                    // also hardcodes R1 as scratch -- save R1 on the R11
-                    // stack across evaluating args[1] so it can't clobber
-                    // the already-computed first operand.
-                    // args[1] може сам бути викликом двоаргументної примітиви,
-                    // яка теж хардкодить R1 як scratch -- зберігаємо R1 на
-                    // стеку R11.
+                    // also hardcodes R1 as scratch -- preserve R1 across
+                    // evaluating args[1] so it can't clobber the
+                    // already-computed first operand (docs/abi.md).
                     self.compile_expr(&args[0], "R1");
-                    self.emit("CONS R11 R1 R11");
-                    self.compile_expr(&args[1], "R2");
-                    self.emit("CAR R1 R11");
-                    self.emit("CDR R11 R11");
+                    self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
                     self.emit(&format!("CONS {} R1 R2", target_reg));
                 }
             }
@@ -148,10 +178,7 @@ impl Compiler {
             "eq" => {
                 if args.len() == 2 {
                     self.compile_expr(&args[0], "R1");
-                    self.emit("CONS R11 R1 R11");
-                    self.compile_expr(&args[1], "R2");
-                    self.emit("CAR R1 R11");
-                    self.emit("CDR R11 R11");
+                    self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
                     self.emit(&format!("EQ {} R1 R2", target_reg));
                 }
             }
@@ -164,22 +191,21 @@ impl Compiler {
             "equal?" => {
                 if args.len() == 2 {
                     self.compile_expr(&args[0], "R1");
-                    self.emit("CONS R11 R1 R11");
-                    self.compile_expr(&args[1], "R2");
-                    self.emit("CAR R1 R11");
-                    self.emit("CDR R11 R11");
+                    self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
                     self.used_equal = true;
-                    self.emit("CALL R14 cml_equal");
+                    // cml_equal returns via RET R14 like cml_lookup, so it
+                    // needs the same call_subroutine protection -- this used
+                    // to be a bare `CALL R14 cml_equal` with no R14 save,
+                    // silently destroying whatever function this equal? call
+                    // was nested inside's own eventual `RET R14` target.
+                    self.call_subroutine("cml_equal");
                     self.emit(&format!("MOV {} R15", target_reg));
                 }
             }
             "+" => {
                 if args.len() == 2 {
                     self.compile_expr(&args[0], "R1");
-                    self.emit("CONS R11 R1 R11");
-                    self.compile_expr(&args[1], "R2");
-                    self.emit("CAR R1 R11");
-                    self.emit("CDR R11 R11");
+                    self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
                     self.emit(&format!("ADD {} R1 R2", target_reg));
                 }
             }
@@ -210,7 +236,7 @@ impl Compiler {
         for (i, arg) in args.iter().enumerate() {
             if i < arg_regs.len() {
                 self.compile_expr(arg, arg_regs[i]);
-                self.emit(&format!("CONS R11 {} R11", arg_regs[i]));
+                self.push(arg_regs[i]);
             }
         }
 
@@ -221,8 +247,7 @@ impl Compiler {
 
         // 3. Pop the arguments back off, in reverse push order.
         for reg in arg_regs.iter().take(bound_arg_count).rev() {
-            self.emit(&format!("CAR {} R11", reg));
-            self.emit("CDR R11 R11");
+            self.pop(reg);
         }
 
         // R0 carries the complete evaluated argument list. Fixed-arity
@@ -236,26 +261,26 @@ impl Compiler {
         for reg in arg_regs.iter().take(args.len()).rev() {
             self.emit(&format!("CONS R0 {} R0", reg));
         }
-        
-        // Save ENV (R4) and Link Register (R14) to stack (R11)
-        self.emit("CONS R11 R4 R11"); // Push R4
-        self.emit("CONS R11 R14 R11"); // Push R14
-        
+
+        // Save ENV (R4) and Link Register (R14), jump into the closure body
+        // (RET, not CALL: the target is a runtime label pointer in a
+        // register, and RET's hardware form doesn't auto-link R14 the way
+        // CALL does -- see docs/abi.md), then restore both on return.
+        self.push("R4");
+        self.push("R14");
+
         // Closure is (LABEL_PTR . CAPTURED_ENV)
         let ret_label = self.next_label("call_ret");
         self.emit("CAR R10 R15"); // Extract LABEL_PTR to R10
         self.emit("CDR R4 R15");  // Extract CAPTURED_ENV to R4 (current ENV register)
-        
+
         self.emit(&format!("LOADI R14 {}", ret_label)); // Return address
         self.emit("RET R10"); // Indirect jump to lambda body
-        
+
         self.emit(&format!("{}:", ret_label));
-        // Restore R14 and R4
-        self.emit("CAR R14 R11"); // Pop R14
-        self.emit("CDR R11 R11");
-        self.emit("CAR R4 R11");  // Pop R4
-        self.emit("CDR R11 R11");
-        
+        self.pop("R14");
+        self.pop("R4");
+
         self.emit(&format!("MOV {} R15", target_reg)); // Lambda returns in R15 by convention
         self.emit("; CALL END");
     }
