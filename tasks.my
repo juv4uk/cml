@@ -39,4 +39,10 @@
      (capabilities . (compiler rust lowering testing proof))
      (done . t)
      (description . "A second consumer of ir::Ir alongside compiler.rs's fpga-lisp emission -- a minimal C emitter proving the IR is really backend-neutral, not just fpga-lisp-shaped by accident. Acceptance: compile a def+lambda+primitive program to C, cc it, run it, and match the my-lisp oracle's result for the same source.")
-     (context . "done (e7bc0df): src/c_backend.rs, tagged-union Value runtime, one C function per lambda, self-recursive def via the same letrec-placeholder-plus-backpatch idea compiler.rs uses. Verified against the real my-lisp oracle with gcc actually compiling+running: (+ x 1) and a self-recursive count both match. Scoped down (fixed-arity params only, no let, no quoted lists yet) and documented as such. Zero impact on fpga-lisp path: full regression clean."))))))
+     (context . "done (e7bc0df): src/c_backend.rs, tagged-union Value runtime, one C function per lambda, self-recursive def via the same letrec-placeholder-plus-backpatch idea compiler.rs uses. Verified against the real my-lisp oracle with gcc actually compiling+running: (+ x 1) and a self-recursive count both match. Scoped down (fixed-arity params only, no let, no quoted lists yet) and documented as such. Zero impact on fpga-lisp path: full regression clean.")))
+   ("CML-MANIFEST-COMPLETE" .
+    ((priority . 0.6)
+     (capabilities . (compiler rust guix))
+     (done . t)
+     (description . "cml/manifest.scm only listed rust/rust:cargo/git/make, but cml's own E2E tests shell out to iverilog/vvp and python3 -- only working because the ambient shared Guix profile happened to provide them. Add them so guix shell --pure -m manifest.scm -- cargo test is self-sufficient.")
+     (context . "done (610b20c): iverilog + python added. guix shell --pure -m manifest.scm -- cargo test --workspace passes fully self-sufficient (7 packages total with gcc-toolchain from CML-C-BACKEND), no ambient profile involved: compiler_test 7/7, conformance_test 2/2, ir_lowering_test 2/2, c_backend_test 2/2."))))))
