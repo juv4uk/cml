@@ -1,0 +1,15 @@
+; tasks.my — durable task plan for the cml agent, per my-lisp
+; docs/swarm-autonomy.md (P2P on one server: this file is this repo's
+; plan of record; sync it into the shared 127.0.0.1:9999 registry with
+; the sync-tasks op after edits and after any server restart).
+;
+; Seed derived from the ecosystem-status.my current-task board; refine
+; freely — this file is the plan of record for this repo. Data only,
+; same flat-alist convention as ecosystem-status.my. `done . t` only
+; when real in-repo evidence exists.
+
+((kind . tasks-my)
+ (tasks .
+  (("CML-LENGTH-E2E" . ((priority . 0.9) (capabilities . (compiler rust proof))
+                        (done . t)
+                        (context . "done: evidence/length/{cml,fpga-lisp,my-lisp}/<sha>.my filed, RESULT_VAL:3 matching oracle; also retracted the false 2+-param-via-wrapper hang report as a testbench-watchdog artifact, docs/abi.md")))))))

@@ -1,0 +1,11 @@
+(evidence
+  (fixture . "(def length-onto (lambda (values acc) (cond ((atom values) acc) (t (length-onto (cdr values) (+ acc 1)))))) (def length (lambda (values) (length-onto values 0))) (length (quote (a b c)))")
+  (requirement . length-e2e)
+  (implementation . fpga-lisp)
+  (commit . "735e7c4")
+  (runner . iverilog)
+  (expected . "3")
+  (actual . "3")
+  (result . pass)
+  (timestamp . "2026-08-12")
+  (note . "hardware side of the same length-e2e run recorded in evidence/length/cml/26c1963.my -- cml-compiled binary executed against fpga-lisp RTL at this commit, RESULT_TAG:0 RESULT_VAL:3. No fpga-lisp code changes were needed for this to pass; the run used a local instrumented copy of fpga/sim/tb_cml_e2e.sv (PC trace + larger watchdog) rather than the shared testbench, whose fixed 70,000,000-unit watchdog is too short for this program's UART load time alone -- worth fpga-lisp raising its watchdog or making it a plusarg upstream."))

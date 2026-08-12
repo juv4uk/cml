@@ -1,0 +1,11 @@
+(evidence
+  (fixture . "(def length-onto (lambda (values acc) (cond ((atom values) acc) (t (length-onto (cdr values) (+ acc 1)))))) (def length (lambda (values) (length-onto values 0))) (length (quote (a b c)))")
+  (requirement . length-e2e)
+  (implementation . cml)
+  (commit . "26c1963")
+  (runner . iverilog)
+  (expected . "3")
+  (actual . "3")
+  (result . pass)
+  (timestamp . "2026-08-12")
+  (note . "first real end-to-end program through the full stack: my-lisp source (core.my's own length/length-onto pair, tail-recursive via -onto accumulator) compiled by cml, assembled, and run on real iverilog against fpga-lisp's RTL. RESULT_TAG:0 RESULT_VAL:3, matching the my-lisp TCP oracle exactly. What looked like a hang on first attempt was retracted (see docs/abi.md, commit 26c1963): fpga-lisp's shared fpga/sim/tb_cml_e2e.sv's fixed 70,000,000-time-unit watchdog is too short for a ~200+-instruction binary's bit-banged UART load time alone (~70,655,200 time units for this program's 218 instructions); confirmed with a local instrumented testbench copy (PC trace + 200,000,000-unit watchdog) rather than by modifying the shared repo. Depends on two real cml compiler fixes landed the same session: e73f93a (compile_cond clobbering the R4/ENV register as NIL-check scratch) and 166dffa (compile_generic_call's cross-argument R1-R3 clobber, the exact shape length-onto's own recursive call (length-onto (cdr values) (+ acc 1)) hits)."))
