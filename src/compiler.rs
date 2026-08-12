@@ -1,4 +1,4 @@
-use crate::ast::Expr;
+use crate::ir::{Ir, Params, PrimOp, Quoted};
 
 pub struct Compiler {
     output: Vec<String>,
@@ -64,15 +64,15 @@ impl Compiler {
         });
     }
 
-    pub fn compile(&mut self, exprs: &[Expr]) -> String {
+    pub fn compile(&mut self, program: &[Ir]) -> String {
         // Initialize R4 (ENV) and R11 (Stack) to NIL at program start
         self.emit("LOADI R13 0");
         self.emit("LOADI R12 1");
         self.emit("EQ R4 R12 R13"); // R4 = NIL
         self.emit("MOV R11 R4"); // R11 = NIL
-        
-        for expr in exprs {
-            self.compile_expr(expr, "R15");
+
+        for ir in program {
+            self.compile_expr(ir, "R15");
         }
         self.emit("HALT");
 
@@ -86,137 +86,88 @@ impl Compiler {
         self.output.join("\n")
     }
 
-    fn compile_expr(&mut self, expr: &Expr, target_reg: &str) {
-        match expr {
-            Expr::Integer(n) => {
+    fn compile_expr(&mut self, ir: &Ir, target_reg: &str) {
+        match ir {
+            Ir::Int(n) => {
                 self.emit_integer_literal(*n, target_reg);
             }
-            Expr::String(s) => {
-                self.emit(&format!("LOADSYM {} {}", target_reg, s.to_uppercase()));
+            Ir::Nil => {
+                self.emit("LOADI R13 0");
+                self.emit("LOADI R12 1");
+                self.emit(&format!("EQ {} R12 R13", target_reg));
             }
-            Expr::Symbol(s) => {
-                let s_upper = s.to_uppercase();
-                if s_upper == "T" {
-                    self.emit(&format!("LOADI {} 0", target_reg));
-                    self.emit(&format!("ATOM {} {}", target_reg, target_reg));
-                } else if s_upper == "NIL" {
-                    self.emit("LOADI R13 0");
-                    self.emit("LOADI R12 1");
-                    self.emit(&format!("EQ {} R12 R13", target_reg));
-                } else {
-                    // Variable lookup
-                    self.used_lookup = true;
-                    self.emit(&format!("; LOOKUP {}", s));
-                    self.emit(&format!("LOADSYM R12 {}", s.to_uppercase()));
-                    self.emit("MOV R13 R4"); // R4 is our standard ENV register
-                    self.call_subroutine("cml_lookup");
-                    self.emit(&format!("MOV {} R15", target_reg));
-                }
+            Ir::True => {
+                self.emit(&format!("LOADI {} 0", target_reg));
+                self.emit(&format!("ATOM {} {}", target_reg, target_reg));
             }
-            Expr::List(list) => {
-                if list.is_empty() {
-                    self.emit("LOADI R13 0");
-                    self.emit("LOADI R12 1");
-                    self.emit(&format!("EQ {} R12 R13", target_reg));
-                } else if let Expr::Symbol(func) = &list[0] {
-                    self.compile_call(func, &list[1..], target_reg);
-                } else {
-                    // if operator is a generic expression (e.g. ((lambda (x) x) 5))
-                    self.compile_generic_call(&list[0], &list[1..], target_reg);
-                }
+            Ir::Var(s) => {
+                // Variable lookup
+                self.used_lookup = true;
+                self.emit(&format!("; LOOKUP {}", s));
+                self.emit(&format!("LOADSYM R12 {}", s));
+                self.emit("MOV R13 R4"); // R4 is our standard ENV register
+                self.call_subroutine("cml_lookup");
+                self.emit(&format!("MOV {} R15", target_reg));
             }
-            Expr::DottedList(_, _) => {
-                // If it reaches here as an expression, it might be a malformed unquoted list
-                // or we are evaluating it directly (which Lisp usually doesn't allow for dotted lists)
-                self.emit("; unquoted dotted list unsupported");
+            Ir::Quote(q) => self.compile_quoted(q, target_reg),
+            Ir::Lambda { params, body } => self.compile_lambda(params, body, target_reg),
+            Ir::App { func, args } => self.compile_generic_call(func, args, target_reg),
+            Ir::Cond { branches } => self.compile_cond(branches, target_reg),
+            Ir::Let { bindings, body } => self.compile_let(bindings, body, target_reg),
+            Ir::Def { name, value } => self.compile_def(name, value, target_reg),
+            Ir::Prim { op, args } => self.compile_prim(*op, args, target_reg),
+        }
+    }
+
+    fn compile_prim(&mut self, op: PrimOp, args: &[Ir], target_reg: &str) {
+        match op {
+            PrimOp::Cons => {
+                // args[1] may itself be a two-arg primitive call, which
+                // also hardcodes R1 as scratch -- preserve R1 across
+                // evaluating args[1] so it can't clobber the
+                // already-computed first operand (docs/abi.md).
+                self.compile_expr(&args[0], "R1");
+                self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
+                self.emit(&format!("CONS {} R1 R2", target_reg));
+            }
+            PrimOp::Car => {
+                self.compile_expr(&args[0], "R1");
+                self.emit(&format!("CAR {} R1", target_reg));
+            }
+            PrimOp::Cdr => {
+                self.compile_expr(&args[0], "R1");
+                self.emit(&format!("CDR {} R1", target_reg));
+            }
+            PrimOp::Eq => {
+                self.compile_expr(&args[0], "R1");
+                self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
+                self.emit(&format!("EQ {} R1 R2", target_reg));
+            }
+            PrimOp::Atom => {
+                self.compile_expr(&args[0], "R1");
+                self.emit(&format!("ATOM {} R1", target_reg));
+            }
+            PrimOp::EqualP => {
+                self.compile_expr(&args[0], "R1");
+                self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
+                self.used_equal = true;
+                // cml_equal returns via RET R14 like cml_lookup, so it
+                // needs the same call_subroutine protection -- this used
+                // to be a bare `CALL R14 cml_equal` with no R14 save,
+                // silently destroying whatever function this equal? call
+                // was nested inside's own eventual `RET R14` target.
+                self.call_subroutine("cml_equal");
+                self.emit(&format!("MOV {} R15", target_reg));
+            }
+            PrimOp::Add => {
+                self.compile_expr(&args[0], "R1");
+                self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
+                self.emit(&format!("ADD {} R1 R2", target_reg));
             }
         }
     }
 
-    fn compile_call(&mut self, func: &str, args: &[Expr], target_reg: &str) {
-        match func {
-            "quote" => {
-                if args.len() == 1 {
-                    self.compile_quote(&args[0], target_reg);
-                }
-            }
-            "cond" => {
-                self.compile_cond(args, target_reg);
-            }
-            "lambda" => {
-                self.compile_lambda(args, target_reg);
-            }
-            "let" => {
-                self.compile_let(args, target_reg);
-            }
-            "def" => {
-                self.compile_def(args, target_reg);
-            }
-            "cons" => {
-                if args.len() == 2 {
-                    // args[1] may itself be a two-arg primitive call, which
-                    // also hardcodes R1 as scratch -- preserve R1 across
-                    // evaluating args[1] so it can't clobber the
-                    // already-computed first operand (docs/abi.md).
-                    self.compile_expr(&args[0], "R1");
-                    self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-                    self.emit(&format!("CONS {} R1 R2", target_reg));
-                }
-            }
-            "car" => {
-                if args.len() == 1 {
-                    self.compile_expr(&args[0], "R1");
-                    self.emit(&format!("CAR {} R1", target_reg));
-                }
-            }
-            "cdr" => {
-                if args.len() == 1 {
-                    self.compile_expr(&args[0], "R1");
-                    self.emit(&format!("CDR {} R1", target_reg));
-                }
-            }
-            "eq" => {
-                if args.len() == 2 {
-                    self.compile_expr(&args[0], "R1");
-                    self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-                    self.emit(&format!("EQ {} R1 R2", target_reg));
-                }
-            }
-            "atom" => {
-                if args.len() == 1 {
-                    self.compile_expr(&args[0], "R1");
-                    self.emit(&format!("ATOM {} R1", target_reg));
-                }
-            }
-            "equal?" => {
-                if args.len() == 2 {
-                    self.compile_expr(&args[0], "R1");
-                    self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-                    self.used_equal = true;
-                    // cml_equal returns via RET R14 like cml_lookup, so it
-                    // needs the same call_subroutine protection -- this used
-                    // to be a bare `CALL R14 cml_equal` with no R14 save,
-                    // silently destroying whatever function this equal? call
-                    // was nested inside's own eventual `RET R14` target.
-                    self.call_subroutine("cml_equal");
-                    self.emit(&format!("MOV {} R15", target_reg));
-                }
-            }
-            "+" => {
-                if args.len() == 2 {
-                    self.compile_expr(&args[0], "R1");
-                    self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-                    self.emit(&format!("ADD {} R1 R2", target_reg));
-                }
-            }
-            _ => {
-                // Call a user-defined function named `func`
-                self.compile_generic_call(&Expr::Symbol(func.to_string()), args, target_reg);
-            }
-        }
-    }
-
-    fn compile_generic_call(&mut self, func_expr: &Expr, args: &[Expr], target_reg: &str) {
+    fn compile_generic_call(&mut self, func: &Ir, args: &[Ir], target_reg: &str) {
         self.emit("; CALL START");
         // 1. Evaluate arguments (support up to 8 args mapped to R1..R3, R5..R9)
         let arg_regs = ["R1", "R2", "R3", "R5", "R6", "R7", "R8", "R9"];
@@ -243,7 +194,7 @@ impl Compiler {
         // 2. Evaluate the closure expression (into R15) while every computed
         // argument sits safely on the stack -- this also protects them from
         // cml_lookup's own R0/R1/R2 scratch use when func_expr is a symbol.
-        self.compile_expr(func_expr, "R15");
+        self.compile_expr(func, "R15");
 
         // 3. Pop the arguments back off, in reverse push order.
         for reg in arg_regs.iter().take(bound_arg_count).rev() {
@@ -298,17 +249,12 @@ impl Compiler {
     // letrec-патерн fpga-lisp (M28/M29): розширюємо R4 placeholder-парою
     // ДО компіляції value, потім SETCDR-бекпатчимо її cdr на скомпільоване
     // значення.
-    fn compile_def(&mut self, args: &[Expr], target_reg: &str) {
-        let [Expr::Symbol(name), value] = args else {
-            self.emit("; malformed def");
-            return;
-        };
-
+    fn compile_def(&mut self, name: &str, value: &Ir, target_reg: &str) {
         self.emit("; DEF START");
         self.emit("LOADI R13 0");
         self.emit("LOADI R12 1");
         self.emit("EQ R9 R12 R13"); // R9 = NIL
-        self.emit(&format!("LOADSYM R12 {}", name.to_uppercase()));
+        self.emit(&format!("LOADSYM R12 {}", name));
         self.emit("CONS R13 R12 R9"); // R13 = ph_pair = (NAME . NIL)
         self.emit("CONS R4 R13 R4"); // env = (ph_pair . env) -- captured by `value` if it's a lambda
         self.emit("CONS R11 R13 R11"); // save ph_pair pointer across compiling `value`
@@ -325,63 +271,40 @@ impl Compiler {
     // (let ((name value) ...) body) to ((lambda (name ...) body) value ...).
     // `let` — похідна форма Lisp, а не примітив FPGA.
     // `let` ist eine abgeleitete Lisp-Form, keine FPGA-Primitive.
-    fn compile_let(&mut self, args: &[Expr], target_reg: &str) {
-        let [Expr::List(bindings), body] = args else {
-            self.emit("; malformed let");
-            return;
-        };
-
-        let mut parameters = Vec::with_capacity(bindings.len());
-        let mut values = Vec::with_capacity(bindings.len());
-        for binding in bindings {
-            let Expr::List(pair) = binding else {
-                self.emit("; malformed let binding");
-                return;
-            };
-            let [Expr::Symbol(name), value] = pair.as_slice() else {
-                self.emit("; malformed let binding");
-                return;
-            };
-            parameters.push(Expr::Symbol(name.clone()));
-            values.push(value.clone());
-        }
-
-        let lambda = Expr::List(vec![
-            Expr::Symbol("lambda".to_string()),
-            Expr::List(parameters),
-            body.clone(),
-        ]);
+    fn compile_let(&mut self, bindings: &[(String, Ir)], body: &Ir, target_reg: &str) {
+        let params = Params::Fixed(bindings.iter().map(|(name, _)| name.clone()).collect());
+        let values: Vec<Ir> = bindings.iter().map(|(_, value)| value.clone()).collect();
+        let lambda = Ir::Lambda { params, body: Box::new(body.clone()) };
         self.compile_generic_call(&lambda, &values, target_reg);
     }
 
-    fn compile_quote(&mut self, expr: &Expr, target_reg: &str) {
-        match expr {
-            Expr::Integer(n) => self.emit_integer_literal(*n, target_reg),
-            Expr::String(s) => self.emit(&format!("LOADSYM {} {}", target_reg, s.to_uppercase())),
-            Expr::Symbol(s) => self.emit(&format!("LOADSYM {} {}", target_reg, s.to_uppercase())),
-            Expr::List(list) => {
-                if list.is_empty() {
-                    self.emit("LOADI R13 0");
-                    self.emit("LOADI R12 1");
-                    self.emit(&format!("EQ {} R12 R13", target_reg));
-                } else {
-                    self.emit("LOADI R13 0");
-                    self.emit("LOADI R12 1");
-                    self.emit(&format!("EQ {} R12 R13", target_reg));
-                    for item in list.iter().rev() {
-                        self.emit(&format!("CONS R11 {} R11", target_reg)); // Push accumulated list tail
-                        self.compile_quote(item, target_reg); // Evaluate item into target_reg
-                        self.emit("CAR R12 R11"); // Pop list tail into R12
-                        self.emit("CDR R11 R11");
-                        self.emit(&format!("CONS {} {} R12", target_reg, target_reg)); // target_reg = cons(item, tail)
-                    }
-                }
+    fn compile_quoted(&mut self, q: &Quoted, target_reg: &str) {
+        match q {
+            Quoted::Int(n) => self.emit_integer_literal(*n, target_reg),
+            Quoted::Str(s) => self.emit(&format!("LOADSYM {} {}", target_reg, s)),
+            Quoted::Sym(s) => self.emit(&format!("LOADSYM {} {}", target_reg, s)),
+            Quoted::Nil => {
+                self.emit("LOADI R13 0");
+                self.emit("LOADI R12 1");
+                self.emit(&format!("EQ {} R12 R13", target_reg));
             }
-            Expr::DottedList(list, tail) => {
-                self.compile_quote(tail, target_reg);
+            Quoted::List(list) => {
+                self.emit("LOADI R13 0");
+                self.emit("LOADI R12 1");
+                self.emit(&format!("EQ {} R12 R13", target_reg));
                 for item in list.iter().rev() {
                     self.emit(&format!("CONS R11 {} R11", target_reg)); // Push accumulated list tail
-                    self.compile_quote(item, target_reg); // Evaluate item into target_reg
+                    self.compile_quoted(item, target_reg); // Evaluate item into target_reg
+                    self.emit("CAR R12 R11"); // Pop list tail into R12
+                    self.emit("CDR R11 R11");
+                    self.emit(&format!("CONS {} {} R12", target_reg, target_reg)); // target_reg = cons(item, tail)
+                }
+            }
+            Quoted::DottedList(list, tail) => {
+                self.compile_quoted(tail, target_reg);
+                for item in list.iter().rev() {
+                    self.emit(&format!("CONS R11 {} R11", target_reg)); // Push accumulated list tail
+                    self.compile_quoted(item, target_reg); // Evaluate item into target_reg
                     self.emit("CAR R12 R11"); // Pop list tail into R12
                     self.emit("CDR R11 R11");
                     self.emit(&format!("CONS {} {} R12", target_reg, target_reg)); // target_reg = cons(item, tail)
@@ -390,109 +313,95 @@ impl Compiler {
         }
     }
 
-    fn compile_cond(&mut self, branches: &[Expr], target_reg: &str) {
+    fn compile_cond(&mut self, branches: &[(Ir, Ir)], target_reg: &str) {
         let end_label = self.next_label("cond_end");
-        
-        for branch in branches {
-            if let Expr::List(pair) = branch {
-                if pair.len() == 2 {
-                    let next_label = self.next_label("cond_next");
-                    
-                    self.compile_expr(&pair[0], "R1");
 
-                    // fpga-lisp's JF treats 0 as falsy, but my-lisp requires 0 to be truthy.
-                    // We generate a strict NIL check by creating NIL and comparing against it twice.
-                    // R9 is scratch here, not R4: R4 is the ENV register, and this NIL-check
-                    // runs unconditionally for every branch (even ones not taken), so clobbering
-                    // R4 here destroyed the environment before a taken branch's body could look
-                    // up any variable or recursive call in it -- the actual cause of self-recursive
-                    // `def` failing with RESULT_ERROR:Type (env lookups saw an empty/NIL env).
-                    self.emit("LOADI R2 0");
-                    self.emit("LOADI R3 1");
-                    self.emit("EQ R9 R2 R3"); // R9 = NIL
+        for (test, body) in branches {
+            let next_label = self.next_label("cond_next");
 
-                    self.emit("EQ R2 R1 R9"); // R2 = TRUE if R1 was NIL, else NIL
-                    self.emit("EQ R3 R2 R9"); // R3 = TRUE if R1 was NOT NIL, else NIL
-                    
-                    self.emit(&format!("JF R3 {}", next_label));
-                    
-                    self.compile_expr(&pair[1], target_reg);
-                    self.emit(&format!("JMP {}", end_label));
-                    
-                    self.emit(&format!("{}:", next_label));
-                }
-            }
+            self.compile_expr(test, "R1");
+
+            // fpga-lisp's JF treats 0 as falsy, but my-lisp requires 0 to be truthy.
+            // We generate a strict NIL check by creating NIL and comparing against it twice.
+            // R9 is scratch here, not R4: R4 is the ENV register, and this NIL-check
+            // runs unconditionally for every branch (even ones not taken), so clobbering
+            // R4 here destroyed the environment before a taken branch's body could look
+            // up any variable or recursive call in it -- the actual cause of self-recursive
+            // `def` failing with RESULT_ERROR:Type (env lookups saw an empty/NIL env).
+            self.emit("LOADI R2 0");
+            self.emit("LOADI R3 1");
+            self.emit("EQ R9 R2 R3"); // R9 = NIL
+
+            self.emit("EQ R2 R1 R9"); // R2 = TRUE if R1 was NIL, else NIL
+            self.emit("EQ R3 R2 R9"); // R3 = TRUE if R1 was NOT NIL, else NIL
+
+            self.emit(&format!("JF R3 {}", next_label));
+
+            self.compile_expr(body, target_reg);
+            self.emit(&format!("JMP {}", end_label));
+
+            self.emit(&format!("{}:", next_label));
         }
         self.emit(&format!("{}:", end_label));
     }
 
-    fn compile_lambda(&mut self, args: &[Expr], target_reg: &str) {
-        if args.len() >= 2 {
-            let lambda_label = self.next_label("lambda_body");
-            let skip_label = self.next_label("lambda_skip");
-            
-            self.emit("; LAMBDA START");
-            self.emit(&format!("LOADI R15 {}", lambda_label)); 
-            self.emit(&format!("CONS {} R15 R4", target_reg)); // Closure = (LABEL_PTR . ENV)
-            self.emit(&format!("JMP {}", skip_label));
-            
-            self.emit(&format!("{}:", lambda_label));
-            // Lambda Body
-            // We must bind parameters (up to 3 mapped from R1, R2, R3)
-            // We bind parameters mapped from R1..R3, R5..R9
-            let arg_regs = ["R1", "R2", "R3", "R5", "R6", "R7", "R8", "R9"];
-            
-            // Check if it's a DottedList for variable arity or a standard List
-            match &args[0] {
-                Expr::List(params) => {
-                    for (i, param) in params.iter().enumerate() {
-                        if let Expr::Symbol(p) = param {
-                            if i < arg_regs.len() {
-                                self.emit(&format!("LOADSYM R12 {}", p.to_uppercase()));
-                                self.emit(&format!("CONS R13 R12 {}", arg_regs[i])); // (param_sym . arg_val)
-                                self.emit("CONS R4 R13 R4"); // env = (pair . env)
-                            }
-                        }
-                    }
-                }
-                Expr::DottedList(list, tail) => {
-                    // Normal params
-                    for (i, param) in list.iter().enumerate() {
-                        if let Expr::Symbol(p) = param {
-                            if i < arg_regs.len() {
-                                self.emit(&format!("LOADSYM R12 {}", p.to_uppercase()));
-                                self.emit(&format!("CONS R13 R12 {}", arg_regs[i])); // (param_sym . arg_val)
-                                self.emit("CONS R4 R13 R4"); // env = (pair . env)
-                            }
-                        }
-                    }
-                    // Variable arity tail: bind rest of args into a list
-                    if let Expr::Symbol(tail_sym) = &**tail {
-                        self.emit("MOV R10 R0");
-                        for _ in 0..list.len() {
-                            self.emit("CDR R10 R10");
-                        }
-                        
-                        self.emit(&format!("LOADSYM R12 {}", tail_sym.to_uppercase()));
-                        self.emit("CONS R13 R12 R10"); // (param_sym . rest_args_list)
+    fn compile_lambda(&mut self, params: &Params, body: &Ir, target_reg: &str) {
+        let lambda_label = self.next_label("lambda_body");
+        let skip_label = self.next_label("lambda_skip");
+
+        self.emit("; LAMBDA START");
+        self.emit(&format!("LOADI R15 {}", lambda_label));
+        self.emit(&format!("CONS {} R15 R4", target_reg)); // Closure = (LABEL_PTR . ENV)
+        self.emit(&format!("JMP {}", skip_label));
+
+        self.emit(&format!("{}:", lambda_label));
+        // Lambda Body
+        // We must bind parameters (up to 3 mapped from R1, R2, R3)
+        // We bind parameters mapped from R1..R3, R5..R9
+        let arg_regs = ["R1", "R2", "R3", "R5", "R6", "R7", "R8", "R9"];
+
+        match params {
+            Params::Fixed(names) => {
+                for (i, name) in names.iter().enumerate() {
+                    if i < arg_regs.len() {
+                        self.emit(&format!("LOADSYM R12 {}", name));
+                        self.emit(&format!("CONS R13 R12 {}", arg_regs[i])); // (param_sym . arg_val)
                         self.emit("CONS R4 R13 R4"); // env = (pair . env)
                     }
                 }
-                Expr::Symbol(tail_sym) => {
-                    self.emit(&format!("LOADSYM R12 {}", tail_sym.to_uppercase()));
-                    self.emit("CONS R13 R12 R0");
-                    self.emit("CONS R4 R13 R4");
-                }
-                _ => {}
             }
-            
-            self.compile_expr(&args[1], "R15"); // Return value in R15
-            // Note: Caller saved return address in R14
-            self.emit("RET R14");
-            
-            self.emit(&format!("{}:", skip_label));
-            self.emit("; LAMBDA END");
+            Params::Variadic { fixed, rest } => {
+                // Normal params
+                for (i, name) in fixed.iter().enumerate() {
+                    if i < arg_regs.len() {
+                        self.emit(&format!("LOADSYM R12 {}", name));
+                        self.emit(&format!("CONS R13 R12 {}", arg_regs[i])); // (param_sym . arg_val)
+                        self.emit("CONS R4 R13 R4"); // env = (pair . env)
+                    }
+                }
+                // Variable arity tail: bind rest of args into a list
+                self.emit("MOV R10 R0");
+                for _ in 0..fixed.len() {
+                    self.emit("CDR R10 R10");
+                }
+
+                self.emit(&format!("LOADSYM R12 {}", rest));
+                self.emit("CONS R13 R12 R10"); // (param_sym . rest_args_list)
+                self.emit("CONS R4 R13 R4"); // env = (pair . env)
+            }
+            Params::AllRest(rest) => {
+                self.emit(&format!("LOADSYM R12 {}", rest));
+                self.emit("CONS R13 R12 R0");
+                self.emit("CONS R4 R13 R4");
+            }
         }
+
+        self.compile_expr(body, "R15"); // Return value in R15
+        // Note: Caller saved return address in R14
+        self.emit("RET R14");
+
+        self.emit(&format!("{}:", skip_label));
+        self.emit("; LAMBDA END");
     }
 
     fn emit_cml_lookup(&mut self) {

@@ -1,5 +1,6 @@
 use cml::parser;
 use cml::compiler::Compiler;
+use cml::lower;
 use std::env;
 use std::fs;
 use std::process::Command;
@@ -47,6 +48,7 @@ fn run_assembler(asm_code: &str, test_name: &str) {
 fn test_compile_cond() {
     let code = "(cond (t 'a) (nil 'b))";
     let exprs = parser::parse(code).unwrap();
+    let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs);
     
@@ -68,6 +70,7 @@ fn test_compile_cond() {
 fn test_compile_lambda() {
     let code = "(lambda (x) x)";
     let exprs = parser::parse(code).unwrap();
+    let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs);
     
@@ -82,6 +85,7 @@ fn test_compile_lambda() {
 #[test]
 fn test_compile_let_as_lambda_application() {
     let exprs = parser::parse("(let ((x 'test)) x)").unwrap();
+    let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs);
 
@@ -95,6 +99,7 @@ fn test_compile_let_as_lambda_application() {
 fn test_compile_apply() {
     let code = "((lambda (x) x) 'test)";
     let exprs = parser::parse(code).unwrap();
+    let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs);
     
@@ -111,6 +116,7 @@ fn test_compile_apply() {
 fn test_compile_nested_apply() {
     let code = "((lambda (x y) (cond (x y) (nil nil))) t 'success)";
     let exprs = parser::parse(code).unwrap();
+    let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs);
 
@@ -121,6 +127,7 @@ fn test_compile_nested_apply() {
 fn test_compile_quoted_list() {
     let code = "'(a (b c) d)";
     let exprs = parser::parse(code).unwrap();
+    let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs);
 
@@ -137,6 +144,7 @@ fn test_compile_quoted_list() {
 fn test_end_to_end_execution() {
     let code = "((lambda (x) x) 'test)";
     let exprs = parser::parse(code).unwrap();
+    let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs);
 

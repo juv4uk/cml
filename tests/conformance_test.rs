@@ -8,6 +8,7 @@ use cml::parser;
 use cml::ast::Expr;
 use cml::compiler::Compiler;
 use cml::macros::MacroExpander;
+use cml::lower;
 
 fn collect_symbols(expr: &Expr, syms: &mut Vec<String>) {
     match expr {
@@ -275,9 +276,10 @@ fn test_conformance() {
                 );
                 continue;
             }
+            let program = lower::lower_program(&exprs).unwrap();
             let mut compiler = Compiler::new();
-            let asm = compiler.compile(&exprs);
-            
+            let asm = compiler.compile(&program);
+
             // Collect new symbols
             let mut new_syms = Vec::new();
             for e in &exprs {

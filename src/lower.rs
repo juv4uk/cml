@@ -19,10 +19,11 @@ pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, String> {
 pub fn lower_expr(expr: &Expr) -> Result<Ir, String> {
     match expr {
         Expr::Integer(n) => Ok(Ir::Int(*n)),
-        // compiler.rs's emit_integer_literal/LOADSYM treatment: a source
-        // string is compiled exactly like a symbol (compatibility.my's
-        // `representational-substitutions`), not a distinct string type.
-        Expr::String(s) => Ok(Ir::Var(s.to_uppercase())),
+        // compiler.rs's compile_expr emits a direct LOADSYM literal for a
+        // source string (compatibility.my's `representational-
+        // substitutions`), never a variable lookup -- Quote(Sym(..))
+        // lowers to exactly that same LOADSYM via compile_quoted.
+        Expr::String(s) => Ok(Ir::Quote(Quoted::Sym(s.to_uppercase()))),
         Expr::Symbol(s) => lower_symbol(s),
         Expr::List(list) => lower_list(list),
         Expr::DottedList(_, _) => {
