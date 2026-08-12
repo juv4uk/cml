@@ -61,17 +61,21 @@ unrelated to environments (see `e73f93a` below).
 
 ## Known gaps
 
-- A 2+-parameter function invoked indirectly through a wrapper closure
-  has been observed to hang (`WATCHDOG TIMEOUT`, no `RESULT_TAG`) if its
-  body contains *any* function call, even in a `cond` branch that isn't
-  taken at runtime. Isolated to: reproduces with an unrelated callee
-  (not just self-recursion), reproduces with distinct parameter names
-  (not a symbol-ID collision), and does *not* reproduce for a 1-parameter
-  function in the same shape. Not yet root-caused — `CALL`/`RET`
-  encoding was checked and is correct (`rs1`-addressed on both the
-  assembler and RTL side, despite the `reg_rd_data_a` port's misleading
-  name). Filed here rather than in code so the next investigation starts
-  from what's already ruled out.
+- ~~A 2+-parameter function invoked indirectly through a wrapper closure
+  hangs if its body contains any function call~~ -- **retracted**. This
+  was never a compiler or hardware bug: `fpga-lisp`'s shared
+  `fpga/sim/tb_cml_e2e.sv` loads the program over a bit-banged UART at
+  8680 time units/bit, so a ~200+-instruction binary alone takes
+  ~70,000,000+ time units just to finish *loading*, before execution
+  even starts -- right at or past the testbench's fixed 70,000,000-unit
+  watchdog. Every case that looked like a hang (including the real
+  `length`/`length-onto` pair from `core.my`, verified end-to-end
+  through `my-lisp` -> `cml` -> `fpga-lisp`) completes correctly and
+  produces the right `RESULT_VAL` once run with a larger watchdog --
+  confirmed with a local instrumented testbench copy (PC trace + a
+  200,000,000-unit watchdog), not by patching the shared repo. Flagged
+  to `fpga-lisp` since this affects any sufficiently large program run
+  through that testbench, not just `cml`'s output.
 - This document was written by reading `compiler.rs`'s actual emitted
   instructions, not from an independent formal model — treat it as a
   description of present behavior to keep consistent, not as a
