@@ -33,4 +33,10 @@
      (capabilities . (compiler rust lisp lowering testing))
      (done . t)
      (description . "Port macros.rs (defmacro expansion) to a from-scratch .my implementation, differentially tested against the Rust reference, same pattern as fpga-lisp's assembler.py/assembler.my.")
-     (context . "done (e5f349f): macros.my, differentially verified against two representative fixtures via the real my-lisp CLI. Found+fixed two real bugs while verifying (eq requires atom operands; my-lisp's real truth symbol is lowercase t, not cml's uppercase T convention). Not wired into cml's compile pipeline -- a proven parallel implementation, matching assembler.my's status relative to assembler.py."))))))
+     (context . "done (e5f349f): macros.my, differentially verified against two representative fixtures via the real my-lisp CLI. Found+fixed two real bugs while verifying (eq requires atom operands; my-lisp's real truth symbol is lowercase t, not cml's uppercase T convention). Not wired into cml's compile pipeline -- a proven parallel implementation, matching assembler.my's status relative to assembler.py.")))
+   ("CML-C-BACKEND" .
+    ((priority . 0.65)
+     (capabilities . (compiler rust lowering testing proof))
+     (done . t)
+     (description . "A second consumer of ir::Ir alongside compiler.rs's fpga-lisp emission -- a minimal C emitter proving the IR is really backend-neutral, not just fpga-lisp-shaped by accident. Acceptance: compile a def+lambda+primitive program to C, cc it, run it, and match the my-lisp oracle's result for the same source.")
+     (context . "done (e7bc0df): src/c_backend.rs, tagged-union Value runtime, one C function per lambda, self-recursive def via the same letrec-placeholder-plus-backpatch idea compiler.rs uses. Verified against the real my-lisp oracle with gcc actually compiling+running: (+ x 1) and a self-recursive count both match. Scoped down (fixed-arity params only, no let, no quoted lists yet) and documented as such. Zero impact on fpga-lisp path: full regression clean."))))))

@@ -93,12 +93,19 @@ it *one of three*, not to write it from scratch.
    instead of a `LOADSYM` literal). `Ir` is now the only thing
    `compiler.rs` sees -- `ast::Expr` never reaches code generation.
    Next: start the C backend.
-2. **C backend next, not CUDA.** C is the cheapest second target: the
-   closure/env-chain lowering cml already does maps 1:1 onto C
-   structures, and it validates the IR without any GPU involvement.
-   A compiled-once `(def square (lambda (x) (* x x)))` → C → `cc`
-   round-trip, compared against the my-lisp oracle, is the acceptance
-   test for the IR.
+2. **C backend next, not CUDA.** ✅ First increment done (`e7bc0df`):
+   `src/c_backend.rs`, a small tagged-union `Value` runtime with a
+   mutable-cons alist env, one C function per lambda, self-recursive
+   `def` via the same letrec-placeholder-plus-backpatch idea
+   `compile_def` uses on fpga-lisp. Verified against the real my-lisp
+   oracle (not just internal consistency): `((lambda (x) (+ x 1)) 41)`
+   and a self-recursive `(count 3)` both compile to C, build with real
+   `gcc`, run, and match the oracle exactly (`tests/c_backend_test.rs`).
+   Scoped down deliberately: fixed-arity lambda params only, no `let`,
+   no quoted lists yet (documented in the module's own doc comment, not
+   silently missing) -- the doc's own `(* x x)` example used a primitive
+   (`*`) `cml` has never actually implemented on any backend, so the
+   verified fixture uses `+` instead.
 3. **CUDA backend after C.** Only pure, element-wise forms (`map`/
    `fold`) become kernels; the compiler decides, or `with-target gpu`
    forces it. Not before the IR is stable.
