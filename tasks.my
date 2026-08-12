@@ -15,4 +15,10 @@
      (capabilities . (compiler rust proof))
      (done . t)
      (description . "Compile+run the real core.my length/length-onto pair end-to-end (my-lisp -> cml -> fpga-lisp) and file it as durable evidence.")
-     (context . "done: evidence/length/{cml,fpga-lisp,my-lisp}/<sha>.my filed, RESULT_VAL:3 matching oracle; also retracted the false 2+-param-via-wrapper hang report as a testbench-watchdog artifact, docs/abi.md"))))))
+     (context . "done: evidence/length/{cml,fpga-lisp,my-lisp}/<sha>.my filed, RESULT_VAL:3 matching oracle; also retracted the false 2+-param-via-wrapper hang report as a testbench-watchdog artifact, docs/abi.md")))
+   ("CML-BACKEND-BOUNDARY" .
+    ((priority . 0.8)
+     (capabilities . (compiler rust))
+     (done . t)
+     (description . "Extract the backend boundary in cml: split the pipeline into ast -> IR -> fpga-lisp ISA emission so C/CUDA/FPGA share one middle-end. Design: docs/heterogeneous-backends.md.")
+     (context . "done (step 1 of the doc's incremental path): src/ir.rs + src/lower.rs, additive only -- compiler.rs's hardware-verified path untouched. tests/ir_lowering_test.rs proves coverage against every tier-1 conformance fixture and core.my's real length/length-onto pair. Next increment (not yet started): make compiler.rs's fpga-lisp emission actually consume Ir instead of ast::Expr directly, then start the C backend."))))))
