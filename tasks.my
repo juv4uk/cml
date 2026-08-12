@@ -27,4 +27,10 @@
      (capabilities . (compiler rust lowering testing iverilog proof))
      (done . t)
      (description . "Make compiler.rs's fpga-lisp ISA emission actually consume Ir instead of ast::Expr directly, zero external behavior change, before starting a C backend against an IR nothing real consumes yet.")
-     (context . "done (a88970e): compiler.rs rewritten form-for-form against Ir/Params/PrimOp/Quoted. Fixed a real lowering bug this surfaced (string literal was lowering to a variable lookup instead of a LOADSYM literal). Zero behavior change verified: full regression clean, length/length-onto assembles to the identical 218 instructions as before. Next: start the C backend."))))))
+     (context . "done (a88970e): compiler.rs rewritten form-for-form against Ir/Params/PrimOp/Quoted. Fixed a real lowering bug this surfaced (string literal was lowering to a variable lookup instead of a LOADSYM literal). Zero behavior change verified: full regression clean, length/length-onto assembles to the identical 218 instructions as before. Next: start the C backend.")))
+   ("CML-MACROS-TO-LISP" .
+    ((priority . 0.6)
+     (capabilities . (compiler rust lisp lowering testing))
+     (done . t)
+     (description . "Port macros.rs (defmacro expansion) to a from-scratch .my implementation, differentially tested against the Rust reference, same pattern as fpga-lisp's assembler.py/assembler.my.")
+     (context . "done (e5f349f): macros.my, differentially verified against two representative fixtures via the real my-lisp CLI. Found+fixed two real bugs while verifying (eq requires atom operands; my-lisp's real truth symbol is lowercase t, not cml's uppercase T convention). Not wired into cml's compile pipeline -- a proven parallel implementation, matching assembler.my's status relative to assembler.py."))))))
