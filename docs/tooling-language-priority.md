@@ -79,13 +79,13 @@ register discipline in an untyped host).
 
 ## Priority summary
 
-1. **`macros.rs` → a `.my`-hosted macro-expander**: real candidate,
-   worth scoping as an actual task. Never touches fpga-lisp or register
-   allocation, so the risk profile matches `assembler.my`'s (a bug there
-   is a compile-time-only regression, not a hardware-verified-path
-   regression). Blocked on nothing external, unlike `assembler.my`
-   (which is blocked by a `my-lisp` interpreter bug per fpga-lisp's own
-   doc) -- this could start now if prioritized.
+1. **`macros.rs` → a `.my`-hosted macro-expander**: ✅ done (`macros.my`,
+   this repo root). Differentially verified against two representative
+   fixtures via the real `my-lisp` CLI (see `macros.my`'s own status
+   note for both, and the two real bugs found+fixed while doing it).
+   Not wired into `cml`'s actual pipeline -- same status as `fpga-lisp`'s
+   `assembler.my` relative to `assembler.py`, a proven parallel
+   implementation, not the thing CI/evidence exercise.
 2. **`lower.rs` → Lisp**: plausible later, not now. Only makes sense
    paired with a real Rust↔Lisp data boundary for `Ir`, which doesn't
    exist and isn't otherwise needed yet.

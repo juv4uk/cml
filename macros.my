@@ -1,0 +1,178 @@
+; macros.my — a from-scratch, .my-hosted reimplementation of cml's
+; macros.rs defmacro-expansion algorithm (a compile-time-only source
+; transform, never reaching fpga-lisp -- see compatibility.my's `defmacro`
+; entry). Same status as fpga-lisp's assembler.my relative to
+; assembler.py (docs/tooling-language-priority.md): a parallel
+; implementation proven correct by differential testing, NOT wired into
+; cml's actual compile pipeline (that would need a subprocess/embedded-
+; interpreter architecture decision out of scope for this step).
+;
+; The macro table and the bindings environment are both plain alists:
+; ((key . value) (key . value) ...), walked with the same recursive
+; lookup shape throughout, matching this codebase's own idioms
+; elsewhere (cml_lookup in fpga-lisp assembly is the same pattern).
+;
+; Status (2026-08-12): differentially verified against macros.rs for two
+; representative fixtures via the real my-lisp CLI (not the Rust
+; reference's own AST shapes -- real my-lisp forms, since this runs
+; inside actual my-lisp, not cml):
+;   (defmacro my-list items (cons 'quote (cons items '())))
+;     (my-list 1 2 3) -> (quote (1 2 3))  -- matches compatibility.my's
+;     own documented example and cml's compiled output for the same
+;     source.
+;   (defmacro my-if (test then else) (cons 'cond (cons (cons test (cons then ()))
+;     (cons (cons t (cons else ())) ()))))
+;     (my-if x 1 2) -> (cond (x 1) (t 2))
+; Two real bugs found+fixed while verifying against actual my-lisp
+; rather than by inspection: `eq` requires both operands to be atoms
+; (this codebase's own eval-macro-body originally compared a possibly-
+; list `expr` against `nil`/`t` before checking `atom` first), and
+; my-lisp's own truth symbol is lowercase `t`, not the uppercase `T`
+; macros.rs uses (cml's Rust parser uppercases every identifier as its
+; own convention; real my-lisp is case-sensitive and never does that).
+; Not exhaustively tested -- same maturity level as fpga-lisp's
+; assembler.my, a proven-real artifact, not a guarantee of full parity.
+
+; --- alist lookup, shared shape for both the macro table and bindings ---
+
+(def alist-get
+  (lambda (alist key)
+    (cond
+      ((atom alist) ())
+      ((eq (car (car alist)) key) (cdr (car alist)))
+      (t (alist-get (cdr alist) key)))))
+
+; --- bind-params: params is a bare symbol, a proper list, or a dotted
+; list, mirroring macros.rs's three Expr shapes for a defmacro's param
+; spec. One recursive walk covers all three: a bare symbol (or a dotted
+; list's tail symbol) is caught by the "params is a non-nil atom" case,
+; binding it to whatever of `args` is left at that point in the walk. ---
+
+(def bind-params
+  (lambda (params args)
+    (cond
+      ((atom params)
+       (cond
+         ((eq params ()) ())
+         (t (cons (cons params args) ()))))
+      ((atom args) ())
+      (t (cons (cons (car params) (car args))
+               (bind-params (cdr params) (cdr args)))))))
+
+; --- eval-macro-body: the restricted meta-evaluator (quote/cons/car/cdr/
+; atom/eq/cond only -- compatibility.my's `meta-evaluator-primitives`),
+; over unevaluated call-site ASTs bound in `env`. ---
+
+(def eval-macro-body
+  (lambda (expr env)
+    (cond
+      ((atom expr)
+       (cond
+         ((eq expr ()) ())
+         ((eq expr (quote nil)) ())
+         ((eq expr (quote t)) (quote t))
+         (t (alist-get env expr))))
+      (t (eval-macro-form expr env)))))
+
+(def eval-macro-form
+  (lambda (expr env)
+    (cond
+      ((eq (car expr) (quote quote)) (car (cdr expr)))
+      ((eq (car expr) (quote cons))
+       (cons (eval-macro-body (car (cdr expr)) env)
+             (eval-macro-body (car (cdr (cdr expr))) env)))
+      ((eq (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) env)))
+      ((eq (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) env)))
+      ((eq (car expr) (quote atom)) (truthy (atom (eval-macro-body (car (cdr expr)) env))))
+      ((eq (car expr) (quote eq))
+       (truthy (equal? (eval-macro-body (car (cdr expr)) env)
+                        (eval-macro-body (car (cdr (cdr expr))) env))))
+      ((eq (car expr) (quote cond)) (eval-macro-cond (cdr expr) env))
+      (t ()))))
+
+(def truthy (lambda (v) (cond (v (quote t)) (t ()))))
+
+(def eval-macro-cond
+  (lambda (branches env)
+    (cond
+      ((atom branches) ())
+      (t (cond
+           ((eval-macro-body (car (car branches)) env)
+            (eval-macro-body (car (cdr (car branches))) env))
+           (t (eval-macro-cond (cdr branches) env)))))))
+
+; --- defmacro recognition and top-level expansion pass ---
+
+(def defmacro-form?
+  (lambda (expr)
+    (cond
+      ((atom expr) ())
+      ((eq (car expr) (quote defmacro)) t)
+      (t ()))))
+
+(def defmacro-name (lambda (expr) (car (cdr expr))))
+(def defmacro-params (lambda (expr) (car (cdr (cdr expr)))))
+(def defmacro-body (lambda (expr) (car (cdr (cdr (cdr expr))))))
+
+(def expand
+  (lambda (expr table)
+    (cond
+      ((atom expr) expr)
+      ((eq (car expr) (quote quote)) expr)
+      (t (expand-call expr table)))))
+
+(def expand-call
+  (lambda (expr table)
+    (cond
+      ((atom (car expr)) (expand-with-macro-check expr table))
+      (t (expand-list expr table)))))
+
+(def expand-with-macro-check
+  (lambda (expr table)
+    (cond
+      ((alist-get table (car expr))
+       (expand (eval-macro-body (macro-entry-body (alist-get table (car expr)))
+                                 (bind-params (macro-entry-params (alist-get table (car expr)))
+                                               (cdr expr)))
+               table))
+      (t (expand-list expr table)))))
+
+; macro table entries store (params . body); helpers to read them back
+; out of that pair shape -- named distinctly from defmacro-params/-body
+; (which read straight off a (defmacro name params body) form) since
+; `def` has no notion of overloading and a name collision would silently
+; shadow the earlier definition instead of erroring.
+(def macro-entry-params (lambda (entry) (car entry)))
+(def macro-entry-body (lambda (entry) (cdr entry)))
+
+(def expand-list
+  (lambda (expr table)
+    (cond
+      ((atom expr) expr)
+      (t (cons (expand (car expr) table) (expand-list (cdr expr) table))))))
+
+; --- process: split a program into (macro-table . non-defmacro-exprs),
+; matching MacroExpander::process's two-pass shape (collect, then
+; expand each remaining top-level form against the now-complete table). ---
+
+(def collect-macros
+  (lambda (exprs table)
+    (cond
+      ((atom exprs) table)
+      ((defmacro-form? (car exprs))
+       (collect-macros (cdr exprs)
+                        (cons (cons (defmacro-name (car exprs))
+                                    (cons (defmacro-params (car exprs)) (defmacro-body (car exprs))))
+                              table)))
+      (t (collect-macros (cdr exprs) table)))))
+
+(def expand-program-with
+  (lambda (exprs table)
+    (cond
+      ((atom exprs) ())
+      ((defmacro-form? (car exprs)) (expand-program-with (cdr exprs) table))
+      (t (cons (expand (car exprs) table) (expand-program-with (cdr exprs) table))))))
+
+(def expand-program
+  (lambda (exprs)
+    (expand-program-with exprs (collect-macros exprs ()))))
