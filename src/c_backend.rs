@@ -6,14 +6,14 @@
 //! first C backend increment, not a claim of parity with `compiler.rs`.
 //! Supported: integers, `nil`/`t`, variables, `quote` of integers/symbols/
 //! lists/dotted lists (CML-C-BACKEND-QUOTED-LISTS), `lambda` (fixed-arity
-//! params only), application, `cond`, structural `equal?` (`v_equal_p`,
-//! recursive -- not just pointer equality), top-level `def` (including
-//! self-recursive, via the same letrec-placeholder-plus-backpatch
-//! technique `compiler.rs`'s `compile_def` uses on fpga-lisp -- see that
-//! function's doc comment and `docs/abi.md`'s `def` section for the
-//! shared idea). Not supported yet: `let` (has an `Ir::Let` arm deriving
-//! it the same way `compiler.rs` does, but untested -- see
-//! CML-C-BACKEND-LET), variadic/dotted lambda params.
+//! params only), application, `cond`, `let` (CML-C-BACKEND-LET, derived
+//! via an immediately-applied lambda, same technique `compiler.rs` uses),
+//! structural `equal?` (`v_equal_p`, recursive -- not just pointer
+//! equality), top-level `def` (including self-recursive, via the same
+//! letrec-placeholder-plus-backpatch technique `compiler.rs`'s
+//! `compile_def` uses on fpga-lisp -- see that function's doc comment and
+//! `docs/abi.md`'s `def` section for the shared idea). Not supported yet:
+//! variadic/dotted lambda params.
 //!
 //! The runtime is a small tagged-union `Value` with a mutable-cons alist
 //! for environments -- the same conceptual model `compiler.rs` uses on

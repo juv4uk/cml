@@ -83,6 +83,39 @@ fn compiles_self_recursive_def_to_c_and_runs_it() {
 }
 
 #[test]
+fn compiles_let_to_c_and_runs_it() {
+    // CML-C-BACKEND-LET: compile_expr's Ir::Let arm (derives let via an
+    // immediately-applied lambda, same technique compiler.rs uses) has
+    // never actually been run before this test.
+    let code = "(let ((x 5) (y 3)) (+ x y))";
+    let exprs = parser::parse(code).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
+    let mut backend = CBackend::new();
+    let c_source = backend.compile_program(&program);
+
+    let c_path = "c_backend_let_test.c";
+    let bin_path = "c_backend_let_test";
+    fs::write(c_path, &c_source).unwrap();
+
+    let compile = Command::new("gcc").arg(c_path).arg("-o").arg(bin_path).output().unwrap();
+    if !compile.status.success() {
+        panic!(
+            "gcc failed:\nSTDERR: {}\n--- generated C ---\n{}",
+            String::from_utf8_lossy(&compile.stderr),
+            c_source
+        );
+    }
+
+    let run = Command::new(format!("./{bin_path}")).output().unwrap();
+    let stdout = String::from_utf8_lossy(&run.stdout);
+
+    let _ = fs::remove_file(c_path);
+    let _ = fs::remove_file(bin_path);
+
+    assert_eq!(stdout.trim(), "8", "expected 8 (matches my-lisp oracle: (let ((x 5) (y 3)) (+ x y)) -> 8), got: {stdout}");
+}
+
+#[test]
 fn compiles_quoted_list_access_to_c_and_runs_it() {
     // CML-C-BACKEND-QUOTED-LISTS: compile_quoted previously panicked on
     // Quoted::List/DottedList. car/(car (cdr ...)) into a quoted list
