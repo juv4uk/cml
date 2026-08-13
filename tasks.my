@@ -63,4 +63,10 @@
      (capabilities . (compiler rust lowering testing proof))
      (done . t)
      (description . "src/c_backend.rs compile_lambda panics on Params::Variadic/AllRest (fixed-arity only). compiler.rs fpga-lisp path supports both. Extend, verified against the my-lisp oracle for a real variadic fixture.")
-     (context . "done (efc0704): args is already a real cons-list at runtime, so no arity counting needed (unlike fpga-lisp's register-based approach) -- rest-param binds to whatever's left after walking fixed names. Verified against the real my-lisp oracle: bare-symbol and dotted-rest param lists both match."))))))
+     (context . "done (efc0704): args is already a real cons-list at runtime, so no arity counting needed (unlike fpga-lisp's register-based approach) -- rest-param binds to whatever's left after walking fixed names. Verified against the real my-lisp oracle: bare-symbol and dotted-rest param lists both match.")))
+   ("CML-C-BACKEND-CONFORMANCE" .
+    ((priority . 0.5)
+     (capabilities . (compiler rust lowering testing proof))
+     (done . t)
+     (description . "c_backend.rs has only ever been run against hand-picked fixtures, never the full tests/fixtures/conformance.my suite conformance_test.rs already exercises against compiler.rs. Write an analogous test: compile+gcc+run every tier-1 fixture through c_backend.rs, compare to the fixture's own expected value.")
+     (context . "done (f73e670): tests/c_backend_conformance_test.rs, all ten constitutive tier-1 fixtures pass. Also fixed print_value to render standard Lisp list syntax instead of raw dotted pairs, and refreshed docs/heterogeneous-backends.md which had gone stale (claimed 'not yet implemented' / 'single-backend' when both were long false)."))))))
