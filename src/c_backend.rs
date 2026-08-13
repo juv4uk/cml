@@ -96,6 +96,37 @@ static Value *env_lookup(Value *env, const char *name) {
     fprintf(stderr, "unbound variable: %s\n", name);
     exit(1);
 }
+
+// Standard Lisp list printing (`(a b c)`, `(a b . c)` for a genuine
+// dotted tail), not a raw nested-dotted-pair dump -- lets a compiled
+// program's printed output be compared directly against my-lisp's own
+// printer / tests/fixtures/conformance.my's `expected` field.
+static void print_value(Value *v) {
+    switch (v->tag) {
+        case TAG_NIL: printf("()"); break;
+        case TAG_TRUE: printf("t"); break;
+        case TAG_INT: printf("%ld", v->u.i); break;
+        case TAG_SYM: printf("%s", v->u.sym); break;
+        case TAG_CLOSURE: printf("<closure>"); break;
+        case TAG_CONS: {
+            printf("(");
+            Value *cur = v;
+            int first = 1;
+            while (cur->tag == TAG_CONS) {
+                if (!first) printf(" ");
+                print_value(cur->u.cons.car);
+                first = 0;
+                cur = cur->u.cons.cdr;
+            }
+            if (cur->tag != TAG_NIL) {
+                printf(" . ");
+                print_value(cur);
+            }
+            printf(")");
+            break;
+        }
+    }
+}
 "#;
 
 impl CBackend {
@@ -132,7 +163,7 @@ impl CBackend {
         }
 
         format!(
-            "{RUNTIME}\nstatic void print_value(Value *v);\nstatic void print_value(Value *v) {{\n    switch (v->tag) {{\n        case TAG_NIL: printf(\"()\"); break;\n        case TAG_TRUE: printf(\"t\"); break;\n        case TAG_INT: printf(\"%ld\", v->u.i); break;\n        case TAG_SYM: printf(\"%s\", v->u.sym); break;\n        case TAG_CLOSURE: printf(\"<closure>\"); break;\n        case TAG_CONS: printf(\"(\"); print_value(v->u.cons.car); printf(\" . \"); print_value(v->u.cons.cdr); printf(\")\"); break;\n    }}\n}}\n\n{}\n\nint main(void) {{\n{}    return 0;\n}}\n",
+            "{RUNTIME}\n{}\n\nint main(void) {{\n{}    return 0;\n}}\n",
             self.functions.join("\n"),
             main_body,
         )

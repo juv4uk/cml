@@ -1,9 +1,11 @@
 # cml as a backend-independent compiler core
 
-Status: strategy, agreed 2026-08-12 (owner + opencode engineer). Not yet
-implemented — this file records the target and the incremental path to
-it, so that a "C backend" or "CUDA backend" can't quietly become a second
-independent compiler.
+Status: strategy agreed 2026-08-12 (owner + opencode engineer); steps 1
+and 2 of the incremental path below are now implemented (`ir.rs`/
+`lower.rs`, `compiler.rs` consuming `Ir`, `src/c_backend.rs`) — see
+"Current reality" for what actually exists today, not just the plan.
+This file still exists so a "CUDA backend" (step 3, not started) can't
+quietly become a second independent compiler once someone picks it up.
 
 ## The goal, stated once
 
@@ -58,18 +60,35 @@ it is the architectural precondition for multi-target execution.
 
 ## Current reality (as of this commit)
 
-`cml` is a **single-backend** compiler:
+`cml` is a **two-backend** compiler sharing one IR:
 
-- `src/parser.rs` → `src/ast.rs` → `src/compiler.rs` → fpga-lisp ISA,
-  emitted directly (`CONS`, `CAR`/`CDR`, `SETCDR`, `JF`, `RET`, ...).
-- There is no IR module and no backend abstraction — the fpga-lisp ISA
-  emission *is* the compiler. See `docs/abi.md`: every `compile_*`
-  function hardcodes its registers.
+- `src/parser.rs` → `src/ast.rs` → macro expansion → `src/lower.rs` →
+  `ir::Ir` (`src/ir.rs`) → either `src/compiler.rs` (fpga-lisp ISA,
+  hardware-verified, `docs/abi.md`'s register discipline) or
+  `src/c_backend.rs` (C source, built and run with real `gcc`, verified
+  against the live `my-lisp` oracle rather than by inspection).
+- `Ir` covers: literals, `nil`/`t`, variables, `quote` (integers/
+  symbols/lists/dotted lists), `lambda` (fixed, variadic, and
+  bare-symbol param lists), application, `cond`, `let`, `def`
+  (including self-recursive, via a letrec-placeholder-plus-backpatch
+  pattern both backends implement independently -- `SETCDR` on
+  fpga-lisp, a literal C struct-field mutation in `c_backend.rs`), and
+  the primitives `cons`/`car`/`cdr`/`eq`/`atom`/`equal?`/`+`.
+- Neither backend supports rationals/bignums/inexact numbers yet
+  (`compatibility.my`'s `limitations`) -- `*` was never implemented on
+  any backend either (the original `(def square (lambda (x) (* x x)))`
+  acceptance example in step 2 below used it before that was noticed;
+  the actually-verified fixtures use `+`).
 - Long-term goal in `README.md`: run `unify.my`/`reason.my` fast on
-  fpga-lisp hardware. That stays; it becomes one target of the IR.
+  fpga-lisp hardware. That stays; it's the fpga-lisp backend's target,
+  same as before the IR existed.
 
-So the fpga-lisp backend already exists in embryo. The work is to make
-it *one of three*, not to write it from scratch.
+The C backend is real but intentionally narrower in one respect the
+fpga-lisp backend isn't held to: it hasn't been exercised against the
+full `tests/fixtures/conformance.my` suite the way `conformance_test.rs`
+exercises `compiler.rs` (`ir_lowering_test.rs` only proves *lowering*
+succeeds for every tier-1 fixture, not that `c_backend.rs` compiles and
+runs each one correctly) -- worth closing before claiming real parity.
 
 ## Incremental path (no rewrite)
 
