@@ -45,4 +45,15 @@
      (capabilities . (compiler rust guix))
      (done . t)
      (description . "cml/manifest.scm only listed rust/rust:cargo/git/make, but cml's own E2E tests shell out to iverilog/vvp and python3 -- only working because the ambient shared Guix profile happened to provide them. Add them so guix shell --pure -m manifest.scm -- cargo test is self-sufficient.")
-     (context . "done (610b20c): iverilog + python added. guix shell --pure -m manifest.scm -- cargo test --workspace passes fully self-sufficient (7 packages total with gcc-toolchain from CML-C-BACKEND), no ambient profile involved: compiler_test 7/7, conformance_test 2/2, ir_lowering_test 2/2, c_backend_test 2/2."))))))
+     (context . "done (610b20c): iverilog + python added. guix shell --pure -m manifest.scm -- cargo test --workspace passes fully self-sufficient (7 packages total with gcc-toolchain from CML-C-BACKEND), no ambient profile involved: compiler_test 7/7, conformance_test 2/2, ir_lowering_test 2/2, c_backend_test 2/2.")))
+   ("CML-C-BACKEND-QUOTED-LISTS" .
+    ((priority . 0.55)
+     (capabilities . (compiler rust lowering testing proof))
+     (done . t)
+     (description . "src/c_backend.rs's compile_quoted panics on Quoted::List/DottedList, unlike compiler.rs's fpga-lisp path. Extend it, verified against the my-lisp oracle for a real quoted-list fixture.")
+     (context . "done (0fe8dc6): a C expression nests mk_cons calls directly (simpler than fpga-lisp's R11-stack accumulator, not a port of it). Verified against the real my-lisp oracle: car of '(1 2 3) -> 1, car of cdr -> 2, matches after compiling to C/gcc/running. Also corrected a stale module doc claim about equal? not being structural (it already was).")))
+   ("CML-C-BACKEND-LET" .
+    ((priority . 0.4)
+     (capabilities . (compiler rust lowering testing proof))
+     (done . nil)
+     (description . "src/c_backend.rs's compile_expr already has an Ir::Let arm deriving it via an immediately-applied lambda (same technique compiler.rs uses), but it has never actually been tested -- verify against the my-lisp oracle for a real let fixture, fix if it does not round-trip."))))))
