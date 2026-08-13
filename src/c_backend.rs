@@ -5,15 +5,16 @@
 //! Deliberately scoped down from full language coverage -- this is the
 //! first C backend increment, not a claim of parity with `compiler.rs`.
 //! Supported: integers, `nil`/`t`, variables, `quote` of integers/symbols/
-//! lists/dotted lists (CML-C-BACKEND-QUOTED-LISTS), `lambda` (fixed-arity
-//! params only), application, `cond`, `let` (CML-C-BACKEND-LET, derived
-//! via an immediately-applied lambda, same technique `compiler.rs` uses),
-//! structural `equal?` (`v_equal_p`, recursive -- not just pointer
-//! equality), top-level `def` (including self-recursive, via the same
-//! letrec-placeholder-plus-backpatch technique `compiler.rs`'s
-//! `compile_def` uses on fpga-lisp -- see that function's doc comment and
-//! `docs/abi.md`'s `def` section for the shared idea). Not supported yet:
-//! variadic/dotted lambda params.
+//! lists/dotted lists (CML-C-BACKEND-QUOTED-LISTS), `lambda` with fixed,
+//! variadic (`(a b . rest)`), and bare-symbol (`args`) param lists
+//! (CML-C-BACKEND-VARIADIC), application, `cond`, `let`
+//! (CML-C-BACKEND-LET, derived via an immediately-applied lambda, same
+//! technique `compiler.rs` uses), structural `equal?` (`v_equal_p`,
+//! recursive -- not just pointer equality), top-level `def` (including
+//! self-recursive, via the same letrec-placeholder-plus-backpatch
+//! technique `compiler.rs`'s `compile_def` uses on fpga-lisp -- see that
+//! function's doc comment and `docs/abi.md`'s `def` section for the
+//! shared idea).
 //!
 //! The runtime is a small tagged-union `Value` with a mutable-cons alist
 //! for environments -- the same conceptual model `compiler.rs` uses on
@@ -245,16 +246,39 @@ impl CBackend {
     /// `CONS closure_reg label env_reg`.
     fn compile_lambda(&mut self, params: &Params, body: &Ir, env: &str) -> String {
         let fn_name = self.next_fn_name();
-        let Params::Fixed(names) = params else {
-            panic!("c_backend only supports fixed-arity lambda params so far (see module doc)");
-        };
 
         let mut fn_body = String::new();
         fn_body.push_str("    Value *args_cursor = args;\n");
-        for name in names {
-            fn_body.push_str(&format!(
-                "    env = mk_cons(mk_cons(mk_sym(\"{name}\"), v_car(args_cursor)), env);\n    args_cursor = v_cdr(args_cursor);\n"
-            ));
+        // `args` is already a real cons-list of the actual arguments here
+        // (unlike fpga-lisp's fixed register file), so variadic/dotted
+        // params need no arity counting the way compile_lambda's
+        // fpga-lisp path does (`MOV R10 R0; CDR R10 R10` per fixed
+        // param): the rest-param just binds to whatever's left in the
+        // list after walking off the fixed ones, or to `args` itself
+        // untouched for a bare-symbol param list.
+        match params {
+            Params::Fixed(names) => {
+                for name in names {
+                    fn_body.push_str(&format!(
+                        "    env = mk_cons(mk_cons(mk_sym(\"{name}\"), v_car(args_cursor)), env);\n    args_cursor = v_cdr(args_cursor);\n"
+                    ));
+                }
+            }
+            Params::Variadic { fixed, rest } => {
+                for name in fixed {
+                    fn_body.push_str(&format!(
+                        "    env = mk_cons(mk_cons(mk_sym(\"{name}\"), v_car(args_cursor)), env);\n    args_cursor = v_cdr(args_cursor);\n"
+                    ));
+                }
+                fn_body.push_str(&format!(
+                    "    env = mk_cons(mk_cons(mk_sym(\"{rest}\"), args_cursor), env);\n"
+                ));
+            }
+            Params::AllRest(rest) => {
+                fn_body.push_str(&format!(
+                    "    env = mk_cons(mk_cons(mk_sym(\"{rest}\"), args), env);\n"
+                ));
+            }
         }
         let body_expr = self.compile_expr(body, "env");
         fn_body.push_str(&format!("    return {body_expr};\n"));

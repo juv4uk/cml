@@ -116,6 +116,42 @@ fn compiles_let_to_c_and_runs_it() {
 }
 
 #[test]
+fn compiles_variadic_and_dotted_lambda_params_to_c_and_runs_it() {
+    // CML-C-BACKEND-VARIADIC: compile_lambda previously panicked on
+    // Params::Variadic/AllRest.
+    let code = "(cons (car ((lambda args args) 1 2 3)) (car ((lambda (a . rest) rest) 1 2 3)))";
+    let exprs = parser::parse(code).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
+    let mut backend = CBackend::new();
+    let c_source = backend.compile_program(&program);
+
+    let c_path = "c_backend_variadic_test.c";
+    let bin_path = "c_backend_variadic_test";
+    fs::write(c_path, &c_source).unwrap();
+
+    let compile = Command::new("gcc").arg(c_path).arg("-o").arg(bin_path).output().unwrap();
+    if !compile.status.success() {
+        panic!(
+            "gcc failed:\nSTDERR: {}\n--- generated C ---\n{}",
+            String::from_utf8_lossy(&compile.stderr),
+            c_source
+        );
+    }
+
+    let run = Command::new(format!("./{bin_path}")).output().unwrap();
+    let stdout = String::from_utf8_lossy(&run.stdout);
+
+    let _ = fs::remove_file(c_path);
+    let _ = fs::remove_file(bin_path);
+
+    assert_eq!(
+        stdout.trim(),
+        "(1 . 2)",
+        "expected (1 . 2) (matches my-lisp oracle: car of bare-symbol-params args -> 1, car of dotted-rest -> 2), got: {stdout}"
+    );
+}
+
+#[test]
 fn compiles_quoted_list_access_to_c_and_runs_it() {
     // CML-C-BACKEND-QUOTED-LISTS: compile_quoted previously panicked on
     // Quoted::List/DottedList. car/(car (cdr ...)) into a quoted list
