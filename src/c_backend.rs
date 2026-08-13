@@ -4,14 +4,16 @@
 //!
 //! Deliberately scoped down from full language coverage -- this is the
 //! first C backend increment, not a claim of parity with `compiler.rs`.
-//! Supported: integers, `nil`/`t`, variables, `quote` of integers/symbols
-//! (not yet lists -- see `compile_quoted`), `lambda` (fixed-arity params
-//! only), application, `cond`, top-level `def` (including self-recursive,
-//! via the same letrec-placeholder-plus-backpatch technique
-//! `compiler.rs`'s `compile_def` uses on fpga-lisp -- see that function's
-//! doc comment and `docs/abi.md`'s `def` section for the shared idea).
-//! Not supported yet: `let`, variadic/dotted lambda params, `equal?`
-//! reaching structural (not pointer) equality, quoted lists/dotted lists.
+//! Supported: integers, `nil`/`t`, variables, `quote` of integers/symbols/
+//! lists/dotted lists (CML-C-BACKEND-QUOTED-LISTS), `lambda` (fixed-arity
+//! params only), application, `cond`, structural `equal?` (`v_equal_p`,
+//! recursive -- not just pointer equality), top-level `def` (including
+//! self-recursive, via the same letrec-placeholder-plus-backpatch
+//! technique `compiler.rs`'s `compile_def` uses on fpga-lisp -- see that
+//! function's doc comment and `docs/abi.md`'s `def` section for the
+//! shared idea). Not supported yet: `let` (has an `Ir::Let` arm deriving
+//! it the same way `compiler.rs` does, but untested -- see
+//! CML-C-BACKEND-LET), variadic/dotted lambda params.
 //!
 //! The runtime is a small tagged-union `Value` with a mutable-cons alist
 //! for environments -- the same conceptual model `compiler.rs` uses on
@@ -213,8 +215,25 @@ impl CBackend {
             Quoted::Int(n) => format!("mk_int({n})"),
             Quoted::Sym(s) | Quoted::Str(s) => format!("mk_sym(\"{s}\")"),
             Quoted::Nil => "(&NIL_V)".to_string(),
-            Quoted::List(_) | Quoted::DottedList(_, _) => {
-                panic!("c_backend does not yet support quoted lists (see module doc)")
+            // Unlike compiler.rs's fpga-lisp path (which needs an explicit
+            // R11-stack accumulator since it's emitting a flat instruction
+            // stream), a C expression can just nest mk_cons calls directly
+            // -- built tail-first, same right-to-left order.
+            Quoted::List(items) => {
+                let mut acc = "(&NIL_V)".to_string();
+                for item in items.iter().rev() {
+                    let item_expr = self.compile_quoted(item);
+                    acc = format!("mk_cons({item_expr}, {acc})");
+                }
+                acc
+            }
+            Quoted::DottedList(items, tail) => {
+                let mut acc = self.compile_quoted(tail);
+                for item in items.iter().rev() {
+                    let item_expr = self.compile_quoted(item);
+                    acc = format!("mk_cons({item_expr}, {acc})");
+                }
+                acc
             }
         }
     }

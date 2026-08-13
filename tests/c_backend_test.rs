@@ -81,3 +81,42 @@ fn compiles_self_recursive_def_to_c_and_runs_it() {
 
     assert_eq!(stdout.trim(), "99", "expected 99 (matches my-lisp oracle: (count 3) -> 99), got: {stdout}");
 }
+
+#[test]
+fn compiles_quoted_list_access_to_c_and_runs_it() {
+    // CML-C-BACKEND-QUOTED-LISTS: compile_quoted previously panicked on
+    // Quoted::List/DottedList. car/(car (cdr ...)) into a quoted list
+    // exercises the fix without depending on print_value's raw dotted-pair
+    // format matching my-lisp's own list printer.
+    let code = "(cons (car (quote (1 2 3))) (car (cdr (quote (1 2 3)))))";
+    let exprs = parser::parse(code).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
+    let mut backend = CBackend::new();
+    let c_source = backend.compile_program(&program);
+
+    let c_path = "c_backend_quoted_list_test.c";
+    let bin_path = "c_backend_quoted_list_test";
+    fs::write(c_path, &c_source).unwrap();
+
+    let compile = Command::new("gcc").arg(c_path).arg("-o").arg(bin_path).output().unwrap();
+    if !compile.status.success() {
+        panic!(
+            "gcc failed:\nSTDERR: {}\n--- generated C ---\n{}",
+            String::from_utf8_lossy(&compile.stderr),
+            c_source
+        );
+    }
+
+    let run = Command::new(format!("./{bin_path}")).output().unwrap();
+    let stdout = String::from_utf8_lossy(&run.stdout);
+
+    let _ = fs::remove_file(c_path);
+    let _ = fs::remove_file(bin_path);
+
+    // print_value renders a cons pair as "(car . cdr)"; car=1, cdr=2 here.
+    assert_eq!(
+        stdout.trim(),
+        "(1 . 2)",
+        "expected (1 . 2) (matches my-lisp oracle: car of '(1 2 3) -> 1, car of cdr -> 2), got: {stdout}"
+    );
+}
