@@ -57,4 +57,10 @@
      (capabilities . (compiler rust lowering testing proof))
      (done . t)
      (description . "src/c_backend.rs's compile_expr already has an Ir::Let arm deriving it via an immediately-applied lambda (same technique compiler.rs uses), but it has never actually been tested -- verify against the my-lisp oracle for a real let fixture, fix if it does not round-trip.")
-     (context . "done (70c25ca): worked correctly unmodified. (let ((x 5) (y 3)) (+ x y)) compiles to C, builds with gcc, runs, matches the my-lisp oracle's 8. Module doc corrected (had let listed as unsupported)."))))))
+     (context . "done (70c25ca): worked correctly unmodified. (let ((x 5) (y 3)) (+ x y)) compiles to C, builds with gcc, runs, matches the my-lisp oracle's 8. Module doc corrected (had let listed as unsupported).")))
+   ("CML-C-BACKEND-VARIADIC" .
+    ((priority . 0.35)
+     (capabilities . (compiler rust lowering testing proof))
+     (done . t)
+     (description . "src/c_backend.rs compile_lambda panics on Params::Variadic/AllRest (fixed-arity only). compiler.rs fpga-lisp path supports both. Extend, verified against the my-lisp oracle for a real variadic fixture.")
+     (context . "done (efc0704): args is already a real cons-list at runtime, so no arity counting needed (unlike fpga-lisp's register-based approach) -- rest-param binds to whatever's left after walking fixed names. Verified against the real my-lisp oracle: bare-symbol and dotted-rest param lists both match."))))))
