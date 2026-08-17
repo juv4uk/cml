@@ -3,6 +3,6 @@
 *.bin binary
 *.vvp binary
 
-# GitHub Linguist: .my files are my-lisp source (Lisp family)
-*.my linguist-language=Common-Lisp
+# GitHub Linguist: .my files are my-lisp source → shown in "Other" bucket
+*.my linguist-language=Text
 *.lisp linguist-language=Common-Lisp
