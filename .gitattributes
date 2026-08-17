@@ -2,3 +2,7 @@
 *.asm binary
 *.bin binary
 *.vvp binary
+
+# GitHub Linguist: .my files are my-lisp source (Lisp family)
+*.my linguist-language=Common-Lisp
+*.lisp linguist-language=Common-Lisp
