@@ -20,7 +20,10 @@ fn main() {
         });
 
     let exprs = parser::parse(&contents).unwrap();
-    let exprs = MacroExpander::new().process(&exprs);
+    let exprs = MacroExpander::new().process(&exprs).unwrap_or_else(|err| {
+        eprintln!("Macro expansion error: {err}");
+        std::process::exit(1);
+    });
     let program = lower::lower_program(&exprs).unwrap_or_else(|err| {
         eprintln!("Lowering error: {}", err);
         std::process::exit(1);

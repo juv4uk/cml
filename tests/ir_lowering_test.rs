@@ -57,7 +57,10 @@ fn lowers_every_tier1_conformance_fixture() {
                 continue;
             }
         };
-        let exprs = MacroExpander::new().process(&exprs);
+        let Ok(exprs) = MacroExpander::new().process(&exprs) else {
+            failures.push(format!("{expr_str}: macro expansion failed"));
+            continue;
+        };
         checked += 1;
         for expr in &exprs {
             if let Err(e) = lower_expr(expr) {

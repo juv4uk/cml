@@ -266,7 +266,7 @@ fn test_conformance() {
         {
             println!("Testing: {}", expr_str);
             let exprs = parser::parse(&expr_str).unwrap();
-            let exprs = MacroExpander::new().process(&exprs);
+            let exprs = MacroExpander::new().process(&exprs).expect("macro expansion failed");
             if let Some(actual_error) = exprs.first().and_then(static_error) {
                 assert_eq!(
                     Some(actual_error),

@@ -57,14 +57,20 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         let Ok(exprs) = parser::parse(&expr_str) else {
             continue;
         };
-        let exprs = MacroExpander::new().process(&exprs);
+        let Ok(exprs) = MacroExpander::new().process(&exprs) else {
+            failures.push(format!("{expr_str}: macro expansion failed"));
+            continue;
+        };
         let Ok(program) = lower::lower_program(&exprs) else {
             failures.push(format!("{expr_str}: lowering failed"));
             continue;
         };
 
         let mut backend = CBackend::new();
-        let c_source = backend.compile_program(&program);
+        let Ok(c_source) = backend.compile_program(&program) else {
+            failures.push(format!("{expr_str}: C compilation failed"));
+            continue;
+        };
 
         let c_path = format!("c_backend_conf_{i}.c");
         let bin_path = format!("c_backend_conf_{i}");

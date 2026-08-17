@@ -8,6 +8,36 @@
 
 use crate::ast::Expr;
 use std::collections::HashMap;
+use std::fmt;
+
+/// Errors that can occur during macro expansion.
+#[derive(Debug, Clone)]
+pub enum MacroError {
+    /// An unbound symbol was referenced in a macro body.
+    UnboundSymbol(String),
+    /// A list form in a macro body didn't start with a symbol operator.
+    ExpectedOperator,
+    /// `car` was applied to a non-pair expression.
+    CarOfNonPair,
+    /// `cdr` was applied to a non-pair expression.
+    CdrOfNonPair,
+    /// An unsupported form was encountered in a macro body.
+    UnsupportedForm(String),
+}
+
+impl fmt::Display for MacroError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MacroError::UnboundSymbol(s) => write!(f, "macro body: unbound symbol `{s}`"),
+            MacroError::ExpectedOperator => write!(f, "macro body: expected operator symbol"),
+            MacroError::CarOfNonPair => write!(f, "macro body: car of non-pair"),
+            MacroError::CdrOfNonPair => write!(f, "macro body: cdr of non-pair"),
+            MacroError::UnsupportedForm(form) => write!(f, "macro body: unsupported form `{form}`"),
+        }
+    }
+}
+
+impl std::error::Error for MacroError {}
 
 struct MacroDef {
     params: Expr,
@@ -73,34 +103,34 @@ impl MacroExpander {
         MacroExpander { macros: HashMap::new() }
     }
 
-    pub fn process(&mut self, exprs: &[Expr]) -> Vec<Expr> {
+    pub fn process(&mut self, exprs: &[Expr]) -> Result<Vec<Expr>, MacroError> {
         let mut out = Vec::new();
         for expr in exprs {
             if let Some((name, params, body)) = as_defmacro(expr) {
                 self.macros.insert(name, MacroDef { params, body });
             } else {
-                out.push(self.expand(expr));
+                out.push(self.expand(expr)?);
             }
         }
-        out
+        Ok(out)
     }
 
-    fn expand(&self, expr: &Expr) -> Expr {
+    fn expand(&self, expr: &Expr) -> Result<Expr, MacroError> {
         match expr {
             Expr::List(list) if !list.is_empty() => {
                 if let Expr::Symbol(name) = &list[0] {
                     if name == "quote" {
-                        return expr.clone();
+                        return Ok(expr.clone());
                     }
                     if let Some(mac) = self.macros.get(name) {
                         let bindings = bind_params(&mac.params, &list[1..]);
-                        let expanded_value = eval_macro_body(&mac.body, &bindings);
+                        let expanded_value = eval_macro_body(&mac.body, &bindings)?;
                         return self.expand(&expanded_value);
                     }
                 }
-                Expr::List(list.iter().map(|e| self.expand(e)).collect())
+                Ok(Expr::List(list.iter().map(|e| self.expand(e)).collect::<Result<Vec<_>, _>>()?))
             }
-            _ => expr.clone(),
+            _ => Ok(expr.clone()),
         }
     }
 }
@@ -145,47 +175,47 @@ fn bind_params(params: &Expr, args: &[Expr]) -> HashMap<String, Expr> {
     env
 }
 
-fn eval_macro_body(expr: &Expr, env: &HashMap<String, Expr>) -> Expr {
+fn eval_macro_body(expr: &Expr, env: &HashMap<String, Expr>) -> Result<Expr, MacroError> {
     match expr {
-        Expr::Integer(_) | Expr::String(_) => expr.clone(),
+        Expr::Integer(_) | Expr::String(_) => Ok(expr.clone()),
         Expr::Symbol(s) => {
             let upper = s.to_uppercase();
             if upper == "NIL" {
-                nil()
+                Ok(nil())
             } else if upper == "T" {
-                expr.clone()
+                Ok(expr.clone())
             } else {
-                env.get(s)
-                    .unwrap_or_else(|| panic!("macro body: unbound symbol {}", s))
-                    .clone()
+                Ok(env.get(s)
+                    .ok_or_else(|| MacroError::UnboundSymbol(s.clone()))?
+                    .clone())
             }
         }
-        Expr::DottedList(_, _) => expr.clone(),
+        Expr::DottedList(_, _) => Ok(expr.clone()),
         Expr::List(list) => {
             if list.is_empty() {
-                return nil();
+                return Ok(nil());
             }
             let Expr::Symbol(op) = &list[0] else {
-                panic!("macro body: expected operator symbol");
+                return Err(MacroError::ExpectedOperator);
             };
             match op.as_str() {
-                "quote" => list[1].clone(),
+                "quote" => Ok(list[1].clone()),
                 "cons" => {
-                    let head = eval_macro_body(&list[1], env);
-                    let tail = eval_macro_body(&list[2], env);
-                    cons_expr(head, tail)
+                    let head = eval_macro_body(&list[1], env)?;
+                    let tail = eval_macro_body(&list[2], env)?;
+                    Ok(cons_expr(head, tail))
                 }
-                "car" => split(&eval_macro_body(&list[1], env))
+                "car" => split(&eval_macro_body(&list[1], env)?)
                     .map(|(h, _)| h)
-                    .unwrap_or_else(|| panic!("macro body: car of non-pair")),
-                "cdr" => split(&eval_macro_body(&list[1], env))
+                    .ok_or(MacroError::CarOfNonPair),
+                "cdr" => split(&eval_macro_body(&list[1], env)?)
                     .map(|(_, t)| t)
-                    .unwrap_or_else(|| panic!("macro body: cdr of non-pair")),
-                "atom" => truthy(split(&eval_macro_body(&list[1], env)).is_none()),
+                    .ok_or(MacroError::CdrOfNonPair),
+                "atom" => Ok(truthy(split(&eval_macro_body(&list[1], env)?).is_none())),
                 "eq" => {
-                    let a = eval_macro_body(&list[1], env);
-                    let b = eval_macro_body(&list[2], env);
-                    truthy(a == b)
+                    let a = eval_macro_body(&list[1], env)?;
+                    let b = eval_macro_body(&list[2], env)?;
+                    Ok(truthy(a == b))
                 }
                 "cond" => {
                     for branch in &list[1..] {
@@ -193,14 +223,14 @@ fn eval_macro_body(expr: &Expr, env: &HashMap<String, Expr>) -> Expr {
                         if pair.len() != 2 {
                             continue;
                         }
-                        let test = eval_macro_body(&pair[0], env);
+                        let test = eval_macro_body(&pair[0], env)?;
                         if !is_nil(&test) {
                             return eval_macro_body(&pair[1], env);
                         }
                     }
-                    nil()
+                    Ok(nil())
                 }
-                other => panic!("macro body: unsupported form `{}`", other),
+                other => Err(MacroError::UnsupportedForm(other.to_string())),
             }
         }
     }

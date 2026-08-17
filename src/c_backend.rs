@@ -23,6 +23,31 @@
 //! 32-bit words on a heap array.
 
 use crate::ir::{Ir, Params, PrimOp, Quoted};
+use std::fmt;
+
+/// Errors that can occur during C code generation.
+#[derive(Debug, Clone)]
+pub enum CompileError {
+    /// A `def` form appeared in a non-top-level position.
+    NestedDef,
+    /// An IR node that this backend does not yet support.
+    Unsupported(String),
+}
+
+impl fmt::Display for CompileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompileError::NestedDef => write!(
+                f, "def is only supported at the top level of a program, not nested"
+            ),
+            CompileError::Unsupported(node) => write!(
+                f, "unsupported IR node in C backend: {node}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for CompileError {}
 
 pub struct CBackend {
     functions: Vec<String>,
@@ -146,15 +171,15 @@ impl CBackend {
     /// value is printed. Program shape assumed: zero or more `Def`s
     /// followed by exactly one expression -- the same shape every
     /// `evidence/`-worthy `cml` fixture in this repo already has.
-    pub fn compile_program(&mut self, program: &[Ir]) -> String {
+    pub fn compile_program(&mut self, program: &[Ir]) -> Result<String, CompileError> {
         let mut main_body = String::new();
         for ir in program {
             match ir {
                 Ir::Def { name, value } => {
-                    main_body.push_str(&self.compile_def(name, value));
+                    main_body.push_str(&self.compile_def(name, value)?);
                 }
                 other => {
-                    let expr = self.compile_expr(other, "global_env");
+                    let expr = self.compile_expr(other, "global_env")?;
                     main_body.push_str(&format!(
                         "    {{ Value *result = {expr}; print_value(result); printf(\"\\n\"); }}\n"
                     ));
@@ -162,11 +187,11 @@ impl CBackend {
             }
         }
 
-        format!(
+        Ok(format!(
             "{RUNTIME}\n{}\n\nint main(void) {{\n{}    return 0;\n}}\n",
             self.functions.join("\n"),
             main_body,
-        )
+        ))
     }
 
     /// `(def name value)`: extends `global_env` with a placeholder pair
@@ -175,7 +200,7 @@ impl CBackend {
     /// then backpatches the placeholder's cdr in place -- the same
     /// letrec-placeholder-plus-SETCDR idea `compiler.rs`'s `compile_def`
     /// uses on fpga-lisp, here as a literal C struct-field mutation.
-    fn compile_def(&mut self, name: &str, value: &Ir) -> String {
+    fn compile_def(&mut self, name: &str, value: &Ir) -> Result<String, CompileError> {
         let mut out = String::new();
         out.push_str(&format!(
             "    Value *ph_{name} = mk_cons(mk_sym(\"{name}\"), &NIL_V);\n"
@@ -183,62 +208,57 @@ impl CBackend {
         out.push_str(&format!(
             "    global_env = mk_cons(ph_{name}, global_env);\n"
         ));
-        let value_expr = self.compile_expr(value, "global_env");
+        let value_expr = self.compile_expr(value, "global_env")?;
         out.push_str(&format!("    ph_{name}->u.cons.cdr = {value_expr};\n"));
-        out
+        Ok(out)
     }
 
-    fn compile_expr(&mut self, ir: &Ir, env: &str) -> String {
+    fn compile_expr(&mut self, ir: &Ir, env: &str) -> Result<String, CompileError> {
         match ir {
-            Ir::Int(n) => format!("mk_int({n})"),
-            Ir::Nil => "(&NIL_V)".to_string(),
-            Ir::True => "(&TRUE_V)".to_string(),
-            Ir::Var(name) => format!("env_lookup({env}, \"{name}\")"),
-            Ir::Quote(q) => self.compile_quoted(q),
+            Ir::Int(n) => Ok(format!("mk_int({n})")),
+            Ir::Nil => Ok("(&NIL_V)".to_string()),
+            Ir::True => Ok("(&TRUE_V)".to_string()),
+            Ir::Var(name) => Ok(format!("env_lookup({env}, \"{name}\")")),
+            Ir::Quote(q) => Ok(self.compile_quoted(q)),
             Ir::Lambda { params, body } => self.compile_lambda(params, body, env),
             Ir::App { func, args } => self.compile_app(func, args, env),
             Ir::Cond { branches } => self.compile_cond(branches, env),
             Ir::Let { bindings, body } => {
-                // Not yet supported by this backend (see module doc);
-                // lowered the same way compiler.rs derives it, so at
-                // least the shape is consistent if this gets picked up.
                 let params = Params::Fixed(bindings.iter().map(|(n, _)| n.clone()).collect());
                 let args: Vec<Ir> = bindings.iter().map(|(_, v)| v.clone()).collect();
                 let lambda = Ir::Lambda { params, body: Box::new((**body).clone()) };
                 self.compile_app(&lambda, &args, env)
             }
-            Ir::Def { .. } => {
-                panic!("def is only supported at the top level of a program, not nested")
-            }
+            Ir::Def { .. } => Err(CompileError::NestedDef),
             Ir::Prim { op, args } => self.compile_prim(*op, args, env),
         }
     }
 
-    fn compile_prim(&mut self, op: PrimOp, args: &[Ir], env: &str) -> String {
+    fn compile_prim(&mut self, op: PrimOp, args: &[Ir], env: &str) -> Result<String, CompileError> {
         match op {
-            PrimOp::Add => format!(
+            PrimOp::Add => Ok(format!(
                 "v_add({}, {})",
-                self.compile_expr(&args[0], env),
-                self.compile_expr(&args[1], env)
-            ),
-            PrimOp::Cons => format!(
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            )),
+            PrimOp::Cons => Ok(format!(
                 "mk_cons({}, {})",
-                self.compile_expr(&args[0], env),
-                self.compile_expr(&args[1], env)
-            ),
-            PrimOp::Car => format!("v_car({})", self.compile_expr(&args[0], env)),
-            PrimOp::Cdr => format!("v_cdr({})", self.compile_expr(&args[0], env)),
-            PrimOp::Eq => format!(
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            )),
+            PrimOp::Car => Ok(format!("v_car({})", self.compile_expr(&args[0], env)?)),
+            PrimOp::Cdr => Ok(format!("v_cdr({})", self.compile_expr(&args[0], env)?)),
+            PrimOp::Eq => Ok(format!(
                 "v_eq({}, {})",
-                self.compile_expr(&args[0], env),
-                self.compile_expr(&args[1], env)
-            ),
-            PrimOp::Atom => format!("(is_atom({}) ? &TRUE_V : &NIL_V)", self.compile_expr(&args[0], env)),
-            PrimOp::EqualP => format!(
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            )),
+            PrimOp::Atom => Ok(format!("(is_atom({}) ? &TRUE_V : &NIL_V)", self.compile_expr(&args[0], env)?)),
+            PrimOp::EqualP => Ok(format!(
                 "(v_equal_p({}, {}) ? &TRUE_V : &NIL_V)",
-                self.compile_expr(&args[0], env),
-                self.compile_expr(&args[1], env)
-            ),
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            )),
         }
     }
 
@@ -275,18 +295,11 @@ impl CBackend {
     /// pairing that function pointer with the *current* env -- captured
     /// at the point the closure is created, same as `compiler.rs`'s
     /// `CONS closure_reg label env_reg`.
-    fn compile_lambda(&mut self, params: &Params, body: &Ir, env: &str) -> String {
+    fn compile_lambda(&mut self, params: &Params, body: &Ir, env: &str) -> Result<String, CompileError> {
         let fn_name = self.next_fn_name();
 
         let mut fn_body = String::new();
         fn_body.push_str("    Value *args_cursor = args;\n");
-        // `args` is already a real cons-list of the actual arguments here
-        // (unlike fpga-lisp's fixed register file), so variadic/dotted
-        // params need no arity counting the way compile_lambda's
-        // fpga-lisp path does (`MOV R10 R0; CDR R10 R10` per fixed
-        // param): the rest-param just binds to whatever's left in the
-        // list after walking off the fixed ones, or to `args` itself
-        // untouched for a bare-symbol param list.
         match params {
             Params::Fixed(names) => {
                 for name in names {
@@ -311,34 +324,34 @@ impl CBackend {
                 ));
             }
         }
-        let body_expr = self.compile_expr(body, "env");
+        let body_expr = self.compile_expr(body, "env")?;
         fn_body.push_str(&format!("    return {body_expr};\n"));
 
         self.functions.push(format!(
             "static Value *{fn_name}(Value *args, Value *env) {{\n{fn_body}}}\n"
         ));
 
-        format!("mk_closure({fn_name}, {env})")
+        Ok(format!("mk_closure({fn_name}, {env})"))
     }
 
-    fn compile_app(&mut self, func: &Ir, args: &[Ir], env: &str) -> String {
-        let func_expr = self.compile_expr(func, env);
+    fn compile_app(&mut self, func: &Ir, args: &[Ir], env: &str) -> Result<String, CompileError> {
+        let func_expr = self.compile_expr(func, env)?;
         let mut args_list = "(&NIL_V)".to_string();
         for arg in args.iter().rev() {
-            let arg_expr = self.compile_expr(arg, env);
+            let arg_expr = self.compile_expr(arg, env)?;
             args_list = format!("mk_cons({arg_expr}, {args_list})");
         }
-        format!(
+        Ok(format!(
             "({{ Value *_f = {func_expr}; _f->u.closure.fn(({args_list}), _f->u.closure.env); }})"
-        )
+        ))
     }
 
-    fn compile_cond(&mut self, branches: &[(Ir, Ir)], env: &str) -> String {
+    fn compile_cond(&mut self, branches: &[(Ir, Ir)], env: &str) -> Result<String, CompileError> {
         let mut out = String::from("({ Value *_c;");
         let mut first = true;
         for (test, body) in branches {
-            let test_expr = self.compile_expr(test, env);
-            let body_expr = self.compile_expr(body, env);
+            let test_expr = self.compile_expr(test, env)?;
+            let body_expr = self.compile_expr(body, env)?;
             if first {
                 out.push_str(&format!(" if (truthy({test_expr})) {{ _c = {body_expr}; }}"));
                 first = false;
@@ -347,6 +360,6 @@ impl CBackend {
             }
         }
         out.push_str(" else { _c = &NIL_V; } _c; })");
-        out
+        Ok(out)
     }
 }

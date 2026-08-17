@@ -18,7 +18,7 @@ fn compiles_add1_to_c_and_runs_it() {
     let exprs = parser::parse(code).unwrap();
     let program = lower::lower_program(&exprs).unwrap();
     let mut backend = CBackend::new();
-    let c_source = backend.compile_program(&program);
+    let c_source = backend.compile_program(&program).unwrap();
 
     let c_path = "c_backend_add1_test.c";
     let bin_path = "c_backend_add1_test";
@@ -58,7 +58,7 @@ fn compiles_self_recursive_def_to_c_and_runs_it() {
     let exprs = parser::parse(code).unwrap();
     let program = lower::lower_program(&exprs).unwrap();
     let mut backend = CBackend::new();
-    let c_source = backend.compile_program(&program);
+    let c_source = backend.compile_program(&program).unwrap();
 
     let c_path = "c_backend_count_test.c";
     let bin_path = "c_backend_count_test";
@@ -91,7 +91,7 @@ fn compiles_let_to_c_and_runs_it() {
     let exprs = parser::parse(code).unwrap();
     let program = lower::lower_program(&exprs).unwrap();
     let mut backend = CBackend::new();
-    let c_source = backend.compile_program(&program);
+    let c_source = backend.compile_program(&program).unwrap();
 
     let c_path = "c_backend_let_test.c";
     let bin_path = "c_backend_let_test";
@@ -123,7 +123,7 @@ fn compiles_variadic_and_dotted_lambda_params_to_c_and_runs_it() {
     let exprs = parser::parse(code).unwrap();
     let program = lower::lower_program(&exprs).unwrap();
     let mut backend = CBackend::new();
-    let c_source = backend.compile_program(&program);
+    let c_source = backend.compile_program(&program).unwrap();
 
     let c_path = "c_backend_variadic_test.c";
     let bin_path = "c_backend_variadic_test";
@@ -161,7 +161,7 @@ fn compiles_quoted_list_access_to_c_and_runs_it() {
     let exprs = parser::parse(code).unwrap();
     let program = lower::lower_program(&exprs).unwrap();
     let mut backend = CBackend::new();
-    let c_source = backend.compile_program(&program);
+    let c_source = backend.compile_program(&program).unwrap();
 
     let c_path = "c_backend_quoted_list_test.c";
     let bin_path = "c_backend_quoted_list_test";
@@ -187,5 +187,60 @@ fn compiles_quoted_list_access_to_c_and_runs_it() {
         stdout.trim(),
         "(1 . 2)",
         "expected (1 . 2) (matches my-lisp oracle: car of '(1 2 3) -> 1, car of cdr -> 2), got: {stdout}"
+    );
+}
+
+#[test]
+fn nested_def_returns_graceful_error() {
+    // CML-C-BACKEND-ERROR-HANDLING: a nested `def` must produce a
+    // CompileError::NestedDef instead of panicking.
+    let code = "(def x (def y 1))";
+    let exprs = parser::parse(code).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
+    let mut backend = CBackend::new();
+    let err = backend.compile_program(&program).unwrap_err();
+    assert!(
+        matches!(err, cml::c_backend::CompileError::NestedDef),
+        "expected NestedDef error, got: {err}"
+    );
+}
+
+// --- Macro expansion error regression tests (CML-C-BACKEND-ERROR-HANDLING) ---
+
+#[test]
+fn macro_unbound_symbol_returns_graceful_error() {
+    use cml::macros::{MacroError, MacroExpander};
+    // A bare symbol `bar` in the macro body (not in a list) that's unbound
+    let code = "(defmacro foo (x) bar) (foo 1)";
+    let exprs = parser::parse(code).unwrap();
+    let err = MacroExpander::new().process(&exprs).unwrap_err();
+    assert!(
+        matches!(err, MacroError::UnboundSymbol(ref s) if s == "bar"),
+        "expected UnboundSymbol(\"bar\"), got: {err}"
+    );
+}
+
+#[test]
+fn macro_expected_operator_returns_graceful_error() {
+    use cml::macros::{MacroError, MacroExpander};
+    // A macro body that's a non-symbol list head: ((1 2) x)
+    let code = "(defmacro foo (x) ((1 2) x)) (foo 1)";
+    let exprs = parser::parse(code).unwrap();
+    let err = MacroExpander::new().process(&exprs).unwrap_err();
+    assert!(
+        matches!(err, MacroError::ExpectedOperator),
+        "expected ExpectedOperator, got: {err}"
+    );
+}
+
+#[test]
+fn macro_unsupported_form_returns_graceful_error() {
+    use cml::macros::{MacroError, MacroExpander};
+    let code = "(defmacro foo (x) (unknown-form x)) (foo 1)";
+    let exprs = parser::parse(code).unwrap();
+    let err = MacroExpander::new().process(&exprs).unwrap_err();
+    assert!(
+        matches!(err, MacroError::UnsupportedForm(ref s) if s == "unknown-form"),
+        "expected UnsupportedForm(\"unknown-form\"), got: {err}"
     );
 }
