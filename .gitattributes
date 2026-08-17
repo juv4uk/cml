@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.asm binary
+*.bin binary
+*.vvp binary
