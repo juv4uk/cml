@@ -1,8 +1,42 @@
 # AGENTS.md — ecosystem overview for agents working in this repo
 
-This repo (`cml`) is one of four in a coordinated ecosystem. If you're an
-agent (Codex, Claude Code, or otherwise) picking up work here, read this
-first — it saves you from re-deriving context another agent already has.
+This repo (`cml`) is one of a coordinated ecosystem (four core repos —
+`my-lisp`, `fpga-lisp`, `cml`, `my-idea` — plus Sanskrit/Pāṇini research
+siblings that don't touch this repo). If you're an agent (Codex, Claude
+Code, or otherwise) picking up work here, read this first — it saves you
+from re-deriving context another agent already has.
+
+## Session start — join the swarm
+
+Coordination lives on `swarm-node` (a separate binary from `:9999`), a P2P
+journal/claim mesh — no agent relays for another. `127.0.0.1:9999`
+(my-lisp's TCP server, `--protocol=sexpr`) is the **semantic oracle**
+(`eval`/`parse`/`diagnose`), unrelated to coordination now. See my-lisp's
+`docs/swarm-mesh-v2.md` for the full design.
+
+```bash
+swarm-node --port 9105 --node-id cml-1 --project cml \
+           --data-dir ~/.swarm-node/cml-1 --connect 127.0.0.1:9101
+```
+(`127.0.0.1:9101` is my-lisp's own node — bootstrap through any one live
+member, gossip connects you to the rest. Check `pgrep -af swarm-node`
+first; don't start a second `cml-1`.) Then, sent to your *own* node's
+port (9105, not 9101) — you can use `my-lisp --connect=127.0.0.1:9105`
+(P2P client mode, forwards one sexpr line from stdin) instead of shelling
+out to another language for this:
+
+```
+(join (capabilities (compiler rust lowering testing iverilog proof cml)) (roles (voter)))
+(sync-tasks (file "/mnt/c/GitHub/cml/tasks.my"))
+(next-best-action (from "cml-1"))
+```
+
+`tasks.my` (this repo root) is the durable plan of record — edit it,
+re-`sync-tasks` after edits and after any node restart (in-memory swarm
+state resets on restart; the journal replays via anti-entropy from
+peers, but `tasks.my`'s `done`/`description` fields are what `sync-tasks`
+reconciles against). A swarm event is a doorbell, never the fact itself —
+verify against `evidence/`/a real commit before acting on one.
 
 ## The four repositories
 
@@ -20,13 +54,14 @@ first — it saves you from re-deriving context another agent already has.
   my-lisp's semantics. `docs/lisp-machine-plan.md` there is the current,
   authoritative status — don't infer progress from this file, which only
   describes timeless roles.
-- **cml** (this repo) — an Ahead-of-Time compiler from my-lisp source
-  directly to fpga-lisp assembly (no runtime `eval`/`apply` loop on the
-  hardware). Tracks conformance against both other repos via
-  [`compatibility.my`](compatibility.my). Has CI
-  (`.github/workflows/ci.yml`) checking out both sibling repos fresh and
-  running a real `iverilog` E2E simulation on every push/PR — see
-  [`docs/testing.md`](docs/testing.md) for the full pipeline.
+- **cml** (this repo) — an Ahead-of-Time compiler from my-lisp source,
+  through a shared backend-neutral IR, to two targets today: fpga-lisp
+  assembly (no runtime `eval`/`apply` loop on the hardware) and a minimal
+  C emitter (`docs/heterogeneous-backends.md`). Tracks conformance
+  against both sibling repos via [`compatibility.my`](compatibility.my).
+  Has CI (`.github/workflows/ci.yml`) checking out both sibling repos
+  fresh and running a real `iverilog` E2E simulation on every push/PR —
+  see [`docs/testing.md`](docs/testing.md) for the full pipeline.
 - **my-idea** — an observer/IDE layer, depends on my-lisp via
   cargo-git-dependency/submodule. Building toward a "System Observatory"
   panel.
@@ -48,11 +83,16 @@ my-lisp, never `(load ...)`-ed as executable source.
 
 ## Talking to my-lisp live
 
-`my-lisp --tcp[=PORT]` (default 9999) starts a REPL reachable over TCP on
-`127.0.0.1` only (no auth — same trust boundary as the stdio REPL). Useful
-for one-off semantic checks without shelling out to the my-lisp CLI per
-call. The my-lisp session can start it on request; connect to
-`127.0.0.1:9999` and send one expression per line.
+`my-lisp --tcp=9999 --protocol=sexpr` is the semantic oracle (loopback
+only, no auth) — `eval`/`parse`/`diagnose`/`contract-version`, one
+isolated environment per connection. Structured request/response, not a
+raw REPL: `(request (id N) (op eval) (source "..."))` in, `(response (id
+N) (status ok) (value ...) ...)` out. Use `my-lisp --connect=HOST:PORT`
+(P2P client mode) to send one request without shelling out to another
+language — see "Session start" above for the same mechanism used against
+the swarm-node coordination plane. This is a **separate, unrelated**
+thing from swarm-node coordination (see above) — don't confuse the two
+ports/protocols.
 
 ## Conventions worth knowing before editing
 
@@ -73,12 +113,17 @@ call. The my-lisp session can start it on request; connect to
   a missing local toolchain blocks local verification only, not landing a
   change — but install what you need yourself rather than skipping local
   verification by default.
-- Rust toolchain on this machine is **shared state** across agent
-  sessions: the rustup default has been observed flipping between
-  `stable-x86_64-pc-windows-msvc` and `stable-x86_64-pc-windows-gnu`
-  depending on which session touched it last. Always pass an explicit
-  `+stable-x86_64-pc-windows-gnu` (this repo builds GNU-target) rather than
-  relying on the default.
+- `cml` is no longer single-backend: `src/ir.rs`/`src/lower.rs` extract a
+  backend-neutral IR from `ast::Expr`, and `src/compiler.rs` (fpga-lisp)
+  and `src/c_backend.rs` (a minimal C emitter) both consume it —
+  `docs/heterogeneous-backends.md` is the design doc, `docs/abi.md` the
+  register-discipline reference for the fpga-lisp side specifically.
+  `macros.my` is a from-scratch `.my`-hosted reimplementation of
+  `src/macros.rs`'s `defmacro` expansion, proven correct by differential
+  testing against the real my-lisp CLI but **not wired into the compile
+  pipeline** — same status as fpga-lisp's `assembler.my` relative to
+  `assembler.py`. See `docs/tooling-language-priority.md` before
+  proposing moving more of `cml` itself to `.my`.
 
 ## Environment: WSL2 + Guix
 
@@ -93,11 +138,13 @@ cd /mnt/c/GitHub/cml
 guix shell -m manifest.scm
 ```
 
-[`manifest.scm`](manifest.scm) pins the toolchain (rust, cargo, git, make);
-don't rely on whatever happens to be on `$PATH` outside the shell. A shared
-Guix profile (`/var/guix/profiles/shared/guix-profile`) also provides
-`iverilog`/`verilator`/`yosys`/`node`/`openjdk` across all four repos'
-users.
+[`manifest.scm`](manifest.scm) pins the full toolchain this repo needs to
+be self-sufficient (`rust`, `cargo`, `git`, `make`, `gcc-toolchain` for
+`src/c_backend.rs`'s target, `iverilog`, `python`) — verify with `guix
+shell --pure -m manifest.scm -- cargo test --workspace` (not a bare
+`guix shell`) before treating a result as evidence-grade, since `--pure`
+is what actually catches an accidental dependency on the ambient shared
+profile instead of this repo's own declared manifest.
 
 ## Cross-session coordination protocol (agreed with my-lisp/fpga-lisp)
 
