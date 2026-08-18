@@ -97,3 +97,50 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
         "fpga-lisp truth/JF contract drift"
     );
 }
+
+/// CML-AUTO-CHECK-CONTRACT-VERSION-CLAIM: catches automatically, on every
+/// `cargo test`, the exact class of bug found manually this session --
+/// my-lisp bumped `language-contract.my` from 1.0 to 2.0 (a real, breaking
+/// semantic change: apostrophe stopped being quote-reader-sugar) while
+/// `compatibility.my` still claimed contract `(1 0)` until a live check
+/// happened to catch it. This test reads my-lisp's `language-contract.my`
+/// directly (the authoritative file, per its own header comment -- never a
+/// number restated in prose) and hard-fails if `compatibility.my`'s
+/// declared `(contract . (major minor))` doesn't match it exactly. Unlike
+/// the SHA-pin check above, a version-number mismatch here is never
+/// "routine drift" -- it means this repo is claiming compatibility with a
+/// contract that no longer exists.
+#[test]
+fn compatibility_my_contract_version_matches_language_contract_my() {
+    let my_lisp = sibling("my-lisp");
+    let language_contract = fs::read_to_string(my_lisp.join("language-contract.my"))
+        .expect("my-lisp's language-contract.my should be readable");
+
+    let major = extract_field(&language_contract, "major")
+        .expect("language-contract.my should have a (major . N) field");
+    let minor = extract_field(&language_contract, "minor")
+        .expect("language-contract.my should have a (minor . N) field");
+
+    let compatibility = fs::read_to_string("compatibility.my")
+        .expect("compatibility.my should be readable");
+    let claimed = format!("(contract . ({major} {minor}))");
+    assert!(
+        compatibility.contains(&claimed),
+        "compatibility.my's declared language contract version doesn't match my-lisp's actual language-contract.my \
+         (major . {major}) (minor . {minor}) -- compatibility.my is claiming compatibility with a contract version \
+         that isn't the real one. Update compatibility.my's `(contract . (major minor))` field."
+    );
+}
+
+/// Extracts the integer value of a `(name . N)` field from a `.my`
+/// alist's raw text -- deliberately not a full s-expression parser
+/// (this repo already has one in `src/parser.rs`, but pulling it into a
+/// test binary for one field isn't worth the coupling); good enough for
+/// the flat, single-line fields `language-contract.my`/`compatibility.my`
+/// actually use.
+fn extract_field(text: &str, name: &str) -> Option<i64> {
+    let marker = format!("({name} . ");
+    let start = text.find(&marker)? + marker.len();
+    let end = text[start..].find(')')? + start;
+    text[start..end].trim().parse().ok()
+}
