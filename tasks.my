@@ -75,4 +75,10 @@
      (capabilities . (compiler rust proof))
      (done . t)
      (description . "P0 protocol drift found live: my-lisp bumped language-contract.my to 2.0 (commit d287a16, removed prime-quote reader shorthand -- apostrophe now a plain identifier char), but cml/AGENTS.md and compatibility.my still said 1.0, and cml/src/parser.rs still auto-expanded a leading apostrophe into (quote ...). Fix parser.rs to match 2.0 semantics, update version claims, verify regression.")
-     (context . "done (c631dbf, 146fc1d): parser.rs no longer treats a leading apostrophe as quote sugar -- folds into whatever identifier it's touching, matching real my-lisp's apostrophe_is_no_longer_quote_sugar_but_part_of_symbol test. 5 of cml's own tests relied on the old shorthand in test-code strings, updated to explicit (quote ...). AGENTS.md/compatibility.my now say contract 2.0 / ISA 1.0 and point at the source files directly instead of repeating a number. Full regression clean."))))))
+     (context . "done (c631dbf, 146fc1d): parser.rs no longer treats a leading apostrophe as quote sugar -- folds into whatever identifier it's touching, matching real my-lisp's apostrophe_is_no_longer_quote_sugar_but_part_of_symbol test. 5 of cml's own tests relied on the old shorthand in test-code strings, updated to explicit (quote ...). AGENTS.md/compatibility.my now say contract 2.0 / ISA 1.0 and point at the source files directly instead of repeating a number. Full regression clean.")))
+   ("CML-C-BACKEND-ERROR-HANDLING" .
+    ((priority . 0.5)
+     (capabilities . (compiler rust proof))
+     (done . t)
+     (description . "Replace panic! calls in c_backend.rs/macros.rs with graceful Result-returning errors (CompileError, MacroError).")
+     (context . "done directly by the owner (commit 095810d, found during CML-1's wake-up git-log review): CompileError (NestedDef, Unsupported) and MacroError (UnboundSymbol, ExpectedOperator, CarOfNonPair, CdrOfNonPair, UnsupportedForm) added, 6 panic! calls converted to Result, main.rs updated with .unwrap_or_else for both. Verified: c_backend_test now has 4 graceful-error regression tests (9/9 total), full workspace regression clean."))))))
