@@ -69,4 +69,10 @@
      (capabilities . (compiler rust lowering testing proof))
      (done . t)
      (description . "c_backend.rs has only ever been run against hand-picked fixtures, never the full tests/fixtures/conformance.my suite conformance_test.rs already exercises against compiler.rs. Write an analogous test: compile+gcc+run every tier-1 fixture through c_backend.rs, compare to the fixture's own expected value.")
-     (context . "done (f73e670): tests/c_backend_conformance_test.rs, all ten constitutive tier-1 fixtures pass. Also fixed print_value to render standard Lisp list syntax instead of raw dotted pairs, and refreshed docs/heterogeneous-backends.md which had gone stale (claimed 'not yet implemented' / 'single-backend' when both were long false)."))))))
+     (context . "done (f73e670): tests/c_backend_conformance_test.rs, all ten constitutive tier-1 fixtures pass. Also fixed print_value to render standard Lisp list syntax instead of raw dotted pairs, and refreshed docs/heterogeneous-backends.md which had gone stale (claimed 'not yet implemented' / 'single-backend' when both were long false).")))
+   ("CML-FIX-CONTRACT-VERSION-DRIFT" .
+    ((priority . 0.9)
+     (capabilities . (compiler rust proof))
+     (done . t)
+     (description . "P0 protocol drift found live: my-lisp bumped language-contract.my to 2.0 (commit d287a16, removed prime-quote reader shorthand -- apostrophe now a plain identifier char), but cml/AGENTS.md and compatibility.my still said 1.0, and cml/src/parser.rs still auto-expanded a leading apostrophe into (quote ...). Fix parser.rs to match 2.0 semantics, update version claims, verify regression.")
+     (context . "done (c631dbf, 146fc1d): parser.rs no longer treats a leading apostrophe as quote sugar -- folds into whatever identifier it's touching, matching real my-lisp's apostrophe_is_no_longer_quote_sugar_but_part_of_symbol test. 5 of cml's own tests relied on the old shorthand in test-code strings, updated to explicit (quote ...). AGENTS.md/compatibility.my now say contract 2.0 / ISA 1.0 and point at the source files directly instead of repeating a number. Full regression clean."))))))
