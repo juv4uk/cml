@@ -87,4 +87,10 @@
      (capabilities . (compiler rust proof))
      (done . t)
      (description . "Post-downtime architecture recovery audit: review cml's AGENTS.md/docs for staleness against the swarm-node coordination migration and this session's IR/C-backend work.")
-     (context . "done (c82027d): AGENTS.md had no 'Session start -- join the swarm' section at all (the single biggest infrastructure change of the session, present in every sibling repo's AGENTS.md); 'Talking to my-lisp live' still described the old plain-REPL :9999 protocol with no mention of --protocol=sexpr or --connect; a leftover Windows-rustup/MSVC-vs-GNU paragraph was dead since the WSL2+Guix migration; no mention anywhere that cml is multi-backend now (ir.rs/lower.rs/c_backend.rs) or that macros.my exists; manifest.scm's own description undercounted its packages. All fixed. Full regression clean after editing."))))))
+     (context . "done (c82027d): AGENTS.md had no 'Session start -- join the swarm' section at all (the single biggest infrastructure change of the session, present in every sibling repo's AGENTS.md); 'Talking to my-lisp live' still described the old plain-REPL :9999 protocol with no mention of --protocol=sexpr or --connect; a leftover Windows-rustup/MSVC-vs-GNU paragraph was dead since the WSL2+Guix migration; no mention anywhere that cml is multi-backend now (ir.rs/lower.rs/c_backend.rs) or that macros.my exists; manifest.scm's own description undercounted its packages. All fixed. Full regression clean after editing.")))
+   ("CML-C-BACKEND-COMPATIBILITY-DOC" .
+    ((priority . 0.45)
+     (capabilities . (compiler rust proof))
+     (done . t)
+     (description . "compatibility.my only documents the fpga-lisp pipeline -- the C backend (src/c_backend.rs, its own conformance test, 10/10 tier-1 fixtures) has no compatibility record at all. Add a c-backend section documenting supported surface, known gaps, and conformance status.")
+     (context . "done (62c94f1): c-backend section added -- shared frontend with fpga-lisp target, supported surface, runtime representation, real differences (structural equal?, no 8-arg register ceiling since args is a real cons-list). Also fixed three examples elsewhere in the file still using apostrophe-as-quote-sugar (stale since contract 2.0). Full regression clean."))))))
