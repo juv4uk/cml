@@ -93,4 +93,10 @@
      (capabilities . (compiler rust proof))
      (done . t)
      (description . "compatibility.my only documents the fpga-lisp pipeline -- the C backend (src/c_backend.rs, its own conformance test, 10/10 tier-1 fixtures) has no compatibility record at all. Add a c-backend section documenting supported surface, known gaps, and conformance status.")
-     (context . "done (62c94f1): c-backend section added -- shared frontend with fpga-lisp target, supported surface, runtime representation, real differences (structural equal?, no 8-arg register ceiling since args is a real cons-list). Also fixed three examples elsewhere in the file still using apostrophe-as-quote-sugar (stale since contract 2.0). Full regression clean."))))))
+     (context . "done (62c94f1): c-backend section added -- shared frontend with fpga-lisp target, supported surface, runtime representation, real differences (structural equal?, no 8-arg register ceiling since args is a real cons-list). Also fixed three examples elsewhere in the file still using apostrophe-as-quote-sugar (stale since contract 2.0). Full regression clean.")))
+   ("CML-AUTO-CHECK-CONTRACT-VERSION-CLAIM" .
+    ((priority . 0.6)
+     (capabilities . (compiler rust proof))
+     (done . t)
+     (description . "Add an automatic test catching contract-version drift between compatibility.my's claimed language contract and my-lisp's real language-contract.my, so the class of bug CML-FIX-CONTRACT-VERSION-DRIFT found manually can't recur silently.")
+     (context . "done (c970e2a): compatibility_my_contract_version_matches_language_contract_my in tests/revision_contract_test.rs reads language-contract.my directly and hard-fails on any mismatch (unlike the SHA-pin check in the same file, this is never routine drift). Verified it actually catches the bug by temporarily reverting compatibility.my's claim and confirming the right failure message, then reverting. Full regression clean."))))))
