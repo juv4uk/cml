@@ -8,16 +8,18 @@ first — it saves you from re-deriving context another agent already has.
 
 - **my-lisp** — the semantic source of truth. Defines the language: parser,
   evaluator, exactness model (rationals, no floats), `lib/core.my` standard
-  library. Language contract version 1.0 (`language-contract.my`). Nothing
-  else in the ecosystem may drift from what that repo says the language
-  means.
+  library. Language contract version **2.0** as of 2026-08-15
+  (`language-contract.my`'s own `(major . 2) (minor . 0)` — **read that
+  file directly**, never trust a number in prose, including this one; the
+  1.0→2.0 break removed `'` as reader shorthand for `quote` — apostrophe
+  is now a plain identifier character, see `src/parser.rs`'s own doc
+  comment on `cml`'s side of that fix). Nothing else in the ecosystem may
+  drift from what that repo says the language means.
 - **fpga-lisp** — hardware implementation of the same language on an FPGA.
-  Tracks an ISA contract (`isa-contract.my`, version 0.2) against my-lisp's
-  semantics. Currently working through `letrec`-in-closures (plan item 24,
-  M28 proved the mechanism, M29 targets the canonical tail-recursive
-  `length`/`length-onto` pair) before it can bootstrap
-  `reverse`/`append`/`map` from `core.my` — the one open blocker the whole
-  ecosystem is waiting on.
+  Tracks an ISA contract (`isa-contract.my`, version **1.0**) against
+  my-lisp's semantics. `docs/lisp-machine-plan.md` there is the current,
+  authoritative status — don't infer progress from this file, which only
+  describes timeless roles.
 - **cml** (this repo) — an Ahead-of-Time compiler from my-lisp source
   directly to fpga-lisp assembly (no runtime `eval`/`apply` loop on the
   hardware). Tracks conformance against both other repos via

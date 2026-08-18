@@ -3,9 +3,9 @@
 ; Die von dieser CML-Revision geprüfte explizite Grenze.
 
 ((kind . cml-compatibility)
- (compiler-version . (0 2 0))
+ (compiler-version . (0 3 0))
  (language . ((repository . juv4uk/my-lisp)
-              (contract . (1 0))
+              (contract . (2 0))
               (tested-sha . "164608cc2b1c08b815362551d6a9483fa762db7b")))
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (1 0))
@@ -16,6 +16,9 @@
                def recursive-def-letrec
                let-as-lambda-lowering variadic-up-to-eight-arguments))
  (representational-substitutions . ((source-string . target-symbol)))
+ (contract-2.0-migration . ((change . "apostrophe-no-longer-quote-reader-sugar")
+                            (fixed-in . "src/parser.rs, commit c631dbf")
+                            (note . "a leading ' used to auto-expand into (quote ...); now folds into the identifier it's touching, matching real my-lisp's own apostrophe_is_no_longer_quote_sugar_but_part_of_symbol parser test. explicit (quote ...) is required from here on -- tests/fixtures/conformance.my already used only that form, which is why this gap survived undetected until a live contract-drift check found it")))
  (conformance . ((tier-1 . partial)
                  (tier-1-fixtures-tagged . 35)
                  (tier-1-fixtures-skipped . 3)
