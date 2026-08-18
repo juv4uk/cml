@@ -37,7 +37,7 @@
               (meta-evaluator-primitives . (quote cons car cdr atom eq cond))
               (never-reaches-fpga . true)
               (limitation . "macro body arity/param binding follows the same fixed/variadic/dotted rules as compile_lambda; no hygiene, no gensym")
-              (example . "(defmacro my-list items (cons 'quote (cons items '()))) (my-list 1 2 3) => (1 2 3)")))
+              (example . "(defmacro my-list items (cons (quote quote) (cons items (quote ())))) (my-list 1 2 3) => (1 2 3)")))
  (def . ((mechanism . letrec-placeholder-pair-plus-setcdr-backpatch)
          (implementation . "compile_def in src/compiler.rs")
          (semantics . (extend-env-with-name-dot-nil-placeholder-before-compiling-value
@@ -48,12 +48,12 @@
          (status . working-real-iverilog-verified)
          (known-issues . ((r4-env-clobber-in-compile-cond . fixed-e73f93a)
                           (cross-argument-r1-r3-clobber-in-compile-generic-call . fixed-166dffa)))
-         (example . "(def length-onto (lambda (values acc) (cond ((atom values) acc) (t (length-onto (cdr values) (+ acc 1)))))) (def length (lambda (values) (length-onto values 0))) (length '(a b c)) => 3, verified end-to-end against core.my's own length/length-onto pair, see evidence/length/")))
+         (example . "(def length-onto (lambda (values acc) (cond ((atom values) acc) (t (length-onto (cdr values) (+ acc 1)))))) (def length (lambda (values) (length-onto values 0))) (length (quote (a b c))) => 3, verified end-to-end against core.my's own length/length-onto pair, see evidence/length/")))
  (equal? . ((mechanism . native-fpga-subroutine)
             (implementation . "cml_equal in src/compiler.rs")
             (algorithm . worklist-on-r11-no-call-ret-recursion)
             (rationale . "avoids depending on the still-unverified letrec/self-referential-closure mechanism (fpga-lisp plan item 24)")
-            (example . "(equal? '(p . 0) (cons 'p 0)) => TRUE")
+            (example . "(equal? (quote (p . 0)) (cons (quote p) 0)) => TRUE")
             (status . working-real-iverilog-verified)
             (known-issues . ((r1-clobber-in-nested-two-arg-primitive-calls . fixed-af64449)))
             (retracted-false-positive . "a prior local run reported cml_equal hanging on this exact fixture; root cause was an insufficient wall-clock timeout on cold vvp startup (30-45s+ for this binary size on this machine), not a hardware or logic bug -- confirmed working with a longer timeout, see ecosystem-status.md")))
@@ -61,4 +61,26 @@
                   (defmacro . real-iverilog-run-passed-locally)
                   (ci-workflow . ".github/workflows/ci.yml")
                   (ci-status-check-method . "REST API conclusion field via /repos/.../actions/runs?head_sha=..., never the rendered HTML /actions page")
-                  (log . "ecosystem-status.md"))))
+                  (log . "ecosystem-status.md")))
+ (c-backend . ((status . "second, non-fpga-lisp compilation target; docs/heterogeneous-backends.md step 2")
+               (implementation . "src/c_backend.rs")
+               (shares-frontend-with-fpga-lisp-target . true)
+               (note . "parse/macro-expand/lower (ast::Expr -> ir::Ir) is identical to the fpga-lisp pipeline above; c-backend only differs from compile assemble simulate onward -- it consumes the same ir::Ir compiler.rs does, not a separate frontend")
+               (pipeline . (parse macro-expand lower emit-c gcc run compare))
+               (supported . (integer nil true quote-integer quote-symbol
+                             quote-proper-list quote-dotted-list variable
+                             lambda-fixed-arity lambda-variadic lambda-bare-symbol-params
+                             application cond let structural-equal? def
+                             recursive-def-letrec))
+               (runtime . ((representation . "tagged-union Value struct (TAG_NIL/TRUE/INT/SYM/CONS/CLOSURE), heap-allocated via malloc, never freed")
+                           (environment . "mutable-cons alist chain, same conceptual model as fpga-lisp's cml_lookup")
+                           (self-recursive-def . "letrec-placeholder-pair-plus-backpatch, same idea as compile_def on fpga-lisp, here a literal C struct-field mutation instead of SETCDR")))
+               (conformance . ((tier-1-constitutive . "10/10, tests/c_backend_conformance_test.rs")
+                               (verified-against . "tests/fixtures/conformance.my, same fixture set the fpga-lisp pipeline uses")))
+               (known-gaps . (no-eight-argument-limit-enforced-unlike-fpga-lisp-register-file
+                              defmacro-supported-only-via-shared-macros-rs-not-macros-my))
+               (differs-from-fpga-lisp . (equal?-is-structural-recursive-v-equal_p-here-vs-fpga-lisps-r11-worklist-but-both-independently-verified-correct
+                                          no-eight-argument-register-ceiling-args-is-a-real-cons-list-not-fixed-registers))
+               (error-handling . ((mechanism . "CompileError/MacroError enums, not panic!")
+                                  (verified . "tests/c_backend_test.rs's 4 macro_*/nested_def_returns_graceful_error tests")))
+               (not-wired-into-cml . "macros.my (a separate .my-hosted defmacro-expander, docs/tooling-language-priority.md) is unrelated to c-backend and not consumed by it either -- c-backend uses the same Rust macros.rs pipeline as fpga-lisp does"))))
