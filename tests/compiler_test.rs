@@ -46,7 +46,7 @@ fn run_assembler(asm_code: &str, test_name: &str) {
 
 #[test]
 fn test_compile_cond() {
-    let code = "(cond (t 'a) (nil 'b))";
+    let code = "(cond (t (quote a)) (nil (quote b)))";
     let exprs = parser::parse(code).unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
@@ -84,7 +84,7 @@ fn test_compile_lambda() {
 
 #[test]
 fn test_compile_let_as_lambda_application() {
-    let exprs = parser::parse("(let ((x 'test)) x)").unwrap();
+    let exprs = parser::parse("(let ((x (quote test))) x)").unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs);
@@ -97,7 +97,7 @@ fn test_compile_let_as_lambda_application() {
 
 #[test]
 fn test_compile_apply() {
-    let code = "((lambda (x) x) 'test)";
+    let code = "((lambda (x) x) (quote test))";
     let exprs = parser::parse(code).unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
@@ -114,7 +114,7 @@ fn test_compile_apply() {
 
 #[test]
 fn test_compile_nested_apply() {
-    let code = "((lambda (x y) (cond (x y) (nil nil))) t 'success)";
+    let code = "((lambda (x y) (cond (x y) (nil nil))) t (quote success))";
     let exprs = parser::parse(code).unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
@@ -125,7 +125,10 @@ fn test_compile_nested_apply() {
 
 #[test]
 fn test_compile_quoted_list() {
-    let code = "'(a (b c) d)";
+    // Explicit (quote ...), not '-shorthand: language-contract.my 2.0
+    // (commit d287a16) removed ' as quote sugar -- it's a plain
+    // identifier character now, see src/parser.rs's own doc comment.
+    let code = "(quote (a (b c) d))";
     let exprs = parser::parse(code).unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
@@ -142,7 +145,7 @@ fn test_compile_quoted_list() {
 
 #[test]
 fn test_end_to_end_execution() {
-    let code = "((lambda (x) x) 'test)";
+    let code = "((lambda (x) x) (quote test))";
     let exprs = parser::parse(code).unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();

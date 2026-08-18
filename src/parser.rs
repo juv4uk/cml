@@ -1,5 +1,15 @@
 use crate::ast::Expr;
 
+// my-lisp's language-contract.my bumped 1.0 -> 2.0 (commit d287a16,
+// "complete quote migration"): `'` is no longer reader shorthand for
+// `quote` -- it's now a plain identifier character (enabling symbols
+// like Ukrainian об'єкт/зв'язок/п'ять), matching real my-lisp's own
+// parser test `apostrophe_is_no_longer_quote_sugar_but_part_of_symbol`.
+// `tokenize` therefore folds `'` into whatever token it's touching
+// instead of splitting on it, and `parse_expr` has no `"'"` case --
+// this file used to auto-expand a leading `'` into `(quote ...)`, which
+// would have silently misparsed any symbol using an apostrophe under
+// the current contract.
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -24,7 +34,7 @@ fn tokenize(input: &str) -> Vec<String> {
         }
 
         match c {
-            '(' | ')' | '\'' => {
+            '(' | ')' => {
                 if !current.is_empty() {
                     tokens.push(current.clone());
                     current.clear();
@@ -68,13 +78,6 @@ fn parse_expr(tokens: &mut std::iter::Peekable<std::vec::IntoIter<String>>) -> R
     match token.as_str() {
         "(" => parse_list(tokens),
         ")" => Err(ParseError::UnexpectedToken(")".to_string())),
-        "'" => {
-            let next_expr = parse_expr(tokens)?;
-            Ok(Expr::List(vec![
-                Expr::Symbol("quote".to_string()),
-                next_expr,
-            ]))
-        }
         _ => {
             if token.starts_with('"') && token.ends_with('"') {
                 Ok(Expr::String(token[1..token.len() - 1].to_string()))
