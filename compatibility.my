@@ -28,6 +28,10 @@
                  (fixture-specific-skips . (inexact-numbers))))
  (limitations . (no-inexact-numbers no-rationals no-canonical-strings
                  no-more-than-eight-call-arguments))
+ (target-diagnostics . ((mechanism . "validate_ir pre-pass in src/compiler.rs, runs before any assembly is emitted")
+                        (checks . (call-arguments-exceed-eight-registers
+                                   integer-literal-exceeds-loadi-16-bit-magnitude))
+                        (note . "both were previously silent target-corruption risks: a 9th+ call argument was never even evaluated (compile_generic_call only compiled args[..8]), and an out-of-range literal truncated into LOADI's 16-bit immediate. Both now fail to compile via CompileError instead. fpga-lisp path only -- c_backend.rs has no 8-arg ceiling since args is a real cons-list, and its own CompileError::Unsupported already covers unrepresentable IR shapes.")))
  (defmacro . ((mechanism . compile-time-only-source-transform)
               (implementation . "src/macros.rs")
               (semantics . (collect-top-level-defmacro

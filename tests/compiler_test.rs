@@ -1,5 +1,5 @@
 use cml::parser;
-use cml::compiler::Compiler;
+use cml::compiler::{CompileError, Compiler};
 use cml::lower;
 use std::env;
 use std::fs;
@@ -50,7 +50,7 @@ fn test_compile_cond() {
     let exprs = parser::parse(code).unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
-    let asm = compiler.compile(&exprs);
+    let asm = compiler.compile(&exprs).unwrap();
     
     // `t` is constructed through ATOM, matching the current target's TRUE
     // representation; the old test still expected the pre-truthiness-fix
@@ -72,7 +72,7 @@ fn test_compile_lambda() {
     let exprs = parser::parse(code).unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
-    let asm = compiler.compile(&exprs);
+    let asm = compiler.compile(&exprs).unwrap();
     
     assert!(asm.contains("LAMBDA START"));
     assert!(asm.contains("LAMBDA END"));
@@ -87,7 +87,7 @@ fn test_compile_let_as_lambda_application() {
     let exprs = parser::parse("(let ((x (quote test))) x)").unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
-    let asm = compiler.compile(&exprs);
+    let asm = compiler.compile(&exprs).unwrap();
 
     assert!(asm.contains("; LAMBDA START"));
     assert!(asm.contains("LOADSYM R12 X"));
@@ -101,7 +101,7 @@ fn test_compile_apply() {
     let exprs = parser::parse(code).unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
-    let asm = compiler.compile(&exprs);
+    let asm = compiler.compile(&exprs).unwrap();
     
     assert!(asm.contains("CALL START"));
     assert!(asm.contains("CALL END"));
@@ -118,7 +118,7 @@ fn test_compile_nested_apply() {
     let exprs = parser::parse(code).unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
-    let asm = compiler.compile(&exprs);
+    let asm = compiler.compile(&exprs).unwrap();
 
     run_assembler(&asm, "test_nested_apply");
 }
@@ -132,7 +132,7 @@ fn test_compile_quoted_list() {
     let exprs = parser::parse(code).unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
-    let asm = compiler.compile(&exprs);
+    let asm = compiler.compile(&exprs).unwrap();
 
     assert!(asm.contains("LOADSYM R15 D"));
     assert!(asm.contains("LOADSYM R15 C"));
@@ -149,7 +149,7 @@ fn test_end_to_end_execution() {
     let exprs = parser::parse(code).unwrap();
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
-    let asm = compiler.compile(&exprs);
+    let asm = compiler.compile(&exprs).unwrap();
 
     let mut full_asm = String::new();
     // Prepend basic symbols
@@ -230,4 +230,42 @@ fn test_end_to_end_execution() {
     if !stdout.contains("CML E2E PASSED") {
         panic!("E2E Simulation failed or did not print PASSED.\nSTDOUT:\n{}", stdout);
     }
+}
+
+#[test]
+fn test_too_many_call_args_is_a_compile_error() {
+    // fpga-lisp's generic call lowering only has 8 fixed argument registers
+    // (R1..R3, R5..R9); a 9th argument was previously silently dropped
+    // (never even evaluated) instead of failing to compile.
+    let code = "((lambda (a b c d e f g h i) a) 1 2 3 4 5 6 7 8 9)";
+    let exprs = parser::parse(code).unwrap();
+    let exprs = lower::lower_program(&exprs).unwrap();
+    let mut compiler = Compiler::new();
+
+    let err = compiler.compile(&exprs).unwrap_err();
+    assert!(matches!(err, CompileError::TooManyArguments { found: 9, max: 8 }));
+}
+
+#[test]
+fn test_out_of_range_integer_literal_is_a_compile_error() {
+    // LOADI's immediate is a 16-bit field; a larger literal previously
+    // truncated silently instead of failing to compile.
+    let code = "100000";
+    let exprs = parser::parse(code).unwrap();
+    let exprs = lower::lower_program(&exprs).unwrap();
+    let mut compiler = Compiler::new();
+
+    let err = compiler.compile(&exprs).unwrap_err();
+    assert!(matches!(err, CompileError::IntegerOutOfRange { value: 100000, .. }));
+}
+
+#[test]
+fn test_out_of_range_quoted_integer_literal_is_a_compile_error() {
+    let code = "(quote (1 2 100000))";
+    let exprs = parser::parse(code).unwrap();
+    let exprs = lower::lower_program(&exprs).unwrap();
+    let mut compiler = Compiler::new();
+
+    let err = compiler.compile(&exprs).unwrap_err();
+    assert!(matches!(err, CompileError::IntegerOutOfRange { value: 100000, .. }));
 }

@@ -278,7 +278,7 @@ fn test_conformance() {
             }
             let program = lower::lower_program(&exprs).unwrap();
             let mut compiler = Compiler::new();
-            let asm = compiler.compile(&program);
+            let asm = compiler.compile(&program).unwrap();
 
             // Collect new symbols
             let mut new_syms = Vec::new();

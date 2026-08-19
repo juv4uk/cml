@@ -1,4 +1,85 @@
 use crate::ir::{Ir, Params, PrimOp, Quoted};
+use std::fmt;
+
+/// The fpga-lisp target's hard limits, checked before any assembly is
+/// emitted (docs/abi.md / isa-contract.my). Both are silent-corruption
+/// risks if left unchecked: extra call args past MAX_ARGS are never even
+/// evaluated (compile_generic_call only compiles args[..MAX_ARGS]), and an
+/// out-of-range literal truncates into LOADI's 16-bit immediate.
+const MAX_CALL_ARGS: usize = 8;
+const MAX_LOADI_MAGNITUDE: i64 = 0xFFFF;
+
+/// Errors caught before emission by validating the IR against fpga-lisp's
+/// target limits -- see docs/abi.md and isa-contract.my.
+#[derive(Debug, Clone)]
+pub enum CompileError {
+    /// A call site passes more arguments than the target's fixed register
+    /// bank (R1..R3, R5..R9) can carry.
+    TooManyArguments { found: usize, max: usize },
+    /// An integer literal doesn't fit LOADI's 16-bit immediate (negatives
+    /// are emitted via `LOADI 0; SUB` of the same-magnitude positive).
+    IntegerOutOfRange { value: i64, max_magnitude: i64 },
+}
+
+impl fmt::Display for CompileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompileError::TooManyArguments { found, max } => write!(
+                f, "call has {found} arguments, but the fpga-lisp target supports at most {max}"
+            ),
+            CompileError::IntegerOutOfRange { value, max_magnitude } => write!(
+                f, "integer literal {value} exceeds the fpga-lisp target's LOADI range (magnitude > {max_magnitude})"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for CompileError {}
+
+fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
+    match ir {
+        Ir::Int(n) => validate_int(*n),
+        Ir::Quote(q) => validate_quoted(q),
+        Ir::Lambda { body, .. } => validate_ir(body),
+        Ir::App { func, args } => {
+            if args.len() > MAX_CALL_ARGS {
+                return Err(CompileError::TooManyArguments { found: args.len(), max: MAX_CALL_ARGS });
+            }
+            validate_ir(func)?;
+            args.iter().try_for_each(validate_ir)
+        }
+        Ir::Cond { branches } => branches.iter().try_for_each(|(test, body)| {
+            validate_ir(test)?;
+            validate_ir(body)
+        }),
+        Ir::Let { bindings, body } => {
+            bindings.iter().try_for_each(|(_, value)| validate_ir(value))?;
+            validate_ir(body)
+        }
+        Ir::Def { value, .. } => validate_ir(value),
+        Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
+        Ir::Nil | Ir::True | Ir::Var(_) => Ok(()),
+    }
+}
+
+fn validate_int(n: i64) -> Result<(), CompileError> {
+    if n.unsigned_abs() > MAX_LOADI_MAGNITUDE as u64 {
+        return Err(CompileError::IntegerOutOfRange { value: n, max_magnitude: MAX_LOADI_MAGNITUDE });
+    }
+    Ok(())
+}
+
+fn validate_quoted(q: &Quoted) -> Result<(), CompileError> {
+    match q {
+        Quoted::Int(n) => validate_int(*n),
+        Quoted::List(items) => items.iter().try_for_each(validate_quoted),
+        Quoted::DottedList(items, tail) => {
+            items.iter().try_for_each(validate_quoted)?;
+            validate_quoted(tail)
+        }
+        Quoted::Str(_) | Quoted::Sym(_) | Quoted::Nil => Ok(()),
+    }
+}
 
 pub struct Compiler {
     output: Vec<String>,
@@ -64,7 +145,9 @@ impl Compiler {
         });
     }
 
-    pub fn compile(&mut self, program: &[Ir]) -> String {
+    pub fn compile(&mut self, program: &[Ir]) -> Result<String, CompileError> {
+        program.iter().try_for_each(validate_ir)?;
+
         // Initialize R4 (ENV) and R11 (Stack) to NIL at program start
         self.emit("LOADI R13 0");
         self.emit("LOADI R12 1");
@@ -83,7 +166,7 @@ impl Compiler {
             self.emit_cml_equal();
         }
 
-        self.output.join("\n")
+        Ok(self.output.join("\n"))
     }
 
     fn compile_expr(&mut self, ir: &Ir, target_reg: &str) {

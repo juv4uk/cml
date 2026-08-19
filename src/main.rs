@@ -29,7 +29,10 @@ fn main() {
         std::process::exit(1);
     });
     let mut compiler = Compiler::new();
-    let asm = compiler.compile(&program);
+    let asm = compiler.compile(&program).unwrap_or_else(|err| {
+        eprintln!("Compile error: {err}");
+        std::process::exit(1);
+    });
 
     println!("{}", asm);
 }

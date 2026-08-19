@@ -6,11 +6,10 @@
 //! explicit data here instead of being hardcoded directly into register
 //! allocation the way `compiler.rs` does today (see `docs/abi.md`).
 //!
-//! This module is additive only: `compiler.rs`'s existing `ast::Expr` ->
-//! fpga-lisp-ISA path is untouched and still what CI/evidence exercise.
-//! Nothing consumes `Ir` yet -- `lower.rs` proves `ast::Expr -> Ir` is
-//! well-defined for every form the compiler already supports, which is
-//! the actual boundary this step is drawing.
+//! `compiler.rs` (fpga-lisp) and `c_backend.rs` (C) both compile this same
+//! `Ir` -- see `lower.rs` for the `ast::Expr -> Ir` step that feeds both,
+//! and `main.rs` for the live `parse -> macro-expand -> lower -> backend`
+//! pipeline.
 
 /// A fully self-contained literal produced by `quote` -- data, never
 /// executed. Kept separate from `Ir` itself because quoted data has no
