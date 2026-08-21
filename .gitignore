@@ -5,3 +5,4 @@ conformance_test.bin
 tb_cml_e2e.vvp
 *.vvp
 *.bin
+target/
