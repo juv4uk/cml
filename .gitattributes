@@ -4,5 +4,5 @@
 *.vvp binary
 
 # GitHub Linguist: .my files are my-lisp source → shown in "Other" bucket
-*.my linguist-language=Text
+*.my linguist-language=Lisp
 *.lisp linguist-language=Common-Lisp
