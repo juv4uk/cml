@@ -167,3 +167,13 @@ tool wrapper + evidence ledger + claim gate. Статус: план,
 план перед write-heavy роботою; зауваження — у plans/ або
 власнику напряму.
 
+
+## NLP / Embeddings tooling (2026-08-22)
+
+Для NLP-задач (ембедінги, семантична класифікація, BGE-M3): системний
+python3 НЕ має torch. Використовуй
+`/home/agents/GitHub/FlagEmbedding/.venv/bin/python`.
+Конфіг і готові індекси: `/home/agents/GitHub/vault-semantic-mcp/`
+(корпусні ембедінги вже в `data/sanskrit_embeddings.jsonl` — перевикористовуй).
+GPU лише 4GB — батчі ≤4, fp16, не перераховувати зайве.
+Повний рецепт: `/home/agents/ecosystem/memory/nlp-tooling-setup.md`.
