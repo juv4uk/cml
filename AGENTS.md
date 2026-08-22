@@ -155,3 +155,15 @@ profile instead of this repo's own declared manifest.
 3. Anchor claims to a commit sha or file:line, not a paraphrase from memory.
 4. Don't block on confirmation before continuing your own work unless
    there's a real dependency.
+
+## Agent Guard (M0 — PROPOSED, 2026-08-22)
+
+План executable-constitution guardrails для агентських сесій:
+`/home/agents/ecosystem/plans/AGENT-GUARD-M0.md`
+
+Машинні гачки на C1/C7/C9/C11 (ox-alpha constitution v1.2):
+tool wrapper + evidence ledger + claim gate. Статус: план,
+реалізація не почата. Агенти, що заходять у репо: прочитайте
+план перед write-heavy роботою; зауваження — у plans/ або
+власнику напряму.
+
