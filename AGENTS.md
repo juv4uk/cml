@@ -177,3 +177,9 @@ python3 НЕ має torch. Використовуй
 (корпусні ембедінги вже в `data/sanskrit_embeddings.jsonl` — перевикористовуй).
 GPU лише 4GB — батчі ≤4, fp16, не перераховувати зайве.
 Повний рецепт: `/home/agents/ecosystem/memory/nlp-tooling-setup.md`.
+
+### NLP consumer (2026-08-23)
+Результати семантичної класифікації корпусу вже готові — дивись без GPU:
+`python3 /home/agents/GitHub/vault-semantic-mcp/lookup_concept.py anumāna`
+(режими: концепт / --file / --search). Епістеміка: semantic-suggest =
+гіпотеза, не authority. Повний рецепт: ecosystem/memory/nlp-tooling-setup.md.
