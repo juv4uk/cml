@@ -4,9 +4,11 @@
 //! representable so the graph contract does not need to change later, but
 //! they fail closed until a live executor is registered.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use crate::compute::{ComputeBackend, ComputeExecutionError, CpuComputeBackend};
+use crate::fpga_transport::{FpgaJobExecutor, FpgaJobV1, FpgaTransport};
 use crate::ir::{BufferLiteral, Ir};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -25,6 +27,13 @@ pub enum ExecutionTarget {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExecutionOperation {
     NumericBufferMap { function: Ir, input: BufferId },
+    FpgaProgram { job: FpgaJobV1 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GraphValue {
+    Buffer(BufferLiteral),
+    LispWord(u32),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,19 +47,33 @@ pub struct PlanNode {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExecutionGraph {
-    pub inputs: Vec<(BufferId, BufferLiteral)>,
+    pub inputs: Vec<(BufferId, GraphValue)>,
     pub nodes: Vec<PlanNode>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExecutionResult {
-    buffers: HashMap<BufferId, BufferLiteral>,
+    values: HashMap<BufferId, GraphValue>,
     execution_order: Vec<NodeId>,
 }
 
 impl ExecutionResult {
     pub fn buffer(&self, id: BufferId) -> Option<&BufferLiteral> {
-        self.buffers.get(&id)
+        match self.values.get(&id) {
+            Some(GraphValue::Buffer(buffer)) => Some(buffer),
+            _ => None,
+        }
+    }
+
+    pub fn lisp_word(&self, id: BufferId) -> Option<u32> {
+        match self.values.get(&id) {
+            Some(GraphValue::LispWord(word)) => Some(*word),
+            _ => None,
+        }
+    }
+
+    pub fn value(&self, id: BufferId) -> Option<&GraphValue> {
+        self.values.get(&id)
     }
 
     pub fn execution_order(&self) -> &[NodeId] {
@@ -71,6 +94,10 @@ pub enum GraphExecutionError {
     MissingInput {
         node: NodeId,
         buffer: BufferId,
+    },
+    InputKindMismatch {
+        node: NodeId,
+        value: BufferId,
     },
     TargetUnavailable {
         node: NodeId,
@@ -94,10 +121,14 @@ pub trait NodeExecutor {
     fn execute_map(&self, ir: &Ir) -> Result<BufferLiteral, String>;
 }
 
+pub trait FpgaProgramNodeExecutor {
+    fn execute_program(&self, job: &FpgaJobV1) -> Result<u32, String>;
+}
+
 #[derive(Default)]
 pub struct HeterogeneousGraphExecutor {
     gpu: HashMap<String, Box<dyn NodeExecutor>>,
-    fpga: HashMap<String, Box<dyn NodeExecutor>>,
+    fpga: HashMap<String, Box<dyn FpgaProgramNodeExecutor>>,
 }
 
 impl HeterogeneousGraphExecutor {
@@ -112,13 +143,84 @@ impl HeterogeneousGraphExecutor {
     pub fn register_fpga(
         &mut self,
         device: impl Into<String>,
-        executor: impl NodeExecutor + 'static,
+        executor: impl FpgaProgramNodeExecutor + 'static,
     ) {
         self.fpga.insert(device.into(), Box::new(executor));
     }
 
     pub fn execute(&self, graph: &ExecutionGraph) -> Result<ExecutionResult, GraphExecutionError> {
-        execute_graph(graph, |node, ir| match &node.target {
+        validate_graph(graph)?;
+        let mut values: HashMap<_, _> = graph.inputs.iter().cloned().collect();
+        let mut completed = HashSet::new();
+        let mut execution_order = Vec::with_capacity(graph.nodes.len());
+
+        while completed.len() < graph.nodes.len() {
+            let Some(node) = graph.nodes.iter().find(|node| {
+                !completed.contains(&node.id)
+                    && node
+                        .dependencies
+                        .iter()
+                        .all(|dependency| completed.contains(dependency))
+            }) else {
+                return Err(GraphExecutionError::DependencyCycle);
+            };
+
+            let output = match &node.operation {
+                ExecutionOperation::NumericBufferMap { function, input } => {
+                    let input_value =
+                        values.get(input).ok_or(GraphExecutionError::MissingInput {
+                            node: node.id,
+                            buffer: *input,
+                        })?;
+                    let GraphValue::Buffer(buffer) = input_value else {
+                        return Err(GraphExecutionError::InputKindMismatch {
+                            node: node.id,
+                            value: *input,
+                        });
+                    };
+                    let ir = Ir::App {
+                        func: Box::new(Ir::Var("NUMERIC-BUFFER-MAP".into())),
+                        args: vec![function.clone(), Ir::Buffer(buffer.clone())],
+                    };
+                    GraphValue::Buffer(self.execute_map(node, &ir)?)
+                }
+                ExecutionOperation::FpgaProgram { job } => {
+                    let ExecutionTarget::Fpga { device } = &node.target else {
+                        return Err(GraphExecutionError::Backend {
+                            node: node.id,
+                            target: node.target.clone(),
+                            message: "FpgaProgram requires an FPGA target".into(),
+                        });
+                    };
+                    let executor = self.fpga.get(device).ok_or_else(|| {
+                        GraphExecutionError::TargetUnavailable {
+                            node: node.id,
+                            target: node.target.clone(),
+                        }
+                    })?;
+                    GraphValue::LispWord(executor.execute_program(job).map_err(|message| {
+                        GraphExecutionError::Backend {
+                            node: node.id,
+                            target: node.target.clone(),
+                            message,
+                        }
+                    })?)
+                }
+            };
+
+            values.insert(node.output, output);
+            completed.insert(node.id);
+            execution_order.push(node.id);
+        }
+
+        Ok(ExecutionResult {
+            values,
+            execution_order,
+        })
+    }
+
+    fn execute_map(&self, node: &PlanNode, ir: &Ir) -> Result<BufferLiteral, GraphExecutionError> {
+        match &node.target {
             ExecutionTarget::Cpu => {
                 CpuComputeBackend
                     .execute(ir)
@@ -142,22 +244,12 @@ impl HeterogeneousGraphExecutor {
                         message,
                     })
             }
-            ExecutionTarget::Fpga { device } => {
-                let executor = self.fpga.get(device).ok_or_else(|| {
-                    GraphExecutionError::TargetUnavailable {
-                        node: node.id,
-                        target: node.target.clone(),
-                    }
-                })?;
-                executor
-                    .execute_map(ir)
-                    .map_err(|message| GraphExecutionError::Backend {
-                        node: node.id,
-                        target: node.target.clone(),
-                        message,
-                    })
-            }
-        })
+            ExecutionTarget::Fpga { .. } => Err(GraphExecutionError::Backend {
+                node: node.id,
+                target: node.target.clone(),
+                message: "NumericBufferMap is not supported by the FPGA executor".into(),
+            }),
+        }
     }
 }
 
@@ -165,61 +257,36 @@ impl HeterogeneousGraphExecutor {
 pub struct CpuGraphExecutor;
 
 impl CpuGraphExecutor {
-    /// Execute atomically from the caller's perspective: the buffer store is
-    /// returned only when every node succeeds.
     pub fn execute(&self, graph: &ExecutionGraph) -> Result<ExecutionResult, GraphExecutionError> {
         HeterogeneousGraphExecutor::default().execute(graph)
     }
 }
 
-fn execute_graph(
-    graph: &ExecutionGraph,
-    mut execute_node: impl FnMut(&PlanNode, &Ir) -> Result<BufferLiteral, GraphExecutionError>,
-) -> Result<ExecutionResult, GraphExecutionError> {
-    validate_graph(graph)?;
+pub struct FpgaTransportNodeExecutor<T> {
+    executor: RefCell<FpgaJobExecutor<T>>,
+}
 
-    let mut buffers: HashMap<_, _> = graph.inputs.iter().cloned().collect();
-    let mut completed = HashSet::new();
-    let mut execution_order = Vec::with_capacity(graph.nodes.len());
-
-    while completed.len() < graph.nodes.len() {
-        let Some(node) = graph.nodes.iter().find(|node| {
-            !completed.contains(&node.id)
-                && node
-                    .dependencies
-                    .iter()
-                    .all(|dependency| completed.contains(dependency))
-        }) else {
-            return Err(GraphExecutionError::DependencyCycle);
-        };
-
-        let output = match &node.operation {
-            ExecutionOperation::NumericBufferMap { function, input } => {
-                let input_value =
-                    buffers
-                        .get(input)
-                        .cloned()
-                        .ok_or(GraphExecutionError::MissingInput {
-                            node: node.id,
-                            buffer: *input,
-                        })?;
-                let ir = Ir::App {
-                    func: Box::new(Ir::Var("NUMERIC-BUFFER-MAP".into())),
-                    args: vec![function.clone(), Ir::Buffer(input_value)],
-                };
-                execute_node(node, &ir)?
-            }
-        };
-
-        buffers.insert(node.output, output);
-        completed.insert(node.id);
-        execution_order.push(node.id);
+impl<T> FpgaTransportNodeExecutor<T>
+where
+    T: FpgaTransport,
+{
+    pub fn new(transport: T) -> Self {
+        Self {
+            executor: RefCell::new(FpgaJobExecutor::new(transport)),
+        }
     }
+}
 
-    Ok(ExecutionResult {
-        buffers,
-        execution_order,
-    })
+impl<T> FpgaProgramNodeExecutor for FpgaTransportNodeExecutor<T>
+where
+    T: FpgaTransport,
+{
+    fn execute_program(&self, job: &FpgaJobV1) -> Result<u32, String> {
+        self.executor
+            .borrow_mut()
+            .execute_word(job)
+            .map_err(|error| format!("{error:?}"))
+    }
 }
 
 #[cfg(feature = "gpu-cuda")]

@@ -79,22 +79,28 @@ impl FpgaResultV1 {
     }
 
     pub fn checked_fixnum(self) -> Result<i32, FpgaProtocolError> {
-        if self.error_flag {
-            return Err(FpgaProtocolError::HardwareError { pc: self.error_pc });
-        }
-        let tag = (self.result_word >> 28) as u8;
+        let word = self.checked_word()?;
+        let tag = (word >> 28) as u8;
         if tag != TAG_FIXNUM {
             return Err(FpgaProtocolError::UnexpectedTag {
                 expected: TAG_FIXNUM,
                 actual: tag,
             });
         }
-        let payload = self.result_word & 0x0fff_ffff;
+        let payload = word & 0x0fff_ffff;
         Ok(if payload & 0x0800_0000 != 0 {
             (payload | 0xf000_0000) as i32
         } else {
             payload as i32
         })
+    }
+
+    pub fn checked_word(self) -> Result<u32, FpgaProtocolError> {
+        if self.error_flag {
+            Err(FpgaProtocolError::HardwareError { pc: self.error_pc })
+        } else {
+            Ok(self.result_word)
+        }
     }
 }
 
@@ -119,5 +125,10 @@ where
     pub fn execute_fixnum(&mut self, job: &FpgaJobV1) -> Result<i32, FpgaProtocolError> {
         job.validate()?;
         self.transport.execute(job)?.checked_fixnum()
+    }
+
+    pub fn execute_word(&mut self, job: &FpgaJobV1) -> Result<u32, FpgaProtocolError> {
+        job.validate()?;
+        self.transport.execute(job)?.checked_word()
     }
 }

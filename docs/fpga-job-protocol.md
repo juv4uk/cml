@@ -24,8 +24,9 @@ reads, and timeouts. CML semantics and the Execution Graph do not know whether
 the implementation uses Windows COM4, native Linux serial, simulation, or a
 future PCIe transport.
 
-M2a does **not** yet attach this executor to `ExecutionGraph`. The graph's
-current value domain contains only `BufferLiteral`, while the real board
-returns a general tagged Lisp word. The next contract change must introduce
-`GraphValue::Buffer` and `GraphValue::LispWord`; treating a Lisp result as a
-one-element GPU buffer would erase this important representation boundary.
+M2b attaches this executor to `ExecutionGraph` through two explicit value
+variants: `GraphValue::Buffer` and `GraphValue::LispWord`. `FpgaProgram` emits
+only the latter; numeric buffer maps consume and emit only the former. A mock
+transport proves graph scheduling, tagged-word preservation, and atomic error
+publication. Physical COM4 transport remains pending and is not inferred from
+the earlier manual monitor pass.

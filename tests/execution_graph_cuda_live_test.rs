@@ -1,7 +1,7 @@
 #![cfg(feature = "gpu-cuda")]
 
 use cml::execution::{
-    BufferId, CudaNodeExecutor, ExecutionGraph, ExecutionOperation, ExecutionTarget,
+    BufferId, CudaNodeExecutor, ExecutionGraph, ExecutionOperation, ExecutionTarget, GraphValue,
     HeterogeneousGraphExecutor, NodeId, PlanNode,
 };
 use cml::gpu_cuda_runtime::discover_devices;
@@ -21,7 +21,10 @@ fn graph_dispatches_a_node_to_live_cuda_and_matches_cpu_semantics() {
     let backend = format!("cuda:{}", device.ordinal);
     let function = lower_one("(lambda (x) (+ x 1))");
     let graph = ExecutionGraph {
-        inputs: vec![(BufferId(0), BufferLiteral::I32(vec![1, 2, 3]))],
+        inputs: vec![(
+            BufferId(0),
+            GraphValue::Buffer(BufferLiteral::I32(vec![1, 2, 3])),
+        )],
         nodes: vec![PlanNode {
             id: NodeId(1),
             operation: ExecutionOperation::NumericBufferMap {

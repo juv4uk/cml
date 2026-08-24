@@ -1,6 +1,6 @@
 use cml::execution::{
     BufferId, CpuGraphExecutor, ExecutionGraph, ExecutionOperation, ExecutionTarget,
-    GraphExecutionError, HeterogeneousGraphExecutor, NodeExecutor, NodeId, PlanNode,
+    GraphExecutionError, GraphValue, HeterogeneousGraphExecutor, NodeExecutor, NodeId, PlanNode,
 };
 use cml::ir::{BufferLiteral, Ir};
 use cml::{lower, parser};
@@ -27,7 +27,10 @@ fn map_node(id: u32, input: u32, output: u32, dependencies: &[u32], offset: i32)
 #[test]
 fn cpu_executor_runs_a_dependent_multi_node_graph() {
     let graph = ExecutionGraph {
-        inputs: vec![(BufferId(0), BufferLiteral::I32(vec![1, 2, 3]))],
+        inputs: vec![(
+            BufferId(0),
+            GraphValue::Buffer(BufferLiteral::I32(vec![1, 2, 3])),
+        )],
         nodes: vec![map_node(1, 0, 1, &[], 1), map_node(2, 1, 2, &[1], 10)],
     };
 
@@ -42,7 +45,7 @@ fn cpu_executor_runs_a_dependent_multi_node_graph() {
 #[test]
 fn dependency_order_is_not_source_order() {
     let graph = ExecutionGraph {
-        inputs: vec![(BufferId(0), BufferLiteral::I32(vec![5]))],
+        inputs: vec![(BufferId(0), GraphValue::Buffer(BufferLiteral::I32(vec![5])))],
         nodes: vec![map_node(2, 1, 2, &[1], 2), map_node(1, 0, 1, &[], 1)],
     };
 
@@ -61,7 +64,7 @@ fn accelerator_targets_fail_closed_without_an_executor() {
         backend: "cuda:0".into(),
     };
     let graph = ExecutionGraph {
-        inputs: vec![(BufferId(0), BufferLiteral::I32(vec![1]))],
+        inputs: vec![(BufferId(0), GraphValue::Buffer(BufferLiteral::I32(vec![1])))],
         nodes: vec![node],
     };
 
@@ -77,7 +80,7 @@ fn accelerator_targets_fail_closed_without_an_executor() {
 #[test]
 fn malformed_dependencies_and_cycles_are_named_errors() {
     let missing = ExecutionGraph {
-        inputs: vec![(BufferId(0), BufferLiteral::I32(vec![1]))],
+        inputs: vec![(BufferId(0), GraphValue::Buffer(BufferLiteral::I32(vec![1])))],
         nodes: vec![map_node(1, 0, 1, &[9], 1)],
     };
     assert_eq!(
@@ -89,7 +92,7 @@ fn malformed_dependencies_and_cycles_are_named_errors() {
     );
 
     let cycle = ExecutionGraph {
-        inputs: vec![(BufferId(0), BufferLiteral::I32(vec![1]))],
+        inputs: vec![(BufferId(0), GraphValue::Buffer(BufferLiteral::I32(vec![1])))],
         nodes: vec![map_node(1, 0, 1, &[2], 1), map_node(2, 1, 2, &[1], 1)],
     };
     assert_eq!(
@@ -116,7 +119,10 @@ fn registered_backend_executes_without_vendor_logic_in_the_graph() {
         backend: "portable-test".into(),
     };
     let graph = ExecutionGraph {
-        inputs: vec![(BufferId(0), BufferLiteral::I32(vec![1, 2]))],
+        inputs: vec![(
+            BufferId(0),
+            GraphValue::Buffer(BufferLiteral::I32(vec![1, 2])),
+        )],
         nodes: vec![node],
     };
     let mut executor = HeterogeneousGraphExecutor::default();

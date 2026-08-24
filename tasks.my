@@ -135,4 +135,10 @@
      (capabilities . (compiler rust fpga protocol testing proof))
      (done . t)
      (description . "Formalize the real fpga-lisp ISA-1.0 bootloader/monitor lifecycle behind a versioned transport-independent CML job protocol before attaching physical COM4.")
-     (context . "done 2026-08-24: FpgaJobV1 emits the exact u16-le count plus u32-le program frame, validates 1..4095 words and R0..R15 before side effects, models REG 0x01 and ERR 0x04 monitor queries, decodes signed 28-bit FIXNUM values, and preserves hardware error PC. FpgaTransport separates Windows COM4/native serial/simulation/PCIe from compiler semantics. Graph attachment remains explicitly pending GraphValue::LispWord rather than misrepresenting tagged words as numeric buffers. compute-contract 0.18; 4 protocol tests pass."))))))
+     (context . "done 2026-08-24: FpgaJobV1 emits the exact u16-le count plus u32-le program frame, validates 1..4095 words and R0..R15 before side effects, models REG 0x01 and ERR 0x04 monitor queries, decodes signed 28-bit FIXNUM values, and preserves hardware error PC. FpgaTransport separates Windows COM4/native serial/simulation/PCIe from compiler semantics. Graph attachment remains explicitly pending GraphValue::LispWord rather than misrepresenting tagged words as numeric buffers. compute-contract 0.18; 4 protocol tests pass.")))
+   ("CML-FPGA-GRAPH-VALUE-M2B" .
+    ((priority . 0.8)
+     (capabilities . (compiler rust fpga protocol testing proof))
+     (done . t)
+     (description . "Extend Execution Graph values with an explicit tagged Lisp word and attach FpgaProgram through FpgaTransport without pretending it is a numeric buffer.")
+     (context . "done 2026-08-24: ExecutionGraph stores GraphValue::Buffer or GraphValue::LispWord; NumericBufferMap remains buffer-only and FpgaProgram returns the raw tagged word through FpgaTransportNodeExecutor. Mock transport tests prove word preservation and no output publication on hardware error; the live CUDA graph still passes after the value-store refactor. Physical COM4 transport remains pending. compute-contract 0.19."))))))

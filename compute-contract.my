@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 18))
+ (version . (0 19))
  (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -55,6 +55,8 @@
                       (automatic-offload . absent)))
  (execution-graph . ((status . registered-backends-m1)
                      (nodes . (id operation logical-input logical-output dependencies target))
+                     (values . (buffer lisp-word))
+                     (operations . (numeric-buffer-map fpga-program))
                      (targets . (cpu gpu fpga))
                      (implemented-executors . (cpu gpu-cuda gpu-wgpu))
                      (backend-registration . explicit-name-to-node-executor)
@@ -70,7 +72,8 @@
                                            (error-status . 0x04)))
                        (result . signed-28-bit-fixnum-or-named-error)
                        (transport . abstract)
-                       (execution-graph-attachment . blocked-on-graph-value-lisp-word)))
+                       (execution-graph-attachment . mock-transport-confirmed)
+                       (physical-transport . pending)))
  (implementation . ((analysis . "src/compute.rs")
                     (buffer-ir . "src/ir.rs")
                     (cpu-reference . "src/compute.rs::CpuComputeBackend")
@@ -82,4 +85,4 @@
                     (execution-graph . "src/execution.rs")
                     (fpga-job-protocol . "src/fpga_transport.rs")
                     (differential-oracle . "my-lisp path dev-dependency")
-                    (tests . "tests/compute_analysis_test.rs tests/typed_buffer_ir_test.rs tests/cpu_compute_backend_test.rs tests/cpu_compute_differential_test.rs tests/execution_graph_test.rs tests/execution_graph_cuda_live_test.rs"))))
+                    (tests . "tests/compute_analysis_test.rs tests/typed_buffer_ir_test.rs tests/cpu_compute_backend_test.rs tests/cpu_compute_differential_test.rs tests/execution_graph_test.rs tests/execution_graph_cuda_live_test.rs tests/execution_graph_fpga_test.rs tests/fpga_transport_test.rs"))))
