@@ -14,7 +14,11 @@
 //! self-recursive, via the same letrec-placeholder-plus-backpatch
 //! technique `compiler.rs`'s `compile_def` uses on fpga-lisp -- see that
 //! function's doc comment and `docs/abi.md`'s `def` section for the
-//! shared idea).
+//! shared idea), and the first contract-2.1 slice: builtins bootstrapped as
+//! ordinary callable values, higher-order use, lexical shadowing, canonical
+//! `#<builtin name>` printing, and named non-callable/arity failures.  The C
+//! path receives `lower_program_with_first_class_builtins`; fpga-lisp keeps
+//! the contract-2.0 `Ir::Prim` path until it independently implements 2.1.
 //!
 //! The runtime is a small tagged-union `Value` with a mutable-cons alist
 //! for environments -- the same conceptual model `compiler.rs` uses on
@@ -54,13 +58,13 @@ pub struct CBackend {
     fn_counter: usize,
 }
 
-const RUNTIME: &str = r#"
+const RUNTIME: &str = r##"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 typedef struct Value Value;
-typedef enum { TAG_NIL, TAG_TRUE, TAG_INT, TAG_SYM, TAG_CONS, TAG_CLOSURE } Tag;
+typedef enum { TAG_NIL, TAG_TRUE, TAG_INT, TAG_SYM, TAG_CONS, TAG_CLOSURE, TAG_BUILTIN } Tag;
 struct Value {
     Tag tag;
     union {
@@ -68,6 +72,7 @@ struct Value {
         const char *sym;
         struct { Value *car; Value *cdr; } cons;
         struct { Value *(*fn)(Value *args, Value *env); Value *env; } closure;
+        struct { const char *name; Value *(*fn)(Value *args, Value *env); } builtin;
     } u;
 };
 
@@ -79,6 +84,7 @@ static Value *mk_int(long n) { Value *v = malloc(sizeof(Value)); v->tag = TAG_IN
 static Value *mk_sym(const char *s) { Value *v = malloc(sizeof(Value)); v->tag = TAG_SYM; v->u.sym = s; return v; }
 static Value *mk_cons(Value *a, Value *b) { Value *v = malloc(sizeof(Value)); v->tag = TAG_CONS; v->u.cons.car = a; v->u.cons.cdr = b; return v; }
 static Value *mk_closure(Value *(*fn)(Value*, Value*), Value *env) { Value *v = malloc(sizeof(Value)); v->tag = TAG_CLOSURE; v->u.closure.fn = fn; v->u.closure.env = env; return v; }
+static Value *mk_builtin(const char *name, Value *(*fn)(Value*, Value*)) { Value *v = malloc(sizeof(Value)); v->tag = TAG_BUILTIN; v->u.builtin.name = name; v->u.builtin.fn = fn; return v; }
 
 static Value *v_car(Value *v) { return v->u.cons.car; }
 static Value *v_cdr(Value *v) { return v->u.cons.cdr; }
@@ -108,6 +114,46 @@ static int v_equal_p(Value *a, Value *b) {
 
 static Value *v_add(Value *a, Value *b) { return mk_int(a->u.i + b->u.i); }
 
+static void runtime_error(const char *kind, const char *detail) {
+    fprintf(stderr, "%s: %s\n", kind, detail);
+    exit(1);
+}
+
+static int list_length(Value *args) {
+    int length = 0;
+    while (args->tag == TAG_CONS) { length++; args = v_cdr(args); }
+    if (args->tag != TAG_NIL) runtime_error("Type", "call arguments must form a proper list");
+    return length;
+}
+
+static void require_arity(Value *args, int expected, const char *name) {
+    if (list_length(args) != expected) runtime_error("Arity", name);
+}
+
+static void require_tag(Value *value, Tag expected, const char *name) {
+    if (value->tag != expected) runtime_error("Type", name);
+}
+
+static Value *arg_at(Value *args, int index) {
+    while (index-- > 0) args = v_cdr(args);
+    return v_car(args);
+}
+
+static Value *builtin_add(Value *args, Value *env) { (void)env; require_arity(args, 2, "+"); require_tag(arg_at(args, 0), TAG_INT, "+"); require_tag(arg_at(args, 1), TAG_INT, "+"); return v_add(arg_at(args, 0), arg_at(args, 1)); }
+static Value *builtin_cons(Value *args, Value *env) { (void)env; require_arity(args, 2, "cons"); return mk_cons(arg_at(args, 0), arg_at(args, 1)); }
+static Value *builtin_car(Value *args, Value *env) { (void)env; require_arity(args, 1, "car"); require_tag(arg_at(args, 0), TAG_CONS, "car"); return v_car(arg_at(args, 0)); }
+static Value *builtin_cdr(Value *args, Value *env) { (void)env; require_arity(args, 1, "cdr"); require_tag(arg_at(args, 0), TAG_CONS, "cdr"); return v_cdr(arg_at(args, 0)); }
+static Value *builtin_eq(Value *args, Value *env) { (void)env; require_arity(args, 2, "eq"); return v_eq(arg_at(args, 0), arg_at(args, 1)); }
+static Value *builtin_atom(Value *args, Value *env) { (void)env; require_arity(args, 1, "atom"); return is_atom(arg_at(args, 0)) ? &TRUE_V : &NIL_V; }
+static Value *builtin_equal_p(Value *args, Value *env) { (void)env; require_arity(args, 2, "equal?"); return v_equal_p(arg_at(args, 0), arg_at(args, 1)) ? &TRUE_V : &NIL_V; }
+
+static Value *v_apply(Value *callable, Value *args) {
+    if (callable->tag == TAG_CLOSURE) return callable->u.closure.fn(args, callable->u.closure.env);
+    if (callable->tag == TAG_BUILTIN) return callable->u.builtin.fn(args, &NIL_V);
+    runtime_error("Type", "attempted to call a non-callable value");
+    return &NIL_V;
+}
+
 // Environment lookup: env is an alist chain, ((sym . val) . rest), same
 // shape as compiler.rs's cml_lookup on fpga-lisp.
 static Value *env_lookup(Value *env, const char *name) {
@@ -122,6 +168,20 @@ static Value *env_lookup(Value *env, const char *name) {
     exit(1);
 }
 
+static void bind_global(const char *name, Value *value) {
+    global_env = mk_cons(mk_cons(mk_sym(name), value), global_env);
+}
+
+static void bootstrap_builtins(void) {
+    bind_global("+", mk_builtin("+", builtin_add));
+    bind_global("CONS", mk_builtin("cons", builtin_cons));
+    bind_global("CAR", mk_builtin("car", builtin_car));
+    bind_global("CDR", mk_builtin("cdr", builtin_cdr));
+    bind_global("EQ", mk_builtin("eq", builtin_eq));
+    bind_global("ATOM", mk_builtin("atom", builtin_atom));
+    bind_global("EQUAL?", mk_builtin("equal?", builtin_equal_p));
+}
+
 // Standard Lisp list printing (`(a b c)`, `(a b . c)` for a genuine
 // dotted tail), not a raw nested-dotted-pair dump -- lets a compiled
 // program's printed output be compared directly against my-lisp's own
@@ -133,6 +193,7 @@ static void print_value(Value *v) {
         case TAG_INT: printf("%ld", v->u.i); break;
         case TAG_SYM: printf("%s", v->u.sym); break;
         case TAG_CLOSURE: printf("<closure>"); break;
+        case TAG_BUILTIN: printf("#<builtin %s>", v->u.builtin.name); break;
         case TAG_CONS: {
             printf("(");
             Value *cur = v;
@@ -152,7 +213,7 @@ static void print_value(Value *v) {
         }
     }
 }
-"#;
+"##;
 
 impl CBackend {
     pub fn new() -> Self {
@@ -188,7 +249,7 @@ impl CBackend {
         }
 
         Ok(format!(
-            "{RUNTIME}\n{}\n\nint main(void) {{\n{}    return 0;\n}}\n",
+            "{RUNTIME}\n{}\n\nint main(void) {{\n    bootstrap_builtins();\n{}    return 0;\n}}\n",
             self.functions.join("\n"),
             main_body,
         ))
@@ -341,9 +402,7 @@ impl CBackend {
             let arg_expr = self.compile_expr(arg, env)?;
             args_list = format!("mk_cons({arg_expr}, {args_list})");
         }
-        Ok(format!(
-            "({{ Value *_f = {func_expr}; _f->u.closure.fn(({args_list}), _f->u.closure.env); }})"
-        ))
+        Ok(format!("({{ Value *_f = {func_expr}; v_apply(_f, ({args_list})); }})"))
     }
 
     fn compile_cond(&mut self, branches: &[(Ir, Ir)], env: &str) -> Result<String, CompileError> {

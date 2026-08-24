@@ -83,8 +83,10 @@
                              quote-proper-list quote-dotted-list variable
                              lambda-fixed-arity lambda-variadic lambda-bare-symbol-params
                              application cond let structural-equal? def
-                             recursive-def-letrec))
-               (runtime . ((representation . "tagged-union Value struct (TAG_NIL/TRUE/INT/SYM/CONS/CLOSURE), heap-allocated via malloc, never freed")
+                             recursive-def-letrec
+                             first-class-builtin-call lexical-builtin-shadowing
+                             higher-order-builtin-argument))
+               (runtime . ((representation . "tagged-union Value struct (TAG_NIL/TRUE/INT/SYM/CONS/CLOSURE/BUILTIN), heap-allocated via malloc, never freed")
                            (environment . "mutable-cons alist chain, same conceptual model as fpga-lisp's cml_lookup")
                            (self-recursive-def . "letrec-placeholder-pair-plus-backpatch, same idea as compile_def on fpga-lisp, here a literal C struct-field mutation instead of SETCDR")))
                (conformance . ((tier-1-matrix . ((selected . 35)
@@ -95,8 +97,19 @@
                                (admission . fail-closed)
                                (verified-by . "tests/c_backend_conformance_test.rs")
                                (verified-against . "my-lisp/tests/fixtures/conformance.my at observed upstream contract 2.1")))
+               (contract-2.1-slice . ((status . partial)
+                                      (lowering . "lower_program_with_first_class_builtins reifies Prim as App(Var builtin, args) for the C backend only")
+                                      (runtime . "builtins bootstrap into global_env as ordinary callable closure values")
+                                      (verified . (def-f-plus-call lexical-shadow-car higher-order-plus
+                                                    builtin-print-representation named-non-callable-type-error
+                                                    named-builtin-arity-error))
+                                      (test . "tests/c_backend_test.rs")
+                                      (does-not-upgrade-supported-contract . true)))
                (known-gaps . (no-eight-argument-limit-enforced-unlike-fpga-lisp-register-file
-                              defmacro-supported-only-via-shared-macros-rs-not-macros-my))
+                              defmacro-supported-only-via-shared-macros-rs-not-macros-my
+                              builtin-set-is-only-cmls-seven-primitives-plus-add
+                              error-messages-and-full-error-fixture-matrix-not-yet-contract-equivalent
+                              fpga-lisp-backend-remains-contract-2.0))
                (differs-from-fpga-lisp . (equal?-is-structural-recursive-v-equal_p-here-vs-fpga-lisps-r11-worklist-but-both-independently-verified-correct
                                           no-eight-argument-register-ceiling-args-is-a-real-cons-list-not-fixed-registers))
                (error-handling . ((mechanism . "CompileError/MacroError enums, not panic!")

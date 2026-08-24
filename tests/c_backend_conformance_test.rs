@@ -102,7 +102,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
             failures.push(format!("{expr_str}: macro expansion failed"));
             continue;
         };
-        let Ok(program) = lower::lower_program(&exprs) else {
+        let Ok(program) = lower::lower_program_with_first_class_builtins(&exprs) else {
             failures.push(format!("{expr_str}: lowering failed"));
             continue;
         };

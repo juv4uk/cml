@@ -16,6 +16,63 @@ pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, String> {
     exprs.iter().map(lower_expr).collect()
 }
 
+/// Contract-2.1 lowering for backends that represent builtins as ordinary
+/// callable values in the lexical environment.  The shared structural IR
+/// still records primitive calls as `Ir::Prim` first (the fpga-lisp 2.0
+/// backend depends on that form); this backend-facing pass reifies every
+/// primitive use into `App(Var(...), ...)`, recursively, so a local binding
+/// can shadow `+`, `car`, etc. through normal environment lookup.
+pub fn lower_program_with_first_class_builtins(exprs: &[Expr]) -> Result<Vec<Ir>, String> {
+    lower_program(exprs).map(|program| program.into_iter().map(reify_primitive_calls).collect())
+}
+
+fn reify_primitive_calls(ir: Ir) -> Ir {
+    match ir {
+        Ir::Prim { op, args } => Ir::App {
+            func: Box::new(Ir::Var(primitive_name(op).to_string())),
+            args: args.into_iter().map(reify_primitive_calls).collect(),
+        },
+        Ir::Lambda { params, body } => Ir::Lambda {
+            params,
+            body: Box::new(reify_primitive_calls(*body)),
+        },
+        Ir::App { func, args } => Ir::App {
+            func: Box::new(reify_primitive_calls(*func)),
+            args: args.into_iter().map(reify_primitive_calls).collect(),
+        },
+        Ir::Cond { branches } => Ir::Cond {
+            branches: branches
+                .into_iter()
+                .map(|(test, body)| (reify_primitive_calls(test), reify_primitive_calls(body)))
+                .collect(),
+        },
+        Ir::Let { bindings, body } => Ir::Let {
+            bindings: bindings
+                .into_iter()
+                .map(|(name, value)| (name, reify_primitive_calls(value)))
+                .collect(),
+            body: Box::new(reify_primitive_calls(*body)),
+        },
+        Ir::Def { name, value } => Ir::Def {
+            name,
+            value: Box::new(reify_primitive_calls(*value)),
+        },
+        leaf => leaf,
+    }
+}
+
+fn primitive_name(op: PrimOp) -> &'static str {
+    match op {
+        PrimOp::Add => "+",
+        PrimOp::Cons => "CONS",
+        PrimOp::Car => "CAR",
+        PrimOp::Cdr => "CDR",
+        PrimOp::Eq => "EQ",
+        PrimOp::Atom => "ATOM",
+        PrimOp::EqualP => "EQUAL?",
+    }
+}
+
 pub fn lower_expr(expr: &Expr) -> Result<Ir, String> {
     match expr {
         Expr::Integer(n) => Ok(Ir::Int(*n)),

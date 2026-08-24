@@ -12,11 +12,85 @@ use cml::c_backend::CBackend;
 use cml::lower;
 use cml::parser;
 
+fn compile_and_run_first_class(code: &str, stem: &str) -> String {
+    let exprs = parser::parse(code).unwrap();
+    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    let c_source = CBackend::new().compile_program(&program).unwrap();
+    let c_path = format!("c_backend_{stem}_test.c");
+    let bin_path = format!("c_backend_{stem}_test");
+    fs::write(&c_path, &c_source).unwrap();
+
+    let compile = Command::new("gcc").arg(&c_path).arg("-o").arg(&bin_path).output().unwrap();
+    if !compile.status.success() {
+        panic!(
+            "gcc failed:\nSTDERR: {}\n--- generated C ---\n{}",
+            String::from_utf8_lossy(&compile.stderr),
+            c_source
+        );
+    }
+    let run = Command::new(format!("./{bin_path}")).output().unwrap();
+    let _ = fs::remove_file(c_path);
+    let _ = fs::remove_file(bin_path);
+    assert!(run.status.success(), "compiled C program failed");
+    String::from_utf8(run.stdout).unwrap().trim().to_lowercase()
+}
+
+fn compile_and_run_failure(code: &str, stem: &str) -> std::process::Output {
+    let exprs = parser::parse(code).unwrap();
+    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    let c_source = CBackend::new().compile_program(&program).unwrap();
+    let c_path = format!("c_backend_{stem}_test.c");
+    let bin_path = format!("c_backend_{stem}_test");
+    fs::write(&c_path, &c_source).unwrap();
+    let compile = Command::new("gcc").arg(&c_path).arg("-o").arg(&bin_path).output().unwrap();
+    assert!(compile.status.success(), "gcc failed: {}", String::from_utf8_lossy(&compile.stderr));
+    let run = Command::new(format!("./{bin_path}")).output().unwrap();
+    let _ = fs::remove_file(c_path);
+    let _ = fs::remove_file(bin_path);
+    run
+}
+
+#[test]
+fn c_backend_calls_a_builtin_stored_as_a_value() {
+    assert_eq!(compile_and_run_first_class("(def f +) (f 20 22)", "builtin_value"), "42");
+}
+
+#[test]
+fn c_backend_lexically_shadows_a_builtin() {
+    let code = "(let ((car (lambda (x) (quote shadowed)))) (car (quote (1 2))))";
+    assert_eq!(compile_and_run_first_class(code, "builtin_shadow"), "shadowed");
+}
+
+#[test]
+fn c_backend_passes_a_builtin_as_a_higher_order_argument() {
+    let code = "((lambda (f) (f 2 3)) +)";
+    assert_eq!(compile_and_run_first_class(code, "builtin_higher_order"), "5");
+}
+
+#[test]
+fn c_backend_prints_the_contractual_builtin_representation() {
+    assert_eq!(compile_and_run_first_class("+", "builtin_print"), "#<builtin +>");
+}
+
+#[test]
+fn c_backend_rejects_a_non_callable_with_a_named_type_error() {
+    let run = compile_and_run_failure("(42 1 2)", "non_callable");
+    assert!(!run.status.success());
+    assert!(String::from_utf8_lossy(&run.stderr).starts_with("Type:"));
+}
+
+#[test]
+fn c_backend_rejects_wrong_builtin_arity_with_a_named_error() {
+    let run = compile_and_run_failure("(+ 1)", "builtin_arity");
+    assert!(!run.status.success());
+    assert!(String::from_utf8_lossy(&run.stderr).starts_with("Arity:"));
+}
+
 #[test]
 fn compiles_add1_to_c_and_runs_it() {
     let code = "(def add1 (lambda (x) (+ x 1))) (add1 41)";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program(&exprs).unwrap();
+    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
     let mut backend = CBackend::new();
     let c_source = backend.compile_program(&program).unwrap();
 
@@ -56,7 +130,7 @@ fn compiles_self_recursive_def_to_c_and_runs_it() {
     // gets self-recursion right too, not just fixed-arity application.
     let code = "(def count (lambda (n) (cond ((eq n 0) 99) (t (count (+ n -1)))))) (count 3)";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program(&exprs).unwrap();
+    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
     let mut backend = CBackend::new();
     let c_source = backend.compile_program(&program).unwrap();
 
@@ -89,7 +163,7 @@ fn compiles_let_to_c_and_runs_it() {
     // never actually been run before this test.
     let code = "(let ((x 5) (y 3)) (+ x y))";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program(&exprs).unwrap();
+    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
     let mut backend = CBackend::new();
     let c_source = backend.compile_program(&program).unwrap();
 
@@ -121,7 +195,7 @@ fn compiles_variadic_and_dotted_lambda_params_to_c_and_runs_it() {
     // Params::Variadic/AllRest.
     let code = "(cons (car ((lambda args args) 1 2 3)) (car ((lambda (a . rest) rest) 1 2 3)))";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program(&exprs).unwrap();
+    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
     let mut backend = CBackend::new();
     let c_source = backend.compile_program(&program).unwrap();
 
@@ -159,7 +233,7 @@ fn compiles_quoted_list_access_to_c_and_runs_it() {
     // format matching my-lisp's own list printer.
     let code = "(cons (car (quote (1 2 3))) (car (cdr (quote (1 2 3)))))";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program(&exprs).unwrap();
+    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
     let mut backend = CBackend::new();
     let c_source = backend.compile_program(&program).unwrap();
 
@@ -196,7 +270,7 @@ fn nested_def_returns_graceful_error() {
     // CompileError::NestedDef instead of panicking.
     let code = "(def x (def y 1))";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program(&exprs).unwrap();
+    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
     let mut backend = CBackend::new();
     let err = backend.compile_program(&program).unwrap_err();
     assert!(
