@@ -5,11 +5,18 @@
 //! COM bridges, native serial libraries, simulation, and future PCIe can share
 //! one CML boundary.
 
+use std::io::Write;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+
 pub const FPGA_JOB_PROTOCOL_VERSION: u16 = 1;
 pub const MAX_PROGRAM_WORDS: usize = 4095;
 pub const TAG_FIXNUM: u8 = 0;
 pub const MONITOR_REG: u8 = 0x01;
 pub const MONITOR_ERROR: u8 = 0x04;
+const BRIDGE_REQUEST_MAGIC: [u8; 4] = *b"CMLJ";
+const BRIDGE_RESPONSE_MAGIC: [u8; 4] = *b"CMLR";
+const BRIDGE_RESPONSE_LEN: usize = 14;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FpgaJobV1 {
@@ -108,6 +115,100 @@ impl FpgaResultV1 {
 /// HALT, issue monitor register/error queries, and return their decoded words.
 pub trait FpgaTransport {
     fn execute(&mut self, job: &FpgaJobV1) -> Result<FpgaResultV1, FpgaProtocolError>;
+}
+
+/// Executes a physical FPGA job through a small host-native bridge process.
+///
+/// This is the WSL/Windows boundary: CML owns the versioned request and
+/// response, while the configured process owns COM-port access, reset timing,
+/// serial framing, and exact reads. No shell is involved and program bytes are
+/// written on stdin, so the 4095-word ISA limit is not constrained by command
+/// line length or temporary-file naming.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandFpgaTransport {
+    program: PathBuf,
+    args: Vec<String>,
+}
+
+impl CommandFpgaTransport {
+    pub fn new(program: impl Into<PathBuf>, args: impl IntoIterator<Item = String>) -> Self {
+        Self {
+            program: program.into(),
+            args: args.into_iter().collect(),
+        }
+    }
+}
+
+impl FpgaTransport for CommandFpgaTransport {
+    fn execute(&mut self, job: &FpgaJobV1) -> Result<FpgaResultV1, FpgaProtocolError> {
+        let request = bridge_request(job)?;
+        let mut child = Command::new(&self.program)
+            .args(&self.args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .map_err(|error| {
+                FpgaProtocolError::Transport(format!(
+                    "failed to start FPGA bridge {}: {error}",
+                    self.program.display()
+                ))
+            })?;
+
+        child
+            .stdin
+            .take()
+            .ok_or_else(|| FpgaProtocolError::Transport("FPGA bridge stdin unavailable".into()))?
+            .write_all(&request)
+            .map_err(|error| {
+                FpgaProtocolError::Transport(format!("failed to write FPGA bridge job: {error}"))
+            })?;
+
+        let output = child.wait_with_output().map_err(|error| {
+            FpgaProtocolError::Transport(format!("failed to wait for FPGA bridge: {error}"))
+        })?;
+        if !output.status.success() {
+            return Err(FpgaProtocolError::Transport(format!(
+                "FPGA bridge exited with {}",
+                output.status
+            )));
+        }
+        parse_bridge_response(&output.stdout)
+    }
+}
+
+fn bridge_request(job: &FpgaJobV1) -> Result<Vec<u8>, FpgaProtocolError> {
+    let frame = job.bootloader_frame()?;
+    let mut request = Vec::with_capacity(8 + frame.len());
+    request.extend_from_slice(&BRIDGE_REQUEST_MAGIC);
+    request.extend_from_slice(&FPGA_JOB_PROTOCOL_VERSION.to_le_bytes());
+    request.push(job.result_register);
+    request.push(0);
+    request.extend_from_slice(&frame);
+    Ok(request)
+}
+
+fn parse_bridge_response(bytes: &[u8]) -> Result<FpgaResultV1, FpgaProtocolError> {
+    if bytes.len() != BRIDGE_RESPONSE_LEN {
+        return Err(FpgaProtocolError::Transport(format!(
+            "FPGA bridge response has {} bytes, expected {BRIDGE_RESPONSE_LEN}",
+            bytes.len()
+        )));
+    }
+    if bytes[..4] != BRIDGE_RESPONSE_MAGIC {
+        return Err(FpgaProtocolError::Transport(
+            "FPGA bridge response magic mismatch".into(),
+        ));
+    }
+    let version = u16::from_le_bytes([bytes[4], bytes[5]]);
+    if version != FPGA_JOB_PROTOCOL_VERSION {
+        return Err(FpgaProtocolError::Transport(format!(
+            "FPGA bridge protocol version {version} is unsupported"
+        )));
+    }
+    let result_word = u32::from_le_bytes(bytes[6..10].try_into().expect("fixed response slice"));
+    let error_status = u32::from_le_bytes(bytes[10..14].try_into().expect("fixed response slice"));
+    Ok(FpgaResultV1::from_monitor_words(result_word, error_status))
 }
 
 pub struct FpgaJobExecutor<T> {

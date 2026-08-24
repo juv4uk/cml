@@ -1,6 +1,6 @@
 # CML to fpga-lisp job protocol
 
-**Status:** M2a host contract, 2026-08-24.  
+**Status:** M2c command transport, 2026-08-24.
 **Wire authority:** `fpga-lisp` ISA 1.0 RTL and monitor protocol.
 
 `FpgaJobV1` describes one already-assembled program image and the register
@@ -28,5 +28,26 @@ M2b attaches this executor to `ExecutionGraph` through two explicit value
 variants: `GraphValue::Buffer` and `GraphValue::LispWord`. `FpgaProgram` emits
 only the latter; numeric buffer maps consume and emit only the former. A mock
 transport proves graph scheduling, tagged-word preservation, and atomic error
-publication. Physical COM4 transport remains pending and is not inferred from
-the earlier manual monitor pass.
+publication.
+
+M2c adds `CommandFpgaTransport`, a shell-free process boundary that writes one
+versioned binary job to stdin and accepts one fixed-size binary response from
+stdout. The companion `fpga-lisp/job_transport.py` runs under native Windows
+Python/pyserial, owns COM4 and timing policy, and preserves the monitor tool's
+delayed input-buffer reset workaround. This avoids a Windows command-line
+length ceiling and temporary files while keeping serial dependencies outside
+CML's language/compiler core.
+
+The ignored live graph test is intentionally operator-gated because the board
+still requires a physical RESET press:
+
+```bash
+CML_FPGA_LIVE=1 \
+CML_FPGA_PYTHON=/mnt/c/Users/user/AppData/Local/Programs/Python/Launcher/py.exe \
+CML_FPGA_BRIDGE_WINDOWS='\\wsl.localhost\Ubuntu\home\agents\GitHub\fpga-lisp\job_transport.py' \
+cargo test --test execution_graph_fpga_live_test -- --ignored --nocapture
+```
+
+Windows PnP currently reports USB Serial Converter B and COM4 healthy. That is
+device-presence evidence only; the M2c live graph result remains pending until
+the reset-gated test returns R9 = FIXNUM(7).

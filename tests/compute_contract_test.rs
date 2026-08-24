@@ -4,7 +4,7 @@ use std::fs;
 fn machine_readable_compute_contract_matches_implementation() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 19))",
+        "(version . (0 20))",
         "(status . experimental-runtime)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -33,7 +33,7 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(accelerator-planner . \"src/accelerator.rs\")",
         "(execution-graph . ((status . registered-backends-m1)",
         "(targets . (cpu gpu fpga))",
-        "(implemented-executors . (cpu gpu-cuda gpu-wgpu))",
+        "(implemented-executors . (cpu gpu-cuda gpu-wgpu fpga-command-bridge))",
         "(backend-registration . explicit-name-to-node-executor)",
         "(physical-evidence . (nvidia-gtx-1050-ti cuda-device-zero graph-map-pass))",
         "(unregistered-targets . fail-closed)",
@@ -42,10 +42,11 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(values . (buffer lisp-word))",
         "(operations . (numeric-buffer-map fpga-program))",
         "(fpga-job-protocol . ((version . 1)",
-        "(status . host-contract-m2a)",
+        "(status . command-transport-m2c)",
         "(wire-authority . fpga-lisp-isa-1.0)",
         "(execution-graph-attachment . mock-transport-confirmed)",
-        "(physical-transport . pending)",
+        "(physical-bridge . (windows-python-pyserial-com4))",
+        "(physical-device-evidence . pnp-present-live-run-pending-manual-reset)",
         "(fpga-job-protocol . \"src/fpga_transport.rs\")",
         "(execution-graph . \"src/execution.rs\")",
         "(wgpu-runtime . \"src/gpu_wgpu_runtime.rs\")",
@@ -60,7 +61,7 @@ fn machine_readable_compute_contract_matches_implementation() {
 
     let compatibility = fs::read_to_string("compatibility.my").unwrap();
     assert!(
-        compatibility.contains("(compute-analysis . ((contract . (0 19))"),
+        compatibility.contains("(compute-analysis . ((contract . (0 20))"),
         "compatibility.my compute contract version drifted from compute-contract.my"
     );
 }

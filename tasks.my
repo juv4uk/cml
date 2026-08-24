@@ -141,4 +141,10 @@
      (capabilities . (compiler rust fpga protocol testing proof))
      (done . t)
      (description . "Extend Execution Graph values with an explicit tagged Lisp word and attach FpgaProgram through FpgaTransport without pretending it is a numeric buffer.")
-     (context . "done 2026-08-24: ExecutionGraph stores GraphValue::Buffer or GraphValue::LispWord; NumericBufferMap remains buffer-only and FpgaProgram returns the raw tagged word through FpgaTransportNodeExecutor. Mock transport tests prove word preservation and no output publication on hardware error; the live CUDA graph still passes after the value-store refactor. Physical COM4 transport remains pending. compute-contract 0.19."))))))
+     (context . "done 2026-08-24: ExecutionGraph stores GraphValue::Buffer or GraphValue::LispWord; NumericBufferMap remains buffer-only and FpgaProgram returns the raw tagged word through FpgaTransportNodeExecutor. Mock transport tests prove word preservation and no output publication on hardware error; the live CUDA graph still passes after the value-store refactor. Physical COM4 transport remains pending. compute-contract 0.19.")))
+   ("CML-FPGA-COMMAND-TRANSPORT-M2C" .
+    ((priority . 0.8)
+     (capabilities . (compiler rust python fpga protocol testing proof))
+     (done . t)
+     (description . "Attach a shell-free binary stdio transport to the Windows-native fpga-lisp COM4 bridge without adding serial policy or pyserial to CML core.")
+     (context . "done 2026-08-24: CommandFpgaTransport streams the full versioned job through child stdin and requires an exact magic/version/result/error response. fpga-lisp/job_transport.py owns Windows pyserial, COM4, reset/halt timing, exact reads, and the proven delayed input-buffer reset. Process tests cover full-size-safe framing and malformed response rejection; an ignored live Execution Graph test is operator-gated on the physical RESET button. Windows PnP sees Converter B/COM4 healthy, but live graph execution remains explicitly pending. compute-contract 0.20."))))))
