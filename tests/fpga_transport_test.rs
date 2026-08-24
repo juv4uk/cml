@@ -1,12 +1,13 @@
 use cml::fpga_transport::{
-    CommandFpgaTransport, FpgaJobExecutor, FpgaJobV1, FpgaProtocolError, FpgaResultV1,
-    FpgaTransport, MAX_PROGRAM_WORDS, MONITOR_ERROR,
+    CommandFpgaTransport, FpgaJobExecutor, FpgaJobV1, FpgaProtocolError, FpgaRegisterInput,
+    FpgaResultV1, FpgaTransport, MAX_PROGRAM_WORDS, MAX_REGISTER_INPUTS, MONITOR_ERROR,
 };
 
 #[test]
 fn job_v1_matches_the_real_uart_bootloader_frame() {
     let job = FpgaJobV1 {
         program_words: vec![0x1122_3344, 0xaabb_ccdd],
+        register_inputs: vec![],
         result_register: 9,
     };
     assert_eq!(
@@ -18,10 +19,39 @@ fn job_v1_matches_the_real_uart_bootloader_frame() {
 }
 
 #[test]
+fn job_v1_encodes_isa_1_1_tagged_register_inputs() {
+    let job = FpgaJobV1 {
+        program_words: vec![0xd201_0000, 0xb000_0000],
+        register_inputs: vec![
+            FpgaRegisterInput {
+                register: 0,
+                tagged_word: 3,
+            },
+            FpgaRegisterInput {
+                register: 1,
+                tagged_word: 4,
+            },
+        ],
+        result_register: 2,
+    };
+    assert_eq!(
+        job.bootloader_frame().unwrap(),
+        vec![
+            0x02, 0x80, 0x02,
+            0x00, 0x03, 0x00, 0x00, 0x00,
+            0x01, 0x04, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x01, 0xd2,
+            0x00, 0x00, 0x00, 0xb0,
+        ]
+    );
+}
+
+#[test]
 fn invalid_jobs_fail_before_transport_side_effects() {
     assert_eq!(
         FpgaJobV1 {
             program_words: vec![],
+            register_inputs: vec![],
             result_register: 9,
         }
         .validate(),
@@ -30,6 +60,7 @@ fn invalid_jobs_fail_before_transport_side_effects() {
     assert_eq!(
         FpgaJobV1 {
             program_words: vec![0; MAX_PROGRAM_WORDS + 1],
+            register_inputs: vec![],
             result_register: 9,
         }
         .validate(),
@@ -38,10 +69,35 @@ fn invalid_jobs_fail_before_transport_side_effects() {
     assert_eq!(
         FpgaJobV1 {
             program_words: vec![0],
+            register_inputs: vec![],
             result_register: 16,
         }
         .validate(),
         Err(FpgaProtocolError::InvalidResultRegister(16))
+    );
+    assert_eq!(
+        FpgaJobV1 {
+            program_words: vec![0],
+            register_inputs: vec![FpgaRegisterInput {
+                register: 0,
+                tagged_word: 0,
+            }; MAX_REGISTER_INPUTS + 1],
+            result_register: 0,
+        }
+        .validate(),
+        Err(FpgaProtocolError::TooManyRegisterInputs(MAX_REGISTER_INPUTS + 1))
+    );
+    assert_eq!(
+        FpgaJobV1 {
+            program_words: vec![0],
+            register_inputs: vec![
+                FpgaRegisterInput { register: 2, tagged_word: 3 },
+                FpgaRegisterInput { register: 2, tagged_word: 4 },
+            ],
+            result_register: 0,
+        }
+        .validate(),
+        Err(FpgaProtocolError::DuplicateInputRegister(2))
     );
 }
 
@@ -87,6 +143,7 @@ fn executor_uses_transport_without_owning_serial_or_device_policy() {
     let result = executor
         .execute_fixnum(&FpgaJobV1 {
             program_words: vec![0xf000_0000],
+            register_inputs: vec![],
             result_register: 9,
         })
         .unwrap();
@@ -109,10 +166,38 @@ sys.stdout.buffer.write(b'CMLR' + struct.pack('<HII', 1, 7, 0))
     let result = transport
         .execute(&FpgaJobV1 {
             program_words: vec![0x1122_3344, 0xaabb_ccdd],
+            register_inputs: vec![],
             result_register: 9,
         })
         .unwrap();
     assert_eq!(result, FpgaResultV1::from_monitor_words(7, 0));
+}
+
+#[test]
+fn command_transport_streams_extended_register_inputs() {
+    let helper = r#"
+import struct, sys
+request = sys.stdin.buffer.read()
+assert request[:8] == b'CMLJ' + struct.pack('<HBB', 1, 2, 0)
+expected = (struct.pack('<HB', 0x8002, 2)
+            + struct.pack('<BI', 0, 3)
+            + struct.pack('<BI', 1, 4)
+            + struct.pack('<II', 0xd2010000, 0xb0000000))
+assert request[8:] == expected
+sys.stdout.buffer.write(b'CMLR' + struct.pack('<HII', 1, 7, 0))
+"#;
+    let mut transport = CommandFpgaTransport::new("python3", vec!["-c".into(), helper.into()]);
+    let result = transport
+        .execute(&FpgaJobV1 {
+            program_words: vec![0xd201_0000, 0xb000_0000],
+            register_inputs: vec![
+                FpgaRegisterInput { register: 0, tagged_word: 3 },
+                FpgaRegisterInput { register: 1, tagged_word: 4 },
+            ],
+            result_register: 2,
+        })
+        .unwrap();
+    assert_eq!(result.checked_fixnum().unwrap(), 7);
 }
 
 #[test]
@@ -122,6 +207,7 @@ fn command_transport_rejects_unversioned_or_truncated_responses() {
     let error = transport
         .execute(&FpgaJobV1 {
             program_words: vec![0],
+            register_inputs: vec![],
             result_register: 0,
         })
         .unwrap_err();

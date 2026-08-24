@@ -1,6 +1,6 @@
 //! Versioned host-side protocol for executing a preassembled fpga-lisp image.
 //!
-//! This models the real ISA-1.0 UART bootloader and post-HALT monitor bytes.
+//! This models the real ISA-1.1 UART bootloader and post-HALT monitor bytes.
 //! Serial-port ownership is delegated to a transport implementation so WSL
 //! COM bridges, native serial libraries, simulation, and future PCIe can share
 //! one CML boundary.
@@ -11,6 +11,7 @@ use std::process::{Command, Stdio};
 
 pub const FPGA_JOB_PROTOCOL_VERSION: u16 = 1;
 pub const MAX_PROGRAM_WORDS: usize = 4095;
+pub const MAX_REGISTER_INPUTS: usize = 16;
 pub const TAG_FIXNUM: u8 = 0;
 pub const MONITOR_REG: u8 = 0x01;
 pub const MONITOR_ERROR: u8 = 0x04;
@@ -21,7 +22,14 @@ const BRIDGE_RESPONSE_LEN: usize = 14;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FpgaJobV1 {
     pub program_words: Vec<u32>,
+    pub register_inputs: Vec<FpgaRegisterInput>,
     pub result_register: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FpgaRegisterInput {
+    pub register: u8,
+    pub tagged_word: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +44,9 @@ pub enum FpgaProtocolError {
     EmptyProgram,
     ProgramTooLong(usize),
     InvalidResultRegister(u8),
+    TooManyRegisterInputs(usize),
+    InvalidInputRegister(u8),
+    DuplicateInputRegister(u8),
     InvalidErrorStatusLength(usize),
     HardwareError { pc: u16 },
     UnexpectedTag { expected: u8, actual: u8 },
@@ -55,15 +66,47 @@ impl FpgaJobV1 {
                 self.result_register,
             ));
         }
+        if self.register_inputs.len() > MAX_REGISTER_INPUTS {
+            return Err(FpgaProtocolError::TooManyRegisterInputs(
+                self.register_inputs.len(),
+            ));
+        }
+        let mut seen = [false; 16];
+        for input in &self.register_inputs {
+            if input.register > 15 {
+                return Err(FpgaProtocolError::InvalidInputRegister(input.register));
+            }
+            if seen[input.register as usize] {
+                return Err(FpgaProtocolError::DuplicateInputRegister(input.register));
+            }
+            seen[input.register as usize] = true;
+        }
         Ok(())
     }
 
-    /// Exact bytes consumed by fpga-lisp ISA-1.0's UART bootloader:
-    /// little-endian u16 instruction count followed by little-endian words.
+    /// Exact bytes consumed by fpga-lisp ISA-1.1's UART bootloader. Jobs with
+    /// no register inputs retain the ISA-1.0 frame byte-for-byte. Extended
+    /// jobs set length bit 15 and insert validated register/tagged-word records.
     pub fn bootloader_frame(&self) -> Result<Vec<u8>, FpgaProtocolError> {
         self.validate()?;
-        let mut frame = Vec::with_capacity(2 + self.program_words.len() * 4);
-        frame.extend_from_slice(&(self.program_words.len() as u16).to_le_bytes());
+        let extra = if self.register_inputs.is_empty() {
+            0
+        } else {
+            1 + self.register_inputs.len() * 5
+        };
+        let mut frame = Vec::with_capacity(2 + extra + self.program_words.len() * 4);
+        let mut header = self.program_words.len() as u16;
+        if !self.register_inputs.is_empty() {
+            header |= 0x8000;
+        }
+        frame.extend_from_slice(&header.to_le_bytes());
+        if !self.register_inputs.is_empty() {
+            frame.push(self.register_inputs.len() as u8);
+            for input in &self.register_inputs {
+                frame.push(input.register);
+                frame.extend_from_slice(&input.tagged_word.to_le_bytes());
+            }
+        }
         for word in &self.program_words {
             frame.extend_from_slice(&word.to_le_bytes());
         }

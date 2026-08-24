@@ -46,6 +46,7 @@ fn execution_graph_runs_bootstrap_add_on_the_live_fpga() {
                 operation: ExecutionOperation::FpgaProgram {
                     job: FpgaJobV1 {
                         program_words: words,
+                        register_inputs: vec![],
                         result_register: 9,
                     },
                 },

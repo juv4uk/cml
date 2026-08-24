@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 23))
+ (version . (0 24))
  (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -82,8 +82,9 @@
                        (status . command-transport-m2c)
                        (wire-authority . fpga-lisp-isa-1.1)
                        (bootloader-frame . ((legacy . (u16-le-word-count u32-le-program-words))
-                                            (extended-register-inputs . rtl-simulation-only)))
-                       (cml-register-input-encoding . pending)
+                                            (extended-register-inputs . (rtl-simulation-proven host-bridge-targeted-tested))))
+                       (cml-register-input-encoding . present-validated)
+                       (register-input-contract . (maximum-16 unique-registers-r0-r15 opaque-u32-tagged-words))
                        (monitor-queries . ((result-register . 0x01)
                                            (error-status . 0x04)))
                        (result . signed-28-bit-fixnum-or-named-error)

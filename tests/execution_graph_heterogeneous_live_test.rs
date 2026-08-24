@@ -99,6 +99,7 @@ fn one_graph_orders_live_cpu_cuda_and_fpga_execution() {
                     operation: ExecutionOperation::FpgaProgram {
                         job: FpgaJobV1 {
                             program_words,
+                            register_inputs: vec![],
                             result_register: 9,
                         },
                     },

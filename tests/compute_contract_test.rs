@@ -4,7 +4,7 @@ use std::fs;
 fn machine_readable_compute_contract_matches_implementation() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 23))",
+        "(version . (0 24))",
         "(status . experimental-runtime)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -55,8 +55,9 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(fpga-job-protocol . ((version . 1)",
         "(status . command-transport-m2c)",
         "(wire-authority . fpga-lisp-isa-1.1)",
-        "(extended-register-inputs . rtl-simulation-only)",
-        "(cml-register-input-encoding . pending)",
+        "(extended-register-inputs . (rtl-simulation-proven host-bridge-targeted-tested))",
+        "(cml-register-input-encoding . present-validated)",
+        "(register-input-contract . (maximum-16 unique-registers-r0-r15 opaque-u32-tagged-words))",
         "(execution-graph-attachment . (mock-transport-confirmed physical-com4-confirmed))",
         "(physical-bridge . (windows-python-pyserial-com4))",
         "(physical-device-evidence . (gw5a-25a windows-com4 graph-program-pass tagged-word-7 no-hardware-error))",
@@ -74,7 +75,7 @@ fn machine_readable_compute_contract_matches_implementation() {
 
     let compatibility = fs::read_to_string("compatibility.my").unwrap();
     assert!(
-        compatibility.contains("(compute-analysis . ((contract . (0 23))"),
+        compatibility.contains("(compute-analysis . ((contract . (0 24))"),
         "compatibility.my compute contract version drifted from compute-contract.my"
     );
 }

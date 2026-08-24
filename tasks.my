@@ -166,6 +166,12 @@
      (done . t)
      (description . "Track fpga-lisp ISA 1.1's backward-compatible extended register-input boot frame without claiming CML transport support prematurely.")
      (context . "done 2026-08-24: compatibility pins fpga-lisp 25c240a / ISA 1.1. The legacy CML program frame remains supported; the new tagged register-input frame is proven only in RTL simulation and CML encoding is explicitly pending. compute-contract 0.23.")))
+   ("CML-FPGA-REGISTER-INPUT-ENCODER-M5B" .
+    ((priority . 0.92)
+     (capabilities . (compiler rust fpga protocol testing proof))
+     (done . t)
+     (description . "Encode validated tagged register inputs into fpga-lisp ISA 1.1 while preserving the legacy frame byte-for-byte.")
+     (context . "done 2026-08-24: FpgaJobV1 accepts at most 16 unique R0..R15 opaque tagged words and emits the extended boot frame. fpga-lisp's bridge validates and preserves it. Seven targeted Rust transport tests and four Python bridge tests pass. No physical payload or automatic graph buffer-to-register lowering is claimed; fpga-input-edge remains absent. compute-contract 0.24; fpga-lisp 092aa3b.")))
    ("CML-EXECUTION-MODULE-BOUNDARY-V0.2" .
     ((priority . 0.45)
      (capabilities . (compiler rust architecture refactor testing))

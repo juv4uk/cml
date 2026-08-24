@@ -20,6 +20,7 @@ impl FpgaTransport for BoardWitness {
 fn graph_preserves_an_fpga_tagged_word_without_calling_it_a_buffer() {
     let job = FpgaJobV1 {
         program_words: vec![0],
+        register_inputs: vec![],
         result_register: 9,
     };
     let graph = ExecutionGraph {
@@ -57,6 +58,7 @@ fn graph_does_not_publish_a_word_when_fpga_reports_an_error() {
             operation: ExecutionOperation::FpgaProgram {
                 job: FpgaJobV1 {
                     program_words: vec![0],
+                    register_inputs: vec![],
                     result_register: 9,
                 },
             },
