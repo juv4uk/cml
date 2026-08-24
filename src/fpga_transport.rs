@@ -55,6 +55,7 @@ pub enum FpgaProtocolError {
     HardwareError { pc: u16 },
     UnexpectedTag { expected: u8, actual: u8 },
     UnsupportedInputBuffer,
+    EmptyInputBuffer,
     InputValueOutOfRange { index: usize, value: i32 },
     RegisterRange { first: u8, count: usize },
     Transport(String),
@@ -74,6 +75,9 @@ pub fn encode_i32_buffer_as_register_inputs(
         BufferLiteral::I32(values) => values,
         BufferLiteral::F32(_) => return Err(FpgaProtocolError::UnsupportedInputBuffer),
     };
+    if values.is_empty() {
+        return Err(FpgaProtocolError::EmptyInputBuffer);
+    }
     if values.len() > MAX_REGISTER_INPUTS
         || usize::from(first_register) + values.len() > 16
     {

@@ -68,6 +68,10 @@ fn typed_i32_buffer_materializes_only_as_checked_fixnum_inputs() {
 #[test]
 fn typed_buffer_adapter_fails_closed_for_float_range_and_register_overflow() {
     assert_eq!(
+        encode_i32_buffer_as_register_inputs(&BufferLiteral::I32(vec![]), 0),
+        Err(FpgaProtocolError::EmptyInputBuffer)
+    );
+    assert_eq!(
         encode_i32_buffer_as_register_inputs(&BufferLiteral::F32(vec![0x3f80_0000]), 0),
         Err(FpgaProtocolError::UnsupportedInputBuffer)
     );
