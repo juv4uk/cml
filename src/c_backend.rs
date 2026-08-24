@@ -26,7 +26,7 @@
 //! walking it), just implemented directly as C structs instead of tagged
 //! 32-bit words on a heap array.
 
-use crate::ir::{Ir, Params, PrimOp, Quoted};
+use crate::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
 use std::fmt;
 
 /// Errors that can occur during C code generation.
@@ -34,8 +34,7 @@ use std::fmt;
 pub enum CompileError {
     /// A `def` form appeared in a non-top-level position.
     NestedDef,
-    /// Typed numeric buffers are admitted by the language contract but are
-    /// not yet represented by this scalar C runtime.
+    /// Floating buffers are not yet represented by this scalar C runtime.
     UnsupportedTypedBuffer,
     /// An IR node that this backend does not yet support.
     Unsupported(String),
@@ -72,13 +71,14 @@ const RUNTIME: &str = r##"
 #include <string.h>
 
 typedef struct Value Value;
-typedef enum { TAG_NIL, TAG_TRUE, TAG_INT, TAG_SYM, TAG_CONS, TAG_CLOSURE, TAG_BUILTIN } Tag;
+typedef enum { TAG_NIL, TAG_TRUE, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN } Tag;
 struct Value {
     Tag tag;
     union {
         long i;
         const char *sym;
         struct { Value *car; Value *cdr; } cons;
+        struct { int *data; size_t len; } i32_buffer;
         struct { Value *(*fn)(Value *args, Value *env); Value *env; } closure;
         struct { const char *name; Value *(*fn)(Value *args, Value *env); } builtin;
     } u;
@@ -91,6 +91,7 @@ static Value *global_env = &NIL_V;
 static Value *mk_int(long n) { Value *v = malloc(sizeof(Value)); v->tag = TAG_INT; v->u.i = n; return v; }
 static Value *mk_sym(const char *s) { Value *v = malloc(sizeof(Value)); v->tag = TAG_SYM; v->u.sym = s; return v; }
 static Value *mk_cons(Value *a, Value *b) { Value *v = malloc(sizeof(Value)); v->tag = TAG_CONS; v->u.cons.car = a; v->u.cons.cdr = b; return v; }
+static Value *mk_i32_buffer(const int *data, size_t len) { Value *v = malloc(sizeof(Value)); v->tag = TAG_I32_BUFFER; v->u.i32_buffer.data = malloc(len * sizeof(int)); v->u.i32_buffer.len = len; memcpy(v->u.i32_buffer.data, data, len * sizeof(int)); return v; }
 static Value *mk_closure(Value *(*fn)(Value*, Value*), Value *env) { Value *v = malloc(sizeof(Value)); v->tag = TAG_CLOSURE; v->u.closure.fn = fn; v->u.closure.env = env; return v; }
 static Value *mk_builtin(const char *name, Value *(*fn)(Value*, Value*)) { Value *v = malloc(sizeof(Value)); v->tag = TAG_BUILTIN; v->u.builtin.name = name; v->u.builtin.fn = fn; return v; }
 
@@ -116,6 +117,10 @@ static int v_equal_p(Value *a, Value *b) {
         case TAG_INT: return a->u.i == b->u.i;
         case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0;
         case TAG_CONS: return v_equal_p(a->u.cons.car, b->u.cons.car) && v_equal_p(a->u.cons.cdr, b->u.cons.cdr);
+        case TAG_I32_BUFFER:
+            if (a->u.i32_buffer.len != b->u.i32_buffer.len) return 0;
+            for (size_t i = 0; i < a->u.i32_buffer.len; i++) if (a->u.i32_buffer.data[i] != b->u.i32_buffer.data[i]) return 0;
+            return 1;
         default: return a == b;
     }
 }
@@ -230,6 +235,11 @@ static void print_value(Value *v) {
         case TAG_SYM: printf("%s", v->u.sym); break;
         case TAG_CLOSURE: printf("<closure>"); break;
         case TAG_BUILTIN: printf("#<builtin %s>", v->u.builtin.name); break;
+        case TAG_I32_BUFFER:
+            printf("#i32(");
+            for (size_t i = 0; i < v->u.i32_buffer.len; i++) { if (i) printf(" "); printf("%d", v->u.i32_buffer.data[i]); }
+            printf(")");
+            break;
         case TAG_CONS: {
             printf("(");
             Value *cur = v;
@@ -316,7 +326,11 @@ impl CBackend {
     fn compile_expr(&mut self, ir: &Ir, env: &str) -> Result<String, CompileError> {
         match ir {
             Ir::Int(n) => Ok(format!("mk_int({n})")),
-            Ir::Buffer(_) => Err(CompileError::UnsupportedTypedBuffer),
+            Ir::Buffer(BufferLiteral::I32(values)) => {
+                let data = values.iter().map(i32::to_string).collect::<Vec<_>>().join(", ");
+                Ok(format!("mk_i32_buffer((int[]){{{data}}}, {})", values.len()))
+            }
+            Ir::Buffer(BufferLiteral::F32(_)) => Err(CompileError::UnsupportedTypedBuffer),
             Ir::Nil => Ok("(&NIL_V)".to_string()),
             Ir::True => Ok("(&TRUE_V)".to_string()),
             Ir::Var(name) => Ok(format!("env_lookup({env}, \"{name}\")")),

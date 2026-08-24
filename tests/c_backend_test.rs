@@ -163,15 +163,17 @@ fn c_backend_reports_contractual_core_error_kinds() {
 }
 
 #[test]
-fn c_backend_rejects_typed_buffers_with_a_named_unsupported_error() {
-    for source in ["#i32(1 2 3)", "#f32(1.0 2.0)"] {
-        let exprs = parser::parse(source).unwrap();
-        let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
-        assert!(matches!(
-            CBackend::new().compile_program(&program),
-            Err(cml::c_backend::CompileError::UnsupportedTypedBuffer)
-        ), "{source} was not classified as UnsupportedTypedBuffer");
-    }
+fn c_backend_supports_i32_buffers_and_rejects_f32_by_name() {
+    assert_eq!(
+        compile_and_run_first_class("#i32(1 -2 3)", "i32_buffer"),
+        "#i32(1 -2 3)"
+    );
+    let exprs = parser::parse("#f32(1.0 2.0)").unwrap();
+    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    assert!(matches!(
+        CBackend::new().compile_program(&program),
+        Err(cml::c_backend::CompileError::UnsupportedTypedBuffer)
+    ));
 }
 
 #[test]
