@@ -7,3 +7,5 @@ pub mod lower;
 pub mod c_backend;
 pub mod compute;
 pub mod gpu_wgsl;
+#[cfg(feature = "gpu-wgpu")]
+pub mod gpu_wgpu_runtime;

@@ -3,7 +3,13 @@ name = "cml"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+gpu-wgpu = ["dep:pollster", "dep:wgpu"]
+
 [dependencies]
+pollster = { version = "1.0.1", optional = true }
+wgpu = { version = "30.0.0", default-features = false, features = ["std", "wgsl", "vulkan", "gles"], optional = true }
 
 [dev-dependencies]
 my-lisp = { path = "../my-lisp/crates/my-lisp" }

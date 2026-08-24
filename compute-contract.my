@@ -1,9 +1,9 @@
 ; compute-contract.my — analysis-only contract for heterogeneous execution
-; This does not extend my-lisp semantics and does not claim a GPU backend.
+; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 8))
- (status . analysis-only)
+ (version . (0 9))
+ (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
                (physical-capabilities . backend)))
@@ -29,11 +29,16 @@
                       (kernel-ir . (parameter exact-integer checked-add))
                       (cpu-compute-backend . (present-reference i32-map-range-proven f32-map-affine-proven))
                       (gpu-emitter . (wgsl-source-only admitted-map-regions))
-                      (gpu-runtime . absent)
+                      (gpu-runtime . (optional-feature gpu-wgpu
+                                      adapter-evidence-returned
+                                      storage-buffer-dispatch-readback))
+                      (runtime-live-evidence . llvmpipe-cpu-vulkan-pass)
+                      (physical-gpu-evidence . absent)
                       (automatic-offload . absent)))
  (implementation . ((analysis . "src/compute.rs")
                     (buffer-ir . "src/ir.rs")
                     (cpu-reference . "src/compute.rs::CpuComputeBackend")
                     (wgsl-emitter . "src/gpu_wgsl.rs")
+                    (wgpu-runtime . "src/gpu_wgpu_runtime.rs")
                     (differential-oracle . "my-lisp path dev-dependency")
                     (tests . "tests/compute_analysis_test.rs tests/typed_buffer_ir_test.rs tests/cpu_compute_backend_test.rs tests/cpu_compute_differential_test.rs"))))
