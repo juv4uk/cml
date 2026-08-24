@@ -19,11 +19,11 @@
             (isa . (1 0))
             (tested-sha . "6c08e42975eb05eb143ee4cc66bcc759b6f92a1b")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
- (compute-analysis . ((contract . (0 7))
+ (compute-analysis . ((contract . (0 8))
                       (status . cpu-reference-execution)
                       (execution-shapes . (scalar element-wise reduction irregular))
                       (gpu-admission . fail-closed)
-                      (note . "CpuComputeBackend is differential-tested against my-lisp for range-proven i32 and affine f32 x+C maps; f32 admission compares canonical f64-then-narrow bits against one f32 add for every literal input element; non-affine/unknown-input f32 and GPU emission remain blocked")))
+                      (note . "CPU reference is differential-tested; admitted i32 and affine f32 maps now emit portable WGSL with a storage-buffer ABI and bounds guard. This is source emission only: no wgpu device runtime, dispatch, or hardware-execution claim")))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom equal? defmacro
                def recursive-def-letrec

@@ -220,7 +220,7 @@ fn eval_f64(expression: &ScalarExpr, parameters: &[f64]) -> Option<f64> {
 /// Returns C for exactly the affine form `parameter-0 + C`. Addition trees
 /// are flattened so the backend performs one binary32 add, matching the
 /// evaluator's one final narrowing step.
-fn f32_affine_offset(expression: &ScalarExpr) -> Option<i64> {
+pub(crate) fn f32_affine_offset(expression: &ScalarExpr) -> Option<i64> {
     fn collect(expression: &ScalarExpr) -> Option<(u32, i64)> {
         match expression {
             ScalarExpr::Parameter(0) => Some((1, 0)),
