@@ -165,7 +165,7 @@
      (capabilities . (compiler fpga protocol contract proof))
      (done . t)
      (description . "Track fpga-lisp ISA 1.1's backward-compatible extended register-input boot frame without claiming CML transport support prematurely.")
-     (context . "done 2026-08-24: compatibility pins fpga-lisp 25c240a / ISA 1.1. The legacy CML program frame remains supported; the new tagged register-input frame is proven only in RTL simulation and CML encoding is explicitly pending. compute-contract 0.23.")))
+     (context . "done 2026-08-24 at the M5A checkpoint: compatibility pinned fpga-lisp 25c240a / ISA 1.1. The legacy CML program frame remained supported; at that checkpoint the tagged register-input frame was simulation-only and CML encoding was pending. Superseded by M5B/M35/M36 physical and host-staged evidence.")))
    ("CML-FPGA-REGISTER-INPUT-ENCODER-M5B" .
     ((priority . 0.92)
      (capabilities . (compiler rust fpga protocol testing proof))
