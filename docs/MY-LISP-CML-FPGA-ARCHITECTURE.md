@@ -30,10 +30,10 @@ incorrect interpretation.
 
 | Component | Declared boundary | Observed state |
 |---|---|---|
-| my-lisp | language contract 2.1 | semantic source of truth |
+| my-lisp | language contract 3.0 | semantic source of truth |
 | CML | language 2.0, partial capability admission from 2.1 | common IR, C and FPGA emitters |
-| fpga-lisp | ISA 1.0 | 32-bit tagged Lisp machine |
-| CML -> FPGA | language 2.0 / ISA 1.0 | real assembler and RTL-simulation conformance path |
+| fpga-lisp | ISA 1.1 | 32-bit tagged Lisp machine with extended register-input frame |
+| CML -> FPGA | language 2.0 / ISA 1.1 | real assembler, transport, and hardware path |
 
 The FPGA path already supports tagged values, a 4096-cell cons heap, a
 4096-word program image, sixteen registers, the McCarthy primitives,
