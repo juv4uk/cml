@@ -47,9 +47,18 @@ pub enum Params {
     AllRest(String),
 }
 
+/// A ratified my-lisp 2.2 immutable, contiguous numeric value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BufferLiteral {
+    I32(Vec<i32>),
+    /// Stored IEEE-754 binary32 bits, not host-decimal approximations.
+    F32(Vec<u32>),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ir {
     Int(i64),
+    Buffer(BufferLiteral),
     /// `nil` / `()` -- the empty list / false value.
     Nil,
     /// `t` -- the canonical true atom.

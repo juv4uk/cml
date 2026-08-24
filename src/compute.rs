@@ -4,7 +4,7 @@
 //! bulk computation in semantic IR, records the representation facts a
 //! backend would need, and refuses GPU admission while any fact is unknown.
 
-use crate::ir::{Ir, PrimOp, Quoted};
+use crate::ir::{BufferLiteral, Ir, PrimOp, Quoted};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionShape {
@@ -139,7 +139,7 @@ fn is_scalar(ir: &Ir) -> bool {
 
 fn effect_of(ir: &Ir) -> EffectClass {
     match ir {
-        Ir::Int(_) | Ir::Nil | Ir::True | Ir::Var(_) | Ir::Quote(_) => {
+        Ir::Int(_) | Ir::Buffer(_) | Ir::Nil | Ir::True | Ir::Var(_) | Ir::Quote(_) => {
             EffectClass::Pure
         }
         Ir::Lambda { body, .. } => effect_of(body),
@@ -176,8 +176,9 @@ fn storage_of(ir: &Ir) -> StorageClass {
     match ir {
         Ir::Quote(Quoted::List(_) | Quoted::DottedList(_, _)) | Ir::Nil => StorageClass::LinkedList,
         Ir::Int(_) | Ir::True => StorageClass::Scalar,
-        // Semantic IR has no typed-buffer node yet. A call named VECTOR is
-        // not enough evidence: my-lisp vectors are heterogeneous and mutable.
+        Ir::Buffer(_) => StorageClass::ContiguousBuffer,
+        // A call named VECTOR is not enough evidence: my-lisp vectors are
+        // heterogeneous and mutable.
         _ => StorageClass::Unknown,
     }
 }
@@ -185,6 +186,8 @@ fn storage_of(ir: &Ir) -> StorageClass {
 fn numeric_domain_of(ir: &Ir) -> NumericDomain {
     match ir {
         Ir::Int(_) | Ir::Quote(Quoted::Int(_)) => NumericDomain::Exact,
+        Ir::Buffer(BufferLiteral::I32(_)) => NumericDomain::FixedWidthInteger,
+        Ir::Buffer(BufferLiteral::F32(_)) => NumericDomain::InexactFloat,
         Ir::Quote(Quoted::List(items)) if items.iter().all(|item| matches!(item, Quoted::Int(_))) => {
             NumericDomain::Exact
         }

@@ -177,7 +177,7 @@ fn bind_params(params: &Expr, args: &[Expr]) -> HashMap<String, Expr> {
 
 fn eval_macro_body(expr: &Expr, env: &HashMap<String, Expr>) -> Result<Expr, MacroError> {
     match expr {
-        Expr::Integer(_) | Expr::String(_) => Ok(expr.clone()),
+        Expr::Integer(_) | Expr::String(_) | Expr::NumericBuffer(_) => Ok(expr.clone()),
         Expr::Symbol(s) => {
             let upper = s.to_uppercase();
             if upper == "NIL" {

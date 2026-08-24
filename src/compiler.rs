@@ -19,6 +19,8 @@ pub enum CompileError {
     /// An integer literal doesn't fit LOADI's 16-bit immediate (negatives
     /// are emitted via `LOADI 0; SUB` of the same-magnitude positive).
     IntegerOutOfRange { value: i64, max_magnitude: i64 },
+    /// Contract 2.2 buffers have no fpga-lisp descriptor/BRAM ABI yet.
+    UnsupportedNumericBuffer,
 }
 
 impl fmt::Display for CompileError {
@@ -30,6 +32,10 @@ impl fmt::Display for CompileError {
             CompileError::IntegerOutOfRange { value, max_magnitude } => write!(
                 f, "integer literal {value} exceeds the fpga-lisp target's LOADI range (magnitude > {max_magnitude})"
             ),
+            CompileError::UnsupportedNumericBuffer => write!(
+                f,
+                "typed numeric buffers are not supported by the fpga-lisp backend"
+            ),
         }
     }
 }
@@ -39,6 +45,7 @@ impl std::error::Error for CompileError {}
 fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
     match ir {
         Ir::Int(n) => validate_int(*n),
+        Ir::Buffer(_) => Err(CompileError::UnsupportedNumericBuffer),
         Ir::Quote(q) => validate_quoted(q),
         Ir::Lambda { body, .. } => validate_ir(body),
         Ir::App { func, args } => {
@@ -174,6 +181,7 @@ impl Compiler {
             Ir::Int(n) => {
                 self.emit_integer_literal(*n, target_reg);
             }
+            Ir::Buffer(_) => unreachable!("numeric buffers are rejected by validate_ir"),
             Ir::Nil => {
                 self.emit("LOADI R13 0");
                 self.emit("LOADI R12 1");

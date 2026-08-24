@@ -1,10 +1,18 @@
 #[derive(Debug, Clone, PartialEq)]
+pub enum NumericBufferLiteral {
+    I32(Vec<i32>),
+    /// Stored IEEE-754 binary32 bits, preserving signed zero exactly.
+    F32(Vec<u32>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Integer(i64),
     Symbol(String),
     List(Vec<Expr>),
     DottedList(Vec<Expr>, Box<Expr>), // (a b . c)
     String(String),
+    NumericBuffer(NumericBufferLiteral),
 }
 
 impl Expr {

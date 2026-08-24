@@ -9,8 +9,8 @@
 //! Assumes macro-expanded input, same contract `compiler.rs` has (see
 //! `main.rs`: `MacroExpander::new().process(&exprs)` runs first).
 
-use crate::ast::Expr;
-use crate::ir::{Ir, Params, PrimOp, Quoted};
+use crate::ast::{Expr, NumericBufferLiteral};
+use crate::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,6 +105,12 @@ fn primitive_name(op: PrimOp) -> &'static str {
 pub fn lower_expr(expr: &Expr) -> Result<Ir, LowerError> {
     match expr {
         Expr::Integer(n) => Ok(Ir::Int(*n)),
+        Expr::NumericBuffer(NumericBufferLiteral::I32(values)) => {
+            Ok(Ir::Buffer(BufferLiteral::I32(values.clone())))
+        }
+        Expr::NumericBuffer(NumericBufferLiteral::F32(values)) => {
+            Ok(Ir::Buffer(BufferLiteral::F32(values.clone())))
+        }
         // compiler.rs's compile_expr emits a direct LOADSYM literal for a
         // source string (compatibility.my's `representational-
         // substitutions`), never a variable lookup -- Quote(Sym(..))
@@ -252,6 +258,9 @@ fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
         Expr::DottedList(list, tail) => Ok(Quoted::DottedList(
             list.iter().map(lower_quoted).collect::<Result<_, _>>()?,
             Box::new(lower_quoted(tail)?),
+        )),
+        Expr::NumericBuffer(_) => Err(LowerError::invalid_form(
+            "numeric buffers are self-evaluating values and must not be quoted",
         )),
     }
 }

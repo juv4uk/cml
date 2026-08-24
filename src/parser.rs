@@ -1,4 +1,4 @@
-use crate::ast::Expr;
+use crate::ast::{Expr, NumericBufferLiteral};
 
 // my-lisp's language-contract.my bumped 1.0 -> 2.0 (commit d287a16,
 // "complete quote migration"): `'` is no longer reader shorthand for
@@ -78,6 +78,8 @@ fn parse_expr(tokens: &mut std::iter::Peekable<std::vec::IntoIter<String>>) -> R
     match token.as_str() {
         "(" => parse_list(tokens),
         ")" => Err(ParseError::UnexpectedToken(")".to_string())),
+        "#i32" => parse_numeric_buffer(tokens, false),
+        "#f32" => parse_numeric_buffer(tokens, true),
         _ => {
             if token.starts_with('"') && token.ends_with('"') {
                 Ok(Expr::String(token[1..token.len() - 1].to_string()))
@@ -87,6 +89,57 @@ fn parse_expr(tokens: &mut std::iter::Peekable<std::vec::IntoIter<String>>) -> R
                 Ok(Expr::Symbol(token))
             }
         }
+    }
+}
+
+fn parse_numeric_buffer(
+    tokens: &mut std::iter::Peekable<std::vec::IntoIter<String>>,
+    f32_elements: bool,
+) -> Result<Expr, ParseError> {
+    match tokens.next().as_deref() {
+        Some("(") => {}
+        Some(token) => {
+            return Err(ParseError::UnexpectedToken(format!(
+                "expected '(' after numeric buffer tag, found {token}"
+            )))
+        }
+        None => return Err(ParseError::UnexpectedEOF),
+    }
+
+    if f32_elements {
+        let mut values = Vec::new();
+        loop {
+            let token = tokens.next().ok_or(ParseError::UnexpectedEOF)?;
+            if token == ")" {
+                return Ok(Expr::NumericBuffer(NumericBufferLiteral::F32(values)));
+            }
+            if token == "(" {
+                return Err(ParseError::UnexpectedToken(
+                    "numeric buffer elements must be scalar".to_string(),
+                ));
+            }
+            let value = token.parse::<f32>().map_err(|_| {
+                ParseError::UnexpectedToken(format!("invalid f32 buffer element: {token}"))
+            })?;
+            if !value.is_finite() {
+                return Err(ParseError::UnexpectedToken(format!(
+                    "non-finite f32 buffer element: {token}"
+                )));
+            }
+            values.push(value.to_bits());
+        }
+    }
+
+    let mut values = Vec::new();
+    loop {
+        let token = tokens.next().ok_or(ParseError::UnexpectedEOF)?;
+        if token == ")" {
+            return Ok(Expr::NumericBuffer(NumericBufferLiteral::I32(values)));
+        }
+        let value = token.parse::<i32>().map_err(|_| {
+            ParseError::UnexpectedToken(format!("invalid i32 buffer element: {token}"))
+        })?;
+        values.push(value);
     }
 }
 

@@ -305,6 +305,9 @@ impl CBackend {
     fn compile_expr(&mut self, ir: &Ir, env: &str) -> Result<String, CompileError> {
         match ir {
             Ir::Int(n) => Ok(format!("mk_int({n})")),
+            Ir::Buffer(_) => Err(CompileError::Unsupported(
+                "typed numeric buffer (CPU ComputeBackend not implemented yet)".to_string(),
+            )),
             Ir::Nil => Ok("(&NIL_V)".to_string()),
             Ir::True => Ok("(&TRUE_V)".to_string()),
             Ir::Var(name) => Ok(format!("env_lookup({env}, \"{name}\")")),

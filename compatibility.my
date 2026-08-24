@@ -12,18 +12,18 @@
               ; compatibility claim.
               (contract . (2 0))
               (tested-sha . "164608cc2b1c08b815362551d6a9483fa762db7b")
-              (observed-upstream-contract . (2 1))
-              (observed-upstream-sha . "fcbf30cdc523cbe00589950a59a0b09bdd6cd18b")
+              (observed-upstream-contract . (2 2))
+              (observed-upstream-sha . "c42c7cb")
               (status . upgrade-required)))
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (1 0))
             (tested-sha . "6c08e42975eb05eb143ee4cc66bcc759b6f92a1b")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
- (compute-analysis . ((contract . (0 1))
+ (compute-analysis . ((contract . (0 2))
                       (status . analysis-only)
                       (execution-shapes . (scalar element-wise reduction irregular))
                       (gpu-admission . fail-closed)
-                      (note . "map/reduce regions are recognized, but no GPU backend or typed-buffer language contract is claimed")))
+                      (note . "map/reduce regions and my-lisp 2.2 i32/f32 Buffer IR are recognized; CPU/GPU emitters remain absent and existing C/FPGA backends reject buffers explicitly")))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom equal? defmacro
                def recursive-def-letrec
