@@ -101,6 +101,34 @@ fn malformed_dependencies_and_cycles_are_named_errors() {
     );
 }
 
+#[test]
+fn data_edges_require_a_real_producer_and_an_explicit_dependency() {
+    let no_producer = ExecutionGraph {
+        inputs: vec![],
+        nodes: vec![map_node(1, 99, 1, &[], 1)],
+    };
+    assert_eq!(
+        CpuGraphExecutor.execute(&no_producer),
+        Err(GraphExecutionError::MissingValueProducer {
+            node: NodeId(1),
+            value: BufferId(99),
+        })
+    );
+
+    let implicit_source_order = ExecutionGraph {
+        inputs: vec![(BufferId(0), GraphValue::Buffer(BufferLiteral::I32(vec![1])))],
+        nodes: vec![map_node(1, 0, 1, &[], 1), map_node(2, 1, 2, &[], 1)],
+    };
+    assert_eq!(
+        CpuGraphExecutor.execute(&implicit_source_order),
+        Err(GraphExecutionError::MissingDataDependency {
+            node: NodeId(2),
+            value: BufferId(1),
+            producer: NodeId(1),
+        })
+    );
+}
+
 struct PortableTestExecutor;
 
 impl NodeExecutor for PortableTestExecutor {

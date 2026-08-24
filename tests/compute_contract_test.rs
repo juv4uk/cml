@@ -4,7 +4,7 @@ use std::fs;
 fn machine_readable_compute_contract_matches_implementation() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 21))",
+        "(version . (0 22))",
         "(status . experimental-runtime)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -42,6 +42,11 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(fpga . one-program-path-not-blanket-conformance)",
         "(heterogeneous . scheduler-order-and-results-not-payload-transfer)",
         "(cross-device-payload-transfer . absent)",
+        "(data . typed-value-with-explicit-producer-dependency)",
+        "(control . dependency-only)",
+        "(buffer-transfer . host-staged-materialized-graph-value)",
+        "(fpga-input-edge . absent-control-dependency-only)",
+        "(implicit-source-order-dataflow . forbidden)",
         "(unregistered-targets . fail-closed)",
         "(publication . atomic-on-whole-graph-success)",
         "(raw-cross-device-pointers . forbidden)",
@@ -67,7 +72,7 @@ fn machine_readable_compute_contract_matches_implementation() {
 
     let compatibility = fs::read_to_string("compatibility.my").unwrap();
     assert!(
-        compatibility.contains("(compute-analysis . ((contract . (0 21))"),
+        compatibility.contains("(compute-analysis . ((contract . (0 22))"),
         "compatibility.my compute contract version drifted from compute-contract.my"
     );
 }

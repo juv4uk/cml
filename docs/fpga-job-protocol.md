@@ -73,3 +73,16 @@ result store can coordinate all three domains. It does **not** prove direct
 GPU-to-FPGA data movement: the dependency currently carries ordering only and
 the FPGA node executes its own preassembled program image. A typed transfer
 edge or shared-memory transport is the next distinct capability.
+
+## M4 data and control edges
+
+Graph validation now rejects a consumed buffer unless it is either a declared
+graph input or has a real producer that is also named as a dependency of the
+consumer. Source order can no longer accidentally masquerade as data flow.
+
+For current numeric nodes, the producer's typed `GraphValue::Buffer` is
+materialized in the host value store before the next executor receives it;
+CPU→CUDA is therefore a host-staged data edge. The CUDA→FPGA dependency in the
+M3 proof is control-only because `FpgaProgram` has no buffer input. A future
+FPGA payload edge must introduce an explicit typed input protocol rather than
+reinterpreting this dependency.

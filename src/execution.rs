@@ -95,6 +95,15 @@ pub enum GraphExecutionError {
         node: NodeId,
         buffer: BufferId,
     },
+    MissingValueProducer {
+        node: NodeId,
+        value: BufferId,
+    },
+    MissingDataDependency {
+        node: NodeId,
+        value: BufferId,
+        producer: NodeId,
+    },
     InputKindMismatch {
         node: NodeId,
         value: BufferId,
@@ -321,6 +330,7 @@ impl NodeExecutor for WgpuNodeExecutor {
 
 fn validate_graph(graph: &ExecutionGraph) -> Result<(), GraphExecutionError> {
     let mut buffers = HashSet::new();
+    let input_buffers: HashSet<_> = graph.inputs.iter().map(|(id, _)| *id).collect();
     for (id, _) in &graph.inputs {
         if !buffers.insert(*id) {
             return Err(GraphExecutionError::DuplicateInput(*id));
@@ -334,6 +344,7 @@ fn validate_graph(graph: &ExecutionGraph) -> Result<(), GraphExecutionError> {
         }
     }
 
+    let mut producers = HashMap::new();
     for node in &graph.nodes {
         for dependency in &node.dependencies {
             if !nodes.contains(dependency) {
@@ -345,6 +356,31 @@ fn validate_graph(graph: &ExecutionGraph) -> Result<(), GraphExecutionError> {
         }
         if !buffers.insert(node.output) {
             return Err(GraphExecutionError::DuplicateOutput(node.output));
+        }
+        producers.insert(node.output, node.id);
+    }
+
+    for node in &graph.nodes {
+        let ExecutionOperation::NumericBufferMap { input, .. } = &node.operation else {
+            continue;
+        };
+        if input_buffers.contains(input) {
+            continue;
+        }
+        let producer =
+            producers
+                .get(input)
+                .copied()
+                .ok_or(GraphExecutionError::MissingValueProducer {
+                    node: node.id,
+                    value: *input,
+                })?;
+        if !node.dependencies.contains(&producer) {
+            return Err(GraphExecutionError::MissingDataDependency {
+                node: node.id,
+                value: *input,
+                producer,
+            });
         }
     }
     Ok(())

@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 21))
+ (version . (0 22))
  (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -70,6 +70,11 @@
                      (physical-evidence-scope . ((fpga . one-program-path-not-blanket-conformance)
                                                  (heterogeneous . scheduler-order-and-results-not-payload-transfer)))
                      (cross-device-payload-transfer . absent)
+                     (edge-classes . ((data . typed-value-with-explicit-producer-dependency)
+                                      (control . dependency-only)))
+                     (buffer-transfer . host-staged-materialized-graph-value)
+                     (fpga-input-edge . absent-control-dependency-only)
+                     (implicit-source-order-dataflow . forbidden)
                      (unregistered-targets . fail-closed)
                      (publication . atomic-on-whole-graph-success)
                      (raw-cross-device-pointers . forbidden)))

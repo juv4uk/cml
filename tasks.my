@@ -153,4 +153,10 @@
      (capabilities . (compiler rust compute gpu cuda fpga protocol testing proof))
      (done . t)
      (description . "Execute CPU, CUDA, and physical FPGA nodes in one dependency graph and preserve typed results without claiming a data path that does not exist.")
-     (context . "done 2026-08-24: operator-gated live test passed in 14.61s. One graph executed CPU [1 2 3]->[2 3 4], GTX 1050 Ti CUDA ->[3 4 5], then GW5A-25A/COM4 -> GraphValue::LispWord(7), with execution_order CPU->CUDA->FPGA. This proves unified scheduling, backend registration, dependency order, and result publication. The CUDA buffer is not yet transferred into the FPGA program; direct cross-device payload transfer remains explicitly absent. compute-contract 0.21."))))))
+     (context . "done 2026-08-24: operator-gated live test passed in 14.61s. One graph executed CPU [1 2 3]->[2 3 4], GTX 1050 Ti CUDA ->[3 4 5], then GW5A-25A/COM4 -> GraphValue::LispWord(7), with execution_order CPU->CUDA->FPGA. This proves unified scheduling, backend registration, dependency order, and result publication. The CUDA buffer is not yet transferred into the FPGA program; direct cross-device payload transfer remains explicitly absent. compute-contract 0.21.")))
+   ("CML-GRAPH-TYPED-EDGES-M4" .
+    ((priority . 0.85)
+     (capabilities . (compiler rust compute graph testing proof))
+     (done . t)
+     (description . "Separate typed data flow from control-only dependencies and reject source-order-dependent buffer consumption before designing FPGA payload transfer.")
+     (context . "done 2026-08-24: graph validation requires every consumed buffer to be a declared input or have a real producer explicitly listed as a dependency. Missing producers and implicit source-order dataflow return named errors. Numeric buffer edges are documented as host-staged materialized GraphValue transfers; the current CUDA->FPGA dependency is control-only because FpgaProgram has no typed input. compute-contract 0.22."))))))
