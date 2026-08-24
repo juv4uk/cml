@@ -181,6 +181,6 @@
    ("CML-EXECUTION-MODULE-BOUNDARY-V0.2" .
     ((priority . 0.45)
      (capabilities . (compiler rust architecture refactor testing))
-     (done . ())
+     (done . t)
      (description . "Before CML v0.2, extract named scheduler and result-store boundaries from execution.rs so typed transfer work does not turn the graph executor into a monolith.")
-     (context . "debt recorded 2026-08-24 from Sakshi M3 witness review: current one-file scheduling/value-store logic is acceptable for v0.1 and all live claims remain valid. Refactor is a maintainability gate before v0.2, not an M3 correctness blocker; preserve behavior and contract-lock evidence."))))))
+     (context . "done 2026-08-24: GraphValueStore and GraphScheduler now own value publication and dependency ordering/cycle detection behind named internal modules. Execution behavior and contract-lock evidence preserved; targeted graph suites remain green."))))))
