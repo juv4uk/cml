@@ -69,6 +69,7 @@ const RUNTIME: &str = r##"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 typedef struct Value Value;
 typedef enum { TAG_NIL, TAG_TRUE, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN } Tag;
@@ -192,6 +193,23 @@ static Value *v_apply(Value *callable, Value *args) {
     if (callable->tag == TAG_BUILTIN) return callable->u.builtin.fn(args, &NIL_V);
     runtime_error("Type", "attempted to call a non-callable value");
     return &NIL_V;
+}
+
+static Value *v_map_i32_buffer(Value *callable, Value *buffer) {
+    require_tag(buffer, TAG_I32_BUFFER, "numeric-buffer-map");
+    size_t len = buffer->u.i32_buffer.len;
+    int *out = malloc(len * sizeof(int));
+    for (size_t i = 0; i < len; i++) {
+        Value *mapped = v_apply(callable, mk_cons(mk_int(buffer->u.i32_buffer.data[i]), &NIL_V));
+        require_tag(mapped, TAG_INT, "numeric-buffer-map");
+        if (mapped->u.i < INT_MIN || mapped->u.i > INT_MAX) {
+            runtime_error("NumericOverflow", "numeric-buffer-map");
+        }
+        out[i] = (int)mapped->u.i;
+    }
+    Value *result = mk_i32_buffer(out, len);
+    free(out);
+    return result;
 }
 
 // Environment lookup: env is an alist chain, ((sym . val) . rest), same
@@ -469,6 +487,13 @@ impl CBackend {
     }
 
     fn compile_app(&mut self, func: &Ir, args: &[Ir], env: &str) -> Result<String, CompileError> {
+        if let Ir::Var(name) = func {
+            if name == "NUMERIC-BUFFER-MAP" && args.len() == 2 {
+                let function = self.compile_expr(&args[0], env)?;
+                let buffer = self.compile_expr(&args[1], env)?;
+                return Ok(format!("v_map_i32_buffer({function}, {buffer})"));
+            }
+        }
         let func_expr = self.compile_expr(func, env)?;
         let mut args_list = "(&NIL_V)".to_string();
         for arg in args.iter().rev() {

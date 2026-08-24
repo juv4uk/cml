@@ -4,7 +4,7 @@ use std::fs;
 fn machine_readable_compute_contract_matches_implementation() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 27))",
+        "(version . (0 28))",
         "(status . experimental-runtime)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -14,6 +14,7 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(required-i32-overflow-proof . true)",
         "(f32-rounding-contract . affine-x-plus-integer-per-literal-bit-equivalence)",
         "(cpu-compute-backend . (present-reference i32-map-range-proven f32-map-affine-proven))",
+        "(c-backend-reference . (i32-buffer-literal i32-map checked-overflow))",
         "(differential-oracle . \"my-lisp path dev-dependency\")",
         "(gpu-emitter . (wgsl-source-only admitted-map-regions))",
         "(cuda-emitter . (cuda-c-source-only admitted-map-regions))",
@@ -75,7 +76,7 @@ fn machine_readable_compute_contract_matches_implementation() {
 
     let compatibility = fs::read_to_string("compatibility.my").unwrap();
     assert!(
-        compatibility.contains("(compute-analysis . ((contract . (0 27))"),
+        compatibility.contains("(compute-analysis . ((contract . (0 28))"),
         "compatibility.my compute contract version drifted from compute-contract.my"
     );
 }

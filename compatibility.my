@@ -150,7 +150,7 @@
                                       (test . "tests/c_backend_test.rs")
                                       (does-not-upgrade-supported-contract . true)))
                (known-gaps . (no-eight-argument-limit-enforced-unlike-fpga-lisp-register-file
-                              typed-numeric-buffers-partial-i32-supported-f32-unsupported
+                              typed-numeric-buffers-i32-literal-and-map-supported-f32-unsupported
                               defmacro-supported-only-via-shared-macros-rs-not-macros-my
                               builtin-set-is-only-cmls-seven-primitives-plus-add
                               malformed-special-forms-other-than-quote-not-yet-systematically-classified
@@ -162,5 +162,6 @@
                                           no-eight-argument-register-ceiling-args-is-a-real-cons-list-not-fixed-registers))
                (error-handling . ((mechanism . "CompileError/MacroError enums, not panic!")
                                   (typed-buffer . ((i32 . supported) (f32 . UnsupportedTypedBuffer)))
+                                  (numeric-buffer-map . ((i32 . supported) (f32 . UnsupportedTypedBuffer)))
                                   (verified . "tests/c_backend_test.rs's 4 macro_*/nested_def_returns_graceful_error tests")))
                (not-wired-into-cml . "macros.my (a separate .my-hosted defmacro-expander, docs/tooling-language-priority.md) is unrelated to c-backend and not consumed by it either -- c-backend uses the same Rust macros.rs pipeline as fpga-lisp does"))))

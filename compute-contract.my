@@ -28,6 +28,7 @@
                       (typed-buffer-elements . (i32 f32))
                       (kernel-ir . (parameter exact-integer checked-add))
                       (cpu-compute-backend . (present-reference i32-map-range-proven f32-map-affine-proven))
+                      (c-backend-reference . (i32-buffer-literal i32-map checked-overflow))
                       (gpu-emitter . (wgsl-source-only admitted-map-regions))
                       (cuda-emitter . (cuda-c-source-only admitted-map-regions))
                       (cuda-runtime . (optional-feature gpu-cuda

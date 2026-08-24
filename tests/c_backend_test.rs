@@ -9,6 +9,7 @@ use std::fs;
 use std::process::Command;
 
 use cml::c_backend::CBackend;
+use cml::ir::{BufferLiteral, Ir, Params, PrimOp};
 use cml::lower;
 use cml::parser;
 
@@ -58,6 +59,30 @@ fn compile_and_run_failure(code: &str, stem: &str) -> std::process::Output {
         "gcc failed: {}",
         String::from_utf8_lossy(&compile.stderr)
     );
+    let run = Command::new(format!("./{bin_path}")).output().unwrap();
+    let _ = fs::remove_file(c_path);
+    let _ = fs::remove_file(bin_path);
+    run
+}
+
+fn compile_ir_and_run(program: &[Ir], stem: &str) -> std::process::Output {
+    let c_source = CBackend::new().compile_program(program).unwrap();
+    let c_path = format!("c_backend_{stem}_test.c");
+    let bin_path = format!("c_backend_{stem}_test");
+    fs::write(&c_path, &c_source).unwrap();
+    let compile = Command::new("gcc")
+        .arg(&c_path)
+        .arg("-o")
+        .arg(&bin_path)
+        .output()
+        .unwrap();
+    if !compile.status.success() {
+        panic!(
+            "gcc failed:\nSTDERR: {}\n--- generated C ---\n{}",
+            String::from_utf8_lossy(&compile.stderr),
+            c_source
+        );
+    }
     let run = Command::new(format!("./{bin_path}")).output().unwrap();
     let _ = fs::remove_file(c_path);
     let _ = fs::remove_file(bin_path);
@@ -174,6 +199,46 @@ fn c_backend_supports_i32_buffers_and_rejects_f32_by_name() {
         CBackend::new().compile_program(&program),
         Err(cml::c_backend::CompileError::UnsupportedTypedBuffer)
     ));
+}
+
+#[test]
+fn c_backend_executes_numeric_buffer_map_as_i32_reference_path() {
+    let program = [Ir::App {
+        func: Box::new(Ir::Var("NUMERIC-BUFFER-MAP".into())),
+        args: vec![
+            Ir::Lambda {
+                params: Params::Fixed(vec!["x".into()]),
+                body: Box::new(Ir::Prim {
+                    op: PrimOp::Add,
+                    args: vec![Ir::Var("x".into()), Ir::Int(1)],
+                }),
+            },
+            Ir::Buffer(BufferLiteral::I32(vec![1, 2, 3])),
+        ],
+    }];
+    let run = compile_ir_and_run(&program, "i32_map");
+    assert!(run.status.success(), "numeric-buffer-map failed: {:?}", run);
+    assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "#i32(2 3 4)");
+}
+
+#[test]
+fn c_backend_numeric_buffer_map_fails_closed_on_i32_overflow() {
+    let program = [Ir::App {
+        func: Box::new(Ir::Var("NUMERIC-BUFFER-MAP".into())),
+        args: vec![
+            Ir::Lambda {
+                params: Params::Fixed(vec!["x".into()]),
+                body: Box::new(Ir::Prim {
+                    op: PrimOp::Add,
+                    args: vec![Ir::Var("x".into()), Ir::Int(1)],
+                }),
+            },
+            Ir::Buffer(BufferLiteral::I32(vec![i32::MAX])),
+        ],
+    }];
+    let run = compile_ir_and_run(&program, "i32_map_overflow");
+    assert!(!run.status.success());
+    assert!(String::from_utf8_lossy(&run.stderr).starts_with("NumericOverflow:"));
 }
 
 #[test]
