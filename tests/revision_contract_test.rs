@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const MY_LISP_SHA: &str = "164608cc2b1c08b815362551d6a9483fa762db7b";
-const FPGA_LISP_SHA: &str = "f2362bb108454511b4dd36e131c51be491bac696";
+const FPGA_LISP_SHA: &str = "25c240af1ac8f38970511108c73207887e460143";
 
 fn sibling(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -72,7 +72,7 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
         compatibility.contains(&format!("(tested-sha . \"{FPGA_LISP_SHA}\")")),
         "this file's FPGA_LISP_SHA constant doesn't match compatibility.my -- update one or the other"
     );
-    assert!(compatibility.contains("(isa . (1 0))"));
+    assert!(compatibility.contains("(isa . (1 1))"));
 
     let my_lisp = sibling("my-lisp");
     let fpga_lisp = sibling("fpga-lisp");
@@ -92,7 +92,7 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
     let isa = fs::read_to_string(fpga_lisp.join("isa-contract.my"))
         .expect("fpga-lisp ISA contract should be readable");
     assert!(
-        isa.contains("(version . (1 0))"),
+        isa.contains("(version . (1 1))"),
         "fpga-lisp ISA version drift"
     );
     assert!(
