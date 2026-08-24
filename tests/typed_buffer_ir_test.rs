@@ -99,16 +99,14 @@ fn non_affine_f32_map_stays_blocked() {
 }
 
 #[test]
-fn existing_backends_reject_buffers_explicitly_until_their_abis_exist() {
+fn fpga_rejects_buffers_while_c_backend_accepts_i32_buffers() {
     let program = vec![lower_one("#i32(1 2 3)")];
     let fpga_error = Compiler::new().compile(&program).unwrap_err().to_string();
     assert!(fpga_error.contains("not supported by the fpga-lisp backend"));
 
-    let c_error = CBackend::new()
-        .compile_program(&program)
-        .unwrap_err()
-        .to_string();
-    assert!(c_error.contains("CPU ComputeBackend not implemented yet"));
+    let c_source = CBackend::new().compile_program(&program).unwrap();
+    assert!(c_source.contains("TAG_I32_BUFFER"));
+    assert!(c_source.contains("mk_i32_buffer"));
 }
 
 #[test]
