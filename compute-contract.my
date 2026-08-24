@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 12))
+ (version . (0 13))
  (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -30,18 +30,23 @@
                       (cpu-compute-backend . (present-reference i32-map-range-proven f32-map-affine-proven))
                       (gpu-emitter . (wgsl-source-only admitted-map-regions))
                       (cuda-emitter . (cuda-c-source-only admitted-map-regions))
+                      (cuda-runtime . (optional-feature gpu-cuda
+                                       nvrtc-to-ptx
+                                       driver-launch-readback))
                       (gpu-runtime . (optional-feature gpu-wgpu
                                       adapter-evidence-returned
                                       default-policy-gpu-only
                                       explicit-software-adapter-probe
                                       storage-buffer-dispatch-readback))
                       (runtime-live-evidence . llvmpipe-cpu-vulkan-pass)
-                      (physical-gpu-evidence . absent)
+                      (physical-gpu-evidence . (nvidia-gtx-1050-ti
+                                                cuda-device-zero
+                                                i32-map-pass))
                       (accelerator-selection . (live-descriptors-only
                                                 portable-first
                                                 vendor-optimized
                                                 cpu-adapters-rejected))
-                      (vendor-paths . ((nvidia . (wgpu cuda-planned))
+                      (vendor-paths . ((nvidia . (wgpu cuda-live))
                                        (amd . (wgpu rocm-planned))
                                        (intel . (wgpu oneapi-level-zero-planned))))
                       (automatic-offload . absent)))
@@ -50,6 +55,7 @@
                     (cpu-reference . "src/compute.rs::CpuComputeBackend")
                     (wgsl-emitter . "src/gpu_wgsl.rs")
                     (cuda-emitter . "src/gpu_cuda.rs")
+                    (cuda-runtime . "src/gpu_cuda_runtime.rs")
                     (wgpu-runtime . "src/gpu_wgpu_runtime.rs")
                     (accelerator-planner . "src/accelerator.rs")
                     (differential-oracle . "my-lisp path dev-dependency")
