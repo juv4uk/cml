@@ -9,6 +9,7 @@ use std::fs;
 use std::process::Command;
 
 use cml::c_backend::CBackend;
+use cml::compute::{ComputeBackend, CpuComputeBackend};
 use cml::ir::{BufferLiteral, Ir, Params, PrimOp};
 use cml::lower;
 use cml::parser;
@@ -87,6 +88,23 @@ fn compile_ir_and_run(program: &[Ir], stem: &str) -> std::process::Output {
     let _ = fs::remove_file(c_path);
     let _ = fs::remove_file(bin_path);
     run
+}
+
+fn cpu_reference_i32_map(source: &str) -> String {
+    let expressions = parser::parse(source).unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let buffer = CpuComputeBackend.execute(&program[0]).unwrap();
+    match buffer {
+        BufferLiteral::I32(values) => format!(
+            "#i32({})",
+            values
+                .iter()
+                .map(i32::to_string)
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+        BufferLiteral::F32(_) => panic!("unexpected f32 reference result"),
+    }
 }
 
 #[test]
@@ -230,6 +248,25 @@ fn c_backend_lowers_source_level_numeric_buffer_map() {
         ),
         "#i32(2 3 4)"
     );
+}
+
+#[test]
+fn c_backend_i32_map_matches_cpu_reference_for_source_fixtures() {
+    for (index, source) in [
+        "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3))",
+        "(numeric-buffer-map (lambda (x) (+ x -2)) #i32(-3 4))",
+        "(numeric-buffer-map (lambda (x) (+ (+ x 10) -3)) #i32(0 7 -9))",
+        "(numeric-buffer-map (lambda (x) (+ x 1)) #i32())",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert_eq!(
+            compile_and_run_first_class(source, &format!("source_i32_differential_{index}")),
+            cpu_reference_i32_map(source),
+            "source: {source}"
+        );
+    }
 }
 
 #[test]
