@@ -23,6 +23,28 @@ fn recognizes_map_without_pretending_a_list_is_a_gpu_buffer() {
 }
 
 #[test]
+fn pure_but_unsupported_kernel_shape_stays_fail_closed() {
+    let analysis = analyze(&lower_one(
+        "(map (lambda (x) (cond (t x))) #i32(1 2 3))",
+    ));
+    assert_eq!(analysis.effect, EffectClass::Pure);
+    assert!(analysis
+        .gpu_blockers
+        .contains(&AdmissionBlocker::KernelNotLowerable));
+    assert!(!analysis.gpu_eligible());
+}
+
+#[test]
+fn captured_values_are_not_mistaken_for_kernel_parameters() {
+    let analysis = analyze(&lower_one(
+        "(map (lambda (x) (+ x offset)) #f32(1.0 2.0))",
+    ));
+    assert!(analysis
+        .gpu_blockers
+        .contains(&AdmissionBlocker::KernelNotLowerable));
+}
+
+#[test]
 fn recognizes_reduce_as_a_distinct_execution_shape() {
     let analysis = analyze(&lower_one(
         "(reduce (lambda (acc x) (+ acc x)) 0 (quote (1 2 3 4)))",

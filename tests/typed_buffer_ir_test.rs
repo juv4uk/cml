@@ -1,4 +1,6 @@
-use cml::compute::{analyze, EffectClass, ExecutionShape, NumericDomain, StorageClass};
+use cml::compute::{
+    analyze, ComputeKernel, EffectClass, ExecutionShape, NumericDomain, ScalarExpr, StorageClass,
+};
 use cml::ir::{BufferLiteral, Ir};
 use cml::{c_backend::CBackend, compiler::Compiler, lower, parser};
 
@@ -36,6 +38,16 @@ fn ratified_buffer_makes_map_a_fail_closed_gpu_candidate() {
     assert_eq!(analysis.effect, EffectClass::Pure);
     assert_eq!(analysis.storage, StorageClass::ContiguousBuffer);
     assert_eq!(analysis.numeric_domain, NumericDomain::FixedWidthInteger);
+    assert_eq!(
+        analysis.region.as_ref().unwrap().kernel,
+        Some(ComputeKernel {
+            parameter_count: 1,
+            body: ScalarExpr::CheckedAdd(
+                Box::new(ScalarExpr::Parameter(0)),
+                Box::new(ScalarExpr::ExactInteger(1)),
+            ),
+        })
+    );
     assert!(analysis.gpu_eligible());
 }
 

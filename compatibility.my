@@ -19,11 +19,11 @@
             (isa . (1 0))
             (tested-sha . "6c08e42975eb05eb143ee4cc66bcc759b6f92a1b")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
- (compute-analysis . ((contract . (0 2))
+ (compute-analysis . ((contract . (0 3))
                       (status . analysis-only)
                       (execution-shapes . (scalar element-wise reduction irregular))
                       (gpu-admission . fail-closed)
-                      (note . "map/reduce regions and my-lisp 2.2 i32/f32 Buffer IR are recognized; CPU/GPU emitters remain absent and existing C/FPGA backends reject buffers explicitly")))
+                      (note . "map/reduce regions and my-lisp 2.2 i32/f32 Buffer IR are recognized; eligible lambdas must lower to the allocation-free scalar Kernel IR (parameter/exact-integer/checked-add); CPU/GPU emitters remain absent")))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom equal? defmacro
                def recursive-def-letrec

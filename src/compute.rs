@@ -4,7 +4,7 @@
 //! bulk computation in semantic IR, records the representation facts a
 //! backend would need, and refuses GPU admission while any fact is unknown.
 
-use crate::ir::{BufferLiteral, Ir, PrimOp, Quoted};
+use crate::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionShape {
@@ -50,6 +50,22 @@ pub enum AdmissionBlocker {
     EffectNotPure,
     StorageNotContiguous,
     NumericDomainNotRepresentable,
+    KernelNotLowerable,
+}
+
+/// Backend-neutral scalar subset allowed inside a bulk kernel. Every node is
+/// pure, allocation-free, and has explicit checked-integer semantics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScalarExpr {
+    Parameter(usize),
+    ExactInteger(i64),
+    CheckedAdd(Box<ScalarExpr>, Box<ScalarExpr>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComputeKernel {
+    pub parameter_count: usize,
+    pub body: ScalarExpr,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -58,6 +74,7 @@ pub struct ComputeRegion {
     pub function: Ir,
     pub input: Ir,
     pub initial: Option<Ir>,
+    pub kernel: Option<ComputeKernel>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -109,6 +126,9 @@ pub fn analyze(ir: &Ir) -> ComputeAnalysis {
     if !matches!(numeric_domain, NumericDomain::FixedWidthInteger | NumericDomain::InexactFloat) {
         gpu_blockers.push(AdmissionBlocker::NumericDomainNotRepresentable);
     }
+    if region.as_ref().is_some_and(|region| region.kernel.is_none()) {
+        gpu_blockers.push(AdmissionBlocker::KernelNotLowerable);
+    }
 
     ComputeAnalysis { shape, effect, storage, numeric_domain, region, gpu_blockers }
 }
@@ -122,13 +142,47 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
             function: function.clone(),
             input: input.clone(),
             initial: None,
+            kernel: lower_kernel(function, 1),
         }),
         ("REDUCE", [function, initial, input]) => Some(ComputeRegion {
             operation: BulkOperation::Reduce,
             function: function.clone(),
             input: input.clone(),
             initial: Some(initial.clone()),
+            kernel: lower_kernel(function, 2),
         }),
+        _ => None,
+    }
+}
+
+fn lower_kernel(function: &Ir, expected_parameters: usize) -> Option<ComputeKernel> {
+    let Ir::Lambda { params: Params::Fixed(parameters), body } = function else {
+        return None;
+    };
+    if parameters.len() != expected_parameters {
+        return None;
+    }
+    let body = lower_scalar_expr(body, parameters)?;
+    Some(ComputeKernel {
+        parameter_count: parameters.len(),
+        body,
+    })
+}
+
+fn lower_scalar_expr(ir: &Ir, parameters: &[String]) -> Option<ScalarExpr> {
+    match ir {
+        Ir::Int(value) => Some(ScalarExpr::ExactInteger(*value)),
+        Ir::Var(name) => parameters
+            .iter()
+            .position(|parameter| parameter == name)
+            .map(ScalarExpr::Parameter),
+        Ir::Prim {
+            op: PrimOp::Add,
+            args,
+        } if args.len() == 2 => Some(ScalarExpr::CheckedAdd(
+            Box::new(lower_scalar_expr(&args[0], parameters)?),
+            Box::new(lower_scalar_expr(&args[1], parameters)?),
+        )),
         _ => None,
     }
 }

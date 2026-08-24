@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics and does not claim a GPU backend.
 
 ((kind . cml-compute-contract)
- (version . (0 2))
+ (version . (0 3))
  (status . analysis-only)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -18,11 +18,13 @@
                    (unknown-facts . reject)
                    (fallback . cpu)))
  (semantic-invariants . ((implicit-exact-to-inexact-conversion . forbidden)
+                         (i32-addition . checked-overflow)
                          (backend-selection-changes-result . forbidden)
                          (source-language-gpu-primitive . absent)))
  (current-boundary . ((bulk-forms-recognized . (map reduce))
                       (typed-buffer-ir . present-from-my-lisp-contract-2.2)
                       (typed-buffer-elements . (i32 f32))
+                      (kernel-ir . (parameter exact-integer checked-add))
                       (cpu-compute-backend . absent)
                       (gpu-emitter . absent)
                       (automatic-offload . absent)))

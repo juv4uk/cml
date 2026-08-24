@@ -4,12 +4,13 @@ use std::fs;
 fn machine_readable_compute_contract_matches_analysis_m0() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 2))",
+        "(version . (0 3))",
         "(status . analysis-only)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
         "(implicit-exact-to-inexact-conversion . forbidden)",
         "(typed-buffer-ir . present-from-my-lisp-contract-2.2)",
+        "(kernel-ir . (parameter exact-integer checked-add))",
         "(cpu-compute-backend . absent)",
         "(gpu-emitter . absent)",
     ] {
