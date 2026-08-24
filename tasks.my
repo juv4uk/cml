@@ -171,7 +171,7 @@
      (capabilities . (compiler rust fpga protocol testing proof))
      (done . t)
      (description . "Encode validated tagged register inputs into fpga-lisp ISA 1.1 while preserving the legacy frame byte-for-byte.")
-     (context . "done 2026-08-24: FpgaJobV1 accepts at most 16 unique R0..R15 opaque tagged words and emits the extended boot frame. fpga-lisp's bridge validates and preserves it. Seven targeted Rust transport tests and four Python bridge tests pass. No physical payload or automatic graph buffer-to-register lowering is claimed; fpga-input-edge remains absent. compute-contract 0.24; fpga-lisp 092aa3b.")))
+     (context . "done 2026-08-24: FpgaJobV1 accepts at most 16 unique R0..R15 opaque tagged words and emits the extended boot frame. fpga-lisp's bridge validates and preserves it. Seven targeted Rust transport tests and four Python bridge tests pass. One operator-gated physical COM4 path returned tagged result word 7 with no hardware error; blanket conformance and automatic graph buffer-to-register lowering remain unclaimed, and fpga-input-edge remains absent. compute-contract 0.25; fpga-lisp e444b45.")))
    ("CML-EXECUTION-MODULE-BOUNDARY-V0.2" .
     ((priority . 0.45)
      (capabilities . (compiler rust architecture refactor testing))
