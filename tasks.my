@@ -129,4 +129,10 @@
      (capabilities . (compiler rust compute gpu cuda testing proof))
      (done . t)
      (description . "Attach real GPU runtimes to the Execution Graph through one vendor-neutral registered NodeExecutor boundary, preserving fail-closed selection.")
-     (context . "done 2026-08-24: HeterogeneousGraphExecutor registers explicit GPU/FPGA executor names; CUDA and wgpu adapters implement the same NodeExecutor map boundary behind feature gates. A fake portable executor proves the graph contains no vendor branch, and the ignored live test dispatched cuda:0 through the graph on GTX 1050 Ti device 0 with #i32(1 2 3) -> #i32(2 3 4). Unregistered targets remain TargetUnavailable. compute-contract 0.17 records M1."))))))
+     (context . "done 2026-08-24: HeterogeneousGraphExecutor registers explicit GPU/FPGA executor names; CUDA and wgpu adapters implement the same NodeExecutor map boundary behind feature gates. A fake portable executor proves the graph contains no vendor branch, and the ignored live test dispatched cuda:0 through the graph on GTX 1050 Ti device 0 with #i32(1 2 3) -> #i32(2 3 4). Unregistered targets remain TargetUnavailable. compute-contract 0.17 records M1.")))
+   ("CML-FPGA-JOB-PROTOCOL-M2A" .
+    ((priority . 0.8)
+     (capabilities . (compiler rust fpga protocol testing proof))
+     (done . t)
+     (description . "Formalize the real fpga-lisp ISA-1.0 bootloader/monitor lifecycle behind a versioned transport-independent CML job protocol before attaching physical COM4.")
+     (context . "done 2026-08-24: FpgaJobV1 emits the exact u16-le count plus u32-le program frame, validates 1..4095 words and R0..R15 before side effects, models REG 0x01 and ERR 0x04 monitor queries, decodes signed 28-bit FIXNUM values, and preserves hardware error PC. FpgaTransport separates Windows COM4/native serial/simulation/PCIe from compiler semantics. Graph attachment remains explicitly pending GraphValue::LispWord rather than misrepresenting tagged words as numeric buffers. compute-contract 0.18; 4 protocol tests pass."))))))

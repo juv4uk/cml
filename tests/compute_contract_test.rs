@@ -4,7 +4,7 @@ use std::fs;
 fn machine_readable_compute_contract_matches_implementation() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 17))",
+        "(version . (0 18))",
         "(status . experimental-runtime)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -39,6 +39,11 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(unregistered-targets . fail-closed)",
         "(publication . atomic-on-whole-graph-success)",
         "(raw-cross-device-pointers . forbidden)",
+        "(fpga-job-protocol . ((version . 1)",
+        "(status . host-contract-m2a)",
+        "(wire-authority . fpga-lisp-isa-1.0)",
+        "(execution-graph-attachment . blocked-on-graph-value-lisp-word)",
+        "(fpga-job-protocol . \"src/fpga_transport.rs\")",
         "(execution-graph . \"src/execution.rs\")",
         "(wgpu-runtime . \"src/gpu_wgpu_runtime.rs\")",
         "(cuda-emitter . \"src/gpu_cuda.rs\")",
@@ -52,7 +57,7 @@ fn machine_readable_compute_contract_matches_implementation() {
 
     let compatibility = fs::read_to_string("compatibility.my").unwrap();
     assert!(
-        compatibility.contains("(compute-analysis . ((contract . (0 17))"),
+        compatibility.contains("(compute-analysis . ((contract . (0 18))"),
         "compatibility.my compute contract version drifted from compute-contract.my"
     );
 }
