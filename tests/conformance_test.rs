@@ -66,6 +66,14 @@ fn parse_error_line(line: &str) -> Option<(String, String)> {
     ))
 }
 
+fn parse_since_contract(line: &str) -> Option<(u32, u32)> {
+    let marker = "(since-contract . (";
+    let start = line.find(marker)? + marker.len();
+    let end = line[start..].find(')')? + start;
+    let mut parts = line[start..end].split_whitespace();
+    Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
+}
+
 // Errors visible from syntax alone are compiler-front-end results; operand
 // type errors still run on FPGA and come back through RESULT_ERROR.
 // Синтаксично видимі помилки повертає front-end, type errors — FPGA.
@@ -236,6 +244,7 @@ fn test_conformance() {
     symbol_table.insert("NIL".to_string(), 0);
     symbol_table.insert("TRUE".to_string(), 1);
     symbol_table.insert("T".to_string(), 1);
+    let mut unsupported_newer_contract = 0;
     
     // Run tests
     for line in fixture_content.lines() {
@@ -246,6 +255,11 @@ fn test_conformance() {
         
         // Let's only run Tier 1 constitutive tests for now to prove the pipeline
         if !line.contains("(tier . 1)") {
+            continue;
+        }
+
+        if parse_since_contract(line).is_some_and(|version| version > (2, 0)) {
+            unsupported_newer_contract += 1;
             continue;
         }
         
@@ -367,4 +381,8 @@ fn test_conformance() {
             assert_eq!(actual, expected_str.unwrap(), "Test failed for {}", expr_str);
         }
     }
+    assert!(
+        unsupported_newer_contract > 0,
+        "the shared suite should exercise the FPGA backend's explicit contract gate"
+    );
 }

@@ -11,8 +11,37 @@
 
 use crate::ast::Expr;
 use crate::ir::{Ir, Params, PrimOp, Quoted};
+use std::fmt;
 
-pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, String> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LowerErrorKind {
+    Arity,
+    InvalidForm,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LowerError {
+    pub kind: LowerErrorKind,
+    pub detail: String,
+}
+
+impl LowerError {
+    fn arity(detail: impl Into<String>) -> Self {
+        Self { kind: LowerErrorKind::Arity, detail: detail.into() }
+    }
+
+    fn invalid_form(detail: impl Into<String>) -> Self {
+        Self { kind: LowerErrorKind::InvalidForm, detail: detail.into() }
+    }
+}
+
+impl fmt::Display for LowerError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{:?}: {}", self.kind, self.detail)
+    }
+}
+
+pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
     exprs.iter().map(lower_expr).collect()
 }
 
@@ -22,7 +51,7 @@ pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, String> {
 /// backend depends on that form); this backend-facing pass reifies every
 /// primitive use into `App(Var(...), ...)`, recursively, so a local binding
 /// can shadow `+`, `car`, etc. through normal environment lookup.
-pub fn lower_program_with_first_class_builtins(exprs: &[Expr]) -> Result<Vec<Ir>, String> {
+pub fn lower_program_with_first_class_builtins(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
     lower_program(exprs).map(|program| program.into_iter().map(reify_primitive_calls).collect())
 }
 
@@ -73,7 +102,7 @@ fn primitive_name(op: PrimOp) -> &'static str {
     }
 }
 
-pub fn lower_expr(expr: &Expr) -> Result<Ir, String> {
+pub fn lower_expr(expr: &Expr) -> Result<Ir, LowerError> {
     match expr {
         Expr::Integer(n) => Ok(Ir::Int(*n)),
         // compiler.rs's compile_expr emits a direct LOADSYM literal for a
@@ -84,12 +113,12 @@ pub fn lower_expr(expr: &Expr) -> Result<Ir, String> {
         Expr::Symbol(s) => lower_symbol(s),
         Expr::List(list) => lower_list(list),
         Expr::DottedList(_, _) => {
-            Err("unquoted dotted list unsupported (matches compiler.rs's compile_expr)".to_string())
+            Err(LowerError::invalid_form("unquoted dotted list unsupported (matches compiler.rs's compile_expr)"))
         }
     }
 }
 
-fn lower_symbol(s: &str) -> Result<Ir, String> {
+fn lower_symbol(s: &str) -> Result<Ir, LowerError> {
     match s.to_uppercase().as_str() {
         "T" => Ok(Ir::True),
         "NIL" => Ok(Ir::Nil),
@@ -97,7 +126,7 @@ fn lower_symbol(s: &str) -> Result<Ir, String> {
     }
 }
 
-fn lower_list(list: &[Expr]) -> Result<Ir, String> {
+fn lower_list(list: &[Expr]) -> Result<Ir, LowerError> {
     if list.is_empty() {
         return Ok(Ir::Nil);
     }
@@ -108,9 +137,10 @@ fn lower_list(list: &[Expr]) -> Result<Ir, String> {
     }
 }
 
-fn lower_call(func: &str, args: &[Expr]) -> Result<Ir, String> {
+fn lower_call(func: &str, args: &[Expr]) -> Result<Ir, LowerError> {
     match func {
         "quote" if args.len() == 1 => Ok(Ir::Quote(lower_quoted(&args[0])?)),
+        "quote" => Err(LowerError::arity("quote expects exactly one argument")),
         "cond" => lower_cond(args),
         "lambda" if args.len() >= 2 => lower_lambda(args),
         "let" if args.len() == 2 => lower_let(args),
@@ -126,72 +156,72 @@ fn lower_call(func: &str, args: &[Expr]) -> Result<Ir, String> {
     }
 }
 
-fn lower_prim(op: PrimOp, args: &[Expr]) -> Result<Ir, String> {
+fn lower_prim(op: PrimOp, args: &[Expr]) -> Result<Ir, LowerError> {
     Ok(Ir::Prim { op, args: args.iter().map(lower_expr).collect::<Result<_, _>>()? })
 }
 
-fn lower_generic_call(func_expr: &Expr, args: &[Expr]) -> Result<Ir, String> {
+fn lower_generic_call(func_expr: &Expr, args: &[Expr]) -> Result<Ir, LowerError> {
     Ok(Ir::App {
         func: Box::new(lower_expr(func_expr)?),
         args: args.iter().map(lower_expr).collect::<Result<_, _>>()?,
     })
 }
 
-fn lower_cond(branches: &[Expr]) -> Result<Ir, String> {
+fn lower_cond(branches: &[Expr]) -> Result<Ir, LowerError> {
     let mut lowered = Vec::with_capacity(branches.len());
     for branch in branches {
         let Expr::List(pair) = branch else {
-            return Err("malformed cond branch (matches compiler.rs's compile_cond)".to_string());
+            return Err(LowerError::invalid_form("malformed cond branch (matches compiler.rs's compile_cond)"));
         };
         let [test, body] = pair.as_slice() else {
-            return Err("malformed cond branch (matches compiler.rs's compile_cond)".to_string());
+            return Err(LowerError::invalid_form("malformed cond branch (matches compiler.rs's compile_cond)"));
         };
         lowered.push((lower_expr(test)?, lower_expr(body)?));
     }
     Ok(Ir::Cond { branches: lowered })
 }
 
-fn lower_lambda(args: &[Expr]) -> Result<Ir, String> {
+fn lower_lambda(args: &[Expr]) -> Result<Ir, LowerError> {
     let params = lower_params(&args[0])?;
     let body = lower_expr(&args[1])?;
     Ok(Ir::Lambda { params, body: Box::new(body) })
 }
 
-fn lower_params(expr: &Expr) -> Result<Params, String> {
+fn lower_params(expr: &Expr) -> Result<Params, LowerError> {
     match expr {
         Expr::List(params) => Ok(Params::Fixed(symbols(params)?)),
         Expr::DottedList(list, tail) => {
             let Expr::Symbol(rest) = &**tail else {
-                return Err("dotted param list's tail must be a symbol".to_string());
+                return Err(LowerError::invalid_form("dotted param list's tail must be a symbol"));
             };
             Ok(Params::Variadic { fixed: symbols(list)?, rest: rest.to_uppercase() })
         }
         Expr::Symbol(rest) => Ok(Params::AllRest(rest.to_uppercase())),
-        _ => Err("malformed lambda parameter list".to_string()),
+        _ => Err(LowerError::invalid_form("malformed lambda parameter list")),
     }
 }
 
-fn symbols(exprs: &[Expr]) -> Result<Vec<String>, String> {
+fn symbols(exprs: &[Expr]) -> Result<Vec<String>, LowerError> {
     exprs
         .iter()
         .map(|e| match e {
             Expr::Symbol(s) => Ok(s.to_uppercase()),
-            _ => Err("expected a symbol in parameter list".to_string()),
+            _ => Err(LowerError::invalid_form("expected a symbol in parameter list")),
         })
         .collect()
 }
 
-fn lower_let(args: &[Expr]) -> Result<Ir, String> {
+fn lower_let(args: &[Expr]) -> Result<Ir, LowerError> {
     let Expr::List(bindings) = &args[0] else {
-        return Err("malformed let (matches compiler.rs's compile_let)".to_string());
+        return Err(LowerError::invalid_form("malformed let (matches compiler.rs's compile_let)"));
     };
     let mut lowered_bindings = Vec::with_capacity(bindings.len());
     for binding in bindings {
         let Expr::List(pair) = binding else {
-            return Err("malformed let binding".to_string());
+            return Err(LowerError::invalid_form("malformed let binding"));
         };
         let [Expr::Symbol(name), value] = pair.as_slice() else {
-            return Err("malformed let binding".to_string());
+            return Err(LowerError::invalid_form("malformed let binding"));
         };
         lowered_bindings.push((name.to_uppercase(), lower_expr(value)?));
     }
@@ -199,15 +229,15 @@ fn lower_let(args: &[Expr]) -> Result<Ir, String> {
     Ok(Ir::Let { bindings: lowered_bindings, body: Box::new(body) })
 }
 
-fn lower_def(args: &[Expr]) -> Result<Ir, String> {
+fn lower_def(args: &[Expr]) -> Result<Ir, LowerError> {
     let Expr::Symbol(name) = &args[0] else {
-        return Err("def expects a symbol name (matches compiler.rs's compile_def)".to_string());
+        return Err(LowerError::invalid_form("def expects a symbol name (matches compiler.rs's compile_def)"));
     };
     let value = lower_expr(&args[1])?;
     Ok(Ir::Def { name: name.to_uppercase(), value: Box::new(value) })
 }
 
-fn lower_quoted(expr: &Expr) -> Result<Quoted, String> {
+fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
     match expr {
         Expr::Integer(n) => Ok(Quoted::Int(*n)),
         Expr::String(s) => Ok(Quoted::Str(s.to_uppercase())),

@@ -205,7 +205,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
     let mut checked = 0;
     let mut checked_errors = 0;
     let mut selected = 0;
-    let mut unsupported_errors = 0;
+    let unsupported_errors = 0;
     let mut unsupported_inexact = 0;
     let mut unsupported_newer_contract = 0;
     let mut admitted_newer_contract = 0;
@@ -250,11 +250,16 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
             None => {}
         }
         if let Some((expr_str, expected_kind)) = parse_error_line(line) {
-            // Malformed special forms currently fall through to generic
-            // application during lowering. They need a typed compile
-            // diagnostic before this fixture can count as conforming.
             if expr_str == "(quote a b)" {
-                unsupported_errors += 1;
+                let exprs = parser::parse(&expr_str).expect("contract fixture must parse");
+                match lower::lower_program_with_first_class_builtins(&exprs) {
+                    Err(error) if error.kind == lower::LowerErrorKind::Arity => {
+                        checked_errors += 1;
+                    }
+                    result => failures.push(format!(
+                        "{expr_str}: expected typed Arity lowering error, got {result:?}"
+                    )),
+                }
                 continue;
             }
             match compile_and_run(&expr_str, &format!("conf_error_{i}")) {

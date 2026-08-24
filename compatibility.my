@@ -91,8 +91,8 @@
                            (self-recursive-def . "letrec-placeholder-pair-plus-backpatch, same idea as compile_def on fpga-lisp, here a literal C struct-field mutation instead of SETCDR")))
                                (conformance . ((tier-1-matrix . ((selected . 35)
                                                   (supported-value . 25)
-                                                  (supported-error . 6)
-                                                  (unsupported-error . 1)
+                                                  (supported-error . 7)
+                                                  (unsupported-error . 0)
                                                   (unsupported-inexact . 3)
                                                   (unsupported-newer-contract . 0)
                                                   (admitted-newer-contract-by-capability . 1)))
@@ -116,7 +116,7 @@
                (known-gaps . (no-eight-argument-limit-enforced-unlike-fpga-lisp-register-file
                               defmacro-supported-only-via-shared-macros-rs-not-macros-my
                               builtin-set-is-only-cmls-seven-primitives-plus-add
-                              malformed-special-form-compile-diagnostics-not-yet-contract-equivalent
+                              malformed-special-forms-other-than-quote-not-yet-systematically-classified
                               fpga-lisp-backend-remains-contract-2.0))
                (differs-from-fpga-lisp . (equal?-is-structural-recursive-v-equal_p-here-vs-fpga-lisps-r11-worklist-but-both-independently-verified-correct
                                           no-eight-argument-register-ceiling-args-is-a-real-cons-list-not-fixed-registers))

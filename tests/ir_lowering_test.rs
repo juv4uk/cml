@@ -6,6 +6,7 @@ use std::fs;
 
 use cml::ir::Ir;
 use cml::lower::lower_expr;
+use cml::lower::LowerErrorKind;
 use cml::macros::MacroExpander;
 use cml::parser;
 
@@ -83,4 +84,12 @@ fn lowers_the_real_length_pair_from_core_my() {
         // never a bare literal falling through unexpectedly.
         assert!(matches!(ir, Ir::Def { .. } | Ir::App { .. }));
     }
+}
+
+#[test]
+fn malformed_quote_has_a_typed_arity_error() {
+    let exprs = parser::parse("(quote a b)").unwrap();
+    let error = lower_expr(&exprs[0]).unwrap_err();
+    assert_eq!(error.kind, LowerErrorKind::Arity);
+    assert_eq!(error.to_string(), "Arity: quote expects exactly one argument");
 }
