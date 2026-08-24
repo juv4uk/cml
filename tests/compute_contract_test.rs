@@ -14,7 +14,7 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(required-i32-overflow-proof . true)",
         "(f32-rounding-contract . affine-x-plus-integer-per-literal-bit-equivalence)",
         "(cpu-compute-backend . (present-reference i32-map-range-proven f32-map-affine-proven))",
-        "(c-backend-reference . (i32-buffer-literal source-level-i32-map cpu-differential checked-overflow))",
+        "(c-backend-reference . (i32-buffer-literal source-level-i32-map cpu-differential checked-overflow checked-allocation))",
         "(differential-oracle . \"my-lisp path dev-dependency\")",
         "(gpu-emitter . (wgsl-source-only admitted-map-regions))",
         "(cuda-emitter . (cuda-c-source-only admitted-map-regions))",

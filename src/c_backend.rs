@@ -89,12 +89,19 @@ static Value NIL_V = { TAG_NIL, { .i = 0 } };
 static Value TRUE_V = { TAG_TRUE, { .i = 0 } };
 static Value *global_env = &NIL_V;
 
-static Value *mk_int(long n) { Value *v = malloc(sizeof(Value)); v->tag = TAG_INT; v->u.i = n; return v; }
-static Value *mk_sym(const char *s) { Value *v = malloc(sizeof(Value)); v->tag = TAG_SYM; v->u.sym = s; return v; }
-static Value *mk_cons(Value *a, Value *b) { Value *v = malloc(sizeof(Value)); v->tag = TAG_CONS; v->u.cons.car = a; v->u.cons.cdr = b; return v; }
-static Value *mk_i32_buffer(const int *data, size_t len) { Value *v = malloc(sizeof(Value)); v->tag = TAG_I32_BUFFER; v->u.i32_buffer.data = malloc(len * sizeof(int)); v->u.i32_buffer.len = len; memcpy(v->u.i32_buffer.data, data, len * sizeof(int)); return v; }
-static Value *mk_closure(Value *(*fn)(Value*, Value*), Value *env) { Value *v = malloc(sizeof(Value)); v->tag = TAG_CLOSURE; v->u.closure.fn = fn; v->u.closure.env = env; return v; }
-static Value *mk_builtin(const char *name, Value *(*fn)(Value*, Value*)) { Value *v = malloc(sizeof(Value)); v->tag = TAG_BUILTIN; v->u.builtin.name = name; v->u.builtin.fn = fn; return v; }
+static void runtime_error(const char *kind, const char *detail);
+static void *checked_malloc(size_t bytes) {
+    void *memory = malloc(bytes == 0 ? 1 : bytes);
+    if (memory == NULL) runtime_error("OutOfMemory", "C backend heap allocation");
+    return memory;
+}
+
+static Value *mk_int(long n) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_INT; v->u.i = n; return v; }
+static Value *mk_sym(const char *s) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_SYM; v->u.sym = s; return v; }
+static Value *mk_cons(Value *a, Value *b) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_CONS; v->u.cons.car = a; v->u.cons.cdr = b; return v; }
+static Value *mk_i32_buffer(const int *data, size_t len) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_I32_BUFFER; v->u.i32_buffer.data = checked_malloc(len * sizeof(int)); v->u.i32_buffer.len = len; memcpy(v->u.i32_buffer.data, data, len * sizeof(int)); return v; }
+static Value *mk_closure(Value *(*fn)(Value*, Value*), Value *env) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_CLOSURE; v->u.closure.fn = fn; v->u.closure.env = env; return v; }
+static Value *mk_builtin(const char *name, Value *(*fn)(Value*, Value*)) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_BUILTIN; v->u.builtin.name = name; v->u.builtin.fn = fn; return v; }
 
 static Value *v_car(Value *v) { return v->u.cons.car; }
 static Value *v_cdr(Value *v) { return v->u.cons.cdr; }
@@ -198,7 +205,7 @@ static Value *v_apply(Value *callable, Value *args) {
 static Value *v_map_i32_buffer(Value *callable, Value *buffer) {
     require_tag(buffer, TAG_I32_BUFFER, "numeric-buffer-map");
     size_t len = buffer->u.i32_buffer.len;
-    int *out = malloc(len * sizeof(int));
+    int *out = checked_malloc(len * sizeof(int));
     for (size_t i = 0; i < len; i++) {
         Value *mapped = v_apply(callable, mk_cons(mk_int(buffer->u.i32_buffer.data[i]), &NIL_V));
         require_tag(mapped, TAG_INT, "numeric-buffer-map");

@@ -163,6 +163,6 @@
                                           no-eight-argument-register-ceiling-args-is-a-real-cons-list-not-fixed-registers))
                (error-handling . ((mechanism . "CompileError/MacroError enums, not panic!")
                                   (typed-buffer . ((i32 . supported) (f32 . UnsupportedTypedBuffer)))
-                                  (numeric-buffer-map . ((i32 . supported) (f32 . UnsupportedTypedBuffer)))
+                                  (numeric-buffer-map . ((i32 . supported) (f32 . UnsupportedTypedBuffer) (allocation-failure . OutOfMemory)))
                                   (verified . "tests/c_backend_test.rs's 4 macro_*/nested_def_returns_graceful_error tests")))
                (not-wired-into-cml . "macros.my (a separate .my-hosted defmacro-expander, docs/tooling-language-priority.md) is unrelated to c-backend and not consumed by it either -- c-backend uses the same Rust macros.rs pipeline as fpga-lisp does"))))
