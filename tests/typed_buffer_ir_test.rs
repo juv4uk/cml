@@ -32,7 +32,7 @@ fn canonical_f32_buffer_preserves_binary32_bits() {
 #[test]
 fn ratified_buffer_makes_map_a_fail_closed_gpu_candidate() {
     let analysis = analyze(&lower_one(
-        "(map (lambda (x) (+ x 1)) #i32(1 2 3))",
+        "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3))",
     ));
     assert_eq!(analysis.shape, ExecutionShape::ElementWise);
     assert_eq!(analysis.effect, EffectClass::Pure);
@@ -49,6 +49,28 @@ fn ratified_buffer_makes_map_a_fail_closed_gpu_candidate() {
         })
     );
     assert!(analysis.gpu_eligible());
+}
+
+#[test]
+fn i32_overflow_without_a_range_proof_blocks_offload() {
+    let analysis = analyze(&lower_one(
+        "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(2147483647))",
+    ));
+    assert!(analysis
+        .gpu_blockers
+        .contains(&cml::compute::AdmissionBlocker::IntegerOverflowNotProven));
+    assert!(!analysis.gpu_eligible());
+}
+
+#[test]
+fn f32_offload_waits_for_an_explicit_per_operation_rounding_contract() {
+    let analysis = analyze(&lower_one(
+        "(numeric-buffer-map (lambda (x) (+ x 0)) #f32(1.0 2.0))",
+    ));
+    assert!(analysis
+        .gpu_blockers
+        .contains(&cml::compute::AdmissionBlocker::FloatRoundingNotDefined));
+    assert!(!analysis.gpu_eligible());
 }
 
 #[test]

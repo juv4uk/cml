@@ -12,18 +12,18 @@
               ; compatibility claim.
               (contract . (2 0))
               (tested-sha . "164608cc2b1c08b815362551d6a9483fa762db7b")
-              (observed-upstream-contract . (2 2))
-              (observed-upstream-sha . "c42c7cb")
+              (observed-upstream-contract . (2 3))
+              (observed-upstream-sha . "9b93cfd")
               (status . upgrade-required)))
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (1 0))
             (tested-sha . "6c08e42975eb05eb143ee4cc66bcc759b6f92a1b")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
- (compute-analysis . ((contract . (0 3))
+ (compute-analysis . ((contract . (0 4))
                       (status . analysis-only)
                       (execution-shapes . (scalar element-wise reduction irregular))
                       (gpu-admission . fail-closed)
-                      (note . "map/reduce regions and my-lisp 2.2 i32/f32 Buffer IR are recognized; eligible lambdas must lower to the allocation-free scalar Kernel IR (parameter/exact-integer/checked-add); CPU/GPU emitters remain absent")))
+                      (note . "canonical numeric-buffer-map from my-lisp 2.3 lowers to scalar Kernel IR; i32 requires a literal range proof, f32 offload remains blocked until per-operation rounding matches the evaluator; CPU/GPU emitters remain absent")))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom equal? defmacro
                def recursive-def-letrec

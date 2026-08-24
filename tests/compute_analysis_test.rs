@@ -84,7 +84,10 @@ fn proven_fixed_width_contiguous_representation_unlocks_gpu_candidate() {
         StorageClass::ContiguousBuffer,
         NumericDomain::FixedWidthInteger,
     );
-    assert!(analysis.gpu_eligible());
+    assert!(!analysis.gpu_eligible());
+    assert!(analysis
+        .gpu_blockers
+        .contains(&AdmissionBlocker::IntegerOverflowNotProven));
 }
 
 #[test]

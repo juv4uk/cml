@@ -51,6 +51,8 @@ pub enum AdmissionBlocker {
     StorageNotContiguous,
     NumericDomainNotRepresentable,
     KernelNotLowerable,
+    IntegerOverflowNotProven,
+    FloatRoundingNotDefined,
 }
 
 /// Backend-neutral scalar subset allowed inside a bulk kernel. Every node is
@@ -129,6 +131,17 @@ pub fn analyze(ir: &Ir) -> ComputeAnalysis {
     if region.as_ref().is_some_and(|region| region.kernel.is_none()) {
         gpu_blockers.push(AdmissionBlocker::KernelNotLowerable);
     }
+    match (numeric_domain, region.as_ref()) {
+        (NumericDomain::FixedWidthInteger, Some(region))
+            if !i32_range_proven(region) =>
+        {
+            gpu_blockers.push(AdmissionBlocker::IntegerOverflowNotProven);
+        }
+        (NumericDomain::InexactFloat, Some(_)) => {
+            gpu_blockers.push(AdmissionBlocker::FloatRoundingNotDefined);
+        }
+        _ => {}
+    }
 
     ComputeAnalysis { shape, effect, storage, numeric_domain, region, gpu_blockers }
 }
@@ -137,7 +150,7 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
     let Ir::App { func, args } = ir else { return None };
     let Ir::Var(name) = &**func else { return None };
     match (name.as_str(), args.as_slice()) {
-        ("MAP", [function, input]) => Some(ComputeRegion {
+        ("MAP" | "NUMERIC-BUFFER-MAP", [function, input]) => Some(ComputeRegion {
             operation: BulkOperation::Map,
             function: function.clone(),
             input: input.clone(),
@@ -152,6 +165,26 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
             kernel: lower_kernel(function, 2),
         }),
         _ => None,
+    }
+}
+
+fn i32_range_proven(region: &ComputeRegion) -> bool {
+    let (Some(kernel), Ir::Buffer(BufferLiteral::I32(input))) = (&region.kernel, &region.input)
+    else {
+        return false;
+    };
+    input.iter().all(|element| {
+        eval_i32_range(&kernel.body, &[i64::from(*element)])
+            .is_some_and(|value| i32::try_from(value).is_ok())
+    })
+}
+
+fn eval_i32_range(expression: &ScalarExpr, parameters: &[i64]) -> Option<i64> {
+    match expression {
+        ScalarExpr::Parameter(index) => parameters.get(*index).copied(),
+        ScalarExpr::ExactInteger(value) => Some(*value),
+        ScalarExpr::CheckedAdd(left, right) => eval_i32_range(left, parameters)?
+            .checked_add(eval_i32_range(right, parameters)?),
     }
 }
 
@@ -207,7 +240,7 @@ fn effect_of(ir: &Ir) -> EffectClass {
         ),
         Ir::Def { .. } => EffectClass::Stateful,
         Ir::App { func, args } => {
-            let known_pure_bulk = matches!(&**func, Ir::Var(name) if name == "MAP" || name == "REDUCE");
+            let known_pure_bulk = matches!(&**func, Ir::Var(name) if name == "MAP" || name == "NUMERIC-BUFFER-MAP" || name == "REDUCE");
             if known_pure_bulk {
                 join_effects(args.iter().map(effect_of))
             } else {
@@ -263,6 +296,8 @@ pub fn refine_representation(
             blocker,
             AdmissionBlocker::StorageNotContiguous
                 | AdmissionBlocker::NumericDomainNotRepresentable
+                | AdmissionBlocker::IntegerOverflowNotProven
+                | AdmissionBlocker::FloatRoundingNotDefined
         )
     });
     if storage != StorageClass::ContiguousBuffer {
@@ -270,5 +305,21 @@ pub fn refine_representation(
     }
     if !matches!(numeric_domain, NumericDomain::FixedWidthInteger | NumericDomain::InexactFloat) {
         analysis.gpu_blockers.push(AdmissionBlocker::NumericDomainNotRepresentable);
+    }
+    match numeric_domain {
+        NumericDomain::FixedWidthInteger
+            if analysis
+                .region
+                .as_ref()
+                .is_none_or(|region| !i32_range_proven(region)) =>
+        {
+            analysis
+                .gpu_blockers
+                .push(AdmissionBlocker::IntegerOverflowNotProven);
+        }
+        NumericDomain::InexactFloat => analysis
+            .gpu_blockers
+            .push(AdmissionBlocker::FloatRoundingNotDefined),
+        _ => {}
     }
 }
