@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 25))
+ (version . (0 26))
  (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -73,7 +73,7 @@
                      (edge-classes . ((data . typed-value-with-explicit-producer-dependency)
                                       (control . dependency-only)))
                      (buffer-transfer . host-staged-materialized-graph-value)
-                     (fpga-input-edge . absent-control-dependency-only)
+                     (fpga-input-edge . (host-staged-register-input-explicit control-dependency-only-for-jobs-without-input))
                      (implicit-source-order-dataflow . forbidden)
                      (unregistered-targets . fail-closed)
                      (publication . atomic-on-whole-graph-success)
@@ -89,7 +89,7 @@
                                            (error-status . 0x04)))
                        (result . signed-28-bit-fixnum-or-named-error)
                        (transport . (abstract command-process-binary-stdio))
-                       (execution-graph-attachment . (mock-transport-confirmed physical-com4-confirmed))
+                       (execution-graph-attachment . (mock-transport-confirmed physical-com4-confirmed-typed-buffer-input))
                        (physical-bridge . (windows-python-pyserial-com4))
                        (physical-device-evidence . (gw5a-25a windows-com4 graph-program-pass tagged-word-7 no-hardware-error))))
  (implementation . ((analysis . "src/compute.rs")

@@ -1,26 +1,20 @@
 use std::env;
-use std::fs;
 
 use cml::execution::{
     BufferId, ExecutionGraph, ExecutionOperation, ExecutionTarget, FpgaTransportNodeExecutor,
-    HeterogeneousGraphExecutor, NodeId, PlanNode,
+    GraphValue, HeterogeneousGraphExecutor, NodeId, PlanNode,
 };
 use cml::fpga_transport::{CommandFpgaTransport, FpgaJobV1};
+use cml::ir::BufferLiteral;
 
 #[test]
 #[ignore = "requires a connected fpga-lisp board and a manual RESET press"]
-fn execution_graph_runs_bootstrap_add_on_the_live_fpga() {
+fn execution_graph_runs_typed_buffer_add_on_the_live_fpga() {
     assert_eq!(env::var("CML_FPGA_LIVE").as_deref(), Ok("1"));
     let python = env::var("CML_FPGA_PYTHON").expect("set CML_FPGA_PYTHON to Windows py.exe");
     let bridge = env::var("CML_FPGA_BRIDGE_WINDOWS")
         .expect("set CML_FPGA_BRIDGE_WINDOWS to job_transport.py's Windows UNC path");
-    let binary = fs::read("../fpga-lisp/bootstrap_add_demo.bin")
-        .expect("assemble ../fpga-lisp/bootstrap_add_demo.bin first");
-    assert_eq!(binary.len() % 4, 0);
-    let words = binary
-        .chunks_exact(4)
-        .map(|word| u32::from_le_bytes(word.try_into().unwrap()))
-        .collect();
+    let words = vec![0xd201_0000, 0xb000_0000];
 
     let transport = CommandFpgaTransport::new(
         python,
@@ -40,15 +34,20 @@ fn execution_graph_runs_bootstrap_add_on_the_live_fpga() {
     let output = BufferId(1);
     let result = executor
         .execute(&ExecutionGraph {
-            inputs: vec![],
+            inputs: vec![(
+                BufferId(0),
+                GraphValue::Buffer(BufferLiteral::I32(vec![3, 4])),
+            )],
             nodes: vec![PlanNode {
                 id: NodeId(1),
-                operation: ExecutionOperation::FpgaProgram {
+                operation: ExecutionOperation::FpgaProgramWithBufferInput {
                     job: FpgaJobV1 {
                         program_words: words,
                         register_inputs: vec![],
-                        result_register: 9,
+                        result_register: 2,
                     },
+                    input: BufferId(0),
+                    first_register: 0,
                 },
                 output,
                 dependencies: vec![],
