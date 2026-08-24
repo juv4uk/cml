@@ -113,6 +113,7 @@ static int v_equal_p(Value *a, Value *b) {
 }
 
 static Value *v_add(Value *a, Value *b) { return mk_int(a->u.i + b->u.i); }
+static Value *v_sub(Value *a, Value *b) { return mk_int(a->u.i - b->u.i); }
 
 static void runtime_error(const char *kind, const char *detail) {
     fprintf(stderr, "%s: %s\n", kind, detail);
@@ -130,6 +131,10 @@ static void require_arity(Value *args, int expected, const char *name) {
     if (list_length(args) != expected) runtime_error("Arity", name);
 }
 
+static void require_min_arity(Value *args, int minimum, const char *name) {
+    if (list_length(args) < minimum) runtime_error("Arity", name);
+}
+
 static void require_tag(Value *value, Tag expected, const char *name) {
     if (value->tag != expected) runtime_error("Type", name);
 }
@@ -140,10 +145,32 @@ static Value *arg_at(Value *args, int index) {
 }
 
 static Value *builtin_add(Value *args, Value *env) { (void)env; require_arity(args, 2, "+"); require_tag(arg_at(args, 0), TAG_INT, "+"); require_tag(arg_at(args, 1), TAG_INT, "+"); return v_add(arg_at(args, 0), arg_at(args, 1)); }
+static Value *builtin_subtract(Value *args, Value *env) {
+    (void)env;
+    require_min_arity(args, 1, "-");
+    Value *result = arg_at(args, 0);
+    require_tag(result, TAG_INT, "-");
+    args = v_cdr(args);
+    if (args->tag == TAG_NIL) return mk_int(-result->u.i);
+    while (args->tag == TAG_CONS) {
+        Value *operand = v_car(args);
+        require_tag(operand, TAG_INT, "-");
+        result = v_sub(result, operand);
+        args = v_cdr(args);
+    }
+    return result;
+}
 static Value *builtin_cons(Value *args, Value *env) { (void)env; require_arity(args, 2, "cons"); return mk_cons(arg_at(args, 0), arg_at(args, 1)); }
 static Value *builtin_car(Value *args, Value *env) { (void)env; require_arity(args, 1, "car"); require_tag(arg_at(args, 0), TAG_CONS, "car"); return v_car(arg_at(args, 0)); }
 static Value *builtin_cdr(Value *args, Value *env) { (void)env; require_arity(args, 1, "cdr"); require_tag(arg_at(args, 0), TAG_CONS, "cdr"); return v_cdr(arg_at(args, 0)); }
-static Value *builtin_eq(Value *args, Value *env) { (void)env; require_arity(args, 2, "eq"); return v_eq(arg_at(args, 0), arg_at(args, 1)); }
+static Value *builtin_eq(Value *args, Value *env) {
+    (void)env;
+    require_arity(args, 2, "eq");
+    Value *left = arg_at(args, 0);
+    Value *right = arg_at(args, 1);
+    if (left->tag == TAG_CONS || right->tag == TAG_CONS) runtime_error("Type", "eq");
+    return v_eq(left, right);
+}
 static Value *builtin_atom(Value *args, Value *env) { (void)env; require_arity(args, 1, "atom"); return is_atom(arg_at(args, 0)) ? &TRUE_V : &NIL_V; }
 static Value *builtin_equal_p(Value *args, Value *env) { (void)env; require_arity(args, 2, "equal?"); return v_equal_p(arg_at(args, 0), arg_at(args, 1)) ? &TRUE_V : &NIL_V; }
 
@@ -164,8 +191,8 @@ static Value *env_lookup(Value *env, const char *name) {
         }
         env = env->u.cons.cdr;
     }
-    fprintf(stderr, "unbound variable: %s\n", name);
-    exit(1);
+    runtime_error("UnknownSymbol", name);
+    return &NIL_V;
 }
 
 static void bind_global(const char *name, Value *value) {
@@ -174,6 +201,7 @@ static void bind_global(const char *name, Value *value) {
 
 static void bootstrap_builtins(void) {
     bind_global("+", mk_builtin("+", builtin_add));
+    bind_global("-", mk_builtin("-", builtin_subtract));
     bind_global("CONS", mk_builtin("cons", builtin_cons));
     bind_global("CAR", mk_builtin("car", builtin_car));
     bind_global("CDR", mk_builtin("cdr", builtin_cdr));
@@ -363,6 +391,10 @@ impl CBackend {
         fn_body.push_str("    Value *args_cursor = args;\n");
         match params {
             Params::Fixed(names) => {
+                fn_body.push_str(&format!(
+                    "    require_arity(args, {}, \"lambda\");\n",
+                    names.len()
+                ));
                 for name in names {
                     fn_body.push_str(&format!(
                         "    env = mk_cons(mk_cons(mk_sym(\"{name}\"), v_car(args_cursor)), env);\n    args_cursor = v_cdr(args_cursor);\n"
@@ -370,6 +402,10 @@ impl CBackend {
                 }
             }
             Params::Variadic { fixed, rest } => {
+                fn_body.push_str(&format!(
+                    "    require_min_arity(args, {}, \"lambda\");\n",
+                    fixed.len()
+                ));
                 for name in fixed {
                     fn_body.push_str(&format!(
                         "    env = mk_cons(mk_cons(mk_sym(\"{name}\"), v_car(args_cursor)), env);\n    args_cursor = v_cdr(args_cursor);\n"

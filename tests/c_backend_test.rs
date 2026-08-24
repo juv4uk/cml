@@ -73,6 +73,19 @@ fn c_backend_prints_the_contractual_builtin_representation() {
 }
 
 #[test]
+fn c_backend_supports_first_class_subtraction() {
+    assert_eq!(compile_and_run_first_class("-", "builtin_subtract_print"), "#<builtin ->");
+    assert_eq!(compile_and_run_first_class("(- 5)", "builtin_subtract_unary"), "-5");
+    assert_eq!(compile_and_run_first_class("(- 20 3 2)", "builtin_subtract_many"), "15");
+}
+
+#[test]
+fn c_backend_rejects_subtraction_without_arguments() {
+    let run = compile_and_run_failure("(-)", "builtin_subtract_arity");
+    assert!(String::from_utf8_lossy(&run.stderr).contains("Arity: -"));
+}
+
+#[test]
 fn c_backend_rejects_a_non_callable_with_a_named_type_error() {
     let run = compile_and_run_failure("(42 1 2)", "non_callable");
     assert!(!run.status.success());
@@ -84,6 +97,26 @@ fn c_backend_rejects_wrong_builtin_arity_with_a_named_error() {
     let run = compile_and_run_failure("(+ 1)", "builtin_arity");
     assert!(!run.status.success());
     assert!(String::from_utf8_lossy(&run.stderr).starts_with("Arity:"));
+}
+
+#[test]
+fn c_backend_reports_contractual_core_error_kinds() {
+    for (code, stem, kind) in [
+        ("(car 5)", "error_car_int", "Type:"),
+        ("(car (quote ()))", "error_car_nil", "Type:"),
+        ("(eq (quote (1)) (quote (2)))", "error_eq_cons", "Type:"),
+        ("(undefined-symbol)", "error_unknown_symbol", "UnknownSymbol:"),
+        ("(cons 1)", "error_cons_arity", "Arity:"),
+        ("((lambda (a b . rest) a) 1)", "error_lambda_arity", "Arity:"),
+    ] {
+        let run = compile_and_run_failure(code, stem);
+        assert!(!run.status.success(), "{code} unexpectedly succeeded");
+        assert!(
+            String::from_utf8_lossy(&run.stderr).starts_with(kind),
+            "{code}: expected {kind}, stderr was {:?}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+    }
 }
 
 #[test]

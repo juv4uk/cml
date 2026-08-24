@@ -12,7 +12,12 @@ use cml::macros::MacroExpander;
 use cml::parser;
 
 const SUPPORTED_LANGUAGE_CONTRACT: (u32, u32) = (2, 0);
-const SUPPORTED_CAPABILITIES: &[&str] = &["first-class-builtins", "builtin-add", "builtin-car"];
+const SUPPORTED_CAPABILITIES: &[&str] = &[
+    "first-class-builtins",
+    "builtin-add",
+    "builtin-car",
+    "builtin-subtract",
+];
 
 fn parse_conformance_line(line: &str) -> Option<(String, String)> {
     let expr_marker = "(expr . \"";
@@ -24,6 +29,46 @@ fn parse_conformance_line(line: &str) -> Option<(String, String)> {
     let expected_end = line[expected_start..].find("\")")? + expected_start;
     let expected = &line[expected_start..expected_end];
     Some((expr.replace("\\\"", "\""), expected.replace("\\\"", "\"")))
+}
+
+fn parse_error_line(line: &str) -> Option<(String, String)> {
+    let expr_marker = "(expr . \"";
+    let expr_start = line.find(expr_marker)? + expr_marker.len();
+    let error_marker = "\") (error . \"";
+    let expr_end = line[expr_start..].find(error_marker)? + expr_start;
+    let error_start = expr_end + error_marker.len();
+    let error_end = line[error_start..].find("\")")? + error_start;
+    Some((line[expr_start..expr_end].replace("\\\"", "\""), line[error_start..error_end].to_string()))
+}
+
+fn compile_and_run(expr_str: &str, stem: &str) -> Result<std::process::Output, String> {
+    let exprs = parser::parse(expr_str).map_err(|error| format!("parser admission failed: {error:?}"))?;
+    let exprs = MacroExpander::new()
+        .process(&exprs)
+        .map_err(|error| format!("macro expansion failed: {error}"))?;
+    let program = lower::lower_program_with_first_class_builtins(&exprs)
+        .map_err(|error| format!("lowering failed: {error}"))?;
+    let c_source = CBackend::new()
+        .compile_program(&program)
+        .map_err(|error| format!("C emission failed: {error}"))?;
+    let c_path = format!("c_backend_{stem}.c");
+    let bin_path = format!("c_backend_{stem}");
+    fs::write(&c_path, &c_source).map_err(|error| error.to_string())?;
+    let compile = Command::new("gcc")
+        .arg(&c_path)
+        .arg("-o")
+        .arg(&bin_path)
+        .output()
+        .map_err(|error| error.to_string())?;
+    let _ = fs::remove_file(&c_path);
+    if !compile.status.success() {
+        return Err(format!("gcc failed: {}", String::from_utf8_lossy(&compile.stderr)));
+    }
+    let run = Command::new(format!("./{bin_path}"))
+        .output()
+        .map_err(|error| error.to_string())?;
+    let _ = fs::remove_file(&bin_path);
+    Ok(run)
 }
 
 fn parse_contract_version(line: &str, field: &str) -> Option<(u32, u32)> {
@@ -145,7 +190,7 @@ fn c_backend_accounts_for_every_contract_2_1_fixture_by_capability() {
 
     assert!(failures.is_empty(), "{} fixture(s) failed:\n{}", failures.len(), failures.join("\n"));
     assert_eq!(selected, supported + unsupported_capability);
-    assert_eq!((selected, supported, unsupported_capability), (3, 2, 1));
+    assert_eq!((selected, supported, unsupported_capability), (3, 3, 0));
     eprintln!(
         "contract-2.1 matrix: selected={selected} supported={supported} \
          unsupported-capability={unsupported_capability}"
@@ -158,6 +203,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
     let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read conformance.my");
 
     let mut checked = 0;
+    let mut checked_errors = 0;
     let mut selected = 0;
     let mut unsupported_errors = 0;
     let mut unsupported_inexact = 0;
@@ -203,8 +249,28 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
             }
             None => {}
         }
-        if line.contains("(error .") {
-            unsupported_errors += 1;
+        if let Some((expr_str, expected_kind)) = parse_error_line(line) {
+            // Malformed special forms currently fall through to generic
+            // application during lowering. They need a typed compile
+            // diagnostic before this fixture can count as conforming.
+            if expr_str == "(quote a b)" {
+                unsupported_errors += 1;
+                continue;
+            }
+            match compile_and_run(&expr_str, &format!("conf_error_{i}")) {
+                Ok(run) if !run.status.success()
+                    && String::from_utf8_lossy(&run.stderr)
+                        .starts_with(&format!("{expected_kind}:")) =>
+                {
+                    checked_errors += 1;
+                }
+                Ok(run) => failures.push(format!(
+                    "{expr_str}: expected {expected_kind} failure, status={}, stderr={:?}",
+                    run.status,
+                    String::from_utf8_lossy(&run.stderr)
+                )),
+                Err(error) => failures.push(format!("{expr_str}: {error}")),
+            }
             continue;
         }
         // fpga-lisp/c_backend have no inexact-number tag; compiler_test/
@@ -273,6 +339,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
 
     assert!(failures.is_empty(), "{} fixture(s) failed:\n{}", failures.len(), failures.join("\n"));
     let accounted = checked
+        + checked_errors
         + unsupported_errors
         + unsupported_inexact
         + unsupported_newer_contract;
@@ -282,7 +349,8 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
     );
     assert!(admitted_newer_contract > 0, "the shared suite should exercise capability-based admission");
     eprintln!(
-        "tier-1 matrix: selected={selected} supported={checked} unsupported-error={unsupported_errors} \
+        "tier-1 matrix: selected={selected} supported-value={checked} supported-error={checked_errors} \
+         unsupported-error={unsupported_errors} \
          unsupported-inexact={unsupported_inexact} unsupported-newer-contract={unsupported_newer_contract} \
          admitted-newer-contract={admitted_newer_contract}"
     );
