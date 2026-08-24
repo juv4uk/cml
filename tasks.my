@@ -159,4 +159,10 @@
      (capabilities . (compiler rust compute graph testing proof))
      (done . t)
      (description . "Separate typed data flow from control-only dependencies and reject source-order-dependent buffer consumption before designing FPGA payload transfer.")
-     (context . "done 2026-08-24: graph validation requires every consumed buffer to be a declared input or have a real producer explicitly listed as a dependency. Missing producers and implicit source-order dataflow return named errors. Numeric buffer edges are documented as host-staged materialized GraphValue transfers; the current CUDA->FPGA dependency is control-only because FpgaProgram has no typed input. compute-contract 0.22."))))))
+     (context . "done 2026-08-24: graph validation requires every consumed buffer to be a declared input or have a real producer explicitly listed as a dependency. Missing producers and implicit source-order dataflow return named errors. Numeric buffer edges are documented as host-staged materialized GraphValue transfers; the current CUDA->FPGA dependency is control-only because FpgaProgram has no typed input. compute-contract 0.22.")))
+   ("CML-EXECUTION-MODULE-BOUNDARY-V0.2" .
+    ((priority . 0.45)
+     (capabilities . (compiler rust architecture refactor testing))
+     (done . ())
+     (description . "Before CML v0.2, extract named scheduler and result-store boundaries from execution.rs so typed transfer work does not turn the graph executor into a monolith.")
+     (context . "debt recorded 2026-08-24 from Sakshi M3 witness review: current one-file scheduling/value-store logic is acceptable for v0.1 and all live claims remain valid. Refactor is a maintainability gate before v0.2, not an M3 correctness blocker; preserve behavior and contract-lock evidence."))))))
