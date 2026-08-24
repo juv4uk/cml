@@ -13,6 +13,7 @@ use crate::fpga_transport::{
 };
 use crate::ir::{BufferLiteral, Ir};
 use crate::execution_store::GraphValueStore;
+use crate::execution_scheduler::GraphScheduler;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub u32);
@@ -178,18 +179,11 @@ impl HeterogeneousGraphExecutor {
     pub fn execute(&self, graph: &ExecutionGraph) -> Result<ExecutionResult, GraphExecutionError> {
         validate_graph(graph)?;
         let mut values = GraphValueStore::from_inputs(&graph.inputs);
-        let mut completed = HashSet::new();
-        let mut execution_order = Vec::with_capacity(graph.nodes.len());
+        let mut scheduler = GraphScheduler::default();
 
-        while completed.len() < graph.nodes.len() {
-            let Some(node) = graph.nodes.iter().find(|node| {
-                !completed.contains(&node.id)
-                    && node
-                        .dependencies
-                        .iter()
-                        .all(|dependency| completed.contains(dependency))
-            }) else {
-                return Err(GraphExecutionError::DependencyCycle);
+        while !scheduler.is_finished(graph) {
+            let Some(node) = scheduler.next_ready(graph) else {
+                return Err(scheduler.cycle_error());
             };
 
             let output = match &node.operation {
@@ -282,11 +276,10 @@ impl HeterogeneousGraphExecutor {
             };
 
             values.publish(node.output, output);
-            completed.insert(node.id);
-            execution_order.push(node.id);
+            scheduler.complete(node.id);
         }
 
-        Ok(values.into_result(execution_order))
+        Ok(values.into_result(scheduler.finish()))
     }
 
     fn execute_map(&self, node: &PlanNode, ir: &Ir) -> Result<BufferLiteral, GraphExecutionError> {

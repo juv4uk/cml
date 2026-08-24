@@ -5,6 +5,7 @@ pub mod compiler;
 pub mod compute;
 pub mod execution;
 mod execution_store;
+mod execution_scheduler;
 pub mod fpga_transport;
 pub mod gpu_cuda;
 #[cfg(feature = "gpu-cuda")]
