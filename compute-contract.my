@@ -67,6 +67,8 @@
                                                    (cpu-buffer . (2 3 4))
                                                    (cuda-buffer . (3 4 5))
                                                    (fpga-word . 7)))
+                     (physical-evidence-scope . ((fpga . one-program-path-not-blanket-conformance)
+                                                 (heterogeneous . scheduler-order-and-results-not-payload-transfer)))
                      (cross-device-payload-transfer . absent)
                      (unregistered-targets . fail-closed)
                      (publication . atomic-on-whole-graph-success)

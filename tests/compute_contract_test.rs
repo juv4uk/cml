@@ -39,6 +39,8 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(fpga . (gw5a-25a windows-com4 graph-program-pass tagged-word-7))",
         "(heterogeneous . (cpu cuda fpga ordered-live-graph-pass))",
         "(execution-order . (cpu cuda fpga))",
+        "(fpga . one-program-path-not-blanket-conformance)",
+        "(heterogeneous . scheduler-order-and-results-not-payload-transfer)",
         "(cross-device-payload-transfer . absent)",
         "(unregistered-targets . fail-closed)",
         "(publication . atomic-on-whole-graph-success)",
