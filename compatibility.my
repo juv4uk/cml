@@ -19,11 +19,11 @@
             (isa . (1 0))
             (tested-sha . "6c08e42975eb05eb143ee4cc66bcc759b6f92a1b")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
- (compute-analysis . ((contract . (0 14))
+ (compute-analysis . ((contract . (0 15))
                       (status . experimental-cross-vendor-runtime)
                       (execution-shapes . (scalar element-wise reduction irregular))
                       (gpu-admission . fail-closed)
-                      (note . "CPU reference is differential-tested; admitted i32 and affine f32 maps emit portable WGSL and NVIDIA CUDA C from the same Compute IR admission. Optional gpu-wgpu provides portable dispatch/readback and rejects CPU adapters by default. Optional gpu-cuda discovers live devices as cross-vendor planner descriptors, compiles with NVRTC, loads PTX through the CUDA Driver API, launches, and reads back. VendorOptimized selected the live NVIDIA CUDA descriptor and the admitted i32 map passed on GTX 1050 Ti device 0; WSL requires /usr/lib/wsl/lib to precede the conflicting native Linux libcuda. ROCm and oneAPI Level Zero remain planned, with wgpu as their implemented portable path.")))
+                      (note . "CPU reference is differential-tested; admitted i32 and affine f32 maps emit portable WGSL and NVIDIA CUDA C from the same Compute IR admission. Optional gpu-wgpu provides portable dispatch/readback and rejects CPU adapters by default. Optional gpu-cuda discovers live devices as cross-vendor planner descriptors, compiles with NVRTC, loads PTX through the CUDA Driver API, launches, and reads back. Backend capabilities now retain live/planned/unsupported status before selection; only live capabilities can become planner descriptors. VendorOptimized selected the live NVIDIA CUDA descriptor and the admitted i32 map passed on GTX 1050 Ti device 0; WSL requires /usr/lib/wsl/lib to precede the conflicting native Linux libcuda. ROCm and oneAPI Level Zero remain planned, with wgpu as their implemented portable path; this host's Intel HD 530/Skylake is upstream-unsupported for WSL compute.")))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom equal? defmacro
                def recursive-def-letrec

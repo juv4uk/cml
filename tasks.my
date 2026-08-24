@@ -111,4 +111,10 @@
      (capabilities . (rust testing))
      (done . t)
      (description . "Establish a repository-wide rustfmt baseline as a dedicated mechanical change, then enforce cargo fmt --check without mixing formatting churn into semantic commits.")
-     (context . "done 2026-08-24: applied rustfmt only to package cml (not the sibling my-lisp path dependency), inspected the 21-file mechanical diff, and added cargo fmt -p cml -- --check to CI. Evidence before task closure: git diff --check clean; guix shell --pure format gate passed; full guix shell --pure cargo test --workspace passed, including C backend conformance, canonical CPU differential, GPU emitter contracts, and FPGA/iverilog conformance (189.45s)."))))))
+     (context . "done 2026-08-24: applied rustfmt only to package cml (not the sibling my-lisp path dependency), inspected the 21-file mechanical diff, and added cargo fmt -p cml -- --check to CI. Evidence before task closure: git diff --check clean; guix shell --pure format gate passed; full guix shell --pure cargo test --workspace passed, including C backend conformance, canonical CPU differential, GPU emitter contracts, and FPGA/iverilog conformance (189.45s).")))
+   ("CML-CAPABILITY-STATUS-GATE" .
+    ((priority . 0.45)
+     (capabilities . (compiler rust gpu proof))
+     (done . t)
+     (description . "Represent live, planned, and unsupported backend capabilities separately so unavailable hardware can never enter accelerator selection as a device descriptor.")
+     (context . "done 2026-08-24: BackendCapability and CapabilityStatus added before the existing live-descriptor-only planner. Tests prove planned/unsupported capabilities cannot become candidates and a live Intel Level Zero capability can use the vendor-optimized policy. compute-contract 0.15 and compatibility.my record the gate; docs/intel-runtime.md records the current Intel HD 530 native-Linux-versus-WSL boundary. Full guix shell --pure cargo test --workspace passed, including FPGA/iverilog conformance (175.60s)."))))))

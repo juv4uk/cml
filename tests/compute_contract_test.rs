@@ -4,7 +4,7 @@ use std::fs;
 fn machine_readable_compute_contract_matches_analysis_m0() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 14))",
+        "(version . (0 15))",
         "(status . experimental-runtime)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -26,6 +26,7 @@ fn machine_readable_compute_contract_matches_analysis_m0() {
         "(runtime-live-evidence . llvmpipe-cpu-vulkan-pass)",
         "(physical-gpu-evidence . (nvidia-gtx-1050-ti",
         "(accelerator-selection . (live-descriptors-only",
+        "capability-status-before-selection",
         "(nvidia . (wgpu cuda-live))",
         "(amd . (wgpu rocm-planned))",
         "(intel . (wgpu oneapi-level-zero-planned))",
@@ -39,4 +40,10 @@ fn machine_readable_compute_contract_matches_analysis_m0() {
             "compute contract lost {required}"
         );
     }
+
+    let compatibility = fs::read_to_string("compatibility.my").unwrap();
+    assert!(
+        compatibility.contains("(compute-analysis . ((contract . (0 15))"),
+        "compatibility.my compute contract version drifted from compute-contract.my"
+    );
 }

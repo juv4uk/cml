@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 14))
+ (version . (0 15))
  (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -45,6 +45,7 @@
                                                 cuda-device-zero
                                                 i32-map-pass))
                       (accelerator-selection . (live-descriptors-only
+                                                capability-status-before-selection
                                                 portable-first
                                                 vendor-optimized
                                                 cpu-adapters-rejected))
