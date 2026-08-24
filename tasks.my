@@ -117,4 +117,10 @@
      (capabilities . (compiler rust gpu proof))
      (done . t)
      (description . "Represent live, planned, and unsupported backend capabilities separately so unavailable hardware can never enter accelerator selection as a device descriptor.")
-     (context . "done 2026-08-24: BackendCapability and CapabilityStatus added before the existing live-descriptor-only planner. Tests prove planned/unsupported capabilities cannot become candidates and a live Intel Level Zero capability can use the vendor-optimized policy. compute-contract 0.15 and compatibility.my record the gate; docs/intel-runtime.md records the current Intel HD 530 native-Linux-versus-WSL boundary. Full guix shell --pure cargo test --workspace passed, including FPGA/iverilog conformance (175.60s)."))))))
+     (context . "done 2026-08-24: BackendCapability and CapabilityStatus added before the existing live-descriptor-only planner. Tests prove planned/unsupported capabilities cannot become candidates and a live Intel Level Zero capability can use the vendor-optimized policy. compute-contract 0.15 and compatibility.my record the gate; docs/intel-runtime.md records the current Intel HD 530 native-Linux-versus-WSL boundary. Full guix shell --pure cargo test --workspace passed, including FPGA/iverilog conformance (175.60s).")))
+   ("CML-EXECUTION-GRAPH-M0" .
+    ((priority . 0.8)
+     (capabilities . (compiler rust compute testing proof))
+     (done . t)
+     (description . "Add a device-neutral Execution Graph with logical buffers, dependencies, CPU reference execution, and fail-closed GPU/FPGA targets before attaching physical executors.")
+     (context . "done 2026-08-24: src/execution.rs adds explicit NodeId/BufferId, dependent numeric-buffer-map nodes, deterministic topological execution, atomic whole-graph publication, named structural/compute errors, and representable CPU/GPU/FPGA targets. Only CPU executes in M0; unregistered accelerator targets return TargetUnavailable. compute-contract 0.16 and compatibility.my record the boundary; tests/execution_graph_test.rs covers multi-node buffer flow, source-order independence, fail-closed accelerator targeting, missing dependencies, and cycles."))))))
