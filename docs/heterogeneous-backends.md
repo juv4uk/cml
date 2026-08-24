@@ -92,6 +92,16 @@ runs each one correctly) -- worth closing before claiming real parity.
 
 ## Incremental path (no rewrite)
 
+### Symbol ABI bridge (2026-08-24)
+
+`Compiler::compile_with_symbols` assigns per-program `LOADSYM` IDs from 900.
+The self-hosted `fpga-lisp/assembler.my` now implements the same normalization
+and `.sym` sidecar contract. `tests/compiler_test.rs` includes a cross-repo
+fixture that assembles CML output through both `assembler.py` and
+`assembler.my` and requires identical bytes. This is an implementation-parity
+proof only; it does not transfer language or backend authority to either
+assembler.
+
 1. **Draw the backend boundary inside cml.** ✅ Done (`src/ir.rs` +
    `src/lower.rs`): a backend-neutral `Ir` covering every form `compile_*`
    in `compiler.rs` handles (literals, `quote`, `cond`, `lambda`/variadic

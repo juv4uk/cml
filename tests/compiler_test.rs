@@ -81,6 +81,46 @@ fn test_compile_with_symbols_emits_fpga_numeric_loadsym_and_table() {
 }
 
 #[test]
+fn test_compile_with_symbols_matches_self_hosted_my_lisp_assembler() {
+    let exprs = parser::parse("(quote a)").unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
+    let compiled = Compiler::new().compile_with_symbols(&program).unwrap();
+    let root = env::temp_dir().join(format!("cml-my-lisp-symbol-parity-{}", std::process::id()));
+    let asm_path = root.with_extension("asm");
+    let python_bin = root.with_extension("python.bin");
+    let my_lisp_bin = root.with_extension("my-lisp.bin");
+    fs::write(&asm_path, &compiled.assembly).unwrap();
+
+    let python = Command::new("python3")
+        .args(["../fpga-lisp/assembler.py", asm_path.to_str().unwrap(), "-o"])
+        .arg(&python_bin)
+        .output()
+        .expect("python assembler should start");
+    assert!(python.status.success(), "python assembler failed: {:?}", python);
+
+    let my_lisp = env::var("MY_LISP_BIN").unwrap_or_else(|_| {
+        "/home/agents/GitHub/my-lisp/target/release/my-lisp".to_string()
+    });
+    if !std::path::Path::new(&my_lisp).is_file() {
+        let _ = fs::remove_file(&asm_path);
+        let _ = fs::remove_file(&python_bin);
+        return;
+    }
+    let self_hosted = Command::new(my_lisp)
+        .current_dir("../fpga-lisp")
+        .args(["assembler.my", asm_path.to_str().unwrap()])
+        .arg(&my_lisp_bin)
+        .output()
+        .expect("my-lisp assembler should start");
+    assert!(self_hosted.status.success(), "my-lisp assembler failed: {:?}", self_hosted);
+    assert_eq!(fs::read(&python_bin).unwrap(), fs::read(&my_lisp_bin).unwrap());
+
+    let _ = fs::remove_file(&asm_path);
+    let _ = fs::remove_file(&python_bin);
+    let _ = fs::remove_file(&my_lisp_bin);
+}
+
+#[test]
 fn test_compile_lambda() {
     let code = "(lambda (x) x)";
     let exprs = parser::parse(code).unwrap();
