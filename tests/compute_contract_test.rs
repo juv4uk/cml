@@ -4,7 +4,7 @@ use std::fs;
 fn machine_readable_compute_contract_matches_analysis_m0() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 10))",
+        "(version . (0 11))",
         "(status . experimental-runtime)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -21,6 +21,11 @@ fn machine_readable_compute_contract_matches_analysis_m0() {
         "explicit-software-adapter-probe",
         "(runtime-live-evidence . llvmpipe-cpu-vulkan-pass)",
         "(physical-gpu-evidence . absent)",
+        "(accelerator-selection . (live-descriptors-only",
+        "(nvidia . (wgpu cuda-planned))",
+        "(amd . (wgpu rocm-planned))",
+        "(intel . (wgpu oneapi-level-zero-planned))",
+        "(accelerator-planner . \"src/accelerator.rs\")",
         "(wgpu-runtime . \"src/gpu_wgpu_runtime.rs\")",
     ] {
         assert!(contract.contains(required), "compute contract lost {required}");

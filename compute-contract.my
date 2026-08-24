@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 10))
+ (version . (0 11))
  (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -36,11 +36,19 @@
                                       storage-buffer-dispatch-readback))
                       (runtime-live-evidence . llvmpipe-cpu-vulkan-pass)
                       (physical-gpu-evidence . absent)
+                      (accelerator-selection . (live-descriptors-only
+                                                portable-first
+                                                vendor-optimized
+                                                cpu-adapters-rejected))
+                      (vendor-paths . ((nvidia . (wgpu cuda-planned))
+                                       (amd . (wgpu rocm-planned))
+                                       (intel . (wgpu oneapi-level-zero-planned))))
                       (automatic-offload . absent)))
  (implementation . ((analysis . "src/compute.rs")
                     (buffer-ir . "src/ir.rs")
                     (cpu-reference . "src/compute.rs::CpuComputeBackend")
                     (wgsl-emitter . "src/gpu_wgsl.rs")
                     (wgpu-runtime . "src/gpu_wgpu_runtime.rs")
+                    (accelerator-planner . "src/accelerator.rs")
                     (differential-oracle . "my-lisp path dev-dependency")
                     (tests . "tests/compute_analysis_test.rs tests/typed_buffer_ir_test.rs tests/cpu_compute_backend_test.rs tests/cpu_compute_differential_test.rs"))))
