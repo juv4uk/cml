@@ -125,10 +125,17 @@ runs each one correctly) -- worth closing before claiming real parity.
    silently missing) -- the doc's own `(* x x)` example used a primitive
    (`*`) `cml` has never actually implemented on any backend, so the
    verified fixture uses `+` instead.
-3. **CUDA backend after C.** Only pure, element-wise forms (`map`/
-   `fold`) become kernels; the compiler decides, or `with-target gpu`
-   forces it. Not before the IR is stable.
-4. **fpga-lisp stays as the third backend** of the same IR.
+3. **Compute analysis after C.** ✅ M0 implemented in `src/compute.rs`:
+   `map`/`reduce` are classified as element-wise/reduction regions, effects
+   and storage/numeric facts are recorded, and GPU admission fails closed.
+   Ordinary quoted lists remain linked storage and exact numbers are never
+   silently converted to floats. See `compute-contract.my`.
+4. **Portable GPU backend after a typed-buffer contract.** The backend may
+   be implemented in Rust through a portable GPU API; a later CUDA-specific
+   emitter is an optimization, not language semantics. No emitter is admitted
+   until my-lisp and CML share an explicit contiguous numeric representation.
+5. **fpga-lisp stays as a backend** of the same semantic IR, with a future
+   dataflow lowering as a separate specialization path.
 
 Later, the target can even be *chosen by the compiler* when provably
 safe, and a single program can span all three:

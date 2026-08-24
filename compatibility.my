@@ -19,6 +19,11 @@
             (isa . (1 0))
             (tested-sha . "6c08e42975eb05eb143ee4cc66bcc759b6f92a1b")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
+ (compute-analysis . ((contract . (0 1))
+                      (status . analysis-only)
+                      (execution-shapes . (scalar element-wise reduction irregular))
+                      (gpu-admission . fail-closed)
+                      (note . "map/reduce regions are recognized, but no GPU backend or typed-buffer language contract is claimed")))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom equal? defmacro
                def recursive-def-letrec

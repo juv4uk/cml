@@ -172,3 +172,13 @@ The three repositories already form the right system. The highest-leverage
 next step is not a new backend but a stronger formal seam between CML and
 fpga-lisp: shared ABI, capability declarations, error protocol, and value
 representation contracts.
+
+## GPU preparation status
+
+CML now owns an analysis-only compute contract (`compute-contract.my`, version
+0.1) and recognizes `map`/`reduce` execution shapes without changing my-lisp.
+GPU admission remains fail-closed. The current my-lisp `Vector` is
+heterogeneous and mutable through `vector-set!`; it is therefore not silently
+treated as a typed GPU buffer. Any immutable/typed contiguous representation
+is a future my-lisp contract decision, after which CML may refine storage and
+numeric facts and select a backend without changing program results.
