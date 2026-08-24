@@ -12,6 +12,7 @@ use cml::macros::MacroExpander;
 use cml::parser;
 
 const SUPPORTED_LANGUAGE_CONTRACT: (u32, u32) = (2, 0);
+const SUPPORTED_CAPABILITIES: &[&str] = &["first-class-builtins"];
 
 fn parse_conformance_line(line: &str) -> Option<(String, String)> {
     let expr_marker = "(expr . \"";
@@ -35,10 +36,26 @@ fn parse_contract_version(line: &str, field: &str) -> Option<(u32, u32)> {
     (parts.next().is_none()).then_some((major, minor))
 }
 
+fn parse_symbol_list_field(line: &str, field: &str) -> Option<Vec<String>> {
+    let marker = format!("({field} . (");
+    let start = line.find(&marker)? + marker.len();
+    let end = line[start..].find(')')? + start;
+    Some(line[start..end].split_whitespace().map(str::to_owned).collect())
+}
+
 #[test]
 fn parses_fixture_contract_gate() {
     let fixture = "((expr . \"x\") (since-contract . (2 1)))";
     assert_eq!(parse_contract_version(fixture, "since-contract"), Some((2, 1)));
+}
+
+#[test]
+fn parses_fixture_capability_requirements() {
+    let fixture = "((expr . \"x\") (requires . (first-class-builtins numeric-buffers)))";
+    assert_eq!(
+        parse_symbol_list_field(fixture, "requires"),
+        Some(vec!["first-class-builtins".to_string(), "numeric-buffers".to_string()])
+    );
 }
 
 #[test]
@@ -51,6 +68,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
     let mut unsupported_errors = 0;
     let mut unsupported_inexact = 0;
     let mut unsupported_newer_contract = 0;
+    let mut admitted_newer_contract = 0;
     let mut failures = Vec::new();
 
     for (i, line) in fixture_content.lines().enumerate() {
@@ -63,10 +81,26 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         // These are explicit capability states, not silent skips. Contract
         // 2.1+ fixtures are upstream evidence but cannot be executed as proof
         // for CML's declared supported contract 2.0.
+        let requirements = match parse_symbol_list_field(line, "requires") {
+            Some(requirements) => requirements,
+            None if line.contains("(requires") => {
+                failures.push(format!("fixture line {}: malformed requires field", i + 1));
+                continue;
+            }
+            None => Vec::new(),
+        };
         match parse_contract_version(line, "since-contract") {
             Some(version) if version > SUPPORTED_LANGUAGE_CONTRACT => {
-                unsupported_newer_contract += 1;
-                continue;
+                let capabilities_supported = !requirements.is_empty()
+                    && requirements
+                        .iter()
+                        .all(|requirement| SUPPORTED_CAPABILITIES.contains(&requirement.as_str()));
+                if capabilities_supported {
+                    admitted_newer_contract += 1;
+                } else {
+                    unsupported_newer_contract += 1;
+                    continue;
+                }
             }
             Some(_) => {}
             None if line.contains("(since-contract") => {
@@ -152,12 +186,10 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         accounted, selected,
         "every selected tier-1 fixture must be executed or assigned one explicit unsupported state"
     );
-    assert!(
-        unsupported_newer_contract > 0,
-        "the current upstream suite should exercise the supported/upstream contract gate"
-    );
+    assert!(admitted_newer_contract > 0, "the shared suite should exercise capability-based admission");
     eprintln!(
         "tier-1 matrix: selected={selected} supported={checked} unsupported-error={unsupported_errors} \
-         unsupported-inexact={unsupported_inexact} unsupported-newer-contract={unsupported_newer_contract}"
+         unsupported-inexact={unsupported_inexact} unsupported-newer-contract={unsupported_newer_contract} \
+         admitted-newer-contract={admitted_newer_contract}"
     );
 }
