@@ -1,14 +1,14 @@
 # cml
 
-**Ahead-of-Time (AOT) Compiler for my-lisp targeting fpga-lisp architecture**
+**Heterogeneous AOT compiler middle-end for my-lisp**
 
 [English](#english) · [Українська](#українська) · [Deutsch](#deutsch)
 
 ## English
 
-`cml` is an Ahead-of-Time (AOT) compiler that translates `my-lisp` source code directly into `fpga-lisp` assembly. Rather than running a full Lisp evaluator loop (`eval`/`apply`) on the hardware at runtime, `cml` performs the compilation on a host machine, generating fixed machine code for the FPGA.
+`cml` is an Ahead-of-Time (AOT) compiler middle-end for `my-lisp`. It lowers one semantic IR toward CPU/C, GPU compute backends, and `fpga-lisp` execution. Backend capabilities remain explicit and fail-closed.
 
-This approach bypasses the runtime interpretation overhead. The long-term goal is to execute complex programs like `unify.my` and `reason.my` (from the "Advice Taker" priority) significantly faster directly on the `fpga-lisp` hardware.
+This approach separates language semantics from physical execution. The current graph has live CPU, CUDA, and FPGA paths, including a host-staged typed-buffer-to-FPGA-register edge; direct GPU-to-FPGA transfer is not claimed.
 
 The compiler handles:
 - Variables (via compile-time environment lookup injection)
@@ -44,9 +44,9 @@ cargo run -- path/to/source.my
 
 ## Українська
 
-`cml` — це Ahead-of-Time (AOT) компілятор, який перетворює сирцевий код `my-lisp` безпосередньо в асемблер `fpga-lisp`. Замість того, щоб запускати повний цикл обчислення Lisp (`eval`/`apply`) на апаратному забезпеченні під час виконання, `cml` виконує компіляцію на хост-комп'ютері, генеруючи фіксований машинний код для FPGA.
+`cml` — це heterogeneous middle-end і Ahead-of-Time (AOT) компілятор для `my-lisp`. Він знижує єдиний semantic IR до CPU/C, GPU compute backends та виконання `fpga-lisp`, залишаючи можливості backend'ів явними й fail-closed.
 
-Цей підхід дозволяє уникнути накладних витрат на інтерпретацію під час виконання. Довгострокова мета полягає в тому, щоб складні програми, такі як `unify.my` та `reason.my` (пріоритет "Advice Taker"), виконувалися значно швидше безпосередньо на апаратурі `fpga-lisp`.
+Цей підхід відділяє семантику мови від фізичного виконання. Поточний graph має live CPU, CUDA і FPGA шляхи, включно з host-staged typed-buffer→FPGA-register edge; прямий GPU→FPGA transfer не заявляється.
 
 Компілятор підтримує:
 - Змінні (через ін'єкцію пошуку в середовищі на етапі компіляції)
@@ -82,9 +82,9 @@ cargo run -- path/to/source.my
 
 ## Deutsch
 
-`cml` ist ein Ahead-of-Time (AOT)-Compiler, der `my-lisp`-Quellcode direkt in `fpga-lisp`-Assembler übersetzt. Anstatt zur Laufzeit eine vollständige Lisp-Auswertungsschleife (`eval`/`apply`) auf der Hardware auszuführen, führt `cml` die Kompilierung auf einem Host-Computer durch und erzeugt festen Maschinencode für das FPGA.
+`cml` ist ein heterogenes AOT-Compiler-Middle-End für `my-lisp`. Es senkt eine gemeinsame semantische IR zu CPU/C-, GPU-Compute-Backends und `fpga-lisp` ab; Backend-Fähigkeiten bleiben explizit und fail-closed.
 
-Dieser Ansatz umgeht den Overhead der Laufzeitinterpretation. Das langfristige Ziel ist es, komplexe Programme wie `unify.my` und `reason.my` (aus der "Advice Taker"-Priorität) deutlich schneller direkt auf der `fpga-lisp`-Hardware auszuführen.
+Dieser Ansatz trennt Sprachsemantik von physischer Ausführung. Der aktuelle Graph hat live CPU-, CUDA- und FPGA-Pfade einschließlich eines host-gestagten Typed-Buffer→FPGA-Register-Pfads; direkter GPU→FPGA-Transfer wird nicht behauptet.
 
 Der Compiler verarbeitet:
 - Variablen (über beim Kompilieren injiziertes Umgebungs-Lookup)
