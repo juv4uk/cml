@@ -172,6 +172,12 @@
      (done . t)
      (description . "Encode validated tagged register inputs into fpga-lisp ISA 1.1 while preserving the legacy frame byte-for-byte.")
      (context . "done 2026-08-24: FpgaJobV1 accepts at most 16 unique R0..R15 opaque tagged words and emits the extended boot frame. fpga-lisp's bridge validates and preserves it. Seven targeted Rust transport tests and four Python bridge tests pass. One operator-gated physical COM4 path returned tagged result word 7 with no hardware error; blanket conformance and automatic graph buffer-to-register lowering remain unclaimed, and fpga-input-edge remains absent. compute-contract 0.25; fpga-lisp e444b45.")))
+   ("CML-FPGA-TYPED-INPUT-ADAPTER-M6" .
+    ((priority . 0.95)
+     (capabilities . (compiler rust compute fpga protocol testing proof))
+     (done . ())
+     (description . "Design and validate an explicit host-staged adapter from an execution-graph typed buffer to ISA 1.1 tagged FPGA register inputs; keep direct GPU-to-FPGA transfer absent and fail closed on unsupported representations.")
+     (context . "next after physical M35 proof: define buffer-to-register representation policy, bounds/overflow checks, explicit data dependency, and differential mock-vs-CPU evidence before any physical run. No automatic placement or language-semantic change is authorized.")))
    ("CML-EXECUTION-MODULE-BOUNDARY-V0.2" .
     ((priority . 0.45)
      (capabilities . (compiler rust architecture refactor testing))
