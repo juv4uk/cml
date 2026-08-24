@@ -103,6 +103,19 @@ fn proven_fixed_width_contiguous_representation_unlocks_gpu_candidate() {
 }
 
 #[test]
+fn first_class_builtin_add_inside_map_matches_structural_primitive_form() {
+    let source = parser::parse("(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3))").unwrap();
+    let program = lower::lower_program_with_first_class_builtins(&source).unwrap();
+    let analysis = analyze(&program[0]);
+    assert!(
+        analysis.gpu_eligible(),
+        "unexpected blockers: {:?}",
+        analysis.gpu_blockers
+    );
+    assert_eq!(analysis.numeric_domain, NumericDomain::FixedWidthInteger);
+}
+
+#[test]
 fn exact_numbers_are_never_silently_refined_to_float() {
     let mut analysis = analyze(&lower_one("(map (lambda (x) (+ x 1)) (quote (1 2 3)))"));
     refine_representation(

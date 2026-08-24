@@ -291,6 +291,14 @@ fn lower_scalar_expr(ir: &Ir, parameters: &[String]) -> Option<ScalarExpr> {
             Box::new(lower_scalar_expr(&args[0], parameters)?),
             Box::new(lower_scalar_expr(&args[1], parameters)?),
         )),
+        Ir::App { func, args }
+            if matches!(&**func, Ir::Var(name) if name == "+") && args.len() == 2 =>
+        {
+            Some(ScalarExpr::CheckedAdd(
+                Box::new(lower_scalar_expr(&args[0], parameters)?),
+                Box::new(lower_scalar_expr(&args[1], parameters)?),
+            ))
+        }
         _ => None,
     }
 }
@@ -325,8 +333,15 @@ fn effect_of(ir: &Ir) -> EffectClass {
         ),
         Ir::Def { .. } => EffectClass::Stateful,
         Ir::App { func, args } => {
-            let known_pure_bulk = matches!(&**func, Ir::Var(name) if name == "MAP" || name == "NUMERIC-BUFFER-MAP" || name == "REDUCE");
-            if known_pure_bulk {
+            let known_pure = matches!(
+                &**func,
+                Ir::Var(name)
+                    if name == "+"
+                        || name == "MAP"
+                        || name == "NUMERIC-BUFFER-MAP"
+                        || name == "REDUCE"
+            );
+            if known_pure {
                 join_effects(args.iter().map(effect_of))
             } else {
                 EffectClass::Unknown

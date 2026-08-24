@@ -26,7 +26,7 @@
  (current-boundary . ((bulk-forms-recognized . (numeric-buffer-map map reduce))
                       (typed-buffer-ir . present-from-my-lisp-contract-2.2)
                       (typed-buffer-elements . (i32 f32))
-                      (kernel-ir . (parameter exact-integer checked-add))
+                      (kernel-ir . (parameter exact-integer checked-add primitive-and-first-class-add))
                       (cpu-compute-backend . (present-reference i32-map-range-proven f32-map-affine-proven))
                       (c-backend-reference . (i32-buffer-literal source-level-i32-map cpu-differential checked-overflow))
                       (gpu-emitter . (wgsl-source-only admitted-map-regions))
