@@ -126,3 +126,40 @@ fn graph_materializes_an_explicit_buffer_edge_into_fpga_register_inputs() {
     let result = executor.execute(&graph).unwrap();
     assert_eq!(result.lisp_word(BufferId(11)), Some(7));
 }
+
+#[test]
+fn graph_rejects_ambiguous_prepopulated_typed_fpga_inputs() {
+    let graph = ExecutionGraph {
+        inputs: vec![(
+            BufferId(10),
+            GraphValue::Buffer(BufferLiteral::I32(vec![3, 4])),
+        )],
+        nodes: vec![PlanNode {
+            id: NodeId(1),
+            operation: ExecutionOperation::FpgaProgramWithBufferInput {
+                job: FpgaJobV1 {
+                    program_words: vec![0],
+                    register_inputs: vec![cml::fpga_transport::FpgaRegisterInput {
+                        register: 0,
+                        tagged_word: 99,
+                    }],
+                    result_register: 2,
+                },
+                input: BufferId(10),
+                first_register: 0,
+            },
+            output: BufferId(11),
+            dependencies: vec![],
+            target: ExecutionTarget::Fpga {
+                device: "input-witness".into(),
+            },
+        }],
+    };
+    let mut executor = HeterogeneousGraphExecutor::default();
+    executor.register_fpga("input-witness", FpgaTransportNodeExecutor::new(InputWitness));
+    assert!(matches!(
+        executor.execute(&graph),
+        Err(cml::execution::GraphExecutionError::Backend { message, .. })
+            if message.contains("must not prepopulate")
+    ));
+}

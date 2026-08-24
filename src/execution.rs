@@ -249,6 +249,14 @@ impl HeterogeneousGraphExecutor {
                             value: *input,
                         });
                     };
+                    if !job.register_inputs.is_empty() {
+                        return Err(GraphExecutionError::Backend {
+                            node: node.id,
+                            target: node.target.clone(),
+                            message: "typed FPGA input job must not prepopulate register inputs"
+                                .into(),
+                        });
+                    }
                     let mut staged_job = job.clone();
                     staged_job.register_inputs = encode_i32_buffer_as_register_inputs(
                         buffer,
