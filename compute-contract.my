@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics and does not claim a GPU backend.
 
 ((kind . cml-compute-contract)
- (version . (0 5))
+ (version . (0 6))
  (status . analysis-only)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -33,4 +33,5 @@
  (implementation . ((analysis . "src/compute.rs")
                     (buffer-ir . "src/ir.rs")
                     (cpu-reference . "src/compute.rs::CpuComputeBackend")
-                    (tests . "tests/compute_analysis_test.rs tests/typed_buffer_ir_test.rs"))))
+                    (differential-oracle . "my-lisp path dev-dependency")
+                    (tests . "tests/compute_analysis_test.rs tests/typed_buffer_ir_test.rs tests/cpu_compute_backend_test.rs tests/cpu_compute_differential_test.rs"))))

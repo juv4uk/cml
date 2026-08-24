@@ -5,3 +5,10 @@ version = 4
 [[package]]
 name = "cml"
 version = "0.1.0"
+dependencies = [
+ "my-lisp",
+]
+
+[[package]]
+name = "my-lisp"
+version = "0.29.0"

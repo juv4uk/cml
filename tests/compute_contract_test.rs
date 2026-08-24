@@ -4,7 +4,7 @@ use std::fs;
 fn machine_readable_compute_contract_matches_analysis_m0() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 5))",
+        "(version . (0 6))",
         "(status . analysis-only)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -14,6 +14,7 @@ fn machine_readable_compute_contract_matches_analysis_m0() {
         "(required-i32-overflow-proof . true)",
         "(f32-rounding-contract . unresolved-block-offload)",
         "(cpu-compute-backend . (present-reference i32-map range-proven-only))",
+        "(differential-oracle . \"my-lisp path dev-dependency\")",
         "(gpu-emitter . absent)",
     ] {
         assert!(contract.contains(required), "compute contract lost {required}");
