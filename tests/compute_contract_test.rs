@@ -34,6 +34,9 @@ fn machine_readable_compute_contract_matches_analysis_m0() {
         "(cuda-emitter . \"src/gpu_cuda.rs\")",
         "(cuda-runtime . \"src/gpu_cuda_runtime.rs\")",
     ] {
-        assert!(contract.contains(required), "compute contract lost {required}");
+        assert!(
+            contract.contains(required),
+            "compute contract lost {required}"
+        );
     }
 }

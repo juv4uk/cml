@@ -1,9 +1,7 @@
-use cml::compute::{
-    AdmissionBlocker, ComputeBackend, ComputeExecutionError, CpuComputeBackend,
-};
+use cml::compute::{AdmissionBlocker, ComputeBackend, ComputeExecutionError, CpuComputeBackend};
 use cml::ir::{BufferLiteral, Ir};
 use cml::{lower, parser};
-use my_lisp::{eval_program, ErrorKind, Session};
+use my_lisp::{ErrorKind, Session, eval_program};
 
 #[derive(Debug, PartialEq, Eq)]
 enum Observable {

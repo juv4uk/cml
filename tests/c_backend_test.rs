@@ -20,7 +20,12 @@ fn compile_and_run_first_class(code: &str, stem: &str) -> String {
     let bin_path = format!("c_backend_{stem}_test");
     fs::write(&c_path, &c_source).unwrap();
 
-    let compile = Command::new("gcc").arg(&c_path).arg("-o").arg(&bin_path).output().unwrap();
+    let compile = Command::new("gcc")
+        .arg(&c_path)
+        .arg("-o")
+        .arg(&bin_path)
+        .output()
+        .unwrap();
     if !compile.status.success() {
         panic!(
             "gcc failed:\nSTDERR: {}\n--- generated C ---\n{}",
@@ -42,8 +47,17 @@ fn compile_and_run_failure(code: &str, stem: &str) -> std::process::Output {
     let c_path = format!("c_backend_{stem}_test.c");
     let bin_path = format!("c_backend_{stem}_test");
     fs::write(&c_path, &c_source).unwrap();
-    let compile = Command::new("gcc").arg(&c_path).arg("-o").arg(&bin_path).output().unwrap();
-    assert!(compile.status.success(), "gcc failed: {}", String::from_utf8_lossy(&compile.stderr));
+    let compile = Command::new("gcc")
+        .arg(&c_path)
+        .arg("-o")
+        .arg(&bin_path)
+        .output()
+        .unwrap();
+    assert!(
+        compile.status.success(),
+        "gcc failed: {}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
     let run = Command::new(format!("./{bin_path}")).output().unwrap();
     let _ = fs::remove_file(c_path);
     let _ = fs::remove_file(bin_path);
@@ -52,31 +66,52 @@ fn compile_and_run_failure(code: &str, stem: &str) -> std::process::Output {
 
 #[test]
 fn c_backend_calls_a_builtin_stored_as_a_value() {
-    assert_eq!(compile_and_run_first_class("(def f +) (f 20 22)", "builtin_value"), "42");
+    assert_eq!(
+        compile_and_run_first_class("(def f +) (f 20 22)", "builtin_value"),
+        "42"
+    );
 }
 
 #[test]
 fn c_backend_lexically_shadows_a_builtin() {
     let code = "(let ((car (lambda (x) (quote shadowed)))) (car (quote (1 2))))";
-    assert_eq!(compile_and_run_first_class(code, "builtin_shadow"), "shadowed");
+    assert_eq!(
+        compile_and_run_first_class(code, "builtin_shadow"),
+        "shadowed"
+    );
 }
 
 #[test]
 fn c_backend_passes_a_builtin_as_a_higher_order_argument() {
     let code = "((lambda (f) (f 2 3)) +)";
-    assert_eq!(compile_and_run_first_class(code, "builtin_higher_order"), "5");
+    assert_eq!(
+        compile_and_run_first_class(code, "builtin_higher_order"),
+        "5"
+    );
 }
 
 #[test]
 fn c_backend_prints_the_contractual_builtin_representation() {
-    assert_eq!(compile_and_run_first_class("+", "builtin_print"), "#<builtin +>");
+    assert_eq!(
+        compile_and_run_first_class("+", "builtin_print"),
+        "#<builtin +>"
+    );
 }
 
 #[test]
 fn c_backend_supports_first_class_subtraction() {
-    assert_eq!(compile_and_run_first_class("-", "builtin_subtract_print"), "#<builtin ->");
-    assert_eq!(compile_and_run_first_class("(- 5)", "builtin_subtract_unary"), "-5");
-    assert_eq!(compile_and_run_first_class("(- 20 3 2)", "builtin_subtract_many"), "15");
+    assert_eq!(
+        compile_and_run_first_class("-", "builtin_subtract_print"),
+        "#<builtin ->"
+    );
+    assert_eq!(
+        compile_and_run_first_class("(- 5)", "builtin_subtract_unary"),
+        "-5"
+    );
+    assert_eq!(
+        compile_and_run_first_class("(- 20 3 2)", "builtin_subtract_many"),
+        "15"
+    );
 }
 
 #[test]
@@ -105,9 +140,17 @@ fn c_backend_reports_contractual_core_error_kinds() {
         ("(car 5)", "error_car_int", "Type:"),
         ("(car (quote ()))", "error_car_nil", "Type:"),
         ("(eq (quote (1)) (quote (2)))", "error_eq_cons", "Type:"),
-        ("(undefined-symbol)", "error_unknown_symbol", "UnknownSymbol:"),
+        (
+            "(undefined-symbol)",
+            "error_unknown_symbol",
+            "UnknownSymbol:",
+        ),
         ("(cons 1)", "error_cons_arity", "Arity:"),
-        ("((lambda (a b . rest) a) 1)", "error_lambda_arity", "Arity:"),
+        (
+            "((lambda (a b . rest) a) 1)",
+            "error_lambda_arity",
+            "Arity:",
+        ),
     ] {
         let run = compile_and_run_failure(code, stem);
         assert!(!run.status.success(), "{code} unexpectedly succeeded");
@@ -146,13 +189,19 @@ fn compiles_add1_to_c_and_runs_it() {
         );
     }
 
-    let run = Command::new(format!("./{bin_path}")).output().expect("failed to run compiled binary");
+    let run = Command::new(format!("./{bin_path}"))
+        .output()
+        .expect("failed to run compiled binary");
     let stdout = String::from_utf8_lossy(&run.stdout);
 
     let _ = fs::remove_file(c_path);
     let _ = fs::remove_file(bin_path);
 
-    assert_eq!(stdout.trim(), "42", "expected 42 (matches my-lisp oracle for the same source), got: {stdout}");
+    assert_eq!(
+        stdout.trim(),
+        "42",
+        "expected 42 (matches my-lisp oracle for the same source), got: {stdout}"
+    );
 }
 
 #[test]
@@ -171,7 +220,12 @@ fn compiles_self_recursive_def_to_c_and_runs_it() {
     let bin_path = "c_backend_count_test";
     fs::write(c_path, &c_source).unwrap();
 
-    let compile = Command::new("gcc").arg(c_path).arg("-o").arg(bin_path).output().unwrap();
+    let compile = Command::new("gcc")
+        .arg(c_path)
+        .arg("-o")
+        .arg(bin_path)
+        .output()
+        .unwrap();
     if !compile.status.success() {
         panic!(
             "gcc failed:\nSTDERR: {}\n--- generated C ---\n{}",
@@ -186,7 +240,11 @@ fn compiles_self_recursive_def_to_c_and_runs_it() {
     let _ = fs::remove_file(c_path);
     let _ = fs::remove_file(bin_path);
 
-    assert_eq!(stdout.trim(), "99", "expected 99 (matches my-lisp oracle: (count 3) -> 99), got: {stdout}");
+    assert_eq!(
+        stdout.trim(),
+        "99",
+        "expected 99 (matches my-lisp oracle: (count 3) -> 99), got: {stdout}"
+    );
 }
 
 #[test]
@@ -204,7 +262,12 @@ fn compiles_let_to_c_and_runs_it() {
     let bin_path = "c_backend_let_test";
     fs::write(c_path, &c_source).unwrap();
 
-    let compile = Command::new("gcc").arg(c_path).arg("-o").arg(bin_path).output().unwrap();
+    let compile = Command::new("gcc")
+        .arg(c_path)
+        .arg("-o")
+        .arg(bin_path)
+        .output()
+        .unwrap();
     if !compile.status.success() {
         panic!(
             "gcc failed:\nSTDERR: {}\n--- generated C ---\n{}",
@@ -219,7 +282,11 @@ fn compiles_let_to_c_and_runs_it() {
     let _ = fs::remove_file(c_path);
     let _ = fs::remove_file(bin_path);
 
-    assert_eq!(stdout.trim(), "8", "expected 8 (matches my-lisp oracle: (let ((x 5) (y 3)) (+ x y)) -> 8), got: {stdout}");
+    assert_eq!(
+        stdout.trim(),
+        "8",
+        "expected 8 (matches my-lisp oracle: (let ((x 5) (y 3)) (+ x y)) -> 8), got: {stdout}"
+    );
 }
 
 #[test]
@@ -236,7 +303,12 @@ fn compiles_variadic_and_dotted_lambda_params_to_c_and_runs_it() {
     let bin_path = "c_backend_variadic_test";
     fs::write(c_path, &c_source).unwrap();
 
-    let compile = Command::new("gcc").arg(c_path).arg("-o").arg(bin_path).output().unwrap();
+    let compile = Command::new("gcc")
+        .arg(c_path)
+        .arg("-o")
+        .arg(bin_path)
+        .output()
+        .unwrap();
     if !compile.status.success() {
         panic!(
             "gcc failed:\nSTDERR: {}\n--- generated C ---\n{}",
@@ -274,7 +346,12 @@ fn compiles_quoted_list_access_to_c_and_runs_it() {
     let bin_path = "c_backend_quoted_list_test";
     fs::write(c_path, &c_source).unwrap();
 
-    let compile = Command::new("gcc").arg(c_path).arg("-o").arg(bin_path).output().unwrap();
+    let compile = Command::new("gcc")
+        .arg(c_path)
+        .arg("-o")
+        .arg(bin_path)
+        .output()
+        .unwrap();
     if !compile.status.success() {
         panic!(
             "gcc failed:\nSTDERR: {}\n--- generated C ---\n{}",

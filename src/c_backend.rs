@@ -42,11 +42,12 @@ impl fmt::Display for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CompileError::NestedDef => write!(
-                f, "def is only supported at the top level of a program, not nested"
+                f,
+                "def is only supported at the top level of a program, not nested"
             ),
-            CompileError::Unsupported(node) => write!(
-                f, "unsupported IR node in C backend: {node}"
-            ),
+            CompileError::Unsupported(node) => {
+                write!(f, "unsupported IR node in C backend: {node}")
+            }
         }
     }
 }
@@ -245,7 +246,10 @@ static void print_value(Value *v) {
 
 impl CBackend {
     pub fn new() -> Self {
-        CBackend { functions: Vec::new(), fn_counter: 0 }
+        CBackend {
+            functions: Vec::new(),
+            fn_counter: 0,
+        }
     }
 
     fn next_fn_name(&mut self) -> String {
@@ -318,7 +322,10 @@ impl CBackend {
             Ir::Let { bindings, body } => {
                 let params = Params::Fixed(bindings.iter().map(|(n, _)| n.clone()).collect());
                 let args: Vec<Ir> = bindings.iter().map(|(_, v)| v.clone()).collect();
-                let lambda = Ir::Lambda { params, body: Box::new((**body).clone()) };
+                let lambda = Ir::Lambda {
+                    params,
+                    body: Box::new((**body).clone()),
+                };
                 self.compile_app(&lambda, &args, env)
             }
             Ir::Def { .. } => Err(CompileError::NestedDef),
@@ -345,7 +352,10 @@ impl CBackend {
                 self.compile_expr(&args[0], env)?,
                 self.compile_expr(&args[1], env)?
             )),
-            PrimOp::Atom => Ok(format!("(is_atom({}) ? &TRUE_V : &NIL_V)", self.compile_expr(&args[0], env)?)),
+            PrimOp::Atom => Ok(format!(
+                "(is_atom({}) ? &TRUE_V : &NIL_V)",
+                self.compile_expr(&args[0], env)?
+            )),
             PrimOp::EqualP => Ok(format!(
                 "(v_equal_p({}, {}) ? &TRUE_V : &NIL_V)",
                 self.compile_expr(&args[0], env)?,
@@ -387,7 +397,12 @@ impl CBackend {
     /// pairing that function pointer with the *current* env -- captured
     /// at the point the closure is created, same as `compiler.rs`'s
     /// `CONS closure_reg label env_reg`.
-    fn compile_lambda(&mut self, params: &Params, body: &Ir, env: &str) -> Result<String, CompileError> {
+    fn compile_lambda(
+        &mut self,
+        params: &Params,
+        body: &Ir,
+        env: &str,
+    ) -> Result<String, CompileError> {
         let fn_name = self.next_fn_name();
 
         let mut fn_body = String::new();
@@ -441,7 +456,9 @@ impl CBackend {
             let arg_expr = self.compile_expr(arg, env)?;
             args_list = format!("mk_cons({arg_expr}, {args_list})");
         }
-        Ok(format!("({{ Value *_f = {func_expr}; v_apply(_f, ({args_list})); }})"))
+        Ok(format!(
+            "({{ Value *_f = {func_expr}; v_apply(_f, ({args_list})); }})"
+        ))
     }
 
     fn compile_cond(&mut self, branches: &[(Ir, Ir)], env: &str) -> Result<String, CompileError> {
@@ -451,10 +468,14 @@ impl CBackend {
             let test_expr = self.compile_expr(test, env)?;
             let body_expr = self.compile_expr(body, env)?;
             if first {
-                out.push_str(&format!(" if (truthy({test_expr})) {{ _c = {body_expr}; }}"));
+                out.push_str(&format!(
+                    " if (truthy({test_expr})) {{ _c = {body_expr}; }}"
+                ));
                 first = false;
             } else {
-                out.push_str(&format!(" else if (truthy({test_expr})) {{ _c = {body_expr}; }}"));
+                out.push_str(&format!(
+                    " else if (truthy({test_expr})) {{ _c = {body_expr}; }}"
+                ));
             }
         }
         out.push_str(" else { _c = &NIL_V; } _c; })");

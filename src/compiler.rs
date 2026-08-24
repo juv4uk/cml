@@ -27,10 +27,15 @@ impl fmt::Display for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CompileError::TooManyArguments { found, max } => write!(
-                f, "call has {found} arguments, but the fpga-lisp target supports at most {max}"
+                f,
+                "call has {found} arguments, but the fpga-lisp target supports at most {max}"
             ),
-            CompileError::IntegerOutOfRange { value, max_magnitude } => write!(
-                f, "integer literal {value} exceeds the fpga-lisp target's LOADI range (magnitude > {max_magnitude})"
+            CompileError::IntegerOutOfRange {
+                value,
+                max_magnitude,
+            } => write!(
+                f,
+                "integer literal {value} exceeds the fpga-lisp target's LOADI range (magnitude > {max_magnitude})"
             ),
             CompileError::UnsupportedNumericBuffer => write!(
                 f,
@@ -50,7 +55,10 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
         Ir::Lambda { body, .. } => validate_ir(body),
         Ir::App { func, args } => {
             if args.len() > MAX_CALL_ARGS {
-                return Err(CompileError::TooManyArguments { found: args.len(), max: MAX_CALL_ARGS });
+                return Err(CompileError::TooManyArguments {
+                    found: args.len(),
+                    max: MAX_CALL_ARGS,
+                });
             }
             validate_ir(func)?;
             args.iter().try_for_each(validate_ir)
@@ -60,7 +68,9 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
             validate_ir(body)
         }),
         Ir::Let { bindings, body } => {
-            bindings.iter().try_for_each(|(_, value)| validate_ir(value))?;
+            bindings
+                .iter()
+                .try_for_each(|(_, value)| validate_ir(value))?;
             validate_ir(body)
         }
         Ir::Def { value, .. } => validate_ir(value),
@@ -71,7 +81,10 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
 
 fn validate_int(n: i64) -> Result<(), CompileError> {
     if n.unsigned_abs() > MAX_LOADI_MAGNITUDE as u64 {
-        return Err(CompileError::IntegerOutOfRange { value: n, max_magnitude: MAX_LOADI_MAGNITUDE });
+        return Err(CompileError::IntegerOutOfRange {
+            value: n,
+            max_magnitude: MAX_LOADI_MAGNITUDE,
+        });
     }
     Ok(())
 }
@@ -314,7 +327,7 @@ impl Compiler {
         // Closure is (LABEL_PTR . CAPTURED_ENV)
         let ret_label = self.next_label("call_ret");
         self.emit("CAR R10 R15"); // Extract LABEL_PTR to R10
-        self.emit("CDR R4 R15");  // Extract CAPTURED_ENV to R4 (current ENV register)
+        self.emit("CDR R4 R15"); // Extract CAPTURED_ENV to R4 (current ENV register)
 
         self.emit(&format!("LOADI R14 {}", ret_label)); // Return address
         self.emit("RET R10"); // Indirect jump to lambda body
@@ -365,7 +378,10 @@ impl Compiler {
     fn compile_let(&mut self, bindings: &[(String, Ir)], body: &Ir, target_reg: &str) {
         let params = Params::Fixed(bindings.iter().map(|(name, _)| name.clone()).collect());
         let values: Vec<Ir> = bindings.iter().map(|(_, value)| value.clone()).collect();
-        let lambda = Ir::Lambda { params, body: Box::new(body.clone()) };
+        let lambda = Ir::Lambda {
+            params,
+            body: Box::new(body.clone()),
+        };
         self.compile_generic_call(&lambda, &values, target_reg);
     }
 

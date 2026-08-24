@@ -1,5 +1,5 @@
 use cml::compute::AdmissionBlocker;
-use cml::gpu_wgsl::{emit_map_shader, WgslError};
+use cml::gpu_wgsl::{WgslError, emit_map_shader};
 use cml::{lower, parser};
 
 fn lower_one(source: &str) -> cml::ir::Ir {

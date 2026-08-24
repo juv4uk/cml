@@ -72,7 +72,9 @@ pub fn parse(input: &str) -> Result<Vec<Expr>, ParseError> {
     Ok(exprs)
 }
 
-fn parse_expr(tokens: &mut std::iter::Peekable<std::vec::IntoIter<String>>) -> Result<Expr, ParseError> {
+fn parse_expr(
+    tokens: &mut std::iter::Peekable<std::vec::IntoIter<String>>,
+) -> Result<Expr, ParseError> {
     let token = tokens.next().ok_or(ParseError::UnexpectedEOF)?;
 
     match token.as_str() {
@@ -101,7 +103,7 @@ fn parse_numeric_buffer(
         Some(token) => {
             return Err(ParseError::UnexpectedToken(format!(
                 "expected '(' after numeric buffer tag, found {token}"
-            )))
+            )));
         }
         None => return Err(ParseError::UnexpectedEOF),
     }
@@ -143,7 +145,9 @@ fn parse_numeric_buffer(
     }
 }
 
-fn parse_list(tokens: &mut std::iter::Peekable<std::vec::IntoIter<String>>) -> Result<Expr, ParseError> {
+fn parse_list(
+    tokens: &mut std::iter::Peekable<std::vec::IntoIter<String>>,
+) -> Result<Expr, ParseError> {
     let mut list = Vec::new();
     while let Some(peeked) = tokens.peek() {
         if peeked == ")" {
@@ -154,7 +158,10 @@ fn parse_list(tokens: &mut std::iter::Peekable<std::vec::IntoIter<String>>) -> R
             let dotted = parse_expr(tokens)?;
             let closing = tokens.next().ok_or(ParseError::UnexpectedEOF)?;
             if closing != ")" {
-                return Err(ParseError::UnexpectedToken(format!("Expected ')', found {}", closing)));
+                return Err(ParseError::UnexpectedToken(format!(
+                    "Expected ')', found {}",
+                    closing
+                )));
             }
             return Ok(Expr::DottedList(list, Box::new(dotted)));
         }

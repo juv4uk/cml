@@ -100,7 +100,9 @@ fn split(expr: &Expr) -> Option<(Expr, Expr)> {
 
 impl MacroExpander {
     pub fn new() -> Self {
-        MacroExpander { macros: HashMap::new() }
+        MacroExpander {
+            macros: HashMap::new(),
+        }
     }
 
     pub fn process(&mut self, exprs: &[Expr]) -> Result<Vec<Expr>, MacroError> {
@@ -128,7 +130,11 @@ impl MacroExpander {
                         return self.expand(&expanded_value);
                     }
                 }
-                Ok(Expr::List(list.iter().map(|e| self.expand(e)).collect::<Result<Vec<_>, _>>()?))
+                Ok(Expr::List(
+                    list.iter()
+                        .map(|e| self.expand(e))
+                        .collect::<Result<Vec<_>, _>>()?,
+                ))
             }
             _ => Ok(expr.clone()),
         }
@@ -185,7 +191,8 @@ fn eval_macro_body(expr: &Expr, env: &HashMap<String, Expr>) -> Result<Expr, Mac
             } else if upper == "T" {
                 Ok(expr.clone())
             } else {
-                Ok(env.get(s)
+                Ok(env
+                    .get(s)
                     .ok_or_else(|| MacroError::UnboundSymbol(s.clone()))?
                     .clone())
             }

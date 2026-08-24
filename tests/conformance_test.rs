@@ -1,14 +1,14 @@
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::process::Command;
-use std::collections::HashMap;
-use std::collections::HashSet;
 
-use cml::parser;
 use cml::ast::Expr;
 use cml::compiler::Compiler;
-use cml::macros::MacroExpander;
 use cml::lower;
+use cml::macros::MacroExpander;
+use cml::parser;
 
 fn collect_symbols(expr: &Expr, syms: &mut Vec<String>) {
     match expr {
@@ -36,20 +36,20 @@ fn collect_symbols(expr: &Expr, syms: &mut Vec<String>) {
 // A simple parser for the alist format: ((expr . "(quote radio)") (expected . "radio") ...)
 fn parse_conformance_line(line: &str) -> Option<(String, String)> {
     let expr_marker = "(expr . \"";
-    
+
     let expr_start = line.find(expr_marker)? + expr_marker.len();
     let expected_marker_full = "\") (expected . \"";
-    
+
     let expr_end = line[expr_start..].find(expected_marker_full)? + expr_start;
     let expr = &line[expr_start..expr_end];
-    
+
     let expected_start = expr_end + expected_marker_full.len();
     let expected_end = line[expected_start..].find("\")")? + expected_start;
     let expected = &line[expected_start..expected_end];
-    
+
     let unescaped_expr = expr.replace("\\\"", "\"");
     let unescaped_expected = expected.replace("\\\"", "\"");
-    
+
     Some((unescaped_expr, unescaped_expected))
 }
 
@@ -86,7 +86,9 @@ fn static_error(expr: &Expr) -> Option<&'static str> {
                 let supplied = items.len() - 1;
                 match lambda.get(1) {
                     Some(Expr::List(params)) if supplied != params.len() => return Some("Arity"),
-                    Some(Expr::DottedList(fixed, _)) if supplied < fixed.len() => return Some("Arity"),
+                    Some(Expr::DottedList(fixed, _)) if supplied < fixed.len() => {
+                        return Some("Arity");
+                    }
                     _ => {}
                 }
             }
@@ -184,10 +186,7 @@ fn canonical_decoder_renders_proper_and_dotted_heap_structures() {
         ("B".to_string(), 11),
         ("TAIL".to_string(), 12),
     ]);
-    let proper = HashMap::from([
-        (0, ((2, 10), (1, 1))),
-        (1, ((2, 11), (3, 0))),
-    ]);
+    let proper = HashMap::from([(0, ((2, 10), (1, 1))), (1, ((2, 11), (3, 0)))]);
     let dotted = HashMap::from([(0, ((2, 10), (2, 12)))]);
 
     assert_eq!(
@@ -204,7 +203,7 @@ fn canonical_decoder_renders_proper_and_dotted_heap_structures() {
 fn test_conformance() {
     let fixture_path = "../my-lisp/tests/fixtures/conformance.my";
     let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read conformance.my");
-    
+
     // 1. Build the simulator once. Sources are read from ../fpga-lisp
     // (current_dir), but the compiled .vvp is written back into this
     // crate's own directory via an absolute -o path, so nothing is written
@@ -216,8 +215,10 @@ fn test_conformance() {
     let iv_output = Command::new("iverilog")
         .current_dir(fpga_sim_dir)
         .arg("-g2012")
-        .arg("-I").arg("fpga/rtl")
-        .arg("-o").arg(&vvp_abs)
+        .arg("-I")
+        .arg("fpga/rtl")
+        .arg("-o")
+        .arg(&vvp_abs)
         .arg("fpga/rtl/lisp_word.sv")
         .arg("fpga/rtl/heap.sv")
         .arg("fpga/rtl/lisp_data_unit.sv")
@@ -234,25 +235,28 @@ fn test_conformance() {
     if !iv_output.status.success() {
         let stderr = String::from_utf8_lossy(&iv_output.stderr);
         let stdout = String::from_utf8_lossy(&iv_output.stdout);
-        panic!("Icarus Verilog compilation failed:\nSTDOUT: {}\nSTDERR: {}", stdout, stderr);
+        panic!(
+            "Icarus Verilog compilation failed:\nSTDOUT: {}\nSTDERR: {}",
+            stdout, stderr
+        );
     }
-    
+
     // Track symbols globally across the runner
     let mut symbol_table = HashMap::new();
     let mut next_sym_id = 10; // Start dynamic symbols at 10
-    
+
     symbol_table.insert("NIL".to_string(), 0);
     symbol_table.insert("TRUE".to_string(), 1);
     symbol_table.insert("T".to_string(), 1);
     let mut unsupported_newer_contract = 0;
-    
+
     // Run tests
     for line in fixture_content.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with(';') {
             continue;
         }
-        
+
         // Let's only run Tier 1 constitutive tests for now to prove the pipeline
         if !line.contains("(tier . 1)") {
             continue;
@@ -262,12 +266,11 @@ fn test_conformance() {
             unsupported_newer_contract += 1;
             continue;
         }
-        
+
         // fpga-lisp hardware only has TAG_FIXNUM, so we skip float tests
         if line.contains("3.0") {
             continue;
         }
-
 
         let (expr_str, expected_str, expected_error) =
             if let Some((expr, expected)) = parse_conformance_line(line) {
@@ -280,7 +283,9 @@ fn test_conformance() {
         {
             println!("Testing: {}", expr_str);
             let exprs = parser::parse(&expr_str).unwrap();
-            let exprs = MacroExpander::new().process(&exprs).expect("macro expansion failed");
+            let exprs = MacroExpander::new()
+                .process(&exprs)
+                .expect("macro expansion failed");
             if let Some(actual_error) = exprs.first().and_then(static_error) {
                 assert_eq!(
                     Some(actual_error),
@@ -299,24 +304,24 @@ fn test_conformance() {
             for e in &exprs {
                 collect_symbols(e, &mut new_syms);
             }
-            
+
             for s in new_syms {
                 if !symbol_table.contains_key(&s) {
                     symbol_table.insert(s, next_sym_id);
                     next_sym_id += 1;
                 }
             }
-            
+
             let mut full_asm = String::new();
             for (sym, id) in &symbol_table {
                 full_asm.push_str(&format!(".define {} {}\n", sym, id));
             }
             full_asm.push_str(&asm);
-            
+
             let test_name = "conformance_test";
             let asm_path = format!("{}.asm", test_name);
             fs::write(&asm_path, &full_asm).unwrap();
-            
+
             // Assemble
             let asm_output = Command::new("python3")
                 .arg("../fpga-lisp/assembler.py")
@@ -325,9 +330,13 @@ fn test_conformance() {
                 .expect("Failed to run python assembler");
 
             if !asm_output.status.success() {
-                panic!("Assembler failed on '{}':\n{}", expr_str, String::from_utf8_lossy(&asm_output.stderr));
+                panic!(
+                    "Assembler failed on '{}':\n{}",
+                    expr_str,
+                    String::from_utf8_lossy(&asm_output.stderr)
+                );
             }
-            
+
             let bin_path = format!("{}.bin", test_name);
             let bin_abs = cwd.join(&bin_path);
 
@@ -345,7 +354,7 @@ fn test_conformance() {
             // Cleanup intermediate files for this test
             let _ = fs::remove_file(&asm_path);
             let _ = fs::remove_file(&bin_path);
-            
+
             // Decode R15
             let mut tag = None;
             let mut val = None;
@@ -369,16 +378,32 @@ fn test_conformance() {
                 }
             }
             if let Some(expected) = expected_error {
-                assert_eq!(result_error.as_deref(), Some(expected.as_str()), "Error mismatch for {}", expr_str);
+                assert_eq!(
+                    result_error.as_deref(),
+                    Some(expected.as_str()),
+                    "Error mismatch for {}",
+                    expr_str
+                );
                 continue;
             }
-            
-            let tag = tag.expect(&format!("Could not find RESULT_TAG in output for {}:\n{}", expr_str, stdout));
-            let val = val.expect(&format!("Could not find RESULT_VAL in output for {}", expr_str));
-            
+
+            let tag = tag.expect(&format!(
+                "Could not find RESULT_TAG in output for {}:\n{}",
+                expr_str, stdout
+            ));
+            let val = val.expect(&format!(
+                "Could not find RESULT_VAL in output for {}",
+                expr_str
+            ));
+
             let actual = render_word((tag, val), &heap, &symbol_table, &mut HashSet::new())
                 .unwrap_or_else(|error| panic!("Could not decode result for {expr_str}: {error}"));
-            assert_eq!(actual, expected_str.unwrap(), "Test failed for {}", expr_str);
+            assert_eq!(
+                actual,
+                expected_str.unwrap(),
+                "Test failed for {}",
+                expr_str
+            );
         }
     }
     assert!(

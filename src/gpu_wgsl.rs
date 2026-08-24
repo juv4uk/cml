@@ -4,7 +4,7 @@
 //! and readback belong to the later `wgpu` runtime slice.
 
 use crate::compute::{
-    analyze, f32_affine_offset, AdmissionBlocker, BulkOperation, NumericDomain, ScalarExpr,
+    AdmissionBlocker, BulkOperation, NumericDomain, ScalarExpr, analyze, f32_affine_offset,
 };
 use crate::ir::Ir;
 

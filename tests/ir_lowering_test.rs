@@ -5,8 +5,8 @@
 use std::fs;
 
 use cml::ir::Ir;
-use cml::lower::lower_expr;
 use cml::lower::LowerErrorKind;
+use cml::lower::lower_expr;
 use cml::macros::MacroExpander;
 use cml::parser;
 
@@ -70,8 +70,16 @@ fn lowers_every_tier1_conformance_fixture() {
         }
     }
 
-    assert!(checked > 20, "expected to actually exercise a meaningful number of fixtures, got {checked}");
-    assert!(failures.is_empty(), "lowering failed for {} fixture(s):\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        checked > 20,
+        "expected to actually exercise a meaningful number of fixtures, got {checked}"
+    );
+    assert!(
+        failures.is_empty(),
+        "lowering failed for {} fixture(s):\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
 }
 
 #[test]
@@ -91,5 +99,8 @@ fn malformed_quote_has_a_typed_arity_error() {
     let exprs = parser::parse("(quote a b)").unwrap();
     let error = lower_expr(&exprs[0]).unwrap_err();
     assert_eq!(error.kind, LowerErrorKind::Arity);
-    assert_eq!(error.to_string(), "Arity: quote expects exactly one argument");
+    assert_eq!(
+        error.to_string(),
+        "Arity: quote expects exactly one argument"
+    );
 }

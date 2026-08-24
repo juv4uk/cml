@@ -1,5 +1,5 @@
 use cml::compute::{
-    analyze, ComputeKernel, EffectClass, ExecutionShape, NumericDomain, ScalarExpr, StorageClass,
+    ComputeKernel, EffectClass, ExecutionShape, NumericDomain, ScalarExpr, StorageClass, analyze,
 };
 use cml::ir::{BufferLiteral, Ir};
 use cml::{c_backend::CBackend, compiler::Compiler, lower, parser};
@@ -56,9 +56,11 @@ fn i32_overflow_without_a_range_proof_blocks_offload() {
     let analysis = analyze(&lower_one(
         "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(2147483647))",
     ));
-    assert!(analysis
-        .gpu_blockers
-        .contains(&cml::compute::AdmissionBlocker::IntegerOverflowNotProven));
+    assert!(
+        analysis
+            .gpu_blockers
+            .contains(&cml::compute::AdmissionBlocker::IntegerOverflowNotProven)
+    );
     assert!(!analysis.gpu_eligible());
 }
 
@@ -67,9 +69,11 @@ fn intermediate_i32_overflow_is_not_hidden_by_later_cancellation() {
     let analysis = analyze(&lower_one(
         "(numeric-buffer-map (lambda (x) (+ (+ x 2147483647) -2147483647)) #i32(1))",
     ));
-    assert!(analysis
-        .gpu_blockers
-        .contains(&cml::compute::AdmissionBlocker::IntegerOverflowNotProven));
+    assert!(
+        analysis
+            .gpu_blockers
+            .contains(&cml::compute::AdmissionBlocker::IntegerOverflowNotProven)
+    );
     assert!(!analysis.gpu_eligible());
 }
 
@@ -86,9 +90,11 @@ fn non_affine_f32_map_stays_blocked() {
     let analysis = analyze(&lower_one(
         "(numeric-buffer-map (lambda (x) (+ x x)) #f32(1.0 2.0))",
     ));
-    assert!(analysis
-        .gpu_blockers
-        .contains(&cml::compute::AdmissionBlocker::FloatRoundingNotDefined));
+    assert!(
+        analysis
+            .gpu_blockers
+            .contains(&cml::compute::AdmissionBlocker::FloatRoundingNotDefined)
+    );
     assert!(!analysis.gpu_eligible());
 }
 

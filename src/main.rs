@@ -1,7 +1,7 @@
-use cml::parser;
 use cml::compiler::Compiler;
-use cml::macros::MacroExpander;
 use cml::lower;
+use cml::macros::MacroExpander;
+use cml::parser;
 use std::env;
 use std::fs;
 
@@ -13,11 +13,10 @@ fn main() {
     }
 
     let filename = &args[1];
-    let contents = fs::read_to_string(filename)
-        .unwrap_or_else(|err| {
-            eprintln!("Error reading file {}: {}", filename, err);
-            std::process::exit(1);
-        });
+    let contents = fs::read_to_string(filename).unwrap_or_else(|err| {
+        eprintln!("Error reading file {}: {}", filename, err);
+        std::process::exit(1);
+    });
 
     let exprs = parser::parse(&contents).unwrap();
     let exprs = MacroExpander::new().process(&exprs).unwrap_or_else(|err| {

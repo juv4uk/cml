@@ -27,11 +27,17 @@ pub struct LowerError {
 
 impl LowerError {
     fn arity(detail: impl Into<String>) -> Self {
-        Self { kind: LowerErrorKind::Arity, detail: detail.into() }
+        Self {
+            kind: LowerErrorKind::Arity,
+            detail: detail.into(),
+        }
     }
 
     fn invalid_form(detail: impl Into<String>) -> Self {
-        Self { kind: LowerErrorKind::InvalidForm, detail: detail.into() }
+        Self {
+            kind: LowerErrorKind::InvalidForm,
+            detail: detail.into(),
+        }
     }
 }
 
@@ -118,9 +124,9 @@ pub fn lower_expr(expr: &Expr) -> Result<Ir, LowerError> {
         Expr::String(s) => Ok(Ir::Quote(Quoted::Sym(s.to_uppercase()))),
         Expr::Symbol(s) => lower_symbol(s),
         Expr::List(list) => lower_list(list),
-        Expr::DottedList(_, _) => {
-            Err(LowerError::invalid_form("unquoted dotted list unsupported (matches compiler.rs's compile_expr)"))
-        }
+        Expr::DottedList(_, _) => Err(LowerError::invalid_form(
+            "unquoted dotted list unsupported (matches compiler.rs's compile_expr)",
+        )),
     }
 }
 
@@ -163,7 +169,10 @@ fn lower_call(func: &str, args: &[Expr]) -> Result<Ir, LowerError> {
 }
 
 fn lower_prim(op: PrimOp, args: &[Expr]) -> Result<Ir, LowerError> {
-    Ok(Ir::Prim { op, args: args.iter().map(lower_expr).collect::<Result<_, _>>()? })
+    Ok(Ir::Prim {
+        op,
+        args: args.iter().map(lower_expr).collect::<Result<_, _>>()?,
+    })
 }
 
 fn lower_generic_call(func_expr: &Expr, args: &[Expr]) -> Result<Ir, LowerError> {
@@ -177,10 +186,14 @@ fn lower_cond(branches: &[Expr]) -> Result<Ir, LowerError> {
     let mut lowered = Vec::with_capacity(branches.len());
     for branch in branches {
         let Expr::List(pair) = branch else {
-            return Err(LowerError::invalid_form("malformed cond branch (matches compiler.rs's compile_cond)"));
+            return Err(LowerError::invalid_form(
+                "malformed cond branch (matches compiler.rs's compile_cond)",
+            ));
         };
         let [test, body] = pair.as_slice() else {
-            return Err(LowerError::invalid_form("malformed cond branch (matches compiler.rs's compile_cond)"));
+            return Err(LowerError::invalid_form(
+                "malformed cond branch (matches compiler.rs's compile_cond)",
+            ));
         };
         lowered.push((lower_expr(test)?, lower_expr(body)?));
     }
@@ -190,7 +203,10 @@ fn lower_cond(branches: &[Expr]) -> Result<Ir, LowerError> {
 fn lower_lambda(args: &[Expr]) -> Result<Ir, LowerError> {
     let params = lower_params(&args[0])?;
     let body = lower_expr(&args[1])?;
-    Ok(Ir::Lambda { params, body: Box::new(body) })
+    Ok(Ir::Lambda {
+        params,
+        body: Box::new(body),
+    })
 }
 
 fn lower_params(expr: &Expr) -> Result<Params, LowerError> {
@@ -198,9 +214,14 @@ fn lower_params(expr: &Expr) -> Result<Params, LowerError> {
         Expr::List(params) => Ok(Params::Fixed(symbols(params)?)),
         Expr::DottedList(list, tail) => {
             let Expr::Symbol(rest) = &**tail else {
-                return Err(LowerError::invalid_form("dotted param list's tail must be a symbol"));
+                return Err(LowerError::invalid_form(
+                    "dotted param list's tail must be a symbol",
+                ));
             };
-            Ok(Params::Variadic { fixed: symbols(list)?, rest: rest.to_uppercase() })
+            Ok(Params::Variadic {
+                fixed: symbols(list)?,
+                rest: rest.to_uppercase(),
+            })
         }
         Expr::Symbol(rest) => Ok(Params::AllRest(rest.to_uppercase())),
         _ => Err(LowerError::invalid_form("malformed lambda parameter list")),
@@ -212,14 +233,18 @@ fn symbols(exprs: &[Expr]) -> Result<Vec<String>, LowerError> {
         .iter()
         .map(|e| match e {
             Expr::Symbol(s) => Ok(s.to_uppercase()),
-            _ => Err(LowerError::invalid_form("expected a symbol in parameter list")),
+            _ => Err(LowerError::invalid_form(
+                "expected a symbol in parameter list",
+            )),
         })
         .collect()
 }
 
 fn lower_let(args: &[Expr]) -> Result<Ir, LowerError> {
     let Expr::List(bindings) = &args[0] else {
-        return Err(LowerError::invalid_form("malformed let (matches compiler.rs's compile_let)"));
+        return Err(LowerError::invalid_form(
+            "malformed let (matches compiler.rs's compile_let)",
+        ));
     };
     let mut lowered_bindings = Vec::with_capacity(bindings.len());
     for binding in bindings {
@@ -232,15 +257,23 @@ fn lower_let(args: &[Expr]) -> Result<Ir, LowerError> {
         lowered_bindings.push((name.to_uppercase(), lower_expr(value)?));
     }
     let body = lower_expr(&args[1])?;
-    Ok(Ir::Let { bindings: lowered_bindings, body: Box::new(body) })
+    Ok(Ir::Let {
+        bindings: lowered_bindings,
+        body: Box::new(body),
+    })
 }
 
 fn lower_def(args: &[Expr]) -> Result<Ir, LowerError> {
     let Expr::Symbol(name) = &args[0] else {
-        return Err(LowerError::invalid_form("def expects a symbol name (matches compiler.rs's compile_def)"));
+        return Err(LowerError::invalid_form(
+            "def expects a symbol name (matches compiler.rs's compile_def)",
+        ));
     };
     let value = lower_expr(&args[1])?;
-    Ok(Ir::Def { name: name.to_uppercase(), value: Box::new(value) })
+    Ok(Ir::Def {
+        name: name.to_uppercase(),
+        value: Box::new(value),
+    })
 }
 
 fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
@@ -252,7 +285,9 @@ fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
             if list.is_empty() {
                 Ok(Quoted::Nil)
             } else {
-                Ok(Quoted::List(list.iter().map(lower_quoted).collect::<Result<_, _>>()?))
+                Ok(Quoted::List(
+                    list.iter().map(lower_quoted).collect::<Result<_, _>>()?,
+                ))
             }
         }
         Expr::DottedList(list, tail) => Ok(Quoted::DottedList(

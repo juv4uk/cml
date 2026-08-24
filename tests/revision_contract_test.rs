@@ -62,8 +62,8 @@ fn head(path: &Path) -> String {
 // non-noisy check, unchanged.
 #[test]
 fn checked_out_dependencies_match_the_compatibility_contract() {
-    let compatibility = fs::read_to_string("compatibility.my")
-        .expect("compatibility.my should be readable");
+    let compatibility =
+        fs::read_to_string("compatibility.my").expect("compatibility.my should be readable");
     assert!(
         compatibility.contains(&format!("(tested-sha . \"{MY_LISP_SHA}\")")),
         "this file's MY_LISP_SHA constant doesn't match compatibility.my -- update one or the other"
@@ -91,7 +91,10 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
 
     let isa = fs::read_to_string(fpga_lisp.join("isa-contract.my"))
         .expect("fpga-lisp ISA contract should be readable");
-    assert!(isa.contains("(version . (1 0))"), "fpga-lisp ISA version drift");
+    assert!(
+        isa.contains("(version . (1 0))"),
+        "fpga-lisp ISA version drift"
+    );
     assert!(
         isa.contains("(jf-branches-only-on . (nil))"),
         "fpga-lisp truth/JF contract drift"
@@ -118,8 +121,8 @@ fn compatibility_my_contract_version_matches_language_contract_my() {
     let minor = extract_field(&language_contract, "minor")
         .expect("language-contract.my should have a (minor . N) field");
 
-    let compatibility = fs::read_to_string("compatibility.my")
-        .expect("compatibility.my should be readable");
+    let compatibility =
+        fs::read_to_string("compatibility.my").expect("compatibility.my should be readable");
     let observed = format!("(observed-upstream-contract . ({major} {minor}))");
     assert!(
         compatibility.contains(&observed),

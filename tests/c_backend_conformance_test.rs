@@ -38,11 +38,15 @@ fn parse_error_line(line: &str) -> Option<(String, String)> {
     let expr_end = line[expr_start..].find(error_marker)? + expr_start;
     let error_start = expr_end + error_marker.len();
     let error_end = line[error_start..].find("\")")? + error_start;
-    Some((line[expr_start..expr_end].replace("\\\"", "\""), line[error_start..error_end].to_string()))
+    Some((
+        line[expr_start..expr_end].replace("\\\"", "\""),
+        line[error_start..error_end].to_string(),
+    ))
 }
 
 fn compile_and_run(expr_str: &str, stem: &str) -> Result<std::process::Output, String> {
-    let exprs = parser::parse(expr_str).map_err(|error| format!("parser admission failed: {error:?}"))?;
+    let exprs =
+        parser::parse(expr_str).map_err(|error| format!("parser admission failed: {error:?}"))?;
     let exprs = MacroExpander::new()
         .process(&exprs)
         .map_err(|error| format!("macro expansion failed: {error}"))?;
@@ -62,7 +66,10 @@ fn compile_and_run(expr_str: &str, stem: &str) -> Result<std::process::Output, S
         .map_err(|error| error.to_string())?;
     let _ = fs::remove_file(&c_path);
     if !compile.status.success() {
-        return Err(format!("gcc failed: {}", String::from_utf8_lossy(&compile.stderr)));
+        return Err(format!(
+            "gcc failed: {}",
+            String::from_utf8_lossy(&compile.stderr)
+        ));
     }
     let run = Command::new(format!("./{bin_path}"))
         .output()
@@ -85,13 +92,21 @@ fn parse_symbol_list_field(line: &str, field: &str) -> Option<Vec<String>> {
     let marker = format!("({field} . (");
     let start = line.find(&marker)? + marker.len();
     let end = line[start..].find(')')? + start;
-    Some(line[start..end].split_whitespace().map(str::to_owned).collect())
+    Some(
+        line[start..end]
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect(),
+    )
 }
 
 #[test]
 fn parses_fixture_contract_gate() {
     let fixture = "((expr . \"x\") (since-contract . (2 1)))";
-    assert_eq!(parse_contract_version(fixture, "since-contract"), Some((2, 1)));
+    assert_eq!(
+        parse_contract_version(fixture, "since-contract"),
+        Some((2, 1))
+    );
 }
 
 #[test]
@@ -99,7 +114,10 @@ fn parses_fixture_capability_requirements() {
     let fixture = "((expr . \"x\") (requires . (first-class-builtins numeric-buffers)))";
     assert_eq!(
         parse_symbol_list_field(fixture, "requires"),
-        Some(vec!["first-class-builtins".to_string(), "numeric-buffers".to_string()])
+        Some(vec![
+            "first-class-builtins".to_string(),
+            "numeric-buffers".to_string()
+        ])
     );
 }
 
@@ -122,7 +140,10 @@ fn c_backend_accounts_for_every_contract_2_1_fixture_by_capability() {
         }
         selected += 1;
         let Some(requirements) = parse_symbol_list_field(line, "requires") else {
-            failures.push(format!("fixture line {}: contract 2.1 fixture has no valid requires field", i + 1));
+            failures.push(format!(
+                "fixture line {}: contract 2.1 fixture has no valid requires field",
+                i + 1
+            ));
             continue;
         };
         if !requirements
@@ -133,7 +154,10 @@ fn c_backend_accounts_for_every_contract_2_1_fixture_by_capability() {
             continue;
         }
         let Some((expr_str, expected_str)) = parse_conformance_line(line) else {
-            failures.push(format!("fixture line {}: expected-value record was not admitted", i + 1));
+            failures.push(format!(
+                "fixture line {}: expected-value record was not admitted",
+                i + 1
+            ));
             continue;
         };
         let exprs = match parser::parse(&expr_str) {
@@ -167,9 +191,17 @@ fn c_backend_accounts_for_every_contract_2_1_fixture_by_capability() {
         let c_path = format!("c_backend_contract21_{i}.c");
         let bin_path = format!("c_backend_contract21_{i}");
         fs::write(&c_path, &c_source).unwrap();
-        let compile = Command::new("gcc").arg(&c_path).arg("-o").arg(&bin_path).output().unwrap();
+        let compile = Command::new("gcc")
+            .arg(&c_path)
+            .arg("-o")
+            .arg(&bin_path)
+            .output()
+            .unwrap();
         if !compile.status.success() {
-            failures.push(format!("{expr_str}: gcc failed: {}", String::from_utf8_lossy(&compile.stderr)));
+            failures.push(format!(
+                "{expr_str}: gcc failed: {}",
+                String::from_utf8_lossy(&compile.stderr)
+            ));
             let _ = fs::remove_file(&c_path);
             continue;
         }
@@ -177,18 +209,28 @@ fn c_backend_accounts_for_every_contract_2_1_fixture_by_capability() {
         let _ = fs::remove_file(&c_path);
         let _ = fs::remove_file(&bin_path);
         if !run.status.success() {
-            failures.push(format!("{expr_str}: compiled program failed: {}", String::from_utf8_lossy(&run.stderr)));
+            failures.push(format!(
+                "{expr_str}: compiled program failed: {}",
+                String::from_utf8_lossy(&run.stderr)
+            ));
             continue;
         }
         let actual = String::from_utf8_lossy(&run.stdout).trim().to_lowercase();
         if actual != expected_str.to_lowercase() {
-            failures.push(format!("{expr_str}: expected {expected_str:?}, got {actual:?}"));
+            failures.push(format!(
+                "{expr_str}: expected {expected_str:?}, got {actual:?}"
+            ));
             continue;
         }
         supported += 1;
     }
 
-    assert!(failures.is_empty(), "{} fixture(s) failed:\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} fixture(s) failed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
     assert_eq!(selected, supported + unsupported_capability);
     assert_eq!((selected, supported, unsupported_capability), (3, 3, 0));
     eprintln!(
@@ -244,7 +286,10 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
             }
             Some(_) => {}
             None if line.contains("(since-contract") => {
-                failures.push(format!("fixture line {}: malformed since-contract field", i + 1));
+                failures.push(format!(
+                    "fixture line {}: malformed since-contract field",
+                    i + 1
+                ));
                 continue;
             }
             None => {}
@@ -263,9 +308,10 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
                 continue;
             }
             match compile_and_run(&expr_str, &format!("conf_error_{i}")) {
-                Ok(run) if !run.status.success()
-                    && String::from_utf8_lossy(&run.stderr)
-                        .starts_with(&format!("{expected_kind}:")) =>
+                Ok(run)
+                    if !run.status.success()
+                        && String::from_utf8_lossy(&run.stderr)
+                            .starts_with(&format!("{expected_kind}:")) =>
                 {
                     checked_errors += 1;
                 }
@@ -286,7 +332,10 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
             continue;
         }
         let Some((expr_str, expected_str)) = parse_conformance_line(line) else {
-            failures.push(format!("fixture line {}: expected-value record was not admitted", i + 1));
+            failures.push(format!(
+                "fixture line {}: expected-value record was not admitted",
+                i + 1
+            ));
             continue;
         };
 
@@ -316,7 +365,12 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         let bin_path = format!("c_backend_conf_{i}");
         fs::write(&c_path, &c_source).unwrap();
 
-        let compile = Command::new("gcc").arg(&c_path).arg("-o").arg(&bin_path).output().unwrap();
+        let compile = Command::new("gcc")
+            .arg(&c_path)
+            .arg("-o")
+            .arg(&bin_path)
+            .output()
+            .unwrap();
         if !compile.status.success() {
             failures.push(format!(
                 "{expr_str}: gcc failed: {}",
@@ -338,11 +392,18 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         // doesn't masquerade as a real mismatch here.
         let expected_lower = expected_str.to_lowercase();
         if actual != expected_lower {
-            failures.push(format!("{expr_str}: expected {expected_str:?}, got {actual:?}"));
+            failures.push(format!(
+                "{expr_str}: expected {expected_str:?}, got {actual:?}"
+            ));
         }
     }
 
-    assert!(failures.is_empty(), "{} fixture(s) failed:\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} fixture(s) failed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
     let accounted = checked
         + checked_errors
         + unsupported_errors
@@ -352,7 +413,10 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         accounted, selected,
         "every selected tier-1 fixture must be executed or assigned one explicit unsupported state"
     );
-    assert!(admitted_newer_contract > 0, "the shared suite should exercise capability-based admission");
+    assert!(
+        admitted_newer_contract > 0,
+        "the shared suite should exercise capability-based admission"
+    );
     eprintln!(
         "tier-1 matrix: selected={selected} supported-value={checked} supported-error={checked_errors} \
          unsupported-error={unsupported_errors} \

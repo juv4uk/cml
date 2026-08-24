@@ -116,7 +116,10 @@ pub fn analyze(ir: &Ir) -> ComputeAnalysis {
         .unwrap_or_else(|| numeric_domain_of(ir));
 
     let mut gpu_blockers = Vec::new();
-    if !matches!(shape, ExecutionShape::ElementWise | ExecutionShape::Reduction) {
+    if !matches!(
+        shape,
+        ExecutionShape::ElementWise | ExecutionShape::Reduction
+    ) {
         gpu_blockers.push(AdmissionBlocker::NotBulkParallel);
     }
     if effect != EffectClass::Pure {
@@ -125,16 +128,20 @@ pub fn analyze(ir: &Ir) -> ComputeAnalysis {
     if storage != StorageClass::ContiguousBuffer {
         gpu_blockers.push(AdmissionBlocker::StorageNotContiguous);
     }
-    if !matches!(numeric_domain, NumericDomain::FixedWidthInteger | NumericDomain::InexactFloat) {
+    if !matches!(
+        numeric_domain,
+        NumericDomain::FixedWidthInteger | NumericDomain::InexactFloat
+    ) {
         gpu_blockers.push(AdmissionBlocker::NumericDomainNotRepresentable);
     }
-    if region.as_ref().is_some_and(|region| region.kernel.is_none()) {
+    if region
+        .as_ref()
+        .is_some_and(|region| region.kernel.is_none())
+    {
         gpu_blockers.push(AdmissionBlocker::KernelNotLowerable);
     }
     match (numeric_domain, region.as_ref()) {
-        (NumericDomain::FixedWidthInteger, Some(region))
-            if !i32_range_proven(region) =>
-        {
+        (NumericDomain::FixedWidthInteger, Some(region)) if !i32_range_proven(region) => {
             gpu_blockers.push(AdmissionBlocker::IntegerOverflowNotProven);
         }
         (NumericDomain::InexactFloat, Some(region)) if !f32_rounding_proven(region) => {
@@ -143,11 +150,20 @@ pub fn analyze(ir: &Ir) -> ComputeAnalysis {
         _ => {}
     }
 
-    ComputeAnalysis { shape, effect, storage, numeric_domain, region, gpu_blockers }
+    ComputeAnalysis {
+        shape,
+        effect,
+        storage,
+        numeric_domain,
+        region,
+        gpu_blockers,
+    }
 }
 
 fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
-    let Ir::App { func, args } = ir else { return None };
+    let Ir::App { func, args } = ir else {
+        return None;
+    };
     let Ir::Var(name) = &**func else { return None };
     match (name.as_str(), args.as_slice()) {
         ("MAP" | "NUMERIC-BUFFER-MAP", [function, input]) => Some(ComputeRegion {
@@ -183,14 +199,16 @@ fn eval_i32_range(expression: &ScalarExpr, parameters: &[i64]) -> Option<i64> {
     let value = match expression {
         ScalarExpr::Parameter(index) => parameters.get(*index).copied(),
         ScalarExpr::ExactInteger(value) => Some(*value),
-        ScalarExpr::CheckedAdd(left, right) => eval_i32_range(left, parameters)?
-            .checked_add(eval_i32_range(right, parameters)?),
+        ScalarExpr::CheckedAdd(left, right) => {
+            eval_i32_range(left, parameters)?.checked_add(eval_i32_range(right, parameters)?)
+        }
     }?;
     i32::try_from(value).ok().map(i64::from)
 }
 
 fn f32_rounding_proven(region: &ComputeRegion) -> bool {
-    let (Some(kernel), Ir::Buffer(BufferLiteral::F32(input))) = (&region.kernel, &region.input) else {
+    let (Some(kernel), Ir::Buffer(BufferLiteral::F32(input))) = (&region.kernel, &region.input)
+    else {
         return false;
     };
     let Some(offset) = f32_affine_offset(&kernel.body) else {
@@ -242,7 +260,11 @@ pub(crate) fn f32_affine_offset(expression: &ScalarExpr) -> Option<i64> {
 }
 
 fn lower_kernel(function: &Ir, expected_parameters: usize) -> Option<ComputeKernel> {
-    let Ir::Lambda { params: Params::Fixed(parameters), body } = function else {
+    let Ir::Lambda {
+        params: Params::Fixed(parameters),
+        body,
+    } = function
+    else {
         return None;
     };
     if parameters.len() != expected_parameters {
@@ -274,7 +296,10 @@ fn lower_scalar_expr(ir: &Ir, parameters: &[String]) -> Option<ScalarExpr> {
 }
 
 fn is_scalar(ir: &Ir) -> bool {
-    matches!(ir, Ir::Int(_) | Ir::Nil | Ir::True | Ir::Var(_) | Ir::Prim { .. })
+    matches!(
+        ir,
+        Ir::Int(_) | Ir::Nil | Ir::True | Ir::Var(_) | Ir::Prim { .. }
+    )
 }
 
 fn effect_of(ir: &Ir) -> EffectClass {
@@ -283,13 +308,20 @@ fn effect_of(ir: &Ir) -> EffectClass {
             EffectClass::Pure
         }
         Ir::Lambda { body, .. } => effect_of(body),
-        Ir::Prim { op: PrimOp::Cons, .. } => EffectClass::Allocating,
+        Ir::Prim {
+            op: PrimOp::Cons, ..
+        } => EffectClass::Allocating,
         Ir::Prim { args, .. } => join_effects(args.iter().map(effect_of)),
         Ir::Cond { branches } => join_effects(
-            branches.iter().flat_map(|(test, body)| [effect_of(test), effect_of(body)]),
+            branches
+                .iter()
+                .flat_map(|(test, body)| [effect_of(test), effect_of(body)]),
         ),
         Ir::Let { bindings, body } => join_effects(
-            bindings.iter().map(|(_, value)| effect_of(value)).chain([effect_of(body)]),
+            bindings
+                .iter()
+                .map(|(_, value)| effect_of(value))
+                .chain([effect_of(body)]),
         ),
         Ir::Def { .. } => EffectClass::Stateful,
         Ir::App { func, args } => {
@@ -304,12 +336,14 @@ fn effect_of(ir: &Ir) -> EffectClass {
 }
 
 fn join_effects(effects: impl IntoIterator<Item = EffectClass>) -> EffectClass {
-    effects.into_iter().fold(EffectClass::Pure, |left, right| match (left, right) {
-        (EffectClass::Stateful, _) | (_, EffectClass::Stateful) => EffectClass::Stateful,
-        (EffectClass::Unknown, _) | (_, EffectClass::Unknown) => EffectClass::Unknown,
-        (EffectClass::Allocating, _) | (_, EffectClass::Allocating) => EffectClass::Allocating,
-        _ => EffectClass::Pure,
-    })
+    effects
+        .into_iter()
+        .fold(EffectClass::Pure, |left, right| match (left, right) {
+            (EffectClass::Stateful, _) | (_, EffectClass::Stateful) => EffectClass::Stateful,
+            (EffectClass::Unknown, _) | (_, EffectClass::Unknown) => EffectClass::Unknown,
+            (EffectClass::Allocating, _) | (_, EffectClass::Allocating) => EffectClass::Allocating,
+            _ => EffectClass::Pure,
+        })
 }
 
 fn storage_of(ir: &Ir) -> StorageClass {
@@ -328,7 +362,9 @@ fn numeric_domain_of(ir: &Ir) -> NumericDomain {
         Ir::Int(_) | Ir::Quote(Quoted::Int(_)) => NumericDomain::Exact,
         Ir::Buffer(BufferLiteral::I32(_)) => NumericDomain::FixedWidthInteger,
         Ir::Buffer(BufferLiteral::F32(_)) => NumericDomain::InexactFloat,
-        Ir::Quote(Quoted::List(items)) if items.iter().all(|item| matches!(item, Quoted::Int(_))) => {
+        Ir::Quote(Quoted::List(items))
+            if items.iter().all(|item| matches!(item, Quoted::Int(_))) =>
+        {
             NumericDomain::Exact
         }
         _ => NumericDomain::Unknown,
@@ -354,10 +390,17 @@ pub fn refine_representation(
         )
     });
     if storage != StorageClass::ContiguousBuffer {
-        analysis.gpu_blockers.push(AdmissionBlocker::StorageNotContiguous);
+        analysis
+            .gpu_blockers
+            .push(AdmissionBlocker::StorageNotContiguous);
     }
-    if !matches!(numeric_domain, NumericDomain::FixedWidthInteger | NumericDomain::InexactFloat) {
-        analysis.gpu_blockers.push(AdmissionBlocker::NumericDomainNotRepresentable);
+    if !matches!(
+        numeric_domain,
+        NumericDomain::FixedWidthInteger | NumericDomain::InexactFloat
+    ) {
+        analysis
+            .gpu_blockers
+            .push(AdmissionBlocker::NumericDomainNotRepresentable);
     }
     match numeric_domain {
         NumericDomain::FixedWidthInteger
@@ -407,11 +450,15 @@ impl ComputeBackend for CpuComputeBackend {
         if !analysis.gpu_eligible() {
             return Err(ComputeExecutionError::NotEligible(analysis.gpu_blockers));
         }
-        let region = analysis.region.ok_or(ComputeExecutionError::UnsupportedOperation)?;
+        let region = analysis
+            .region
+            .ok_or(ComputeExecutionError::UnsupportedOperation)?;
         if region.operation != BulkOperation::Map {
             return Err(ComputeExecutionError::UnsupportedOperation);
         }
-        let kernel = region.kernel.ok_or(ComputeExecutionError::InternalInvariant)?;
+        let kernel = region
+            .kernel
+            .ok_or(ComputeExecutionError::InternalInvariant)?;
         match region.input {
             Ir::Buffer(BufferLiteral::I32(input)) => {
                 let mut output = Vec::with_capacity(input.len());
@@ -427,7 +474,8 @@ impl ComputeBackend for CpuComputeBackend {
             }
             Ir::Buffer(BufferLiteral::F32(input)) => {
                 let offset = f32_affine_offset(&kernel.body)
-                    .ok_or(ComputeExecutionError::InternalInvariant)? as f32;
+                    .ok_or(ComputeExecutionError::InternalInvariant)?
+                    as f32;
                 Ok(BufferLiteral::F32(
                     input
                         .into_iter()

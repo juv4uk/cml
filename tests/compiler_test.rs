@@ -1,6 +1,6 @@
-use cml::parser;
 use cml::compiler::{CompileError, Compiler};
 use cml::lower;
+use cml::parser;
 use std::env;
 use std::fs;
 use std::process::Command;
@@ -32,7 +32,10 @@ fn run_assembler(asm_code: &str, test_name: &str) {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let stdout = String::from_utf8_lossy(&output.stdout);
-            panic!("Assembler failed for {}:\nSTDOUT: {}\nSTDERR: {}", test_name, stdout, stderr);
+            panic!(
+                "Assembler failed for {}:\nSTDOUT: {}\nSTDERR: {}",
+                test_name, stdout, stderr
+            );
         }
     } else {
         panic!("Failed to run python. Is assembler.py at ../fpga-lisp/assembler.py?");
@@ -51,7 +54,7 @@ fn test_compile_cond() {
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs).unwrap();
-    
+
     // `t` is constructed through ATOM, matching the current target's TRUE
     // representation; the old test still expected the pre-truthiness-fix
     // `LOADSYM R1 TRUE` sequence.
@@ -73,7 +76,7 @@ fn test_compile_lambda() {
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs).unwrap();
-    
+
     assert!(asm.contains("LAMBDA START"));
     assert!(asm.contains("LAMBDA END"));
     assert!(asm.contains("CONS R15 R15 R4")); // Closure building
@@ -102,7 +105,7 @@ fn test_compile_apply() {
     let exprs = lower::lower_program(&exprs).unwrap();
     let mut compiler = Compiler::new();
     let asm = compiler.compile(&exprs).unwrap();
-    
+
     assert!(asm.contains("CALL START"));
     assert!(asm.contains("CALL END"));
     assert!(asm.contains("CAR R10 R15"));
@@ -139,7 +142,7 @@ fn test_compile_quoted_list() {
     assert!(asm.contains("LOADSYM R15 B"));
     assert!(asm.contains("LOADSYM R15 A"));
     assert!(asm.contains("CONS R15 R15 R12"));
-    
+
     run_assembler(&asm, "test_quoted_list");
 }
 
@@ -191,8 +194,10 @@ fn test_end_to_end_execution() {
     let iv_output = Command::new("iverilog")
         .current_dir(fpga_sim_dir)
         .arg("-g2012")
-        .arg("-I").arg("fpga/rtl")
-        .arg("-o").arg(&vvp_abs)
+        .arg("-I")
+        .arg("fpga/rtl")
+        .arg("-o")
+        .arg(&vvp_abs)
         .arg("fpga/rtl/lisp_word.sv")
         .arg("fpga/rtl/heap.sv")
         .arg("fpga/rtl/lisp_data_unit.sv")
@@ -209,7 +214,10 @@ fn test_end_to_end_execution() {
     if !iv_output.status.success() {
         let stderr = String::from_utf8_lossy(&iv_output.stderr);
         let stdout = String::from_utf8_lossy(&iv_output.stdout);
-        panic!("Icarus Verilog compilation failed:\nSTDOUT: {}\nSTDERR: {}", stdout, stderr);
+        panic!(
+            "Icarus Verilog compilation failed:\nSTDOUT: {}\nSTDERR: {}",
+            stdout, stderr
+        );
     }
 
     // 3. Run simulation with vvp, pointing it at the .bin via the testbench's
@@ -228,7 +236,10 @@ fn test_end_to_end_execution() {
     let _ = fs::remove_file(&vvp_path);
 
     if !stdout.contains("CML E2E PASSED") {
-        panic!("E2E Simulation failed or did not print PASSED.\nSTDOUT:\n{}", stdout);
+        panic!(
+            "E2E Simulation failed or did not print PASSED.\nSTDOUT:\n{}",
+            stdout
+        );
     }
 }
 
@@ -243,7 +254,10 @@ fn test_too_many_call_args_is_a_compile_error() {
     let mut compiler = Compiler::new();
 
     let err = compiler.compile(&exprs).unwrap_err();
-    assert!(matches!(err, CompileError::TooManyArguments { found: 9, max: 8 }));
+    assert!(matches!(
+        err,
+        CompileError::TooManyArguments { found: 9, max: 8 }
+    ));
 }
 
 #[test]
@@ -256,7 +270,10 @@ fn test_out_of_range_integer_literal_is_a_compile_error() {
     let mut compiler = Compiler::new();
 
     let err = compiler.compile(&exprs).unwrap_err();
-    assert!(matches!(err, CompileError::IntegerOutOfRange { value: 100000, .. }));
+    assert!(matches!(
+        err,
+        CompileError::IntegerOutOfRange { value: 100000, .. }
+    ));
 }
 
 #[test]
@@ -267,5 +284,8 @@ fn test_out_of_range_quoted_integer_literal_is_a_compile_error() {
     let mut compiler = Compiler::new();
 
     let err = compiler.compile(&exprs).unwrap_err();
-    assert!(matches!(err, CompileError::IntegerOutOfRange { value: 100000, .. }));
+    assert!(matches!(
+        err,
+        CompileError::IntegerOutOfRange { value: 100000, .. }
+    ));
 }

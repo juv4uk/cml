@@ -1,6 +1,6 @@
 use cml::compute::{
-    analyze, refine_representation, AdmissionBlocker, BulkOperation, EffectClass,
-    ExecutionShape, NumericDomain, StorageClass,
+    AdmissionBlocker, BulkOperation, EffectClass, ExecutionShape, NumericDomain, StorageClass,
+    analyze, refine_representation,
 };
 use cml::lower;
 use cml::parser;
@@ -18,30 +18,38 @@ fn recognizes_map_without_pretending_a_list_is_a_gpu_buffer() {
     assert_eq!(analysis.storage, StorageClass::LinkedList);
     assert_eq!(analysis.numeric_domain, NumericDomain::Exact);
     assert_eq!(analysis.region.unwrap().operation, BulkOperation::Map);
-    assert!(analysis.gpu_blockers.contains(&AdmissionBlocker::StorageNotContiguous));
-    assert!(analysis.gpu_blockers.contains(&AdmissionBlocker::NumericDomainNotRepresentable));
+    assert!(
+        analysis
+            .gpu_blockers
+            .contains(&AdmissionBlocker::StorageNotContiguous)
+    );
+    assert!(
+        analysis
+            .gpu_blockers
+            .contains(&AdmissionBlocker::NumericDomainNotRepresentable)
+    );
 }
 
 #[test]
 fn pure_but_unsupported_kernel_shape_stays_fail_closed() {
-    let analysis = analyze(&lower_one(
-        "(map (lambda (x) (cond (t x))) #i32(1 2 3))",
-    ));
+    let analysis = analyze(&lower_one("(map (lambda (x) (cond (t x))) #i32(1 2 3))"));
     assert_eq!(analysis.effect, EffectClass::Pure);
-    assert!(analysis
-        .gpu_blockers
-        .contains(&AdmissionBlocker::KernelNotLowerable));
+    assert!(
+        analysis
+            .gpu_blockers
+            .contains(&AdmissionBlocker::KernelNotLowerable)
+    );
     assert!(!analysis.gpu_eligible());
 }
 
 #[test]
 fn captured_values_are_not_mistaken_for_kernel_parameters() {
-    let analysis = analyze(&lower_one(
-        "(map (lambda (x) (+ x offset)) #f32(1.0 2.0))",
-    ));
-    assert!(analysis
-        .gpu_blockers
-        .contains(&AdmissionBlocker::KernelNotLowerable));
+    let analysis = analyze(&lower_one("(map (lambda (x) (+ x offset)) #f32(1.0 2.0))"));
+    assert!(
+        analysis
+            .gpu_blockers
+            .contains(&AdmissionBlocker::KernelNotLowerable)
+    );
 }
 
 #[test]
@@ -63,16 +71,18 @@ fn generic_calls_are_not_assumed_pure() {
 
 #[test]
 fn unknown_calls_inside_a_map_kernel_block_gpu_admission() {
-    let mut analysis = analyze(&lower_one(
-        "(map (lambda (x) (mystery x)) data)",
-    ));
+    let mut analysis = analyze(&lower_one("(map (lambda (x) (mystery x)) data)"));
     refine_representation(
         &mut analysis,
         StorageClass::ContiguousBuffer,
         NumericDomain::FixedWidthInteger,
     );
     assert_eq!(analysis.effect, EffectClass::Unknown);
-    assert!(analysis.gpu_blockers.contains(&AdmissionBlocker::EffectNotPure));
+    assert!(
+        analysis
+            .gpu_blockers
+            .contains(&AdmissionBlocker::EffectNotPure)
+    );
 }
 
 #[test]
@@ -85,17 +95,25 @@ fn proven_fixed_width_contiguous_representation_unlocks_gpu_candidate() {
         NumericDomain::FixedWidthInteger,
     );
     assert!(!analysis.gpu_eligible());
-    assert!(analysis
-        .gpu_blockers
-        .contains(&AdmissionBlocker::IntegerOverflowNotProven));
+    assert!(
+        analysis
+            .gpu_blockers
+            .contains(&AdmissionBlocker::IntegerOverflowNotProven)
+    );
 }
 
 #[test]
 fn exact_numbers_are_never_silently_refined_to_float() {
     let mut analysis = analyze(&lower_one("(map (lambda (x) (+ x 1)) (quote (1 2 3)))"));
-    refine_representation(&mut analysis, StorageClass::ContiguousBuffer, NumericDomain::Exact);
+    refine_representation(
+        &mut analysis,
+        StorageClass::ContiguousBuffer,
+        NumericDomain::Exact,
+    );
     assert!(!analysis.gpu_eligible());
-    assert!(analysis
-        .gpu_blockers
-        .contains(&AdmissionBlocker::NumericDomainNotRepresentable));
+    assert!(
+        analysis
+            .gpu_blockers
+            .contains(&AdmissionBlocker::NumericDomainNotRepresentable)
+    );
 }

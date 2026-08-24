@@ -1,6 +1,4 @@
-use cml::compute::{
-    AdmissionBlocker, ComputeBackend, ComputeExecutionError, CpuComputeBackend,
-};
+use cml::compute::{AdmissionBlocker, ComputeBackend, ComputeExecutionError, CpuComputeBackend};
 use cml::ir::{BufferLiteral, Ir};
 use cml::{lower, parser};
 
