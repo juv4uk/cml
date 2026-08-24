@@ -177,7 +177,7 @@
      (capabilities . (compiler rust compute fpga protocol testing proof))
      (done . t)
      (description . "Design and validate an explicit host-staged adapter from an execution-graph typed buffer to ISA 1.1 tagged FPGA register inputs; keep direct GPU-to-FPGA transfer absent and fail closed on unsupported representations.")
-     (context . "done 2026-08-24: explicit FpgaProgramWithBufferInput stages checked i32 BufferLiteral values into ISA 1.1 tagged register inputs, rejects F32/range/register overflow, and requires a real graph input or producer dependency. Mock graph tests, one physical COM4 run, and one CPU->CUDA->host-staged-FPGA run passed (ADD R0=3,R1=4 -> R2=7; heterogeneous run 14.17s). Direct device-to-device GPU-to-FPGA transfer and automatic placement remain absent; compute-contract 0.26.")))
+     (context . "done 2026-08-24: explicit FpgaProgramWithBufferInput stages checked i32 BufferLiteral values into ISA 1.1 tagged register inputs, rejects empty/F32/range/register overflow and prepopulated inputs, and requires a real graph input or producer dependency. Mock graph tests, one physical COM4 run, and one CPU->CUDA->host-staged-FPGA run passed (ADD R0=3,R1=4 -> R2=7; heterogeneous run 14.17s). Direct device-to-device GPU-to-FPGA transfer and automatic placement remain absent; compute-contract 0.27.")))
    ("CML-EXECUTION-MODULE-BOUNDARY-V0.2" .
     ((priority . 0.45)
      (capabilities . (compiler rust architecture refactor testing))

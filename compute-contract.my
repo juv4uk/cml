@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 26))
+ (version . (0 27))
  (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -74,6 +74,9 @@
                                       (control . dependency-only)))
                      (buffer-transfer . host-staged-materialized-graph-value)
                      (fpga-input-edge . (host-staged-register-input-explicit control-dependency-only-for-jobs-without-input))
+                     (typed-fpga-input-policy . ((empty-buffer . reject)
+                                                 (prepopulated-register-inputs . reject)
+                                                 (unsupported-representation . reject)))
                      (implicit-source-order-dataflow . forbidden)
                      (unregistered-targets . fail-closed)
                      (publication . atomic-on-whole-graph-success)
