@@ -1,4 +1,4 @@
-use cml::compiler::Compiler;
+use cml::compiler::{Compiler, CompiledAssembly};
 use cml::lower;
 use cml::macros::MacroExpander;
 use cml::parser;
@@ -28,10 +28,23 @@ fn main() {
         std::process::exit(1);
     });
     let mut compiler = Compiler::new();
-    let asm = compiler.compile(&program).unwrap_or_else(|err| {
-        eprintln!("Compile error: {err}");
-        std::process::exit(1);
-    });
+    // M1.1d bridge (LOADSYM contract, F6): emit numeric tagged-symbol
+    // immediates + per-program symbol table, per the directive that
+    // computational transforms live in CML while the fpga-lisp assembler
+    // stays a numeric reference. The legacy name-oriented compile remains
+    // available in the library for readable diagnostics.
+    let compiled: CompiledAssembly = compiler
+        .compile_with_symbols(&program)
+        .unwrap_or_else(|err| {
+            eprintln!("Compile error: {err}");
+            std::process::exit(1);
+        });
 
-    println!("{}", asm);
+    println!("{}", compiled.assembly);
+    if !compiled.symbols.is_empty() {
+        println!("; SYMBOL TABLE (id name) — LOADSYM immediates above");
+        for (id, name) in &compiled.symbols {
+            println!("; SYM {id} {name}");
+        }
+    }
 }
