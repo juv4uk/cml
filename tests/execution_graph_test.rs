@@ -1,6 +1,6 @@
 use cml::execution::{
     BufferId, CpuGraphExecutor, ExecutionGraph, ExecutionOperation, ExecutionTarget,
-    GraphExecutionError, NodeId, PlanNode,
+    GraphExecutionError, HeterogeneousGraphExecutor, NodeExecutor, NodeId, PlanNode,
 };
 use cml::ir::{BufferLiteral, Ir};
 use cml::{lower, parser};
@@ -95,5 +95,36 @@ fn malformed_dependencies_and_cycles_are_named_errors() {
     assert_eq!(
         CpuGraphExecutor.execute(&cycle),
         Err(GraphExecutionError::DependencyCycle)
+    );
+}
+
+struct PortableTestExecutor;
+
+impl NodeExecutor for PortableTestExecutor {
+    fn execute_map(&self, ir: &Ir) -> Result<BufferLiteral, String> {
+        use cml::compute::{ComputeBackend, CpuComputeBackend};
+        CpuComputeBackend
+            .execute(ir)
+            .map_err(|error| format!("{error:?}"))
+    }
+}
+
+#[test]
+fn registered_backend_executes_without_vendor_logic_in_the_graph() {
+    let mut node = map_node(1, 0, 1, &[], 4);
+    node.target = ExecutionTarget::Gpu {
+        backend: "portable-test".into(),
+    };
+    let graph = ExecutionGraph {
+        inputs: vec![(BufferId(0), BufferLiteral::I32(vec![1, 2]))],
+        nodes: vec![node],
+    };
+    let mut executor = HeterogeneousGraphExecutor::default();
+    executor.register_gpu("portable-test", PortableTestExecutor);
+
+    let result = executor.execute(&graph).unwrap();
+    assert_eq!(
+        result.buffer(BufferId(1)),
+        Some(&BufferLiteral::I32(vec![5, 6]))
     );
 }

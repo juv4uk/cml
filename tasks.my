@@ -123,4 +123,10 @@
      (capabilities . (compiler rust compute testing proof))
      (done . t)
      (description . "Add a device-neutral Execution Graph with logical buffers, dependencies, CPU reference execution, and fail-closed GPU/FPGA targets before attaching physical executors.")
-     (context . "done 2026-08-24: src/execution.rs adds explicit NodeId/BufferId, dependent numeric-buffer-map nodes, deterministic topological execution, atomic whole-graph publication, named structural/compute errors, and representable CPU/GPU/FPGA targets. Only CPU executes in M0; unregistered accelerator targets return TargetUnavailable. compute-contract 0.16 and compatibility.my record the boundary; tests/execution_graph_test.rs covers multi-node buffer flow, source-order independence, fail-closed accelerator targeting, missing dependencies, and cycles."))))))
+     (context . "done 2026-08-24: src/execution.rs adds explicit NodeId/BufferId, dependent numeric-buffer-map nodes, deterministic topological execution, atomic whole-graph publication, named structural/compute errors, and representable CPU/GPU/FPGA targets. Only CPU executes in M0; unregistered accelerator targets return TargetUnavailable. compute-contract 0.16 and compatibility.my record the boundary; tests/execution_graph_test.rs covers multi-node buffer flow, source-order independence, fail-closed accelerator targeting, missing dependencies, and cycles.")))
+   ("CML-EXECUTION-GRAPH-GPU-M1" .
+    ((priority . 0.8)
+     (capabilities . (compiler rust compute gpu cuda testing proof))
+     (done . t)
+     (description . "Attach real GPU runtimes to the Execution Graph through one vendor-neutral registered NodeExecutor boundary, preserving fail-closed selection.")
+     (context . "done 2026-08-24: HeterogeneousGraphExecutor registers explicit GPU/FPGA executor names; CUDA and wgpu adapters implement the same NodeExecutor map boundary behind feature gates. A fake portable executor proves the graph contains no vendor branch, and the ignored live test dispatched cuda:0 through the graph on GTX 1050 Ti device 0 with #i32(1 2 3) -> #i32(2 3 4). Unregistered targets remain TargetUnavailable. compute-contract 0.17 records M1."))))))

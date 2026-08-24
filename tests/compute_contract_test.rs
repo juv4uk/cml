@@ -1,10 +1,10 @@
 use std::fs;
 
 #[test]
-fn machine_readable_compute_contract_matches_analysis_m0() {
+fn machine_readable_compute_contract_matches_implementation() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 16))",
+        "(version . (0 17))",
         "(status . experimental-runtime)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -31,9 +31,11 @@ fn machine_readable_compute_contract_matches_analysis_m0() {
         "(amd . (wgpu rocm-planned))",
         "(intel . (wgpu oneapi-level-zero-planned))",
         "(accelerator-planner . \"src/accelerator.rs\")",
-        "(execution-graph . ((status . cpu-reference-m0)",
+        "(execution-graph . ((status . registered-backends-m1)",
         "(targets . (cpu gpu fpga))",
-        "(implemented-executors . (cpu))",
+        "(implemented-executors . (cpu gpu-cuda gpu-wgpu))",
+        "(backend-registration . explicit-name-to-node-executor)",
+        "(physical-evidence . (nvidia-gtx-1050-ti cuda-device-zero graph-map-pass))",
         "(unregistered-targets . fail-closed)",
         "(publication . atomic-on-whole-graph-success)",
         "(raw-cross-device-pointers . forbidden)",
@@ -50,7 +52,7 @@ fn machine_readable_compute_contract_matches_analysis_m0() {
 
     let compatibility = fs::read_to_string("compatibility.my").unwrap();
     assert!(
-        compatibility.contains("(compute-analysis . ((contract . (0 16))"),
+        compatibility.contains("(compute-analysis . ((contract . (0 17))"),
         "compatibility.my compute contract version drifted from compute-contract.my"
     );
 }
