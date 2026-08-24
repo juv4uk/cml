@@ -12,6 +12,7 @@ use crate::fpga_transport::{
     encode_i32_buffer_as_register_inputs, FpgaJobExecutor, FpgaJobV1, FpgaTransport,
 };
 use crate::ir::{BufferLiteral, Ir};
+use crate::execution_store::GraphValueStore;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub u32);
@@ -65,6 +66,16 @@ pub struct ExecutionResult {
 }
 
 impl ExecutionResult {
+    pub(crate) fn from_store(
+        values: HashMap<BufferId, GraphValue>,
+        execution_order: Vec<NodeId>,
+    ) -> Self {
+        Self {
+            values,
+            execution_order,
+        }
+    }
+
     pub fn buffer(&self, id: BufferId) -> Option<&BufferLiteral> {
         match self.values.get(&id) {
             Some(GraphValue::Buffer(buffer)) => Some(buffer),
@@ -166,7 +177,7 @@ impl HeterogeneousGraphExecutor {
 
     pub fn execute(&self, graph: &ExecutionGraph) -> Result<ExecutionResult, GraphExecutionError> {
         validate_graph(graph)?;
-        let mut values: HashMap<_, _> = graph.inputs.iter().cloned().collect();
+        let mut values = GraphValueStore::from_inputs(&graph.inputs);
         let mut completed = HashSet::new();
         let mut execution_order = Vec::with_capacity(graph.nodes.len());
 
@@ -270,15 +281,12 @@ impl HeterogeneousGraphExecutor {
                 }
             };
 
-            values.insert(node.output, output);
+            values.publish(node.output, output);
             completed.insert(node.id);
             execution_order.push(node.id);
         }
 
-        Ok(ExecutionResult {
-            values,
-            execution_order,
-        })
+        Ok(values.into_result(execution_order))
     }
 
     fn execute_map(&self, node: &PlanNode, ir: &Ir) -> Result<BufferLiteral, GraphExecutionError> {
