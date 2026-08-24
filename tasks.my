@@ -189,4 +189,10 @@
      (capabilities . (compiler rust architecture refactor testing))
      (done . t)
      (description . "Before CML v0.2, extract named scheduler and result-store boundaries from execution.rs so typed transfer work does not turn the graph executor into a monolith.")
-     (context . "done 2026-08-24: GraphValueStore and GraphScheduler now own value publication and dependency ordering/cycle detection behind named internal modules. Execution behavior and contract-lock evidence preserved; targeted graph suites remain green."))))))
+     (context . "done 2026-08-24: GraphValueStore and GraphScheduler now own value publication and dependency ordering/cycle detection behind named internal modules. Execution behavior and contract-lock evidence preserved; targeted graph suites remain green.")))
+   ("CML-DOCS-CONTRACT-SYNC-2026-08-24" .
+    ((priority . 0.55)
+     (capabilities . (documentation compiler compute fpga proof))
+     (done . t)
+     (description . "Reconcile cross-repo architecture and C backend compatibility documents with the live language, ISA, and source-level compute evidence.")
+     (context . "done 2026-08-24: architecture mirrors now state my-lisp contract 3.0, fpga-lisp ISA 1.1, and the live CML->FPGA boundary. compatibility.my now distinguishes the shared frontend from the C backend first-class-builtin lowering pass and lists i32 typed-buffer/numeric-buffer-map support plus I32_BUFFER runtime representation. Historical conformance counts remain append-only snapshots."))))))

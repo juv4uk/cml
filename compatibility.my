@@ -20,7 +20,7 @@
                                    (note . "CML still claims contract 2.0. It must not classify or claim contract-3.0 error parity until each backend has named-error conformance evidence.")))))
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (1 1))
-            (tested-sha . "34f9cd7")
+            (tested-sha . "34f9cd70bf8a2e9db34e50be2d0e8e03c3c6ac76")
             (physical-evidence . (windows-com4 isa-1.1-register-input-one-path result-word-7 no-hardware-error))))
  (pipeline . (parse macro-expand compile assemble simulate compare))
  (compute-analysis . ((contract . (0 28))
@@ -113,16 +113,17 @@
  (c-backend . ((status . "second, non-fpga-lisp compilation target; docs/heterogeneous-backends.md step 2")
                (implementation . "src/c_backend.rs")
                (shares-frontend-with-fpga-lisp-target . true)
-               (note . "parse/macro-expand/lower (ast::Expr -> ir::Ir) is identical to the fpga-lisp pipeline above; c-backend only differs from compile assemble simulate onward -- it consumes the same ir::Ir compiler.rs does, not a separate frontend")
+               (note . "parser/macro expansion/lowering share the same ast::Expr -> ir::Ir frontend; the C backend then applies its first-class-builtin lowering pass before emit-c/gcc/run, while fpga-lisp consumes the structural primitive form")
                (pipeline . (parse macro-expand lower emit-c gcc run compare))
                (supported . (integer nil true quote-integer quote-symbol
                              quote-proper-list quote-dotted-list variable
                              lambda-fixed-arity lambda-variadic lambda-bare-symbol-params
                              application cond let structural-equal? def
                              recursive-def-letrec
+                             typed-buffer-i32 numeric-buffer-map-i32
                              first-class-builtin-call lexical-builtin-shadowing
                              higher-order-builtin-argument))
-               (runtime . ((representation . "tagged-union Value struct (TAG_NIL/TRUE/INT/SYM/CONS/CLOSURE/BUILTIN), heap-allocated via malloc, never freed")
+               (runtime . ((representation . "tagged-union Value struct (TAG_NIL/TRUE/INT/SYM/CONS/I32_BUFFER/CLOSURE/BUILTIN), heap-allocated via malloc, never freed")
                            (environment . "mutable-cons alist chain, same conceptual model as fpga-lisp's cml_lookup")
                            (self-recursive-def . "letrec-placeholder-pair-plus-backpatch, same idea as compile_def on fpga-lisp, here a literal C struct-field mutation instead of SETCDR")))
                                (conformance . ((tier-1-matrix . ((selected . 35)
