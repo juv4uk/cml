@@ -11,7 +11,7 @@
               ; detected upstream bump cannot be "fixed" by making a false
               ; compatibility claim.
               (contract . (2 0))
-              (tested-sha . "164608cc2b1c08b815362551d6a9483fa762db7b")
+              (tested-sha . "5a662c0cd2372d32adc3ad7b44de043be7050026")
               (observed-upstream-contract . (3 0))
               (observed-upstream-sha . "2eb4ad1")
               (status . upgrade-required)
@@ -20,7 +20,7 @@
                                    (note . "CML still claims contract 2.0. It must not classify or claim contract-3.0 error parity until each backend has named-error conformance evidence.")))))
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (1 1))
-            (tested-sha . "34f9cd70bf8a2e9db34e50be2d0e8e03c3c6ac76")
+            (tested-sha . "0351a6d535504e0790f0f4e115b69518605b142e")
             (physical-evidence . (windows-com4 isa-1.1-register-input-one-path result-word-7 no-hardware-error))))
  (pipeline . (parse macro-expand compile assemble simulate compare))
  (compute-analysis . ((contract . (0 28))
