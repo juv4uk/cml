@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 11))
+ (version . (0 12))
  (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -29,6 +29,7 @@
                       (kernel-ir . (parameter exact-integer checked-add))
                       (cpu-compute-backend . (present-reference i32-map-range-proven f32-map-affine-proven))
                       (gpu-emitter . (wgsl-source-only admitted-map-regions))
+                      (cuda-emitter . (cuda-c-source-only admitted-map-regions))
                       (gpu-runtime . (optional-feature gpu-wgpu
                                       adapter-evidence-returned
                                       default-policy-gpu-only
@@ -48,6 +49,7 @@
                     (buffer-ir . "src/ir.rs")
                     (cpu-reference . "src/compute.rs::CpuComputeBackend")
                     (wgsl-emitter . "src/gpu_wgsl.rs")
+                    (cuda-emitter . "src/gpu_cuda.rs")
                     (wgpu-runtime . "src/gpu_wgpu_runtime.rs")
                     (accelerator-planner . "src/accelerator.rs")
                     (differential-oracle . "my-lisp path dev-dependency")

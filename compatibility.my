@@ -19,11 +19,11 @@
             (isa . (1 0))
             (tested-sha . "6c08e42975eb05eb143ee4cc66bcc759b6f92a1b")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
- (compute-analysis . ((contract . (0 11))
+ (compute-analysis . ((contract . (0 12))
                       (status . experimental-wgpu-runtime)
                       (execution-shapes . (scalar element-wise reduction irregular))
                       (gpu-admission . fail-closed)
-                      (note . "CPU reference is differential-tested; admitted i32 and affine f32 maps emit portable WGSL. Optional feature gpu-wgpu provides native adapter/device, storage-buffer dispatch, and readback. Its default policy rejects CPU/unknown adapters; software-adapter execution requires explicit opt-in. Accelerator selection is cross-vendor: live wgpu descriptors are portable candidates, while matching CUDA/ROCm/oneAPI Level Zero descriptors can be preferred when their runtimes exist. Only wgpu exists today; vendor APIs remain planned. A live i32 map passed on llvmpipe (DeviceType CPU, Vulkan); physical GPU execution remains unconfirmed through wgpu.")))
+                      (note . "CPU reference is differential-tested; admitted i32 and affine f32 maps emit portable WGSL and NVIDIA CUDA C from the same Compute IR admission. Optional feature gpu-wgpu provides native adapter/device, storage-buffer dispatch, and readback. Its default policy rejects CPU/unknown adapters; software-adapter execution requires explicit opt-in. Accelerator selection is cross-vendor: live wgpu descriptors are portable candidates, while matching CUDA/ROCm/oneAPI Level Zero descriptors can be preferred when their runtimes exist. CUDA currently has source emission only; ROCm and oneAPI remain planned. A live i32 map passed on llvmpipe (DeviceType CPU, Vulkan); physical GPU execution remains unconfirmed from CML.")))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom equal? defmacro
                def recursive-def-letrec
