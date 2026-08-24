@@ -9,10 +9,14 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+use crate::ir::BufferLiteral;
+
 pub const FPGA_JOB_PROTOCOL_VERSION: u16 = 1;
 pub const MAX_PROGRAM_WORDS: usize = 4095;
 pub const MAX_REGISTER_INPUTS: usize = 16;
 pub const TAG_FIXNUM: u8 = 0;
+pub const FIXNUM_MIN: i32 = -(1 << 27);
+pub const FIXNUM_MAX: i32 = (1 << 27) - 1;
 pub const MONITOR_REG: u8 = 0x01;
 pub const MONITOR_ERROR: u8 = 0x04;
 const BRIDGE_REQUEST_MAGIC: [u8; 4] = *b"CMLJ";
@@ -50,7 +54,47 @@ pub enum FpgaProtocolError {
     InvalidErrorStatusLength(usize),
     HardwareError { pc: u16 },
     UnexpectedTag { expected: u8, actual: u8 },
+    UnsupportedInputBuffer,
+    InputValueOutOfRange { index: usize, value: i32 },
+    RegisterRange { first: u8, count: usize },
     Transport(String),
+}
+
+/// Materialize a contiguous i32 buffer as ISA 1.1 tagged FIXNUM inputs.
+///
+/// This is deliberately an explicit host-staged boundary: F32 buffers and
+/// values outside the fpga-lisp FIXNUM range are rejected rather than
+/// silently rounded or truncated. The caller must still attach the returned
+/// inputs to a graph node with an explicit data dependency.
+pub fn encode_i32_buffer_as_register_inputs(
+    buffer: &BufferLiteral,
+    first_register: u8,
+) -> Result<Vec<FpgaRegisterInput>, FpgaProtocolError> {
+    let values = match buffer {
+        BufferLiteral::I32(values) => values,
+        BufferLiteral::F32(_) => return Err(FpgaProtocolError::UnsupportedInputBuffer),
+    };
+    if values.len() > MAX_REGISTER_INPUTS
+        || usize::from(first_register) + values.len() > 16
+    {
+        return Err(FpgaProtocolError::RegisterRange {
+            first: first_register,
+            count: values.len(),
+        });
+    }
+    values
+        .iter()
+        .enumerate()
+        .map(|(index, &value)| {
+            if !(FIXNUM_MIN..=FIXNUM_MAX).contains(&value) {
+                return Err(FpgaProtocolError::InputValueOutOfRange { index, value });
+            }
+            Ok(FpgaRegisterInput {
+                register: first_register + index as u8,
+                tagged_word: (i64::from(value) & 0x0fff_ffff) as u32,
+            })
+        })
+        .collect()
 }
 
 impl FpgaJobV1 {

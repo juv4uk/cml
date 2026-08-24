@@ -1,7 +1,9 @@
 use cml::fpga_transport::{
     CommandFpgaTransport, FpgaJobExecutor, FpgaJobV1, FpgaProtocolError, FpgaRegisterInput,
     FpgaResultV1, FpgaTransport, MAX_PROGRAM_WORDS, MAX_REGISTER_INPUTS, MONITOR_ERROR,
+    encode_i32_buffer_as_register_inputs,
 };
+use cml::ir::BufferLiteral;
 
 #[test]
 fn job_v1_matches_the_real_uart_bootloader_frame() {
@@ -43,6 +45,42 @@ fn job_v1_encodes_isa_1_1_tagged_register_inputs() {
             0x00, 0x00, 0x01, 0xd2,
             0x00, 0x00, 0x00, 0xb0,
         ]
+    );
+}
+
+#[test]
+fn typed_i32_buffer_materializes_only_as_checked_fixnum_inputs() {
+    let inputs = encode_i32_buffer_as_register_inputs(
+        &BufferLiteral::I32(vec![-1, 3, 4]),
+        0,
+    )
+    .unwrap();
+    assert_eq!(
+        inputs,
+        vec![
+            FpgaRegisterInput { register: 0, tagged_word: 0x0fff_ffff },
+            FpgaRegisterInput { register: 1, tagged_word: 3 },
+            FpgaRegisterInput { register: 2, tagged_word: 4 },
+        ]
+    );
+}
+
+#[test]
+fn typed_buffer_adapter_fails_closed_for_float_range_and_register_overflow() {
+    assert_eq!(
+        encode_i32_buffer_as_register_inputs(&BufferLiteral::F32(vec![0x3f80_0000]), 0),
+        Err(FpgaProtocolError::UnsupportedInputBuffer)
+    );
+    assert_eq!(
+        encode_i32_buffer_as_register_inputs(&BufferLiteral::I32(vec![1 << 27]), 0),
+        Err(FpgaProtocolError::InputValueOutOfRange {
+            index: 0,
+            value: 1 << 27,
+        })
+    );
+    assert_eq!(
+        encode_i32_buffer_as_register_inputs(&BufferLiteral::I32(vec![1, 2]), 15),
+        Err(FpgaProtocolError::RegisterRange { first: 15, count: 2 })
     );
 }
 
