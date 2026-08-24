@@ -1,4 +1,5 @@
 use crate::ir::{Ir, Params, PrimOp, Quoted};
+use std::collections::BTreeMap;
 use std::fmt;
 
 /// The fpga-lisp target's hard limits, checked before any assembly is
@@ -21,6 +22,8 @@ pub enum CompileError {
     IntegerOutOfRange { value: i64, max_magnitude: i64 },
     /// Contract 2.2 buffers have no fpga-lisp descriptor/BRAM ABI yet.
     UnsupportedNumericBuffer,
+    /// A symbol-table-aware emission would exceed the 16-bit LOADSYM field.
+    SymbolTableOverflow,
 }
 
 impl fmt::Display for CompileError {
@@ -41,6 +44,9 @@ impl fmt::Display for CompileError {
                 f,
                 "typed numeric buffers are not supported by the fpga-lisp backend"
             ),
+            CompileError::SymbolTableOverflow => {
+                write!(f, "fpga-lisp symbol table exceeds LOADSYM's 16-bit id range")
+            }
         }
     }
 }
@@ -106,6 +112,14 @@ pub struct Compiler {
     label_counter: usize,
     used_lookup: bool,
     used_equal: bool,
+}
+
+/// FPGA-ready assembly plus the per-program symbol table required to turn
+/// `LOADSYM Rn NAME` into the ISA's numeric tagged-symbol immediate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompiledAssembly {
+    pub assembly: String,
+    pub symbols: Vec<(u16, String)>,
 }
 
 impl Compiler {
@@ -187,6 +201,50 @@ impl Compiler {
         }
 
         Ok(self.output.join("\n"))
+    }
+
+    /// Compile and intern symbolic LOADSYM operands deterministically for one
+    /// program. The legacy `compile` API remains name-oriented for readable
+    /// diagnostics; this additive API is the direct CML -> fpga-lisp bridge.
+    pub fn compile_with_symbols(
+        &mut self,
+        program: &[Ir],
+    ) -> Result<CompiledAssembly, CompileError> {
+        let named = self.compile(program)?;
+        let mut ids = BTreeMap::<String, u16>::new();
+        let mut next_id: u32 = 900;
+        let mut lines = Vec::new();
+        for line in named.lines() {
+            let mut parts = line.splitn(3, char::is_whitespace);
+            let opcode = parts.next().unwrap_or_default();
+            let register = parts.next();
+            let operand = parts.next();
+            if opcode == "LOADSYM" {
+                if let (Some(register), Some(operand)) = (register, operand) {
+                    let id = if let Ok(existing) = operand.parse::<u16>() {
+                        existing
+                    } else {
+                        let entry = ids.entry(operand.to_string()).or_insert_with(|| {
+                            let assigned = u16::try_from(next_id).unwrap_or(u16::MAX);
+                            next_id = next_id.saturating_add(1);
+                            assigned
+                        });
+                        if next_id > u32::from(u16::MAX) + 1 {
+                            return Err(CompileError::SymbolTableOverflow);
+                        }
+                        *entry
+                    };
+                    lines.push(format!("LOADSYM {register} {id}"));
+                    continue;
+                }
+            }
+            lines.push(line.to_string());
+        }
+        let symbols = ids.into_iter().map(|(name, id)| (id, name)).collect();
+        Ok(CompiledAssembly {
+            assembly: lines.join("\n"),
+            symbols,
+        })
     }
 
     fn compile_expr(&mut self, ir: &Ir, target_reg: &str) {

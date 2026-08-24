@@ -70,6 +70,17 @@ fn test_compile_cond() {
 }
 
 #[test]
+fn test_compile_with_symbols_emits_fpga_numeric_loadsym_and_table() {
+    let exprs = parser::parse("(quote a)").unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
+    let compiled = Compiler::new().compile_with_symbols(&program).unwrap();
+
+    assert!(compiled.assembly.contains("LOADSYM R15 900"));
+    assert_eq!(compiled.symbols, vec![(900, "A".to_string())]);
+    run_assembler(&compiled.assembly, "test_compile_with_symbols");
+}
+
+#[test]
 fn test_compile_lambda() {
     let code = "(lambda (x) x)";
     let exprs = parser::parse(code).unwrap();

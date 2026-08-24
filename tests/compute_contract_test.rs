@@ -63,6 +63,7 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(physical-bridge . (windows-python-pyserial-com4))",
         "(physical-device-evidence . (gw5a-25a windows-com4 graph-program-pass tagged-word-7 no-hardware-error))",
         "(fpga-job-protocol . \"src/fpga_transport.rs\")",
+        "(fpga-symbol-table . \"src/compiler.rs::compile_with_symbols\")",
         "(execution-graph . \"src/execution.rs\")",
         "(wgpu-runtime . \"src/gpu_wgpu_runtime.rs\")",
         "(cuda-emitter . \"src/gpu_cuda.rs\")",

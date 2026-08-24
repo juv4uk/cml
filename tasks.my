@@ -195,4 +195,10 @@
      (capabilities . (documentation compiler compute fpga proof))
      (done . t)
      (description . "Reconcile cross-repo architecture and C backend compatibility documents with the live language, ISA, and source-level compute evidence.")
-     (context . "done 2026-08-24: architecture mirrors now state my-lisp contract 3.0, fpga-lisp ISA 1.1, and the live CML->FPGA boundary. compatibility.my now distinguishes the shared frontend from the C backend first-class-builtin lowering pass and lists i32 typed-buffer/numeric-buffer-map support plus I32_BUFFER runtime representation. Historical conformance counts remain append-only snapshots."))))))
+     (context . "done 2026-08-24: architecture mirrors now state my-lisp contract 3.0, fpga-lisp ISA 1.1, and the live CML->FPGA boundary. compatibility.my now distinguishes the shared frontend from the C backend first-class-builtin lowering pass and lists i32 typed-buffer/numeric-buffer-map support plus I32_BUFFER runtime representation. Historical conformance counts remain append-only snapshots.")))
+   ("CML-FPGA-SYMBOL-TABLE-BRIDGE" .
+    ((priority . 0.8)
+     (capabilities . (compiler rust fpga protocol testing proof))
+     (done . t)
+     (description . "Provide an additive compiler API that interns LOADSYM operands into deterministic per-program numeric IDs accepted by the fpga-lisp assembler.")
+     (context . "done 2026-08-24: Compiler::compile_with_symbols returns numeric LOADSYM assembly plus a (u16, name) table, starting at ID 900, while legacy name-oriented compile() remains unchanged. A compiler integration test assembles the numeric output with fpga-lisp/assembler.py. The bridge is per-program, not a global symbol ABI."))))))

@@ -107,6 +107,7 @@
                     (execution-graph . "src/execution.rs")
                     (execution-scheduler . "src/execution_scheduler.rs")
                     (execution-value-store . "src/execution_store.rs")
+                    (fpga-symbol-table . "src/compiler.rs::compile_with_symbols")
                     (fpga-job-protocol . "src/fpga_transport.rs")
                     (differential-oracle . "my-lisp path dev-dependency")
                     (physical-fpga-bridge . "../fpga-lisp/job_transport.py")
