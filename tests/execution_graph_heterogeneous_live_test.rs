@@ -1,7 +1,6 @@
 #![cfg(feature = "gpu-cuda")]
 
 use std::env;
-use std::fs;
 
 use cml::execution::{
     BufferId, CudaNodeExecutor, ExecutionGraph, ExecutionOperation, ExecutionTarget,
@@ -24,13 +23,7 @@ fn one_graph_orders_live_cpu_cuda_and_fpga_execution() {
     let python = env::var("CML_FPGA_PYTHON").expect("set CML_FPGA_PYTHON to Windows py.exe");
     let bridge = env::var("CML_FPGA_BRIDGE_WINDOWS")
         .expect("set CML_FPGA_BRIDGE_WINDOWS to job_transport.py's Windows UNC path");
-    let binary = fs::read("../fpga-lisp/bootstrap_add_demo.bin")
-        .expect("assemble ../fpga-lisp/bootstrap_add_demo.bin first");
-    assert_eq!(binary.len() % 4, 0);
-    let program_words = binary
-        .chunks_exact(4)
-        .map(|word| u32::from_le_bytes(word.try_into().unwrap()))
-        .collect();
+    let program_words = vec![0xd201_0000, 0xb000_0000];
 
     let cuda_device = discover_devices()
         .expect("CUDA discovery failed")
@@ -96,12 +89,14 @@ fn one_graph_orders_live_cpu_cuda_and_fpga_execution() {
                 },
                 PlanNode {
                     id: NodeId(3),
-                    operation: ExecutionOperation::FpgaProgram {
+                    operation: ExecutionOperation::FpgaProgramWithBufferInput {
                         job: FpgaJobV1 {
                             program_words,
                             register_inputs: vec![],
-                            result_register: 9,
+                            result_register: 2,
                         },
+                        input: BufferId(2),
+                        first_register: 0,
                     },
                     output: BufferId(3),
                     dependencies: vec![NodeId(2)],
