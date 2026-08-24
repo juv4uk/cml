@@ -23,10 +23,26 @@ fn run_assembler(asm_code: &str, test_name: &str) {
     let asm_path = format!("{}.asm", test_name);
     fs::write(&asm_path, full_asm).unwrap();
 
-    let output = Command::new("python3")
-        .arg("../fpga-lisp/assembler.py")
-        .arg(&asm_path)
-        .output();
+    let bin_path = format!("{}.bin", test_name);
+    let asm_abs = env::current_dir().unwrap().join(&asm_path);
+    let bin_abs = env::current_dir().unwrap().join(&bin_path);
+    let configured = env::var("MY_LISP_BIN").unwrap_or_else(|_| {
+        "/home/agents/GitHub/my-lisp/target/release/my-lisp".to_string()
+    });
+    let output = if std::path::Path::new(&configured).is_file() {
+        // Prefer the self-hosted my-lisp assembler. Run from fpga-lisp so its
+        // canonical core.my load resolves; keep Python as explicit fallback.
+        Command::new(configured)
+            .current_dir("../fpga-lisp")
+            .args(["assembler.my", asm_abs.to_str().unwrap()])
+            .arg(&bin_abs)
+            .output()
+    } else {
+        Command::new("python3")
+            .args(["../fpga-lisp/assembler.py", asm_abs.to_str().unwrap(), "-o"])
+            .arg(&bin_abs)
+            .output()
+    };
 
     if let Ok(output) = output {
         if !output.status.success() {
@@ -42,7 +58,6 @@ fn run_assembler(asm_code: &str, test_name: &str) {
     }
 
     // Clean up
-    let bin_path = format!("{}.bin", test_name);
     let _ = fs::remove_file(asm_path);
     let _ = fs::remove_file(bin_path);
 }

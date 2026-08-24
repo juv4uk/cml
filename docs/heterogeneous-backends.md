@@ -100,7 +100,8 @@ and `.sym` sidecar contract. `tests/compiler_test.rs` includes a cross-repo
 fixture that assembles CML output through both `assembler.py` and
 `assembler.my` and requires identical bytes. This is an implementation-parity
 proof only; it does not transfer language or backend authority to either
-assembler.
+assembler. The compiler-test harness now prefers the release `my-lisp`
+assembler and falls back to Python only when that binary is unavailable.
 
 1. **Draw the backend boundary inside cml.** ✅ Done (`src/ir.rs` +
    `src/lower.rs`): a backend-neutral `Ir` covering every form `compile_*`
