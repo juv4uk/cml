@@ -180,12 +180,13 @@ fn i32_range_proven(region: &ComputeRegion) -> bool {
 }
 
 fn eval_i32_range(expression: &ScalarExpr, parameters: &[i64]) -> Option<i64> {
-    match expression {
+    let value = match expression {
         ScalarExpr::Parameter(index) => parameters.get(*index).copied(),
         ScalarExpr::ExactInteger(value) => Some(*value),
         ScalarExpr::CheckedAdd(left, right) => eval_i32_range(left, parameters)?
             .checked_add(eval_i32_range(right, parameters)?),
-    }
+    }?;
+    i32::try_from(value).ok().map(i64::from)
 }
 
 fn f32_rounding_proven(region: &ComputeRegion) -> bool {

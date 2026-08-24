@@ -63,6 +63,17 @@ fn i32_overflow_without_a_range_proof_blocks_offload() {
 }
 
 #[test]
+fn intermediate_i32_overflow_is_not_hidden_by_later_cancellation() {
+    let analysis = analyze(&lower_one(
+        "(numeric-buffer-map (lambda (x) (+ (+ x 2147483647) -2147483647)) #i32(1))",
+    ));
+    assert!(analysis
+        .gpu_blockers
+        .contains(&cml::compute::AdmissionBlocker::IntegerOverflowNotProven));
+    assert!(!analysis.gpu_eligible());
+}
+
+#[test]
 fn affine_f32_map_has_a_single_rounding_proof() {
     let analysis = analyze(&lower_one(
         "(numeric-buffer-map (lambda (x) (+ x 0)) #f32(1.0 2.0))",
