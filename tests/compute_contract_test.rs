@@ -4,7 +4,7 @@ use std::fs;
 fn machine_readable_compute_contract_matches_implementation() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 20))",
+        "(version . (0 21))",
         "(status . experimental-runtime)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -37,6 +37,9 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(backend-registration . explicit-name-to-node-executor)",
         "(gpu . (nvidia-gtx-1050-ti cuda-device-zero graph-map-pass))",
         "(fpga . (gw5a-25a windows-com4 graph-program-pass tagged-word-7))",
+        "(heterogeneous . (cpu cuda fpga ordered-live-graph-pass))",
+        "(execution-order . (cpu cuda fpga))",
+        "(cross-device-payload-transfer . absent)",
         "(unregistered-targets . fail-closed)",
         "(publication . atomic-on-whole-graph-success)",
         "(raw-cross-device-pointers . forbidden)",
@@ -62,7 +65,7 @@ fn machine_readable_compute_contract_matches_implementation() {
 
     let compatibility = fs::read_to_string("compatibility.my").unwrap();
     assert!(
-        compatibility.contains("(compute-analysis . ((contract . (0 20))"),
+        compatibility.contains("(compute-analysis . ((contract . (0 21))"),
         "compatibility.my compute contract version drifted from compute-contract.my"
     );
 }

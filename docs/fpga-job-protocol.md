@@ -60,3 +60,16 @@ The checked-in fpga-lisp reference fixture corpus follows upstream my-lisp
 contract 3.0 so unsupported cases remain visible. That reference pin is not a
 capability claim: CML and its FPGA backend still declare contract 2.0 until
 named-error conformance exists for every required backend path.
+
+## M3 heterogeneous live graph
+
+One operator-gated graph executed three ordered physical/runtime domains in
+14.61 seconds: CPU mapped `[1,2,3]` to `[2,3,4]`, the GTX 1050 Ti CUDA node
+mapped that buffer to `[3,4,5]`, then the COM4 FPGA node returned tagged word
+`7`. `execution_order()` was exactly CPU → CUDA → FPGA.
+
+This proves one scheduler, dependency graph, backend registry, and atomic
+result store can coordinate all three domains. It does **not** prove direct
+GPU-to-FPGA data movement: the dependency currently carries ordering only and
+the FPGA node executes its own preassembled program image. A typed transfer
+edge or shared-memory transport is the next distinct capability.

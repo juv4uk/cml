@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const MY_LISP_SHA: &str = "164608cc2b1c08b815362551d6a9483fa762db7b";
-const FPGA_LISP_SHA: &str = "bbc3ae5932cc79f0a906dbacc91af89d2e212ea6";
+const FPGA_LISP_SHA: &str = "f2362bb108454511b4dd36e131c51be491bac696";
 
 fn sibling(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
