@@ -137,7 +137,7 @@ pub fn analyze(ir: &Ir) -> ComputeAnalysis {
         {
             gpu_blockers.push(AdmissionBlocker::IntegerOverflowNotProven);
         }
-        (NumericDomain::InexactFloat, Some(_)) => {
+        (NumericDomain::InexactFloat, Some(region)) if !f32_rounding_proven(region) => {
             gpu_blockers.push(AdmissionBlocker::FloatRoundingNotDefined);
         }
         _ => {}
@@ -186,6 +186,58 @@ fn eval_i32_range(expression: &ScalarExpr, parameters: &[i64]) -> Option<i64> {
         ScalarExpr::CheckedAdd(left, right) => eval_i32_range(left, parameters)?
             .checked_add(eval_i32_range(right, parameters)?),
     }
+}
+
+fn f32_rounding_proven(region: &ComputeRegion) -> bool {
+    let (Some(kernel), Ir::Buffer(BufferLiteral::F32(input))) = (&region.kernel, &region.input) else {
+        return false;
+    };
+    let Some(offset) = f32_affine_offset(&kernel.body) else {
+        return false;
+    };
+    input.iter().all(|bits| {
+        let element = f32::from_bits(*bits);
+        let Some(canonical) = eval_f64(&kernel.body, &[f64::from(element)]) else {
+            return false;
+        };
+        let backend = element + offset as f32;
+        canonical.is_finite()
+            && backend.is_finite()
+            && (canonical as f32).to_bits() == backend.to_bits()
+    })
+}
+
+fn eval_f64(expression: &ScalarExpr, parameters: &[f64]) -> Option<f64> {
+    match expression {
+        ScalarExpr::Parameter(index) => parameters.get(*index).copied(),
+        ScalarExpr::ExactInteger(value) => Some(*value as f64),
+        ScalarExpr::CheckedAdd(left, right) => {
+            Some(eval_f64(left, parameters)? + eval_f64(right, parameters)?)
+        }
+    }
+}
+
+/// Returns C for exactly the affine form `parameter-0 + C`. Addition trees
+/// are flattened so the backend performs one binary32 add, matching the
+/// evaluator's one final narrowing step.
+fn f32_affine_offset(expression: &ScalarExpr) -> Option<i64> {
+    fn collect(expression: &ScalarExpr) -> Option<(u32, i64)> {
+        match expression {
+            ScalarExpr::Parameter(0) => Some((1, 0)),
+            ScalarExpr::Parameter(_) => None,
+            ScalarExpr::ExactInteger(value) => Some((0, *value)),
+            ScalarExpr::CheckedAdd(left, right) => {
+                let (left_parameters, left_constant) = collect(left)?;
+                let (right_parameters, right_constant) = collect(right)?;
+                Some((
+                    left_parameters.checked_add(right_parameters)?,
+                    left_constant.checked_add(right_constant)?,
+                ))
+            }
+        }
+    }
+    let (parameters, constant) = collect(expression)?;
+    (parameters == 1).then_some(constant)
 }
 
 fn lower_kernel(function: &Ir, expected_parameters: usize) -> Option<ComputeKernel> {
@@ -317,9 +369,16 @@ pub fn refine_representation(
                 .gpu_blockers
                 .push(AdmissionBlocker::IntegerOverflowNotProven);
         }
-        NumericDomain::InexactFloat => analysis
-            .gpu_blockers
-            .push(AdmissionBlocker::FloatRoundingNotDefined),
+        NumericDomain::InexactFloat
+            if analysis
+                .region
+                .as_ref()
+                .is_none_or(|region| !f32_rounding_proven(region)) =>
+        {
+            analysis
+                .gpu_blockers
+                .push(AdmissionBlocker::FloatRoundingNotDefined);
+        }
         _ => {}
     }
 }
@@ -352,16 +411,30 @@ impl ComputeBackend for CpuComputeBackend {
             return Err(ComputeExecutionError::UnsupportedOperation);
         }
         let kernel = region.kernel.ok_or(ComputeExecutionError::InternalInvariant)?;
-        let Ir::Buffer(BufferLiteral::I32(input)) = region.input else {
-            return Err(ComputeExecutionError::UnsupportedOperation);
-        };
-
-        let mut output = Vec::with_capacity(input.len());
-        for element in input {
-            let value = eval_i32_range(&kernel.body, &[i64::from(element)])
-                .ok_or(ComputeExecutionError::InternalInvariant)?;
-            output.push(i32::try_from(value).map_err(|_| ComputeExecutionError::InternalInvariant)?);
+        match region.input {
+            Ir::Buffer(BufferLiteral::I32(input)) => {
+                let mut output = Vec::with_capacity(input.len());
+                for element in input {
+                    let value = eval_i32_range(&kernel.body, &[i64::from(element)])
+                        .ok_or(ComputeExecutionError::InternalInvariant)?;
+                    output.push(
+                        i32::try_from(value)
+                            .map_err(|_| ComputeExecutionError::InternalInvariant)?,
+                    );
+                }
+                Ok(BufferLiteral::I32(output))
+            }
+            Ir::Buffer(BufferLiteral::F32(input)) => {
+                let offset = f32_affine_offset(&kernel.body)
+                    .ok_or(ComputeExecutionError::InternalInvariant)? as f32;
+                Ok(BufferLiteral::F32(
+                    input
+                        .into_iter()
+                        .map(|bits| (f32::from_bits(bits) + offset).to_bits())
+                        .collect(),
+                ))
+            }
+            _ => Err(ComputeExecutionError::UnsupportedOperation),
         }
-        Ok(BufferLiteral::I32(output))
     }
 }

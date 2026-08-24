@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics and does not claim a GPU backend.
 
 ((kind . cml-compute-contract)
- (version . (0 6))
+ (version . (0 7))
  (status . analysis-only)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -16,7 +16,7 @@
                    (required-storage . contiguous-buffer)
                    (required-numeric-domain . (fixed-width-integer inexact-float))
                    (required-i32-overflow-proof . true)
-                   (f32-rounding-contract . unresolved-block-offload)
+                   (f32-rounding-contract . affine-x-plus-integer-per-literal-bit-equivalence)
                    (unknown-facts . reject)
                    (fallback . cpu)))
  (semantic-invariants . ((implicit-exact-to-inexact-conversion . forbidden)
@@ -27,7 +27,7 @@
                       (typed-buffer-ir . present-from-my-lisp-contract-2.2)
                       (typed-buffer-elements . (i32 f32))
                       (kernel-ir . (parameter exact-integer checked-add))
-                      (cpu-compute-backend . (present-reference i32-map range-proven-only))
+                      (cpu-compute-backend . (present-reference i32-map-range-proven f32-map-affine-proven))
                       (gpu-emitter . absent)
                       (automatic-offload . absent)))
  (implementation . ((analysis . "src/compute.rs")

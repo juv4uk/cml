@@ -33,7 +33,21 @@ fn render_buffer(buffer: BufferLiteral) -> String {
                 .collect::<Vec<_>>()
                 .join(" ")
         ),
-        BufferLiteral::F32(_) => unreachable!("f32 is not admitted by CPU M0"),
+        BufferLiteral::F32(values) => format!(
+            "#f32({})",
+            values
+                .iter()
+                .map(|bits| {
+                    let value = f32::from_bits(*bits);
+                    if value.fract() == 0.0 {
+                        format!("{value:.1}")
+                    } else {
+                        value.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
     }
 }
 
@@ -57,6 +71,8 @@ fn cpu_compute_matches_the_live_canonical_evaluator() {
         "(numeric-buffer-map (lambda (x) (+ (+ x 10) -3)) #i32(0 7 -9))",
         "(numeric-buffer-map (lambda (x) (+ x 1)) #i32())",
         "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(2147483647))",
+        "(numeric-buffer-map (lambda (x) (+ x 1)) #f32(1.0 -2.5 0.1))",
+        "(numeric-buffer-map (lambda (x) (+ (+ x 10) -3)) #f32(1.0 -2.5 0.1))",
     ] {
         assert_eq!(compiled(source), oracle(source), "source: {source}");
     }

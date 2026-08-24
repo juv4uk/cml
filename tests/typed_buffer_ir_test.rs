@@ -63,9 +63,17 @@ fn i32_overflow_without_a_range_proof_blocks_offload() {
 }
 
 #[test]
-fn f32_offload_waits_for_an_explicit_per_operation_rounding_contract() {
+fn affine_f32_map_has_a_single_rounding_proof() {
     let analysis = analyze(&lower_one(
         "(numeric-buffer-map (lambda (x) (+ x 0)) #f32(1.0 2.0))",
+    ));
+    assert!(analysis.gpu_eligible());
+}
+
+#[test]
+fn non_affine_f32_map_stays_blocked() {
+    let analysis = analyze(&lower_one(
+        "(numeric-buffer-map (lambda (x) (+ x x)) #f32(1.0 2.0))",
     ));
     assert!(analysis
         .gpu_blockers
