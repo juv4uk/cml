@@ -222,6 +222,17 @@ fn c_backend_executes_numeric_buffer_map_as_i32_reference_path() {
 }
 
 #[test]
+fn c_backend_lowers_source_level_numeric_buffer_map() {
+    assert_eq!(
+        compile_and_run_first_class(
+            "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3))",
+            "source_i32_map"
+        ),
+        "#i32(2 3 4)"
+    );
+}
+
+#[test]
 fn c_backend_numeric_buffer_map_fails_closed_on_i32_overflow() {
     let program = [Ir::App {
         func: Box::new(Ir::Var("NUMERIC-BUFFER-MAP".into())),

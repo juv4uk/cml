@@ -183,7 +183,7 @@
      (capabilities . (compiler rust compute testing proof))
      (done . t)
      (description . "Give C backend typed numeric buffers an explicit representation and reference execution path while retaining fail-closed unsupported classifications.")
-     (context . "done 2026-08-24: C backend emits and runs exact #i32 buffers (including negative values) through a tagged C runtime buffer representation and canonical #i32 printer; numeric-buffer-map now executes pure fixed-width i32 lambdas through the same reference path with checked NumericOverflow failure. #f32 remains CompileError::UnsupportedTypedBuffer. C backend regression is 21/21 PASS and conformance harness 4/4 PASS. compute-contract 0.28.")))
+     (context . "done 2026-08-24: C backend emits and runs exact #i32 buffers (including negative values) through a tagged C runtime buffer representation and canonical #i32 printer; source-level numeric-buffer-map lowers into the same reference path for pure fixed-width i32 lambdas with checked NumericOverflow failure. #f32 remains CompileError::UnsupportedTypedBuffer. C backend regression is 22/22 PASS and conformance harness 4/4 PASS. compute-contract 0.28.")))
    ("CML-EXECUTION-MODULE-BOUNDARY-V0.2" .
     ((priority . 0.45)
      (capabilities . (compiler rust architecture refactor testing))
