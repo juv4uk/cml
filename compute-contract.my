@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 9))
+ (version . (0 10))
  (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -31,6 +31,8 @@
                       (gpu-emitter . (wgsl-source-only admitted-map-regions))
                       (gpu-runtime . (optional-feature gpu-wgpu
                                       adapter-evidence-returned
+                                      default-policy-gpu-only
+                                      explicit-software-adapter-probe
                                       storage-buffer-dispatch-readback))
                       (runtime-live-evidence . llvmpipe-cpu-vulkan-pass)
                       (physical-gpu-evidence . absent)

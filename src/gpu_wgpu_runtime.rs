@@ -25,11 +25,20 @@ pub struct WgpuExecution {
     pub adapter: AdapterEvidence,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdapterPolicy {
+    /// Useful for validating the runtime on software adapters such as llvmpipe.
+    AnyComputeAdapter,
+    /// Reject CPU and unknown adapters before device creation or dispatch.
+    GpuOnly,
+}
+
 #[derive(Debug)]
 pub enum WgpuRuntimeError {
     Shader(WgslError),
     UnsupportedInput,
     NoAdapter(String),
+    AdapterRejected(AdapterEvidence),
     RequestDevice(String),
     Poll(String),
     Map(String),
@@ -48,6 +57,13 @@ impl From<WgslError> for WgpuRuntimeError {
 /// wgpu execution path, while the adapter metadata is the separate evidence
 /// needed before calling that path physical GPU execution.
 pub async fn execute_map(ir: &Ir) -> Result<WgpuExecution, WgpuRuntimeError> {
+    execute_map_with_policy(ir, AdapterPolicy::GpuOnly).await
+}
+
+pub async fn execute_map_with_policy(
+    ir: &Ir,
+    policy: AdapterPolicy,
+) -> Result<WgpuExecution, WgpuRuntimeError> {
     let shader_source = emit_map_shader(ir)?;
     let input = map_input(ir).ok_or(WgpuRuntimeError::UnsupportedInput)?;
     if input.bytes.is_empty() {
@@ -72,6 +88,7 @@ pub async fn execute_map(ir: &Ir) -> Result<WgpuExecution, WgpuRuntimeError> {
         device_type: info.device_type,
         backend: info.backend,
     };
+    enforce_adapter_policy(&evidence, policy)?;
 
     let (device, queue) = adapter
         .request_device(&wgpu::DeviceDescriptor {
@@ -177,6 +194,29 @@ pub fn execute_map_blocking(ir: &Ir) -> Result<WgpuExecution, WgpuRuntimeError> 
     pollster::block_on(execute_map(ir))
 }
 
+pub fn execute_map_blocking_with_policy(
+    ir: &Ir,
+    policy: AdapterPolicy,
+) -> Result<WgpuExecution, WgpuRuntimeError> {
+    pollster::block_on(execute_map_with_policy(ir, policy))
+}
+
+fn enforce_adapter_policy(
+    evidence: &AdapterEvidence,
+    policy: AdapterPolicy,
+) -> Result<(), WgpuRuntimeError> {
+    let is_gpu = matches!(
+        evidence.device_type,
+        wgpu::DeviceType::IntegratedGpu
+            | wgpu::DeviceType::DiscreteGpu
+            | wgpu::DeviceType::VirtualGpu
+    );
+    if policy == AdapterPolicy::GpuOnly && !is_gpu {
+        return Err(WgpuRuntimeError::AdapterRejected(evidence.clone()));
+    }
+    Ok(())
+}
+
 struct InputBytes {
     bytes: Vec<u8>,
     element_count: u32,
@@ -271,5 +311,21 @@ mod tests {
             input.decode(&[0, 1]),
             Err(WgpuRuntimeError::Map(_))
         ));
+    }
+
+    #[test]
+    fn gpu_policy_rejects_cpu_adapter_evidence() {
+        let evidence = AdapterEvidence {
+            name: "llvmpipe".into(),
+            vendor: 0x10005,
+            device: 0,
+            device_type: wgpu::DeviceType::Cpu,
+            backend: wgpu::Backend::Vulkan,
+        };
+        assert!(matches!(
+            enforce_adapter_policy(&evidence, AdapterPolicy::GpuOnly),
+            Err(WgpuRuntimeError::AdapterRejected(rejected)) if rejected == evidence
+        ));
+        assert!(enforce_adapter_policy(&evidence, AdapterPolicy::AnyComputeAdapter).is_ok());
     }
 }
