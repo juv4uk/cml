@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics and does not claim a GPU backend.
 
 ((kind . cml-compute-contract)
- (version . (0 4))
+ (version . (0 5))
  (status . analysis-only)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -27,9 +27,10 @@
                       (typed-buffer-ir . present-from-my-lisp-contract-2.2)
                       (typed-buffer-elements . (i32 f32))
                       (kernel-ir . (parameter exact-integer checked-add))
-                      (cpu-compute-backend . absent)
+                      (cpu-compute-backend . (present-reference i32-map range-proven-only))
                       (gpu-emitter . absent)
                       (automatic-offload . absent)))
  (implementation . ((analysis . "src/compute.rs")
                     (buffer-ir . "src/ir.rs")
+                    (cpu-reference . "src/compute.rs::CpuComputeBackend")
                     (tests . "tests/compute_analysis_test.rs tests/typed_buffer_ir_test.rs"))))

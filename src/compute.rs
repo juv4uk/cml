@@ -323,3 +323,45 @@ pub fn refine_representation(
         _ => {}
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComputeExecutionError {
+    NotEligible(Vec<AdmissionBlocker>),
+    UnsupportedOperation,
+    InternalInvariant,
+}
+
+/// Common execution boundary for specialized compute backends. M0's CPU
+/// implementation is the reference for the same already-admitted Kernel IR a
+/// later GPU backend will consume.
+pub trait ComputeBackend {
+    fn execute(&self, ir: &Ir) -> Result<BufferLiteral, ComputeExecutionError>;
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct CpuComputeBackend;
+
+impl ComputeBackend for CpuComputeBackend {
+    fn execute(&self, ir: &Ir) -> Result<BufferLiteral, ComputeExecutionError> {
+        let analysis = analyze(ir);
+        if !analysis.gpu_eligible() {
+            return Err(ComputeExecutionError::NotEligible(analysis.gpu_blockers));
+        }
+        let region = analysis.region.ok_or(ComputeExecutionError::UnsupportedOperation)?;
+        if region.operation != BulkOperation::Map {
+            return Err(ComputeExecutionError::UnsupportedOperation);
+        }
+        let kernel = region.kernel.ok_or(ComputeExecutionError::InternalInvariant)?;
+        let Ir::Buffer(BufferLiteral::I32(input)) = region.input else {
+            return Err(ComputeExecutionError::UnsupportedOperation);
+        };
+
+        let mut output = Vec::with_capacity(input.len());
+        for element in input {
+            let value = eval_i32_range(&kernel.body, &[i64::from(element)])
+                .ok_or(ComputeExecutionError::InternalInvariant)?;
+            output.push(i32::try_from(value).map_err(|_| ComputeExecutionError::InternalInvariant)?);
+        }
+        Ok(BufferLiteral::I32(output))
+    }
+}

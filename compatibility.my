@@ -19,11 +19,11 @@
             (isa . (1 0))
             (tested-sha . "6c08e42975eb05eb143ee4cc66bcc759b6f92a1b")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
- (compute-analysis . ((contract . (0 4))
-                      (status . analysis-only)
+ (compute-analysis . ((contract . (0 5))
+                      (status . cpu-reference-execution)
                       (execution-shapes . (scalar element-wise reduction irregular))
                       (gpu-admission . fail-closed)
-                      (note . "canonical numeric-buffer-map from my-lisp 2.3 lowers to scalar Kernel IR; i32 requires a literal range proof, f32 offload remains blocked until per-operation rounding matches the evaluator; CPU/GPU emitters remain absent")))
+                      (note . "canonical numeric-buffer-map from my-lisp 2.3 lowers to scalar Kernel IR; CpuComputeBackend executes range-proven literal i32 maps as the reference path; f32 and GPU remain blocked until rounding semantics are resolved")))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom equal? defmacro
                def recursive-def-letrec
