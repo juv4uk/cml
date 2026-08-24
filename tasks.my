@@ -153,7 +153,7 @@
      (capabilities . (compiler rust compute gpu cuda fpga protocol testing proof))
      (done . t)
      (description . "Execute CPU, CUDA, and physical FPGA nodes in one dependency graph and preserve typed results without claiming a data path that does not exist.")
-     (context . "done 2026-08-24: operator-gated live test passed in 14.61s. One graph executed CPU [1 2 3]->[2 3 4], GTX 1050 Ti CUDA ->[3 4 5], then GW5A-25A/COM4 -> GraphValue::LispWord(7), with execution_order CPU->CUDA->FPGA. This proves unified scheduling, backend registration, dependency order, and result publication. The CUDA buffer is not yet transferred into the FPGA program; direct cross-device payload transfer remains explicitly absent. compute-contract 0.21.")))
+     (context . "done 2026-08-24: operator-gated live test passed in 14.17s. One graph executed CPU [1 2 3]->[2 3 4], GTX 1050 Ti CUDA ->[3 4 5], then host-staged typed buffer input into GW5A-25A/COM4 -> GraphValue::LispWord(7), with execution_order CPU->CUDA->FPGA. This proves unified scheduling, backend registration, explicit data dependency, host-staged buffer-to-register materialization, and result publication. Direct device-to-device GPU→FPGA payload transfer remains explicitly absent. compute-contract 0.26.")))
    ("CML-GRAPH-TYPED-EDGES-M4" .
     ((priority . 0.85)
      (capabilities . (compiler rust compute graph testing proof))
@@ -177,7 +177,7 @@
      (capabilities . (compiler rust compute fpga protocol testing proof))
      (done . t)
      (description . "Design and validate an explicit host-staged adapter from an execution-graph typed buffer to ISA 1.1 tagged FPGA register inputs; keep direct GPU-to-FPGA transfer absent and fail closed on unsupported representations.")
-     (context . "done 2026-08-24: explicit FpgaProgramWithBufferInput stages checked i32 BufferLiteral values into ISA 1.1 tagged register inputs, rejects F32/range/register overflow, and requires a real graph input or producer dependency. Mock graph tests and one operator-gated physical COM4 run passed (ADD R0=3,R1=4 -> R2=7 in 12.76s). Direct GPU-to-FPGA transfer and automatic placement remain absent; compute-contract 0.26.")))
+     (context . "done 2026-08-24: explicit FpgaProgramWithBufferInput stages checked i32 BufferLiteral values into ISA 1.1 tagged register inputs, rejects F32/range/register overflow, and requires a real graph input or producer dependency. Mock graph tests, one physical COM4 run, and one CPU->CUDA->host-staged-FPGA run passed (ADD R0=3,R1=4 -> R2=7; heterogeneous run 14.17s). Direct device-to-device GPU-to-FPGA transfer and automatic placement remain absent; compute-contract 0.26.")))
    ("CML-EXECUTION-MODULE-BOUNDARY-V0.2" .
     ((priority . 0.45)
      (capabilities . (compiler rust architecture refactor testing))
