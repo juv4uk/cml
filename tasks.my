@@ -69,7 +69,7 @@
      (capabilities . (compiler rust lowering testing proof))
      (done . t)
      (description . "c_backend.rs has only ever been run against hand-picked fixtures, never the full tests/fixtures/conformance.my suite conformance_test.rs already exercises against compiler.rs. Write an analogous test: compile+gcc+run every tier-1 fixture through c_backend.rs, compare to the fixture's own expected value.")
-     (context . "done (f73e670, extended 2026-08-24): tests/c_backend_conformance_test.rs now account for every constitutive Tier-1 fixture: selected=35, supported-value=25, supported-error=7, explicit unsupported-inexact=3, unsupported-error=0, unsupported-newer-contract=0, admitted-newer-contract=1. Contract-2.1 matrix is selected=3, supported=3. The harness treats parser/admission/compiler/gcc/runtime mismatches as failures rather than silently skipping them.")))
+     (context . "done (f73e670, extended 2026-08-24): tests/c_backend_conformance_test.rs now account for every constitutive Tier-1 fixture: selected=35, supported-value=25, supported-error=7, explicit unsupported-inexact=3, unsupported-error=0, unsupported-newer-contract=0, admitted-newer-contract=1. Contract-2.1 matrix is selected=3, supported=3; the hand-picked C backend regression suite is 18/18 PASS, 22/22 across both suites. The harness treats parser/admission/compiler/gcc/runtime mismatches as failures rather than silently skipping them.")))
    ("CML-FIX-CONTRACT-VERSION-DRIFT" .
     ((priority . 0.9)
      (capabilities . (compiler rust proof))
