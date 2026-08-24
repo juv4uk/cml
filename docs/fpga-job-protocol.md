@@ -48,6 +48,10 @@ CML_FPGA_BRIDGE_WINDOWS='\\wsl.localhost\Ubuntu\home\agents\GitHub\fpga-lisp\job
 cargo test --test execution_graph_fpga_live_test -- --ignored --nocapture
 ```
 
-Windows PnP currently reports USB Serial Converter B and COM4 healthy. That is
-device-presence evidence only; the M2c live graph result remains pending until
-the reset-gated test returns R9 = FIXNUM(7).
+Windows PnP reports USB Serial Converter B and COM4 healthy. On 2026-08-24 the
+reset-gated test then completed the stronger proof: the registered
+`fpga-lisp:com4` executor uploaded `bootstrap_add_demo.bin` to the physical
+GW5A-25A board, read R9 as raw tagged word `0x00000007`, observed no hardware
+error, and published `GraphValue::LispWord(7)`. The ignored test passed in
+13.37 seconds. This is one live program-path observation, not blanket FPGA
+backend conformance.

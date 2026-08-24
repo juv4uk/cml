@@ -20,7 +20,7 @@
                                    (note . "CML still claims contract 2.0. It must not classify or claim contract-3.0 error parity until each backend has named-error conformance evidence.")))))
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (1 0))
-            (tested-sha . "00736371330df780af40856b8095950ffde52af4")))
+            (tested-sha . "296cde9240afc34ed5397626234aafea86215aaa")))
  (pipeline . (parse macro-expand compile assemble simulate compare))
  (compute-analysis . ((contract . (0 20))
                       (status . experimental-cross-vendor-runtime)
@@ -31,6 +31,7 @@
                                           (logical-buffer-flow . tested)
                                           (registered-executors . (cpu gpu-cuda gpu-wgpu fpga-command-bridge))
                                           (cuda-live-graph-evidence . (nvidia-gtx-1050-ti device-zero i32-map-pass))
+                                          (fpga-live-graph-evidence . (gw5a-25a windows-com4 tagged-word-7 no-hardware-error))
                                           (gpu-fpga-without-executor . fail-closed)
                                           (automatic-placement . absent)))
                       (fpga-job-protocol . ((version . 1)
@@ -39,7 +40,7 @@
                                             (transport-implementations . (binary-stdio-command windows-python-pyserial))
                                             (graph-values . (buffer lisp-word))
                                             (graph-attachment . mock-transport-confirmed)
-                                            (physical-transport . pnp-present-live-run-pending-manual-reset)))
+                                            (physical-transport . windows-com4-live-graph-pass)))
                       (note . "CPU reference is differential-tested; admitted i32 and affine f32 maps emit portable WGSL and NVIDIA CUDA C from the same Compute IR admission. The M1 Execution Graph resolves explicit target names through a vendor-neutral NodeExecutor registry. CPU, optional CUDA, and optional wgpu adapters implement the same buffer-map boundary; unregistered GPU/FPGA targets still fail closed. A graph node dispatched through the registered cuda:0 executor passed on the GTX 1050 Ti and matched the canonical i32 result. Optional gpu-wgpu provides portable dispatch/readback and rejects CPU adapters by default. WSL CUDA requires /usr/lib/wsl/lib to precede the conflicting native Linux libcuda. ROCm and oneAPI Level Zero remain planned, with wgpu as their implemented portable path; this host's Intel HD 530/Skylake is upstream-unsupported for WSL compute.")))
  (supported . (integer symbol nil true quote proper-list dotted-list
                cond lambda application cons car cdr eq atom equal? defmacro
