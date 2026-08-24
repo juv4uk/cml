@@ -45,7 +45,7 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(fpga-job-protocol . ((version . 1)",
         "(status . command-transport-m2c)",
         "(wire-authority . fpga-lisp-isa-1.0)",
-        "(execution-graph-attachment . mock-transport-confirmed)",
+        "(execution-graph-attachment . (mock-transport-confirmed physical-com4-confirmed))",
         "(physical-bridge . (windows-python-pyserial-com4))",
         "(physical-device-evidence . (gw5a-25a windows-com4 graph-program-pass tagged-word-7 no-hardware-error))",
         "(fpga-job-protocol . \"src/fpga_transport.rs\")",

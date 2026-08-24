@@ -55,3 +55,8 @@ GW5A-25A board, read R9 as raw tagged word `0x00000007`, observed no hardware
 error, and published `GraphValue::LispWord(7)`. The ignored test passed in
 13.37 seconds. This is one live program-path observation, not blanket FPGA
 backend conformance.
+
+The checked-in fpga-lisp reference fixture corpus follows upstream my-lisp
+contract 3.0 so unsupported cases remain visible. That reference pin is not a
+capability claim: CML and its FPGA backend still declare contract 2.0 until
+named-error conformance exists for every required backend path.
