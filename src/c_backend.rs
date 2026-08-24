@@ -34,6 +34,9 @@ use std::fmt;
 pub enum CompileError {
     /// A `def` form appeared in a non-top-level position.
     NestedDef,
+    /// Typed numeric buffers are admitted by the language contract but are
+    /// not yet represented by this scalar C runtime.
+    UnsupportedTypedBuffer,
     /// An IR node that this backend does not yet support.
     Unsupported(String),
 }
@@ -44,6 +47,10 @@ impl fmt::Display for CompileError {
             CompileError::NestedDef => write!(
                 f,
                 "def is only supported at the top level of a program, not nested"
+            ),
+            CompileError::UnsupportedTypedBuffer => write!(
+                f,
+                "unsupported typed numeric buffer in C backend: use a compute backend"
             ),
             CompileError::Unsupported(node) => {
                 write!(f, "unsupported IR node in C backend: {node}")
@@ -309,9 +316,7 @@ impl CBackend {
     fn compile_expr(&mut self, ir: &Ir, env: &str) -> Result<String, CompileError> {
         match ir {
             Ir::Int(n) => Ok(format!("mk_int({n})")),
-            Ir::Buffer(_) => Err(CompileError::Unsupported(
-                "typed numeric buffer (CPU ComputeBackend not implemented yet)".to_string(),
-            )),
+            Ir::Buffer(_) => Err(CompileError::UnsupportedTypedBuffer),
             Ir::Nil => Ok("(&NIL_V)".to_string()),
             Ir::True => Ok("(&TRUE_V)".to_string()),
             Ir::Var(name) => Ok(format!("env_lookup({env}, \"{name}\")")),

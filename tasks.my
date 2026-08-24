@@ -178,6 +178,12 @@
      (done . t)
      (description . "Design and validate an explicit host-staged adapter from an execution-graph typed buffer to ISA 1.1 tagged FPGA register inputs; keep direct GPU-to-FPGA transfer absent and fail closed on unsupported representations.")
      (context . "done 2026-08-24: explicit FpgaProgramWithBufferInput stages checked i32 BufferLiteral values into ISA 1.1 tagged register inputs, rejects empty/F32/range/register overflow and prepopulated inputs, and requires a real graph input or producer dependency. Mock graph tests, one physical COM4 run, and one CPU->CUDA->host-staged-FPGA run passed (ADD R0=3,R1=4 -> R2=7; heterogeneous run 14.17s). Direct device-to-device GPU-to-FPGA transfer and automatic placement remain absent; compute-contract 0.27.")))
+   ("CML-C-BACKEND-TYPED-BUFFER-BOUNDARY-M8" .
+    ((priority . 0.7)
+     (capabilities . (compiler rust compute testing proof))
+     (done . t)
+     (description . "Give C backend typed numeric buffers an explicit unsupported classification until a scalar C representation is designed.")
+     (context . "done 2026-08-24: CompileError::UnsupportedTypedBuffer is distinct from generic unsupported IR; #i32 and #f32 admission tests both assert the named classification. C backend regression is 19/19 PASS; implementation remains fail-closed until the compute representation contract is ready.")))
    ("CML-EXECUTION-MODULE-BOUNDARY-V0.2" .
     ((priority . 0.45)
      (capabilities . (compiler rust architecture refactor testing))

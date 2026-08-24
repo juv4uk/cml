@@ -163,6 +163,18 @@ fn c_backend_reports_contractual_core_error_kinds() {
 }
 
 #[test]
+fn c_backend_rejects_typed_buffers_with_a_named_unsupported_error() {
+    for source in ["#i32(1 2 3)", "#f32(1.0 2.0)"] {
+        let exprs = parser::parse(source).unwrap();
+        let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+        assert!(matches!(
+            CBackend::new().compile_program(&program),
+            Err(cml::c_backend::CompileError::UnsupportedTypedBuffer)
+        ), "{source} was not classified as UnsupportedTypedBuffer");
+    }
+}
+
+#[test]
 fn compiles_add1_to_c_and_runs_it() {
     let code = "(def add1 (lambda (x) (+ x 1))) (add1 41)";
     let exprs = parser::parse(code).unwrap();
