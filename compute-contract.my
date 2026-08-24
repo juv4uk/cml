@@ -2,7 +2,7 @@
 ; This does not extend my-lisp semantics or claim physical-GPU execution.
 
 ((kind . cml-compute-contract)
- (version . (0 13))
+ (version . (0 14))
  (status . experimental-runtime)
  (authority . ((language-semantics . my-lisp)
                (compute-analysis . cml)
@@ -31,6 +31,8 @@
                       (gpu-emitter . (wgsl-source-only admitted-map-regions))
                       (cuda-emitter . (cuda-c-source-only admitted-map-regions))
                       (cuda-runtime . (optional-feature gpu-cuda
+                                       live-device-discovery
+                                       planner-descriptor
                                        nvrtc-to-ptx
                                        driver-launch-readback))
                       (gpu-runtime . (optional-feature gpu-wgpu

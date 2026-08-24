@@ -4,7 +4,7 @@ use std::fs;
 fn machine_readable_compute_contract_matches_analysis_m0() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 13))",
+        "(version . (0 14))",
         "(status . experimental-runtime)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -18,6 +18,8 @@ fn machine_readable_compute_contract_matches_analysis_m0() {
         "(gpu-emitter . (wgsl-source-only admitted-map-regions))",
         "(cuda-emitter . (cuda-c-source-only admitted-map-regions))",
         "(cuda-runtime . (optional-feature gpu-cuda",
+        "live-device-discovery",
+        "planner-descriptor",
         "(gpu-runtime . (optional-feature gpu-wgpu",
         "default-policy-gpu-only",
         "explicit-software-adapter-probe",

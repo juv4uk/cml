@@ -3,13 +3,24 @@
 use cudarc::driver::{CudaContext, LaunchConfig, PushKernelArg};
 use cudarc::nvrtc::compile_ptx;
 
+use crate::accelerator::{
+    AcceleratorApi, AcceleratorClass, AcceleratorDescriptor, AcceleratorVendor,
+};
 use crate::gpu_cuda::{CudaEmitError, emit_map_kernel};
 use crate::ir::{BufferLiteral, Ir};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CudaDevice {
+    pub descriptor: AcceleratorDescriptor,
+    pub ordinal: usize,
+    pub compute_capability: (i32, i32),
+    pub total_memory_bytes: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CudaExecution {
     pub output: BufferLiteral,
-    pub device_ordinal: usize,
+    pub device: CudaDevice,
 }
 
 #[derive(Debug)]
@@ -26,6 +37,18 @@ impl From<CudaEmitError> for CudaRuntimeError {
     }
 }
 
+pub fn discover_devices() -> Result<Vec<CudaDevice>, CudaRuntimeError> {
+    let count =
+        CudaContext::device_count().map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+    (0..count)
+        .map(|ordinal| {
+            let context = CudaContext::new(ordinal as usize)
+                .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+            device_evidence(&context)
+        })
+        .collect()
+}
+
 pub fn execute_map(ir: &Ir, device_ordinal: usize) -> Result<CudaExecution, CudaRuntimeError> {
     let source = emit_map_kernel(ir)?;
     let buffer = map_input(ir).ok_or(CudaRuntimeError::UnsupportedInput)?;
@@ -38,6 +61,7 @@ pub fn execute_map(ir: &Ir, device_ordinal: usize) -> Result<CudaExecution, Cuda
     let ptx = compile_ptx(source).map_err(|error| CudaRuntimeError::Nvrtc(error.to_string()))?;
     let context = CudaContext::new(device_ordinal)
         .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+    let device = device_evidence(&context)?;
     let stream = context.default_stream();
     let module = context
         .load_module(ptx)
@@ -97,9 +121,29 @@ pub fn execute_map(ir: &Ir, device_ordinal: usize) -> Result<CudaExecution, Cuda
         }
     };
 
-    Ok(CudaExecution {
-        output,
-        device_ordinal,
+    Ok(CudaExecution { output, device })
+}
+
+fn device_evidence(context: &CudaContext) -> Result<CudaDevice, CudaRuntimeError> {
+    let name = context
+        .name()
+        .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+    let compute_capability = context
+        .compute_capability()
+        .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+    let total_memory_bytes = context
+        .total_mem()
+        .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+    Ok(CudaDevice {
+        descriptor: AcceleratorDescriptor {
+            name,
+            vendor: AcceleratorVendor::Nvidia,
+            api: AcceleratorApi::Cuda,
+            class: AcceleratorClass::DiscreteGpu,
+        },
+        ordinal: context.ordinal(),
+        compute_capability,
+        total_memory_bytes,
     })
 }
 

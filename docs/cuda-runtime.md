@@ -28,6 +28,8 @@ LD_LIBRARY_PATH=/usr/lib/wsl/lib:/lib/x86_64-linux-gnu \
 ```
 
 Evidence recorded 2026-08-24: the admitted i32 map executed on NVIDIA GeForce
-GTX 1050 Ti device 0 and returned `[2, 3, 4]`. This proves the CML CUDA path for
-that slice only; it does not prove automatic offload, the f32 path, ROCm, or
-oneAPI Level Zero.
+GTX 1050 Ti device 0 and returned `[2, 3, 4]`. Live discovery reported compute
+capability 6.1 and 4,294,705,152 bytes, produced an NVIDIA/CUDA/discrete-GPU
+planner descriptor, and `VendorOptimized` selected it. This proves the CML CUDA
+path for that slice only; it does not prove automatic offload, the f32 path,
+ROCm, or oneAPI Level Zero.
