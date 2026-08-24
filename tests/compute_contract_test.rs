@@ -4,7 +4,7 @@ use std::fs;
 fn machine_readable_compute_contract_matches_implementation() {
     let contract = fs::read_to_string("compute-contract.my").unwrap();
     for required in [
-        "(version . (0 24))",
+        "(version . (0 27))",
         "(status . experimental-runtime)",
         "(unknown-facts . reject)",
         "(fallback . cpu)",
@@ -40,25 +40,25 @@ fn machine_readable_compute_contract_matches_implementation() {
         "(heterogeneous . (cpu cuda fpga ordered-live-graph-pass))",
         "(execution-order . (cpu cuda fpga))",
         "(fpga . one-program-path-not-blanket-conformance)",
-        "(heterogeneous . scheduler-order-and-results-not-payload-transfer)",
-        "(cross-device-payload-transfer . absent)",
+        "(heterogeneous . scheduler-order-results-and-host-staged-fpga-input-not-direct-device-transfer)",
+        "(cross-device-payload-transfer . (direct-device-to-device-absent host-staged-buffer-to-register-proven))",
         "(data . typed-value-with-explicit-producer-dependency)",
         "(control . dependency-only)",
         "(buffer-transfer . host-staged-materialized-graph-value)",
-        "(fpga-input-edge . absent-control-dependency-only)",
+        "(fpga-input-edge . (host-staged-register-input-explicit control-dependency-only-for-jobs-without-input))",
         "(implicit-source-order-dataflow . forbidden)",
         "(unregistered-targets . fail-closed)",
         "(publication . atomic-on-whole-graph-success)",
         "(raw-cross-device-pointers . forbidden)",
         "(values . (buffer lisp-word))",
-        "(operations . (numeric-buffer-map fpga-program))",
+        "(operations . (numeric-buffer-map fpga-program fpga-program-with-buffer-input))",
         "(fpga-job-protocol . ((version . 1)",
         "(status . command-transport-m2c)",
         "(wire-authority . fpga-lisp-isa-1.1)",
-        "(extended-register-inputs . (rtl-simulation-proven host-bridge-targeted-tested))",
+        "(extended-register-inputs . (rtl-simulation-proven host-bridge-targeted-tested physical-com4-confirmed-one-path))",
         "(cml-register-input-encoding . present-validated)",
         "(register-input-contract . (maximum-16 unique-registers-r0-r15 opaque-u32-tagged-words))",
-        "(execution-graph-attachment . (mock-transport-confirmed physical-com4-confirmed))",
+        "(execution-graph-attachment . (mock-transport-confirmed physical-com4-confirmed-typed-buffer-input))",
         "(physical-bridge . (windows-python-pyserial-com4))",
         "(physical-device-evidence . (gw5a-25a windows-com4 graph-program-pass tagged-word-7 no-hardware-error))",
         "(fpga-job-protocol . \"src/fpga_transport.rs\")",
@@ -75,7 +75,7 @@ fn machine_readable_compute_contract_matches_implementation() {
 
     let compatibility = fs::read_to_string("compatibility.my").unwrap();
     assert!(
-        compatibility.contains("(compute-analysis . ((contract . (0 24))"),
+        compatibility.contains("(compute-analysis . ((contract . (0 27))"),
         "compatibility.my compute contract version drifted from compute-contract.my"
     );
 }

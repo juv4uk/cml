@@ -56,7 +56,7 @@
  (execution-graph . ((status . registered-backends-m1)
                      (nodes . (id operation logical-input logical-output dependencies target))
                      (values . (buffer lisp-word))
-                     (operations . (numeric-buffer-map fpga-program))
+                     (operations . (numeric-buffer-map fpga-program fpga-program-with-buffer-input))
                      (targets . (cpu gpu fpga))
                      (implemented-executors . (cpu gpu-cuda gpu-wgpu fpga-command-bridge))
                      (backend-registration . explicit-name-to-node-executor)
