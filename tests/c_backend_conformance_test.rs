@@ -1,9 +1,8 @@
 // CML-C-BACKEND-CONFORMANCE: c_backend.rs had only ever been run against
 // a handful of hand-picked fixtures (tests/c_backend_test.rs), never the
-// full tests/fixtures/conformance.my suite conformance_test.rs already
-// exercises against compiler.rs -- this closes that gap the same way,
-// for the same tier-1 "constitutive" fixtures (the seven primitives +
-// quote/cond, the only forms both backends actually implement).
+// shared tests/fixtures/conformance.my suite. Every tier-1 fixture must now
+// be accounted for as executed or as one explicit unsupported category;
+// parser/admission failures are failures, never silent `continue`s.
 use std::fs;
 use std::process::Command;
 
@@ -11,6 +10,8 @@ use cml::c_backend::CBackend;
 use cml::lower;
 use cml::macros::MacroExpander;
 use cml::parser;
+
+const SUPPORTED_LANGUAGE_CONTRACT: (u32, u32) = (2, 0);
 
 fn parse_conformance_line(line: &str) -> Option<(String, String)> {
     let expr_marker = "(expr . \"";
@@ -24,12 +25,32 @@ fn parse_conformance_line(line: &str) -> Option<(String, String)> {
     Some((expr.replace("\\\"", "\""), expected.replace("\\\"", "\"")))
 }
 
+fn parse_contract_version(line: &str, field: &str) -> Option<(u32, u32)> {
+    let marker = format!("({field} . (");
+    let start = line.find(&marker)? + marker.len();
+    let end = line[start..].find(')')? + start;
+    let mut parts = line[start..end].split_whitespace();
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    (parts.next().is_none()).then_some((major, minor))
+}
+
+#[test]
+fn parses_fixture_contract_gate() {
+    let fixture = "((expr . \"x\") (since-contract . (2 1)))";
+    assert_eq!(parse_contract_version(fixture, "since-contract"), Some((2, 1)));
+}
+
 #[test]
 fn c_backend_matches_every_constitutive_tier1_fixture() {
     let fixture_path = "../my-lisp/tests/fixtures/conformance.my";
     let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read conformance.my");
 
     let mut checked = 0;
+    let mut selected = 0;
+    let mut unsupported_errors = 0;
+    let mut unsupported_inexact = 0;
+    let mut unsupported_newer_contract = 0;
     let mut failures = Vec::new();
 
     for (i, line) in fixture_content.lines().enumerate() {
@@ -37,25 +58,45 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         if line.is_empty() || line.starts_with(';') || !line.contains("(tier . 1)") {
             continue;
         }
-        // error-mode fixtures and anything c_backend/lower.rs doesn't
-        // implement (defmacro, arithmetic beyond +, etc.) are out of
-        // scope here -- same tier-1 "constitutive" subset both backends
-        // actually cover.
+        selected += 1;
+
+        // These are explicit capability states, not silent skips. Contract
+        // 2.1+ fixtures are upstream evidence but cannot be executed as proof
+        // for CML's declared supported contract 2.0.
+        match parse_contract_version(line, "since-contract") {
+            Some(version) if version > SUPPORTED_LANGUAGE_CONTRACT => {
+                unsupported_newer_contract += 1;
+                continue;
+            }
+            Some(_) => {}
+            None if line.contains("(since-contract") => {
+                failures.push(format!("fixture line {}: malformed since-contract field", i + 1));
+                continue;
+            }
+            None => {}
+        }
         if line.contains("(error .") {
+            unsupported_errors += 1;
             continue;
         }
         // fpga-lisp/c_backend have no inexact-number tag; compiler_test/
         // conformance_test skip these too (compatibility.my's
         // tier-1-skip-reason).
         if line.contains("3.0") {
+            unsupported_inexact += 1;
             continue;
         }
         let Some((expr_str, expected_str)) = parse_conformance_line(line) else {
+            failures.push(format!("fixture line {}: expected-value record was not admitted", i + 1));
             continue;
         };
 
-        let Ok(exprs) = parser::parse(&expr_str) else {
-            continue;
+        let exprs = match parser::parse(&expr_str) {
+            Ok(exprs) => exprs,
+            Err(error) => {
+                failures.push(format!("{expr_str}: parser admission failed: {error:?}"));
+                continue;
+            }
         };
         let Ok(exprs) = MacroExpander::new().process(&exprs) else {
             failures.push(format!("{expr_str}: macro expansion failed"));
@@ -102,6 +143,21 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         }
     }
 
-    assert!(checked >= 10, "expected to exercise the ten constitutive tier-1 fixtures, got {checked}");
     assert!(failures.is_empty(), "{} fixture(s) failed:\n{}", failures.len(), failures.join("\n"));
+    let accounted = checked
+        + unsupported_errors
+        + unsupported_inexact
+        + unsupported_newer_contract;
+    assert_eq!(
+        accounted, selected,
+        "every selected tier-1 fixture must be executed or assigned one explicit unsupported state"
+    );
+    assert!(
+        unsupported_newer_contract > 0,
+        "the current upstream suite should exercise the supported/upstream contract gate"
+    );
+    eprintln!(
+        "tier-1 matrix: selected={selected} supported={checked} unsupported-error={unsupported_errors} \
+         unsupported-inexact={unsupported_inexact} unsupported-newer-contract={unsupported_newer_contract}"
+    );
 }

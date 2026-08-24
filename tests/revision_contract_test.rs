@@ -98,18 +98,15 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
     );
 }
 
-/// CML-AUTO-CHECK-CONTRACT-VERSION-CLAIM: catches automatically, on every
-/// `cargo test`, the exact class of bug found manually this session --
-/// my-lisp bumped `language-contract.my` from 1.0 to 2.0 (a real, breaking
-/// semantic change: apostrophe stopped being quote-reader-sugar) while
-/// `compatibility.my` still claimed contract `(1 0)` until a live check
-/// happened to catch it. This test reads my-lisp's `language-contract.my`
-/// directly (the authoritative file, per its own header comment -- never a
-/// number restated in prose) and hard-fails if `compatibility.my`'s
-/// declared `(contract . (major minor))` doesn't match it exactly. Unlike
-/// the SHA-pin check above, a version-number mismatch here is never
-/// "routine drift" -- it means this repo is claiming compatibility with a
-/// contract that no longer exists.
+/// CML-AUTO-CHECK-CONTRACT-VERSION-CLAIM: keep the compiler's supported
+/// contract separate from the newest contract observed upstream.
+///
+/// A previous version required `(contract . ...)` to equal my-lisp HEAD.
+/// That made an upstream bump impossible to represent honestly: CML either
+/// stayed on its actually-supported version and CI failed, or changed the
+/// number before implementing the semantics and made a false compatibility
+/// claim. `contract` now remains the supported boundary; the independently
+/// recorded `observed-upstream-contract` must track live upstream instead.
 #[test]
 fn compatibility_my_contract_version_matches_language_contract_my() {
     let my_lisp = sibling("my-lisp");
@@ -123,12 +120,21 @@ fn compatibility_my_contract_version_matches_language_contract_my() {
 
     let compatibility = fs::read_to_string("compatibility.my")
         .expect("compatibility.my should be readable");
-    let claimed = format!("(contract . ({major} {minor}))");
+    let observed = format!("(observed-upstream-contract . ({major} {minor}))");
     assert!(
-        compatibility.contains(&claimed),
-        "compatibility.my's declared language contract version doesn't match my-lisp's actual language-contract.my \
-         (major . {major}) (minor . {minor}) -- compatibility.my is claiming compatibility with a contract version \
-         that isn't the real one. Update compatibility.my's `(contract . (major minor))` field."
+        compatibility.contains(&observed),
+        "compatibility.my's observed upstream contract doesn't match my-lisp's actual language-contract.my \
+         (major . {major}) (minor . {minor}). Update `observed-upstream-contract`; do not change the supported \
+         `(contract . ...)` field until CML has implemented and verified the new semantics."
+    );
+
+    assert!(
+        compatibility.contains("(contract . (2 0))"),
+        "CML's supported contract changed without updating this executable boundary"
+    );
+    assert!(
+        compatibility.contains("(status . upgrade-required)"),
+        "a supported/upstream contract mismatch must be represented explicitly"
     );
 }
 

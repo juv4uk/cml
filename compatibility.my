@@ -5,8 +5,16 @@
 ((kind . cml-compatibility)
  (compiler-version . (0 3 0))
  (language . ((repository . juv4uk/my-lisp)
+              ; `contract` is the highest language contract this compiler
+              ; claims to implement, not an alias for whatever upstream has
+              ; most recently published.  Keep the two states separate so a
+              ; detected upstream bump cannot be "fixed" by making a false
+              ; compatibility claim.
               (contract . (2 0))
-              (tested-sha . "164608cc2b1c08b815362551d6a9483fa762db7b")))
+              (tested-sha . "164608cc2b1c08b815362551d6a9483fa762db7b")
+              (observed-upstream-contract . (2 1))
+              (observed-upstream-sha . "fcbf30cdc523cbe00589950a59a0b09bdd6cd18b")
+              (status . upgrade-required)))
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (1 0))
             (tested-sha . "6c08e42975eb05eb143ee4cc66bcc759b6f92a1b")))
@@ -79,8 +87,14 @@
                (runtime . ((representation . "tagged-union Value struct (TAG_NIL/TRUE/INT/SYM/CONS/CLOSURE), heap-allocated via malloc, never freed")
                            (environment . "mutable-cons alist chain, same conceptual model as fpga-lisp's cml_lookup")
                            (self-recursive-def . "letrec-placeholder-pair-plus-backpatch, same idea as compile_def on fpga-lisp, here a literal C struct-field mutation instead of SETCDR")))
-               (conformance . ((tier-1-constitutive . "10/10, tests/c_backend_conformance_test.rs")
-                               (verified-against . "tests/fixtures/conformance.my, same fixture set the fpga-lisp pipeline uses")))
+               (conformance . ((tier-1-matrix . ((selected . 35)
+                                                  (supported . 24)
+                                                  (unsupported-error . 7)
+                                                  (unsupported-inexact . 3)
+                                                  (unsupported-newer-contract . 1)))
+                               (admission . fail-closed)
+                               (verified-by . "tests/c_backend_conformance_test.rs")
+                               (verified-against . "my-lisp/tests/fixtures/conformance.my at observed upstream contract 2.1")))
                (known-gaps . (no-eight-argument-limit-enforced-unlike-fpga-lisp-register-file
                               defmacro-supported-only-via-shared-macros-rs-not-macros-my))
                (differs-from-fpga-lisp . (equal?-is-structural-recursive-v-equal_p-here-vs-fpga-lisps-r11-worklist-but-both-independently-verified-correct
