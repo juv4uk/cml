@@ -20,7 +20,7 @@
                                    (note . "CML still claims contract 2.0. It must not classify or claim contract-3.0 error parity until each backend has named-error conformance evidence.")))))
  (target . ((repository . juv4uk/fpga-lisp)
             (isa . (1 1))
-            (tested-sha . "30ffda8")
+            (tested-sha . "34f9cd7")
             (physical-evidence . (windows-com4 isa-1.1-register-input-one-path result-word-7 no-hardware-error))))
  (pipeline . (parse macro-expand compile assemble simulate compare))
  (compute-analysis . ((contract . (0 27))
