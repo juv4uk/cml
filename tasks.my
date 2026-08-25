@@ -202,3 +202,11 @@
      (done . t)
      (description . "Provide an additive compiler API that interns LOADSYM operands into deterministic per-program numeric IDs accepted by the fpga-lisp assembler.")
      (context . "done 2026-08-24: Compiler::compile_with_symbols returns numeric LOADSYM assembly plus a (u16, name) table, starting at ID 900, while legacy name-oriented compile() remains unchanged. A compiler integration test assembles the numeric output with fpga-lisp/assembler.py. The bridge is per-program, not a global symbol ABI."))))))
+
+
+  ("CML-FULL-SEMANTIC-IR" . (
+    (priority . 7.5)
+    (capabilities . (cml compiler rust ir))
+    (description . "Extend Ir to represent complete current my-lisp semantics and GPU-oriented Compute IR. Current lowering is structural AST-to-IR translation without full semantic analysis. Per VIVEKA-MY-LISP-CML-ANALYSIS section 4.")
+    (done . ())
+  ))
