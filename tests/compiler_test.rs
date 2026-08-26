@@ -26,9 +26,8 @@ fn run_assembler(asm_code: &str, test_name: &str) {
     let bin_path = format!("{}.bin", test_name);
     let asm_abs = env::current_dir().unwrap().join(&asm_path);
     let bin_abs = env::current_dir().unwrap().join(&bin_path);
-    let configured = env::var("MY_LISP_BIN").unwrap_or_else(|_| {
-        "/home/agents/GitHub/my-lisp/target/release/my-lisp".to_string()
-    });
+    let configured = env::var("MY_LISP_BIN")
+        .unwrap_or_else(|_| "/home/agents/GitHub/my-lisp/target/release/my-lisp".to_string());
     let output = if std::path::Path::new(&configured).is_file() {
         // Prefer the self-hosted my-lisp assembler. Run from fpga-lisp so its
         // canonical core.my load resolves; keep Python as explicit fallback.
@@ -107,15 +106,22 @@ fn test_compile_with_symbols_matches_self_hosted_my_lisp_assembler() {
     fs::write(&asm_path, &compiled.assembly).unwrap();
 
     let python = Command::new("python3")
-        .args(["../fpga-lisp/assembler.py", asm_path.to_str().unwrap(), "-o"])
+        .args([
+            "../fpga-lisp/assembler.py",
+            asm_path.to_str().unwrap(),
+            "-o",
+        ])
         .arg(&python_bin)
         .output()
         .expect("python assembler should start");
-    assert!(python.status.success(), "python assembler failed: {:?}", python);
+    assert!(
+        python.status.success(),
+        "python assembler failed: {:?}",
+        python
+    );
 
-    let my_lisp = env::var("MY_LISP_BIN").unwrap_or_else(|_| {
-        "/home/agents/GitHub/my-lisp/target/release/my-lisp".to_string()
-    });
+    let my_lisp = env::var("MY_LISP_BIN")
+        .unwrap_or_else(|_| "/home/agents/GitHub/my-lisp/target/release/my-lisp".to_string());
     if !std::path::Path::new(&my_lisp).is_file() {
         let _ = fs::remove_file(&asm_path);
         let _ = fs::remove_file(&python_bin);
@@ -127,8 +133,15 @@ fn test_compile_with_symbols_matches_self_hosted_my_lisp_assembler() {
         .arg(&my_lisp_bin)
         .output()
         .expect("my-lisp assembler should start");
-    assert!(self_hosted.status.success(), "my-lisp assembler failed: {:?}", self_hosted);
-    assert_eq!(fs::read(&python_bin).unwrap(), fs::read(&my_lisp_bin).unwrap());
+    assert!(
+        self_hosted.status.success(),
+        "my-lisp assembler failed: {:?}",
+        self_hosted
+    );
+    assert_eq!(
+        fs::read(&python_bin).unwrap(),
+        fs::read(&my_lisp_bin).unwrap()
+    );
 
     let _ = fs::remove_file(&asm_path);
     let _ = fs::remove_file(&python_bin);

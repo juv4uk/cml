@@ -157,10 +157,9 @@ fn lower_call(func: &str, args: &[Expr]) -> Result<Ir, LowerError> {
         "lambda" if args.len() >= 2 => lower_lambda(args),
         "let" if args.len() == 2 => lower_let(args),
         "def" if args.len() == 2 => lower_def(args),
-        "numeric-buffer-map" if args.len() == 2 => lower_generic_call(
-            &Expr::Symbol("NUMERIC-BUFFER-MAP".to_string()),
-            args,
-        ),
+        "numeric-buffer-map" if args.len() == 2 => {
+            lower_generic_call(&Expr::Symbol("NUMERIC-BUFFER-MAP".to_string()), args)
+        }
         "numeric-buffer-map" => Err(LowerError::arity(
             "numeric-buffer-map expects exactly two arguments",
         )),

@@ -39,28 +39,31 @@ fn job_v1_encodes_isa_1_1_tagged_register_inputs() {
     assert_eq!(
         job.bootloader_frame().unwrap(),
         vec![
-            0x02, 0x80, 0x02,
-            0x00, 0x03, 0x00, 0x00, 0x00,
-            0x01, 0x04, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x01, 0xd2,
-            0x00, 0x00, 0x00, 0xb0,
+            0x02, 0x80, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01, 0xd2, 0x00, 0x00, 0x00, 0xb0,
         ]
     );
 }
 
 #[test]
 fn typed_i32_buffer_materializes_only_as_checked_fixnum_inputs() {
-    let inputs = encode_i32_buffer_as_register_inputs(
-        &BufferLiteral::I32(vec![-1, 3, 4]),
-        0,
-    )
-    .unwrap();
+    let inputs =
+        encode_i32_buffer_as_register_inputs(&BufferLiteral::I32(vec![-1, 3, 4]), 0).unwrap();
     assert_eq!(
         inputs,
         vec![
-            FpgaRegisterInput { register: 0, tagged_word: 0x0fff_ffff },
-            FpgaRegisterInput { register: 1, tagged_word: 3 },
-            FpgaRegisterInput { register: 2, tagged_word: 4 },
+            FpgaRegisterInput {
+                register: 0,
+                tagged_word: 0x0fff_ffff
+            },
+            FpgaRegisterInput {
+                register: 1,
+                tagged_word: 3
+            },
+            FpgaRegisterInput {
+                register: 2,
+                tagged_word: 4
+            },
         ]
     );
 }
@@ -84,7 +87,10 @@ fn typed_buffer_adapter_fails_closed_for_float_range_and_register_overflow() {
     );
     assert_eq!(
         encode_i32_buffer_as_register_inputs(&BufferLiteral::I32(vec![1, 2]), 15),
-        Err(FpgaProtocolError::RegisterRange { first: 15, count: 2 })
+        Err(FpgaProtocolError::RegisterRange {
+            first: 15,
+            count: 2
+        })
     );
 }
 
@@ -120,21 +126,32 @@ fn invalid_jobs_fail_before_transport_side_effects() {
     assert_eq!(
         FpgaJobV1 {
             program_words: vec![0],
-            register_inputs: vec![FpgaRegisterInput {
-                register: 0,
-                tagged_word: 0,
-            }; MAX_REGISTER_INPUTS + 1],
+            register_inputs: vec![
+                FpgaRegisterInput {
+                    register: 0,
+                    tagged_word: 0,
+                };
+                MAX_REGISTER_INPUTS + 1
+            ],
             result_register: 0,
         }
         .validate(),
-        Err(FpgaProtocolError::TooManyRegisterInputs(MAX_REGISTER_INPUTS + 1))
+        Err(FpgaProtocolError::TooManyRegisterInputs(
+            MAX_REGISTER_INPUTS + 1
+        ))
     );
     assert_eq!(
         FpgaJobV1 {
             program_words: vec![0],
             register_inputs: vec![
-                FpgaRegisterInput { register: 2, tagged_word: 3 },
-                FpgaRegisterInput { register: 2, tagged_word: 4 },
+                FpgaRegisterInput {
+                    register: 2,
+                    tagged_word: 3
+                },
+                FpgaRegisterInput {
+                    register: 2,
+                    tagged_word: 4
+                },
             ],
             result_register: 0,
         }
@@ -233,8 +250,14 @@ sys.stdout.buffer.write(b'CMLR' + struct.pack('<HII', 1, 7, 0))
         .execute(&FpgaJobV1 {
             program_words: vec![0xd201_0000, 0xb000_0000],
             register_inputs: vec![
-                FpgaRegisterInput { register: 0, tagged_word: 3 },
-                FpgaRegisterInput { register: 1, tagged_word: 4 },
+                FpgaRegisterInput {
+                    register: 0,
+                    tagged_word: 3,
+                },
+                FpgaRegisterInput {
+                    register: 1,
+                    tagged_word: 4,
+                },
             ],
             result_register: 2,
         })

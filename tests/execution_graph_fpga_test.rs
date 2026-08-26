@@ -122,7 +122,10 @@ fn graph_materializes_an_explicit_buffer_edge_into_fpga_register_inputs() {
         }],
     };
     let mut executor = HeterogeneousGraphExecutor::default();
-    executor.register_fpga("input-witness", FpgaTransportNodeExecutor::new(InputWitness));
+    executor.register_fpga(
+        "input-witness",
+        FpgaTransportNodeExecutor::new(InputWitness),
+    );
     let result = executor.execute(&graph).unwrap();
     assert_eq!(result.lisp_word(BufferId(11)), Some(7));
 }
@@ -156,7 +159,10 @@ fn graph_rejects_ambiguous_prepopulated_typed_fpga_inputs() {
         }],
     };
     let mut executor = HeterogeneousGraphExecutor::default();
-    executor.register_fpga("input-witness", FpgaTransportNodeExecutor::new(InputWitness));
+    executor.register_fpga(
+        "input-witness",
+        FpgaTransportNodeExecutor::new(InputWitness),
+    );
     assert!(matches!(
         executor.execute(&graph),
         Err(cml::execution::GraphExecutionError::Backend { message, .. })

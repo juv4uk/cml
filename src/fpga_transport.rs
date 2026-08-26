@@ -78,9 +78,7 @@ pub fn encode_i32_buffer_as_register_inputs(
     if values.is_empty() {
         return Err(FpgaProtocolError::EmptyInputBuffer);
     }
-    if values.len() > MAX_REGISTER_INPUTS
-        || usize::from(first_register) + values.len() > 16
-    {
+    if values.len() > MAX_REGISTER_INPUTS || usize::from(first_register) + values.len() > 16 {
         return Err(FpgaProtocolError::RegisterRange {
             first: first_register,
             count: values.len(),

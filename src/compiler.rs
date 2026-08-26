@@ -45,7 +45,10 @@ impl fmt::Display for CompileError {
                 "typed numeric buffers are not supported by the fpga-lisp backend"
             ),
             CompileError::SymbolTableOverflow => {
-                write!(f, "fpga-lisp symbol table exceeds LOADSYM's 16-bit id range")
+                write!(
+                    f,
+                    "fpga-lisp symbol table exceeds LOADSYM's 16-bit id range"
+                )
             }
         }
     }

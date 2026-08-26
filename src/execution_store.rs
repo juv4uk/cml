@@ -27,7 +27,10 @@ impl GraphValueStore {
         self.values.insert(id, value);
     }
 
-    pub(crate) fn into_result(self, execution_order: Vec<NodeId>) -> super::execution::ExecutionResult {
+    pub(crate) fn into_result(
+        self,
+        execution_order: Vec<NodeId>,
+    ) -> super::execution::ExecutionResult {
         super::execution::ExecutionResult::from_store(self.values, execution_order)
     }
 }

@@ -1,4 +1,4 @@
-use cml::compiler::{Compiler, CompiledAssembly};
+use cml::compiler::{CompiledAssembly, Compiler};
 use cml::lower;
 use cml::macros::MacroExpander;
 use cml::parser;
@@ -33,12 +33,13 @@ fn main() {
     // computational transforms live in CML while the fpga-lisp assembler
     // stays a numeric reference. The legacy name-oriented compile remains
     // available in the library for readable diagnostics.
-    let compiled: CompiledAssembly = compiler
-        .compile_with_symbols(&program)
-        .unwrap_or_else(|err| {
-            eprintln!("Compile error: {err}");
-            std::process::exit(1);
-        });
+    let compiled: CompiledAssembly =
+        compiler
+            .compile_with_symbols(&program)
+            .unwrap_or_else(|err| {
+                eprintln!("Compile error: {err}");
+                std::process::exit(1);
+            });
 
     println!("{}", compiled.assembly);
     if !compiled.symbols.is_empty() {

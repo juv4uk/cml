@@ -211,10 +211,8 @@ fn c_backend_supports_i32_buffers_and_rejects_f32_by_name() {
         compile_and_run_first_class("#i32(1 -2 3)", "i32_buffer"),
         "#i32(1 -2 3)"
     );
-    let i32_program = lower::lower_program_with_first_class_builtins(
-        &parser::parse("#i32(1)").unwrap(),
-    )
-    .unwrap();
+    let i32_program =
+        lower::lower_program_with_first_class_builtins(&parser::parse("#i32(1)").unwrap()).unwrap();
     let i32_c_source = CBackend::new().compile_program(&i32_program).unwrap();
     assert!(i32_c_source.contains("OutOfMemory"));
     assert!(i32_c_source.contains("checked_malloc"));

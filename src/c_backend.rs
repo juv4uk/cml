@@ -352,8 +352,15 @@ impl CBackend {
         match ir {
             Ir::Int(n) => Ok(format!("mk_int({n})")),
             Ir::Buffer(BufferLiteral::I32(values)) => {
-                let data = values.iter().map(i32::to_string).collect::<Vec<_>>().join(", ");
-                Ok(format!("mk_i32_buffer((int[]){{{data}}}, {})", values.len()))
+                let data = values
+                    .iter()
+                    .map(i32::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Ok(format!(
+                    "mk_i32_buffer((int[]){{{data}}}, {})",
+                    values.len()
+                ))
             }
             Ir::Buffer(BufferLiteral::F32(_)) => Err(CompileError::UnsupportedTypedBuffer),
             Ir::Nil => Ok("(&NIL_V)".to_string()),

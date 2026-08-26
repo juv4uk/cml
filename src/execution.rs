@@ -8,12 +8,12 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use crate::compute::{ComputeBackend, ComputeExecutionError, CpuComputeBackend};
+use crate::execution_scheduler::GraphScheduler;
+use crate::execution_store::GraphValueStore;
 use crate::fpga_transport::{
-    encode_i32_buffer_as_register_inputs, FpgaJobExecutor, FpgaJobV1, FpgaTransport,
+    FpgaJobExecutor, FpgaJobV1, FpgaTransport, encode_i32_buffer_as_register_inputs,
 };
 use crate::ir::{BufferLiteral, Ir};
-use crate::execution_store::GraphValueStore;
-use crate::execution_scheduler::GraphScheduler;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub u32);
@@ -30,8 +30,13 @@ pub enum ExecutionTarget {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExecutionOperation {
-    NumericBufferMap { function: Ir, input: BufferId },
-    FpgaProgram { job: FpgaJobV1 },
+    NumericBufferMap {
+        function: Ir,
+        input: BufferId,
+    },
+    FpgaProgram {
+        job: FpgaJobV1,
+    },
     FpgaProgramWithBufferInput {
         job: FpgaJobV1,
         input: BufferId,
@@ -239,10 +244,11 @@ impl HeterogeneousGraphExecutor {
                             message: "FpgaProgramWithBufferInput requires an FPGA target".into(),
                         });
                     };
-                    let input_value = values.get(input).ok_or(GraphExecutionError::MissingInput {
-                        node: node.id,
-                        buffer: *input,
-                    })?;
+                    let input_value =
+                        values.get(input).ok_or(GraphExecutionError::MissingInput {
+                            node: node.id,
+                            buffer: *input,
+                        })?;
                     let GraphValue::Buffer(buffer) = input_value else {
                         return Err(GraphExecutionError::InputKindMismatch {
                             node: node.id,
@@ -258,28 +264,27 @@ impl HeterogeneousGraphExecutor {
                         });
                     }
                     let mut staged_job = job.clone();
-                    staged_job.register_inputs = encode_i32_buffer_as_register_inputs(
-                        buffer,
-                        *first_register,
-                    )
-                    .map_err(|error| GraphExecutionError::Backend {
-                        node: node.id,
-                        target: node.target.clone(),
-                        message: format!("typed FPGA input rejected: {error:?}"),
-                    })?;
+                    staged_job.register_inputs =
+                        encode_i32_buffer_as_register_inputs(buffer, *first_register).map_err(
+                            |error| GraphExecutionError::Backend {
+                                node: node.id,
+                                target: node.target.clone(),
+                                message: format!("typed FPGA input rejected: {error:?}"),
+                            },
+                        )?;
                     let executor = self.fpga.get(device).ok_or_else(|| {
                         GraphExecutionError::TargetUnavailable {
                             node: node.id,
                             target: node.target.clone(),
                         }
                     })?;
-                    GraphValue::LispWord(executor.execute_program(&staged_job).map_err(|message| {
-                        GraphExecutionError::Backend {
+                    GraphValue::LispWord(executor.execute_program(&staged_job).map_err(
+                        |message| GraphExecutionError::Backend {
                             node: node.id,
                             target: node.target.clone(),
                             message,
-                        }
-                    })?)
+                        },
+                    )?)
                 }
             };
 
