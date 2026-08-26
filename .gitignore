@@ -2,6 +2,7 @@
 琊浥彰湡污獹獩യ⸊楧⵴牣摥湥楴污ੳ
 # Build artifacts
 conformance_test.bin
+conformance_test.asm
 tb_cml_e2e.vvp
 *.vvp
 *.bin
