@@ -50,7 +50,7 @@ verify against `evidence/`/a real commit before acting on one.
   comment on `cml`'s side of that fix). Nothing else in the ecosystem may
   drift from what that repo says the language means.
 - **fpga-lisp** — hardware implementation of the same language on an FPGA.
-  Tracks an ISA contract (`isa-contract.my`, version **1.0**) against
+  Tracks an ISA contract (`isa-contract.my`, version **1.1**) against
   my-lisp's semantics. `docs/lisp-machine-plan.md` there is the current,
   authoritative status — don't infer progress from this file, which only
   describes timeless roles.
