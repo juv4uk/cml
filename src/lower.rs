@@ -11,12 +11,14 @@
 
 use crate::ast::{Expr, NumericBufferLiteral};
 use crate::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
+use crate::semantic::{self, SemanticError};
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LowerErrorKind {
     Arity,
     InvalidForm,
+    Semantic,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +41,13 @@ impl LowerError {
             detail: detail.into(),
         }
     }
+
+    fn semantic(error: SemanticError) -> Self {
+        Self {
+            kind: LowerErrorKind::Semantic,
+            detail: error.to_string(),
+        }
+    }
 }
 
 impl fmt::Display for LowerError {
@@ -48,6 +57,7 @@ impl fmt::Display for LowerError {
 }
 
 pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
+    semantic::analyze_program(exprs).map_err(LowerError::semantic)?;
     exprs.iter().map(lower_expr).collect()
 }
 
@@ -109,6 +119,11 @@ fn primitive_name(op: PrimOp) -> &'static str {
 }
 
 pub fn lower_expr(expr: &Expr) -> Result<Ir, LowerError> {
+    semantic::analyze_expr(expr).map_err(LowerError::semantic)?;
+    lower_expr_admitted(expr)
+}
+
+fn lower_expr_admitted(expr: &Expr) -> Result<Ir, LowerError> {
     match expr {
         Expr::Integer(n) => Ok(Ir::Int(*n)),
         Expr::NumericBuffer(NumericBufferLiteral::I32(values)) => {

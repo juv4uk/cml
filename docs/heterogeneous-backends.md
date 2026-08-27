@@ -44,6 +44,25 @@ The one thing that makes all three backends shareable is a *common,
 backend-neutral IR* in the middle. Everything below follows from having
 that IR; nothing above it changes.
 
+### Current semantic gate
+
+`src/semantic.rs` is the first fail-closed admission pass between macro
+expansion and lowering. It deliberately does **not** claim full my-lisp 3.0
+semantic analysis. Its current executable boundary rejects two shapes that
+CML previously could compile into a different program than the canonical
+evaluator:
+
+- duplicate lambda parameters, including collisions introduced by CML's
+  current uppercase symbol representation;
+- lambda bodies containing more than one expression, because canonical
+  my-lisp evaluates them sequentially while the current `Ir::Lambda` can
+  represent exactly one body expression.
+
+Both `lower_program` and the public `lower_expr` entry point apply this gate,
+so a source consumer cannot silently bypass it by selecting a backend. Further
+contract coverage remains open work; rejection here is evidence of safe
+non-support, not a claim that the full semantic-analysis milestone is done.
+
 ## Why purity is the enabler
 
 my-lisp's functional, immutable semantics are the property that makes
