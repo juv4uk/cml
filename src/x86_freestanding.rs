@@ -87,6 +87,7 @@ impl X86FreestandingBackend {
             output: String::new(),
             symbols,
             next_slot: 0,
+            next_label: 0,
         };
         emitter.line(".text");
         emitter.line(".globl wsm_entry");
@@ -140,7 +141,12 @@ fn preflight(
         Ir::Var(_) => return Err(CompileError::Unsupported("variable")),
         Ir::Lambda { .. } => return Err(CompileError::Unsupported("lambda")),
         Ir::App { .. } => return Err(CompileError::Unsupported("application")),
-        Ir::Cond { .. } => return Err(CompileError::Unsupported("cond")),
+        Ir::Cond { branches } => {
+            for (test, expr) in branches {
+                preflight(test, symbols, slots)?;
+                preflight(expr, symbols, slots)?;
+            }
+        }
         Ir::Let { .. } => return Err(CompileError::Unsupported("let")),
         Ir::Def { .. } => return Err(CompileError::Unsupported("def")),
     }
@@ -192,6 +198,7 @@ struct Emitter {
     output: String,
     symbols: BTreeMap<String, u64>,
     next_slot: usize,
+    next_label: usize,
 }
 
 impl Emitter {
@@ -204,6 +211,12 @@ impl Emitter {
         let slot = self.next_slot;
         self.next_slot += 1;
         slot
+    }
+
+    fn allocate_label(&mut self) -> usize {
+        let label = self.next_label;
+        self.next_label += 1;
+        label
     }
 
     fn slot_offset(slot: usize) -> usize {
@@ -220,6 +233,7 @@ impl Emitter {
             Ir::Nil => self.emit_immediate(wsm_os_target::NIL),
             Ir::True => self.emit_immediate(wsm_os_target::TRUE),
             Ir::Quote(value) => self.emit_quoted(value)?,
+            Ir::Cond { branches } => self.emit_cond(branches)?,
             Ir::Prim { op, args } => self.emit_primitive(*op, args)?,
             _ => unreachable!("preflight excludes unsupported IR"),
         }
@@ -234,6 +248,31 @@ impl Emitter {
         let id = self.symbols[&name.to_uppercase()];
         let word = wsm_os_target::encode_symbol(id).expect("preflight assigned valid symbol id");
         self.emit_immediate(word);
+    }
+
+    fn emit_cond(&mut self, branches: &[(Ir, Ir)]) -> Result<(), CompileError> {
+        let end_label = self.allocate_label();
+        let mut next_branch_label = self.allocate_label();
+        
+        for (test, expr) in branches {
+            self.line(&format!(".Lcond_branch_{}:", next_branch_label));
+            self.emit_ir(test)?;
+            
+            next_branch_label = self.allocate_label();
+            
+            self.line(&format!("    movabsq ${}, %rcx", wsm_os_target::NIL));
+            self.line("    cmpq %rcx, %rax");
+            self.line(&format!("    je .Lcond_branch_{}", next_branch_label));
+            
+            self.emit_ir(expr)?;
+            self.line(&format!("    jmp .Lcond_end_{}", end_label));
+        }
+        
+        self.line(&format!(".Lcond_branch_{}:", next_branch_label));
+        self.emit_immediate(wsm_os_target::NIL);
+        
+        self.line(&format!(".Lcond_end_{}:", end_label));
+        Ok(())
     }
 
     fn emit_quoted(&mut self, quoted: &Quoted) -> Result<(), CompileError> {

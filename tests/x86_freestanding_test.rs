@@ -165,3 +165,18 @@ fn fixnum_range_is_owned_by_the_target_contract() {
         ))
     );
 }
+
+#[test]
+fn cond_branching_evaluates_only_truthy_branch() {
+    let program = vec![
+        Ir::Cond {
+            branches: vec![
+                (Ir::Nil, Ir::Int(1)),
+                (Ir::True, Ir::Int(42)),
+            ]
+        }
+    ];
+    let assembly = X86FreestandingBackend::new().compile_program(&program).unwrap();
+    assert!(assembly.contains("cmpq %rcx, %rax"));
+    assert!(assembly.contains("je .Lcond_branch_"));
+}
