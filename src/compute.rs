@@ -164,7 +164,11 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
     let Ir::App { func, args } = ir else {
         return None;
     };
-    let Ir::Var(name) = &**func else { return None };
+    let name = match &**func {
+        Ir::Var(name) => name,
+        Ir::Builtin(name) => name,
+        _ => return None,
+    };
     match (name.as_str(), args.as_slice()) {
         ("MAP" | "NUMERIC-BUFFER-MAP", [function, input]) => Some(ComputeRegion {
             operation: BulkOperation::Map,
@@ -312,9 +316,13 @@ fn is_scalar(ir: &Ir) -> bool {
 
 fn effect_of(ir: &Ir) -> EffectClass {
     match ir {
-        Ir::Int(_) | Ir::Buffer(_) | Ir::Nil | Ir::True | Ir::Var(_) | Ir::Quote(_) => {
-            EffectClass::Pure
-        }
+        Ir::Int(_)
+        | Ir::Buffer(_)
+        | Ir::Nil
+        | Ir::True
+        | Ir::Var(_)
+        | Ir::Quote(_)
+        | Ir::Builtin(_) => EffectClass::Pure,
         Ir::Lambda { body, .. } => effect_of(body),
         Ir::Prim {
             op: PrimOp::Cons, ..
@@ -334,14 +342,12 @@ fn effect_of(ir: &Ir) -> EffectClass {
         Ir::Def { .. } => EffectClass::Stateful,
         Ir::TailSelfCall { .. } => EffectClass::Stateful,
         Ir::App { func, args } => {
-            let known_pure = matches!(
-                &**func,
-                Ir::Var(name)
-                    if name == "+"
-                        || name == "MAP"
-                        || name == "NUMERIC-BUFFER-MAP"
-                        || name == "REDUCE"
-            );
+            let known_pure = match &**func {
+                Ir::Var(name) | Ir::Builtin(name) => {
+                    name == "+" || name == "MAP" || name == "NUMERIC-BUFFER-MAP" || name == "REDUCE"
+                }
+                _ => false,
+            };
             if known_pure {
                 join_effects(args.iter().map(effect_of))
             } else {

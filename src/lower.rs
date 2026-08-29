@@ -155,6 +155,7 @@ fn mark_tail_position(ir: &Ir, self_name: &str) -> Ir {
 
 fn reify_primitive_calls(ir: Ir) -> Ir {
     match ir {
+        Ir::Builtin(name) => Ir::Var(name),
         Ir::Prim { op, args } => Ir::App {
             func: Box::new(Ir::Var(primitive_name(op).to_string())),
             args: args.into_iter().map(reify_primitive_calls).collect(),
@@ -201,12 +202,23 @@ fn primitive_name(op: PrimOp) -> &'static str {
     }
 }
 
-pub fn lower_expr(expr: &Expr) -> Result<Ir, LowerError> {
-    semantic::analyze_expr(expr).map_err(LowerError::semantic)?;
-    lower_expr_admitted(expr)
+#[derive(Clone, Default)]
+struct Env {
+    bound: Vec<String>,
 }
 
-fn lower_expr_admitted(expr: &Expr) -> Result<Ir, LowerError> {
+impl Env {
+    fn is_bound(&self, name: &str) -> bool {
+        self.bound.iter().any(|b| b == name)
+    }
+}
+
+pub fn lower_expr(expr: &Expr) -> Result<Ir, LowerError> {
+    semantic::analyze_expr(expr).map_err(LowerError::semantic)?;
+    lower_expr_admitted(expr, &Env::default())
+}
+
+fn lower_expr_admitted(expr: &Expr, env: &Env) -> Result<Ir, LowerError> {
     match expr {
         Expr::Integer(n) => Ok(Ir::Int(*n)),
         Expr::NumericBuffer(NumericBufferLiteral::I32(values)) => {
@@ -220,74 +232,112 @@ fn lower_expr_admitted(expr: &Expr) -> Result<Ir, LowerError> {
         // substitutions`), never a variable lookup -- Quote(Sym(..))
         // lowers to exactly that same LOADSYM via compile_quoted.
         Expr::String(s) => Ok(Ir::Quote(Quoted::Sym(s.to_uppercase()))),
-        Expr::Symbol(s) => lower_symbol(s),
-        Expr::List(list) => lower_list(list),
+        Expr::Symbol(s) => lower_symbol(s, env),
+        Expr::List(list) => lower_list(list, env),
         Expr::DottedList(_, _) => Err(LowerError::invalid_form(
             "unquoted dotted list unsupported (matches compiler.rs's compile_expr)",
         )),
     }
 }
 
-fn lower_symbol(s: &str) -> Result<Ir, LowerError> {
-    match s.to_uppercase().as_str() {
+fn lower_symbol(s: &str, env: &Env) -> Result<Ir, LowerError> {
+    let upper = s.to_uppercase();
+    match upper.as_str() {
         "T" => Ok(Ir::True),
         "NIL" => Ok(Ir::Nil),
-        _ => Ok(Ir::Var(s.to_uppercase())),
+        "QUOTE" | "COND" | "LAMBDA" | "LET" | "DEF" | "DEFMACRO" => {
+            if env.is_bound(&upper) {
+                Ok(Ir::Var(upper))
+            } else {
+                Err(LowerError::invalid_form(
+                    "special forms are not callable values",
+                ))
+            }
+        }
+        "CONS" | "CAR" | "CDR" | "EQ" | "ATOM" | "EQUAL?" | "+" | "-" | "NUMERIC-BUFFER-MAP" => {
+            if env.is_bound(&upper) {
+                Ok(Ir::Var(upper))
+            } else {
+                Ok(Ir::Builtin(upper))
+            }
+        }
+        _ => Ok(Ir::Var(upper)),
     }
 }
 
-fn lower_list(list: &[Expr]) -> Result<Ir, LowerError> {
+fn lower_list(list: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     if list.is_empty() {
         return Ok(Ir::Nil);
     }
     if let Expr::Symbol(func) = &list[0] {
-        lower_call(func, &list[1..])
+        lower_call(func, &list[1..], env)
     } else {
-        lower_generic_call(&list[0], &list[1..])
+        lower_generic_call(&list[0], &list[1..], env)
     }
 }
 
-fn lower_call(func: &str, args: &[Expr]) -> Result<Ir, LowerError> {
+fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     match func {
-        "quote" if args.len() == 1 => Ok(Ir::Quote(lower_quoted(&args[0])?)),
-        "quote" => Err(LowerError::arity("quote expects exactly one argument")),
-        "cond" => lower_cond(args),
-        "lambda" if args.len() >= 2 => lower_lambda(args),
-        "let" if args.len() == 2 => lower_let(args),
-        "def" if args.len() == 2 => lower_def(args),
-        "numeric-buffer-map" if args.len() == 2 => {
-            lower_generic_call(&Expr::Symbol("NUMERIC-BUFFER-MAP".to_string()), args)
-        }
-        "numeric-buffer-map" => Err(LowerError::arity(
-            "numeric-buffer-map expects exactly two arguments",
-        )),
-        "cons" if args.len() == 2 => lower_prim(PrimOp::Cons, args),
-        "car" if args.len() == 1 => lower_prim(PrimOp::Car, args),
-        "cdr" if args.len() == 1 => lower_prim(PrimOp::Cdr, args),
-        "eq" if args.len() == 2 => lower_prim(PrimOp::Eq, args),
-        "atom" if args.len() == 1 => lower_prim(PrimOp::Atom, args),
-        "equal?" if args.len() == 2 => lower_prim(PrimOp::EqualP, args),
-        "+" if args.len() == 2 => lower_prim(PrimOp::Add, args),
-        "-" if args.len() == 2 => lower_prim(PrimOp::Sub, args),
-        _ => lower_generic_call(&Expr::Symbol(func.to_string()), args),
+        "quote" if args.len() == 1 => return Ok(Ir::Quote(lower_quoted(&args[0])?)),
+        "quote" => return Err(LowerError::arity("quote expects exactly one argument")),
+        "cond" => return lower_cond(args, env),
+        "lambda" if args.len() >= 2 => return lower_lambda(args, env),
+        "let" if args.len() == 2 => return lower_let(args, env),
+        "def" if args.len() == 2 => return lower_def(args, env),
+        _ => {}
     }
+
+    let upper = func.to_uppercase();
+    if !env.is_bound(&upper) {
+        match func {
+            "numeric-buffer-map" if args.len() == 2 => {
+                return lower_generic_call(
+                    &Expr::Symbol("NUMERIC-BUFFER-MAP".to_string()),
+                    args,
+                    env,
+                );
+            }
+            "numeric-buffer-map" => {
+                return Err(LowerError::arity(
+                    "numeric-buffer-map expects exactly two arguments",
+                ));
+            }
+            "cons" if args.len() == 2 => return lower_prim(PrimOp::Cons, args, env),
+            "car" if args.len() == 1 => return lower_prim(PrimOp::Car, args, env),
+            "cdr" if args.len() == 1 => return lower_prim(PrimOp::Cdr, args, env),
+            "eq" if args.len() == 2 => return lower_prim(PrimOp::Eq, args, env),
+            "atom" if args.len() == 1 => return lower_prim(PrimOp::Atom, args, env),
+            "equal?" if args.len() == 2 => return lower_prim(PrimOp::EqualP, args, env),
+            "+" if args.len() == 2 => return lower_prim(PrimOp::Add, args, env),
+            "-" if args.len() == 2 => return lower_prim(PrimOp::Sub, args, env),
+            _ => {}
+        }
+    }
+
+    lower_generic_call(&Expr::Symbol(func.to_string()), args, env)
 }
 
-fn lower_prim(op: PrimOp, args: &[Expr]) -> Result<Ir, LowerError> {
+fn lower_prim(op: PrimOp, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     Ok(Ir::Prim {
         op,
-        args: args.iter().map(lower_expr).collect::<Result<_, _>>()?,
+        args: args
+            .iter()
+            .map(|e| lower_expr_admitted(e, env))
+            .collect::<Result<_, _>>()?,
     })
 }
 
-fn lower_generic_call(func_expr: &Expr, args: &[Expr]) -> Result<Ir, LowerError> {
+fn lower_generic_call(func_expr: &Expr, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     Ok(Ir::App {
-        func: Box::new(lower_expr(func_expr)?),
-        args: args.iter().map(lower_expr).collect::<Result<_, _>>()?,
+        func: Box::new(lower_expr_admitted(func_expr, env)?),
+        args: args
+            .iter()
+            .map(|e| lower_expr_admitted(e, env))
+            .collect::<Result<_, _>>()?,
     })
 }
 
-fn lower_cond(branches: &[Expr]) -> Result<Ir, LowerError> {
+fn lower_cond(branches: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     let mut lowered = Vec::with_capacity(branches.len());
     for branch in branches {
         let Expr::List(pair) = branch else {
@@ -300,14 +350,26 @@ fn lower_cond(branches: &[Expr]) -> Result<Ir, LowerError> {
                 "malformed cond branch (matches compiler.rs's compile_cond)",
             ));
         };
-        lowered.push((lower_expr(test)?, lower_expr(body)?));
+        lowered.push((
+            lower_expr_admitted(test, env)?,
+            lower_expr_admitted(body, env)?,
+        ));
     }
     Ok(Ir::Cond { branches: lowered })
 }
 
-fn lower_lambda(args: &[Expr]) -> Result<Ir, LowerError> {
+fn lower_lambda(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     let params = lower_params(&args[0])?;
-    let body = lower_expr(&args[1])?;
+    let mut inner = env.clone();
+    match &params {
+        Params::Fixed(names) => inner.bound.extend_from_slice(names),
+        Params::Variadic { fixed, rest } => {
+            inner.bound.extend_from_slice(fixed);
+            inner.bound.push(rest.clone());
+        }
+        Params::AllRest(rest) => inner.bound.push(rest.clone()),
+    }
+    let body = lower_expr_admitted(&args[1], &inner)?;
     Ok(Ir::Lambda {
         params,
         body: Box::new(body),
@@ -345,13 +407,14 @@ fn symbols(exprs: &[Expr]) -> Result<Vec<String>, LowerError> {
         .collect()
 }
 
-fn lower_let(args: &[Expr]) -> Result<Ir, LowerError> {
+fn lower_let(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     let Expr::List(bindings) = &args[0] else {
         return Err(LowerError::invalid_form(
             "malformed let (matches compiler.rs's compile_let)",
         ));
     };
     let mut lowered_bindings = Vec::with_capacity(bindings.len());
+    let mut inner = env.clone();
     for binding in bindings {
         let Expr::List(pair) = binding else {
             return Err(LowerError::invalid_form("malformed let binding"));
@@ -359,22 +422,24 @@ fn lower_let(args: &[Expr]) -> Result<Ir, LowerError> {
         let [Expr::Symbol(name), value] = pair.as_slice() else {
             return Err(LowerError::invalid_form("malformed let binding"));
         };
-        lowered_bindings.push((name.to_uppercase(), lower_expr(value)?));
+        let name_upper = name.to_uppercase();
+        lowered_bindings.push((name_upper.clone(), lower_expr_admitted(value, env)?));
+        inner.bound.push(name_upper);
     }
-    let body = lower_expr(&args[1])?;
+    let body = lower_expr_admitted(&args[1], &inner)?;
     Ok(Ir::Let {
         bindings: lowered_bindings,
         body: Box::new(body),
     })
 }
 
-fn lower_def(args: &[Expr]) -> Result<Ir, LowerError> {
+fn lower_def(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     let Expr::Symbol(name) = &args[0] else {
         return Err(LowerError::invalid_form(
             "def expects a symbol name (matches compiler.rs's compile_def)",
         ));
     };
-    let value = lower_expr(&args[1])?;
+    let value = lower_expr_admitted(&args[1], env)?;
     Ok(Ir::Def {
         name: name.to_uppercase(),
         value: Box::new(value),
