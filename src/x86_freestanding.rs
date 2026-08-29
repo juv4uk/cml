@@ -58,7 +58,7 @@ impl X86FreestandingBackend {
         Self
     }
 
-/// Compile a complete program. Validation and symbol assignment finish
+    /// Compile a complete program. Validation and symbol assignment finish
     /// before the output buffer is created, so every error is fail-closed.
     pub fn compile_program(&self, program: &[Ir]) -> Result<String, CompileError> {
         if program.is_empty() {
@@ -72,8 +72,16 @@ impl X86FreestandingBackend {
         // This is the only first-order self-tail-call pattern admitted by the
         // x86 freestanding backend. All other shapes fall through to the flat
         // preflight path, which rejects Def/Lambda/App as unsupported.
-        if let [Ir::Def { name: def_name, value }, Ir::App { func, args: call_args }] =
-            program
+        if let [
+            Ir::Def {
+                name: def_name,
+                value,
+            },
+            Ir::App {
+                func,
+                args: call_args,
+            },
+        ] = program
         {
             if let (
                 Ir::Lambda {
@@ -84,12 +92,7 @@ impl X86FreestandingBackend {
             ) = (value.as_ref(), func.as_ref())
             {
                 if call_name == def_name && call_args.len() == param_names.len() {
-                    return self.compile_tail_call_program(
-                        def_name,
-                        param_names,
-                        body,
-                        call_args,
-                    );
+                    return self.compile_tail_call_program(def_name, param_names, body, call_args);
                 }
             }
         }
@@ -276,7 +279,7 @@ fn preflight(
         Ir::TailSelfCall { .. } => {
             return Err(CompileError::Unsupported(
                 "TailSelfCall outside a tail-call program",
-            ))
+            ));
         }
     }
     Ok(())
@@ -643,10 +646,7 @@ impl Emitter {
 
                 // Copy tmp slots into param slots.
                 for (param_idx, &tmp) in tmp_slots.iter().enumerate().take(param_count) {
-                    self.line(&format!(
-                        "    movq {}(%rsp), %rax",
-                        Self::slot_offset(tmp)
-                    ));
+                    self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(tmp)));
                     self.line(&format!(
                         "    movq %rax, {}(%rsp)",
                         Self::slot_offset(param_idx)

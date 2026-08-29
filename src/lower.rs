@@ -95,7 +95,11 @@ pub fn lower_program_with_tail_calls(exprs: &[Expr]) -> Result<Vec<Ir>, LowerErr
                     ref name,
                     value: ref lambda,
                 } => {
-                    if let Ir::Lambda { ref params, ref body } = **lambda {
+                    if let Ir::Lambda {
+                        ref params,
+                        ref body,
+                    } = **lambda
+                    {
                         let new_body = mark_tail_position(body, name);
                         Ir::Def {
                             name: name.clone(),
@@ -127,9 +131,7 @@ fn mark_tail_position(ir: &Ir, self_name: &str) -> Ir {
         Ir::App { func, args } => {
             if let Ir::Var(name) = func.as_ref() {
                 if name == self_name {
-                    return Ir::TailSelfCall {
-                        args: args.clone(),
-                    };
+                    return Ir::TailSelfCall { args: args.clone() };
                 }
             }
             ir.clone()
