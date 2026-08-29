@@ -226,7 +226,7 @@
     (priority . 7.5)
     (capabilities . (cml compiler rust ir))
     (description . "Extend Ir to represent complete current my-lisp semantics and GPU-oriented Compute IR. Current lowering is structural AST-to-IR translation without full semantic analysis. Per VIVEKA-MY-LISP-CML-ANALYSIS section 4.")
-    (done . t)
+    (done . ())
   ))
   ("CML-CONTRACT-REALIGNMENT-M0" . (
     (priority . 8.0)
