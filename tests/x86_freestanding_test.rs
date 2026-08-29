@@ -61,6 +61,7 @@ fn frozen_cons_fixture_is_deterministic_and_assembles() {
     let first = backend.compile_program(&frozen_fixture()).unwrap();
     let second = backend.compile_program(&frozen_fixture()).unwrap();
     assert_eq!(first, second);
+    assert!(first.starts_with(".att_syntax prefix\n"));
     assert!(first.contains(".globl wsm_entry"));
     assert!(first.contains("call wsm_cons"));
     assert_eq!(
