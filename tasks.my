@@ -230,7 +230,7 @@
     (capabilities . (cml compiler rust testing proof))
     (depends-on . (CML-IMPLEMENT-CONTRACT-2.1))
     (description . "Phase 4: Make conformance fail closed. Do not silently continue on fixture parse failures. Record one explicit result for every fixture, compare successful values against contractual errors, and report exact counts using explicit states (SUPPORTED, UNSUPPORTED, UNIMPLEMENTED, FAILED).")
-    (done . ())
+     (done . t)
   ))
 
   ("CML-GPU-COMPUTE-LOWERING" . (
