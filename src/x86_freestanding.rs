@@ -189,7 +189,8 @@ fn primitive_contract(operation: PrimOp) -> Result<(&'static str, usize), Compil
         PrimOp::Cdr => Ok(("cdr", 1)),
         PrimOp::Eq => Ok(("eq", 2)),
         PrimOp::Atom => Ok(("atom", 1)),
-        PrimOp::Add => Err(CompileError::Unsupported("add primitive")),
+        PrimOp::Add => Ok(("add", 2)),
+        PrimOp::Sub => Ok(("sub", 2)),
         PrimOp::EqualP => Err(CompileError::Unsupported("equal? primitive")),
     }
 }
@@ -315,6 +316,12 @@ impl Emitter {
     fn emit_primitive(&mut self, operation: PrimOp, args: &[Ir]) -> Result<(), CompileError> {
         let (name, expected) = primitive_contract(operation)?;
         debug_assert_eq!(args.len(), expected, "preflight checked {name} arity");
+
+        // Arithmetic is inline — no runtime call, checked for 61-bit overflow.
+        if matches!(operation, PrimOp::Add | PrimOp::Sub) {
+            return self.emit_arithmetic(operation, args);
+        }
+
         let slots: Vec<usize> = args
             .iter()
             .map(|argument| {
@@ -342,9 +349,80 @@ impl Emitter {
             PrimOp::Cdr => "wsm_cdr",
             PrimOp::Eq => "wsm_eq",
             PrimOp::Atom => "wsm_atom",
-            _ => unreachable!("primitive_contract excludes unsupported operations"),
+            _ => unreachable!("arithmetic handled above; equal? excluded by preflight"),
         };
         self.line(&format!("    call {runtime}"));
+        Ok(())
+    }
+
+    /// Inline checked fixnum addition or subtraction.
+    ///
+    /// Both arguments are tagged fixnums: `(value << 3) | TAG_FIXNUM`.
+    /// Strategy:
+    ///   1. Decode both (arithmetic-right-shift by TAG_BITS=3 → signed i61).
+    ///   2. Perform the 64-bit signed add/sub — `jo` fires on i64 overflow.
+    ///   3. The i61 overflow boundary is tighter: check explicitly against
+    ///      FIXNUM_MIN/MAX; if out of range call wsm_fail(ErrorCode::Type=2).
+    ///   4. Re-encode: `shlq $3, result; orq $3, result`.
+    ///
+    /// Uses %rcx and %rdx as scratch; does NOT clobber %r12 (context ptr).
+    fn emit_arithmetic(&mut self, operation: PrimOp, args: &[Ir]) -> Result<(), CompileError> {
+        let ok_label = self.allocate_label();
+
+        // Evaluate first arg → %rax, save to stack slot.
+        self.emit_ir(&args[0])?;
+        let slot0 = self.allocate_slot();
+        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot0)));
+
+        // Evaluate second arg → %rax, save to stack slot.
+        self.emit_ir(&args[1])?;
+        let slot1 = self.allocate_slot();
+        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot1)));
+
+        // Load and decode both operands.
+        // %rcx = a (decoded i64), %rdx = b (decoded i64).
+        self.line(&format!("    movq {}(%rsp), %rcx", Self::slot_offset(slot0)));
+        self.line("    sarq $3, %rcx");
+        self.line(&format!("    movq {}(%rsp), %rdx", Self::slot_offset(slot1)));
+        self.line("    sarq $3, %rdx");
+
+        // Perform the operation; check 64-bit overflow first.
+        let overflow_label = self.allocate_label();
+        match operation {
+            PrimOp::Add => {
+                self.line("    addq %rdx, %rcx");
+            }
+            PrimOp::Sub => {
+                self.line("    subq %rdx, %rcx");
+            }
+            _ => unreachable!(),
+        }
+        // 64-bit signed overflow → Type error.
+        self.line(&format!("    jo .Larith_overflow_{}", overflow_label));
+
+        // Check 61-bit fixnum range.
+        let min = wsm_os_target::FIXNUM_MIN;
+        let max = wsm_os_target::FIXNUM_MAX;
+        self.line(&format!("    movabsq ${min}, %rax"));
+        self.line("    cmpq %rax, %rcx");
+        self.line(&format!("    jl .Larith_overflow_{}", overflow_label));
+        self.line(&format!("    movabsq ${max}, %rax"));
+        self.line("    cmpq %rax, %rcx");
+        self.line(&format!("    jg .Larith_overflow_{}", overflow_label));
+
+        // Encode result back as fixnum.
+        self.line("    shlq $3, %rcx");
+        self.line(&format!("    orq ${}, %rcx", wsm_os_target::Tag::Fixnum as u64));
+        self.line("    movq %rcx, %rax");
+        self.line(&format!("    jmp .Larith_ok_{}", ok_label));
+
+        // Overflow path — call wsm_fail(context, ErrorCode::Type=2).
+        self.line(&format!(".Larith_overflow_{}:", overflow_label));
+        self.line("    movq %r12, %rdi");
+        self.line(&format!("    movl ${}, %esi", wsm_os_target::ErrorCode::Type as u32));
+        self.line("    call wsm_fail");
+
+        self.line(&format!(".Larith_ok_{}:", ok_label));
         Ok(())
     }
 }

@@ -113,6 +113,7 @@ fn reify_primitive_calls(ir: Ir) -> Ir {
 fn primitive_name(op: PrimOp) -> &'static str {
     match op {
         PrimOp::Add => "+",
+        PrimOp::Sub => "-",
         PrimOp::Cons => "CONS",
         PrimOp::Car => "CAR",
         PrimOp::Cdr => "CDR",
@@ -189,6 +190,7 @@ fn lower_call(func: &str, args: &[Expr]) -> Result<Ir, LowerError> {
         "atom" if args.len() == 1 => lower_prim(PrimOp::Atom, args),
         "equal?" if args.len() == 2 => lower_prim(PrimOp::EqualP, args),
         "+" if args.len() == 2 => lower_prim(PrimOp::Add, args),
+        "-" if args.len() == 2 => lower_prim(PrimOp::Sub, args),
         _ => lower_generic_call(&Expr::Symbol(func.to_string()), args),
     }
 }

@@ -329,6 +329,11 @@ impl Compiler {
                 self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
                 self.emit(&format!("ADD {} R1 R2", target_reg));
             }
+            PrimOp::Sub => {
+                self.compile_expr(&args[0], "R1");
+                self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
+                self.emit(&format!("SUB {} R1 R2", target_reg));
+            }
         }
     }
 

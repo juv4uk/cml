@@ -30,6 +30,7 @@ pub enum Quoted {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrimOp {
     Add,
+    Sub,
     Cons,
     Car,
     Cdr,

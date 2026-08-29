@@ -138,10 +138,67 @@ fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
     );
     assert_eq!(
         backend.compile_program(&[Ir::Prim {
+            op: PrimOp::EqualP,
+            args: vec![Ir::Int(1), Ir::Int(1)],
+        }]),
+        Err(CompileError::Unsupported("equal? primitive"))
+    );
+}
+
+#[test]
+fn checked_add_and_sub_produce_inline_arithmetic() {
+    let backend = X86FreestandingBackend::new();
+
+    // Simple add: 1 + 2 = 3 — assembly must not call any runtime function.
+    let add_asm = backend
+        .compile_program(&[Ir::Prim {
             op: PrimOp::Add,
             args: vec![Ir::Int(1), Ir::Int(2)],
-        }]),
-        Err(CompileError::Unsupported("add primitive"))
+        }])
+        .unwrap();
+    assert!(add_asm.contains("sarq $3,"), "add must decode fixnum");
+    assert!(add_asm.contains("addq"), "add must use addq");
+    assert!(add_asm.contains("wsm_fail"), "add must guard overflow path");
+    assert!(!add_asm.contains("call wsm_add"), "no runtime wsm_add call");
+
+    // Simple sub: 5 - 3 = 2 — assembly must not call any runtime function.
+    let sub_asm = backend
+        .compile_program(&[Ir::Prim {
+            op: PrimOp::Sub,
+            args: vec![Ir::Int(5), Ir::Int(3)],
+        }])
+        .unwrap();
+    assert!(sub_asm.contains("subq"), "sub must use subq");
+    assert!(sub_asm.contains("wsm_fail"), "sub must guard overflow path");
+    assert!(!sub_asm.contains("call wsm_sub"), "no runtime wsm_sub call");
+
+    // Boundary: FIXNUM_MAX must assemble OK, FIXNUM_MAX+1 must be rejected at preflight.
+    assert!(
+        backend
+            .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX)])
+            .is_ok()
+    );
+    assert_eq!(
+        backend.compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX + 1)]),
+        Err(CompileError::FixnumOutOfRange(wsm_os_target::FIXNUM_MAX + 1))
+    );
+
+    // Overflow: the assembly for FIXNUM_MAX + 1 would overflow — but that's a
+    // *runtime* overflow, not a preflight error, since both inputs are in range.
+    let overflow_asm = backend
+        .compile_program(&[Ir::Prim {
+            op: PrimOp::Add,
+            args: vec![
+                Ir::Int(wsm_os_target::FIXNUM_MAX),
+                Ir::Int(1),
+            ],
+        }])
+        .unwrap();
+    // Must assemble correctly — the overflow is caught at runtime by wsm_fail.
+    let symbols = assemble_and_undefined_symbols(&overflow_asm, "add-overflow");
+    assert!(
+        symbols.contains("wsm_fail"),
+        "overflow path imports wsm_fail"
     );
 }
 

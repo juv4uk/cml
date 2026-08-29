@@ -391,6 +391,11 @@ impl CBackend {
                 self.compile_expr(&args[0], env)?,
                 self.compile_expr(&args[1], env)?
             )),
+            PrimOp::Sub => Ok(format!(
+                "v_sub({}, {})",
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            )),
             PrimOp::Cons => Ok(format!(
                 "mk_cons({}, {})",
                 self.compile_expr(&args[0], env)?,
