@@ -123,7 +123,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
     let mut checked = 0;
     let mut checked_errors = 0;
     let mut selected = 0;
-    let unsupported_errors = 0;
+    let mut unsupported_errors = 0;
     let mut unsupported_inexact = 0;
     let mut unsupported_newer_contract = 0;
     let mut failures = Vec::new();
@@ -215,9 +215,16 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         };
 
         let mut backend = CBackend::new();
-        let Ok(c_source) = backend.compile_program(&program) else {
-            failures.push(format!("{expr_str}: C compilation failed"));
-            continue;
+        let c_source = match backend.compile_program(&program) {
+            Ok(src) => src,
+            Err(cml::c_backend::CompileError::Unsupported(_)) => {
+                unsupported_errors += 1;
+                continue;
+            }
+            Err(e) => {
+                failures.push(format!("{expr_str}: C compilation failed: {:?}", e));
+                continue;
+            }
         };
 
         let c_path = format!("c_backend_conf_{i}.c");

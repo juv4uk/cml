@@ -24,6 +24,8 @@ pub enum CompileError {
     UnsupportedNumericBuffer,
     /// A symbol-table-aware emission would exceed the 16-bit LOADSYM field.
     SymbolTableOverflow,
+    /// An IR variant that is semantically supported by CML but lacks an fpga-lisp emission path.
+    Unsupported(String),
 }
 
 impl fmt::Display for CompileError {
@@ -40,16 +42,11 @@ impl fmt::Display for CompileError {
                 f,
                 "integer literal {value} exceeds the fpga-lisp target's LOADI range (magnitude > {max_magnitude})"
             ),
-            CompileError::UnsupportedNumericBuffer => write!(
-                f,
-                "typed numeric buffers are not supported by the fpga-lisp backend"
-            ),
-            CompileError::SymbolTableOverflow => {
-                write!(
-                    f,
-                    "fpga-lisp symbol table exceeds LOADSYM's 16-bit id range"
-                )
+            CompileError::UnsupportedNumericBuffer => {
+                write!(f, "unsupported typed numeric buffer for FPGA target")
             }
+            CompileError::SymbolTableOverflow => write!(f, "symbol table overflow (max {})", MAX_LOADI_MAGNITUDE),
+            CompileError::Unsupported(msg) => write!(f, "unsupported IR node for FPGA target: {}", msg),
         }
     }
 }
@@ -84,9 +81,9 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
         }
         Ir::Def { value, .. } => validate_ir(value),
         Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
-        Ir::Nil | Ir::True | Ir::Var(_) => Ok(()),
-        Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedNumericBuffer), // reuse Unsupported slot; TailSelfCall is x86-only
-        _ => Err(CompileError::UnsupportedNumericBuffer),
+        Ir::Nil | Ir::True | Ir::Var(_) | Ir::Builtin(_) => Ok(()),
+        Ir::TailSelfCall { .. } => Err(CompileError::Unsupported("TailSelfCall is x86-only".to_string())),
+        _ => Err(CompileError::Unsupported("unsupported IR node in compiler".to_string())),
     }
 }
 
@@ -109,7 +106,7 @@ fn validate_quoted(q: &Quoted) -> Result<(), CompileError> {
             validate_quoted(tail)
         }
         Quoted::Str(_) | Quoted::Sym(_) | Quoted::Nil => Ok(()),
-        _ => Err(CompileError::UnsupportedNumericBuffer),
+        _ => Err(CompileError::Unsupported("unsupported quoted node in compiler".to_string())),
     }
 }
 

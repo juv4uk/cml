@@ -227,11 +227,7 @@ fn lower_expr_admitted(expr: &Expr, env: &Env) -> Result<Ir, LowerError> {
         Expr::NumericBuffer(NumericBufferLiteral::F32(values)) => {
             Ok(Ir::Buffer(BufferLiteral::F32(values.clone())))
         }
-        // compiler.rs's compile_expr emits a direct LOADSYM literal for a
-        // source string (compatibility.my's `representational-
-        // substitutions`), never a variable lookup -- Quote(Sym(..))
-        // lowers to exactly that same LOADSYM via compile_quoted.
-        Expr::String(s) => Ok(Ir::Quote(Quoted::Sym(s.to_uppercase()))),
+        Expr::String(s) => Ok(Ir::String(s.clone())),
         Expr::Symbol(s) => lower_symbol(s, env),
         Expr::List(list) => lower_list(list, env),
         Expr::DottedList(_, _) => Err(LowerError::invalid_form(

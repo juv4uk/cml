@@ -366,7 +366,7 @@ impl CBackend {
             Ir::Nil => Ok("(&NIL_V)".to_string()),
             Ir::True => Ok("(&TRUE_V)".to_string()),
             Ir::Var(name) => Ok(format!("env_lookup({env}, \"{name}\")")),
-            Ir::Quote(q) => Ok(self.compile_quoted(q)),
+            Ir::Quote(q) => self.compile_quoted(q),
             Ir::Lambda { params, body } => self.compile_lambda(params, body, env),
             Ir::App { func, args } => self.compile_app(func, args, env),
             Ir::Cond { branches } => self.compile_cond(branches, env),
@@ -426,32 +426,28 @@ impl CBackend {
         }
     }
 
-    fn compile_quoted(&mut self, q: &Quoted) -> String {
+    fn compile_quoted(&mut self, q: &Quoted) -> Result<String, CompileError> {
         match q {
-            Quoted::Int(n) => format!("mk_int({n})"),
-            Quoted::Sym(s) | Quoted::Str(s) => format!("mk_sym(\"{s}\")"),
-            Quoted::Nil => "(&NIL_V)".to_string(),
-            // Unlike compiler.rs's fpga-lisp path (which needs an explicit
-            // R11-stack accumulator since it's emitting a flat instruction
-            // stream), a C expression can just nest mk_cons calls directly
-            // -- built tail-first, same right-to-left order.
+            Quoted::Int(n) => Ok(format!("mk_int({n})")),
+            Quoted::Sym(s) | Quoted::Str(s) => Ok(format!("mk_sym(\"{s}\")")),
+            Quoted::Nil => Ok("(&NIL_V)".to_string()),
             Quoted::List(items) => {
                 let mut acc = "(&NIL_V)".to_string();
                 for item in items.iter().rev() {
-                    let item_expr = self.compile_quoted(item);
+                    let item_expr = self.compile_quoted(item)?;
                     acc = format!("mk_cons({item_expr}, {acc})");
                 }
-                acc
+                Ok(acc)
             }
             Quoted::DottedList(items, tail) => {
-                let mut acc = self.compile_quoted(tail);
+                let mut acc = self.compile_quoted(tail)?;
                 for item in items.iter().rev() {
-                    let item_expr = self.compile_quoted(item);
+                    let item_expr = self.compile_quoted(item)?;
                     acc = format!("mk_cons({item_expr}, {acc})");
                 }
-                acc
+                Ok(acc)
             }
-            _ => unimplemented!("unsupported quoted node for C backend"),
+            _ => Err(CompileError::Unsupported("unsupported quoted node for C backend".to_string())),
         }
     }
 
