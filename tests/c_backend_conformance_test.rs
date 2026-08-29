@@ -126,7 +126,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
     let unsupported_errors = 0;
     let mut unsupported_inexact = 0;
     let mut unsupported_newer_contract = 0;
-        let mut failures = Vec::new();
+    let mut failures = Vec::new();
 
     for (i, line) in fixture_content.lines().enumerate() {
         let line = line.trim();
