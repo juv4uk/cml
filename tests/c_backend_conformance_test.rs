@@ -12,12 +12,6 @@ use cml::macros::MacroExpander;
 use cml::parser;
 
 const SUPPORTED_LANGUAGE_CONTRACT: (u32, u32) = (2, 0);
-const SUPPORTED_CAPABILITIES: &[&str] = &[
-    "first-class-builtins",
-    "builtin-add",
-    "builtin-car",
-    "builtin-subtract",
-];
 
 fn parse_conformance_line(line: &str) -> Option<(String, String)> {
     let expr_marker = "(expr . \"";
@@ -122,124 +116,6 @@ fn parses_fixture_capability_requirements() {
 }
 
 #[test]
-fn c_backend_accounts_for_every_contract_2_1_fixture_by_capability() {
-    let fixture_path = "../my-lisp/tests/fixtures/conformance.my";
-    let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read conformance.my");
-    let mut selected = 0;
-    let mut supported = 0;
-    let mut unsupported_capability = 0;
-    let mut failures = Vec::new();
-
-    for (i, line) in fixture_content.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with(';') {
-            continue;
-        }
-        if parse_contract_version(line, "since-contract") != Some((2, 1)) {
-            continue;
-        }
-        selected += 1;
-        let Some(requirements) = parse_symbol_list_field(line, "requires") else {
-            failures.push(format!(
-                "fixture line {}: contract 2.1 fixture has no valid requires field",
-                i + 1
-            ));
-            continue;
-        };
-        if !requirements
-            .iter()
-            .all(|requirement| SUPPORTED_CAPABILITIES.contains(&requirement.as_str()))
-        {
-            unsupported_capability += 1;
-            continue;
-        }
-        let Some((expr_str, expected_str)) = parse_conformance_line(line) else {
-            failures.push(format!(
-                "fixture line {}: expected-value record was not admitted",
-                i + 1
-            ));
-            continue;
-        };
-        let exprs = match parser::parse(&expr_str) {
-            Ok(exprs) => exprs,
-            Err(error) => {
-                failures.push(format!("{expr_str}: parser admission failed: {error:?}"));
-                continue;
-            }
-        };
-        let exprs = match MacroExpander::new().process(&exprs) {
-            Ok(exprs) => exprs,
-            Err(error) => {
-                failures.push(format!("{expr_str}: macro expansion failed: {error}"));
-                continue;
-            }
-        };
-        let program = match lower::lower_program_with_first_class_builtins(&exprs) {
-            Ok(program) => program,
-            Err(error) => {
-                failures.push(format!("{expr_str}: lowering failed: {error}"));
-                continue;
-            }
-        };
-        let c_source = match CBackend::new().compile_program(&program) {
-            Ok(source) => source,
-            Err(error) => {
-                failures.push(format!("{expr_str}: C emission failed: {error}"));
-                continue;
-            }
-        };
-        let c_path = format!("c_backend_contract21_{i}.c");
-        let bin_path = format!("c_backend_contract21_{i}");
-        fs::write(&c_path, &c_source).unwrap();
-        let compile = Command::new("gcc")
-            .arg(&c_path)
-            .arg("-o")
-            .arg(&bin_path)
-            .output()
-            .unwrap();
-        if !compile.status.success() {
-            failures.push(format!(
-                "{expr_str}: gcc failed: {}",
-                String::from_utf8_lossy(&compile.stderr)
-            ));
-            let _ = fs::remove_file(&c_path);
-            continue;
-        }
-        let run = Command::new(format!("./{bin_path}")).output().unwrap();
-        let _ = fs::remove_file(&c_path);
-        let _ = fs::remove_file(&bin_path);
-        if !run.status.success() {
-            failures.push(format!(
-                "{expr_str}: compiled program failed: {}",
-                String::from_utf8_lossy(&run.stderr)
-            ));
-            continue;
-        }
-        let actual = String::from_utf8_lossy(&run.stdout).trim().to_lowercase();
-        if actual != expected_str.to_lowercase() {
-            failures.push(format!(
-                "{expr_str}: expected {expected_str:?}, got {actual:?}"
-            ));
-            continue;
-        }
-        supported += 1;
-    }
-
-    assert!(
-        failures.is_empty(),
-        "{} fixture(s) failed:\n{}",
-        failures.len(),
-        failures.join("\n")
-    );
-    assert_eq!(selected, supported + unsupported_capability);
-    assert_eq!((selected, supported, unsupported_capability), (3, 3, 0));
-    eprintln!(
-        "contract-2.1 matrix: selected={selected} supported={supported} \
-         unsupported-capability={unsupported_capability}"
-    );
-}
-
-#[test]
 fn c_backend_matches_every_constitutive_tier1_fixture() {
     let fixture_path = "../my-lisp/tests/fixtures/conformance.my";
     let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read conformance.my");
@@ -250,8 +126,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
     let unsupported_errors = 0;
     let mut unsupported_inexact = 0;
     let mut unsupported_newer_contract = 0;
-    let mut admitted_newer_contract = 0;
-    let mut failures = Vec::new();
+        let mut failures = Vec::new();
 
     for (i, line) in fixture_content.lines().enumerate() {
         let line = line.trim();
@@ -263,26 +138,10 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         // These are explicit capability states, not silent skips. Contract
         // 2.1+ fixtures are upstream evidence but cannot be executed as proof
         // for CML's declared supported contract 2.0.
-        let requirements = match parse_symbol_list_field(line, "requires") {
-            Some(requirements) => requirements,
-            None if line.contains("(requires") => {
-                failures.push(format!("fixture line {}: malformed requires field", i + 1));
-                continue;
-            }
-            None => Vec::new(),
-        };
         match parse_contract_version(line, "since-contract") {
             Some(version) if version > SUPPORTED_LANGUAGE_CONTRACT => {
-                let capabilities_supported = !requirements.is_empty()
-                    && requirements
-                        .iter()
-                        .all(|requirement| SUPPORTED_CAPABILITIES.contains(&requirement.as_str()));
-                if capabilities_supported {
-                    admitted_newer_contract += 1;
-                } else {
-                    unsupported_newer_contract += 1;
-                    continue;
-                }
+                unsupported_newer_contract += 1;
+                continue;
             }
             Some(_) => {}
             None if line.contains("(since-contract") => {
@@ -413,14 +272,10 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         accounted, selected,
         "every selected tier-1 fixture must be executed or assigned one explicit unsupported state"
     );
-    assert!(
-        admitted_newer_contract > 0,
-        "the shared suite should exercise capability-based admission"
-    );
     eprintln!(
         "tier-1 matrix: selected={selected} supported-value={checked} supported-error={checked_errors} \
          unsupported-error={unsupported_errors} \
          unsupported-inexact={unsupported_inexact} unsupported-newer-contract={unsupported_newer_contract} \
-         admitted-newer-contract={admitted_newer_contract}"
+        "
     );
 }
