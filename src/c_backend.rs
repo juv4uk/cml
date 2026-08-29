@@ -381,7 +381,6 @@ impl CBackend {
             }
             Ir::Def { .. } => Err(CompileError::NestedDef),
             Ir::Prim { op, args } => self.compile_prim(*op, args, env),
-            _ => todo!(),
         }
     }
 

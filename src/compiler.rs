@@ -85,7 +85,6 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
         Ir::Def { value, .. } => validate_ir(value),
         Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
         Ir::Nil | Ir::True | Ir::Var(_) => Ok(()),
-        _ => todo!(),
     }
 }
 
@@ -108,7 +107,6 @@ fn validate_quoted(q: &Quoted) -> Result<(), CompileError> {
             validate_quoted(tail)
         }
         Quoted::Str(_) | Quoted::Sym(_) | Quoted::Nil => Ok(()),
-        _ => todo!(),
     }
 }
 
@@ -283,7 +281,6 @@ impl Compiler {
             Ir::Let { bindings, body } => self.compile_let(bindings, body, target_reg),
             Ir::Def { name, value } => self.compile_def(name, value, target_reg),
             Ir::Prim { op, args } => self.compile_prim(*op, args, target_reg),
-            _ => todo!(),
         }
     }
 
