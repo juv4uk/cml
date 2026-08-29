@@ -221,6 +221,7 @@
     ((priority . 9.0)
      (capabilities . (cml compiler testing conformance proof))
      (depends-on . (CML-CONTRACT-SCOPE-REALIGN-M1))
+     (done . t)
      (description . "Make conformance classification genuinely fail closed. A compiler error may count as UNSUPPORTED only when the fixture obligation and backend capability matrix predeclare that exact unsupported reason; unexpected parse/lowering/backend errors are FAILED. Emit one explicit result per fixture and assert totals. Reopen or qualify the historical CML-CONFORMANCE-FAIL-CLOSED claim using executable evidence."))))))
 
 
@@ -252,6 +253,7 @@
     (depends-on . (CML-IMPLEMENT-CONTRACT-2.1))
     (description . "Phase 4: Make conformance fail closed. Do not silently continue on fixture parse failures. Record one explicit result for every fixture, compare successful values against contractual errors, and report exact counts using explicit states (SUPPORTED, UNSUPPORTED, UNIMPLEMENTED, FAILED).")
      (done . t)
+     (context . "Qualified by executable evidence: unexpected parse/lowering errors are now FAILED, not skipped")
   ))
 
   ("CML-GPU-COMPUTE-LOWERING" . (
