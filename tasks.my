@@ -238,5 +238,5 @@
     (capabilities . (cml compiler rust compute gpu cuda cuda-backend))
     (depends-on . (CML-CONFORMANCE-FAIL-CLOSED))
     (description . "Deferred Work: After realignment, extend numeric/runtime coverage, establish C backend as reference path, design lower Compute IR, benchmark CPU vs GPU, and optionally build the specialized CUDA backend.")
-    (done . ())
+     (done . t)
   ))
