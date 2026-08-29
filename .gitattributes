@@ -5,6 +5,6 @@
 
 # GitHub Linguist: temporary WSM display profile for every supported source
 # extension. This affects highlighting/statistics only.
-*.wsm linguist-language=Racket
-*.my linguist-language=Racket
-*.lisp linguist-language=Racket
+*.wsm linguist-language=Lisp
+*.my linguist-language=Lisp
+*.lisp linguist-language=Lisp
