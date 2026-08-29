@@ -88,10 +88,6 @@ impl X86FreestandingBackend {
             symbols,
             next_slot: 0,
         };
-        // Make the syntax explicit: GNU `as` defaults to AT&T while LLVM's
-        // integrated assembler (used by Rust `global_asm!`) defaults to Intel.
-        // The generated artifact must mean the same thing in both consumers.
-        emitter.line(".att_syntax prefix");
         emitter.line(".text");
         emitter.line(".globl wsm_entry");
         emitter.line(".type wsm_entry, @function");
