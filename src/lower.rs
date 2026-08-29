@@ -57,8 +57,9 @@ impl fmt::Display for LowerError {
 }
 
 pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
-    semantic::analyze_program(exprs).map_err(LowerError::semantic)?;
-    exprs.iter().map(lower_expr).collect()
+    let folded: Vec<Expr> = exprs.iter().map(crate::pratyahara::fold_constants).collect();
+    semantic::analyze_program(&folded).map_err(LowerError::semantic)?;
+    folded.iter().map(lower_expr).collect()
 }
 
 /// Contract-2.1 lowering for backends that represent builtins as ordinary

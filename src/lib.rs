@@ -17,4 +17,5 @@ pub mod ir;
 pub mod lower;
 pub mod macros;
 pub mod parser;
+pub mod pratyahara;
 pub mod semantic;
