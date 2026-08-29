@@ -286,7 +286,10 @@ fn test_conformance() {
             } else if let Some((expr, error)) = parse_error_line(line) {
                 (expr, None, Some(error))
             } else {
-                failures.push(format!("fixture line {}: no expected value or error record", i + 1));
+                failures.push(format!(
+                    "fixture line {}: no expected value or error record",
+                    i + 1
+                ));
                 continue;
             };
         {
@@ -309,14 +312,19 @@ fn test_conformance() {
                 if expected_error.as_deref() == Some(actual_error) {
                     checked_errors += 1;
                 } else {
-                    failures.push(format!("{expr_str}: expected static error {:?}, got {:?}", expected_error, actual_error));
+                    failures.push(format!(
+                        "{expr_str}: expected static error {:?}, got {:?}",
+                        expected_error, actual_error
+                    ));
                 }
                 continue;
             }
             let program = match lower::lower_program(&exprs) {
                 Ok(p) => p,
                 Err(err) => {
-                    if expected_error.as_deref() == Some("Arity") && err.kind == lower::LowerErrorKind::Arity {
+                    if expected_error.as_deref() == Some("Arity")
+                        && err.kind == lower::LowerErrorKind::Arity
+                    {
                         checked_errors += 1;
                     } else {
                         failures.push(format!("{expr_str}: lowering failed: {:?}", err));
@@ -415,17 +423,24 @@ fn test_conformance() {
                 if result_error.as_deref() == Some(expected.as_str()) {
                     checked_errors += 1;
                 } else {
-                    failures.push(format!("{expr_str}: expected error {expected}, got {:?}", result_error));
+                    failures.push(format!(
+                        "{expr_str}: expected error {expected}, got {:?}",
+                        result_error
+                    ));
                 }
                 continue;
             }
 
             let Some(tag) = tag else {
-                failures.push(format!("{expr_str}: Could not find RESULT_TAG in output: {stdout}"));
+                failures.push(format!(
+                    "{expr_str}: Could not find RESULT_TAG in output: {stdout}"
+                ));
                 continue;
             };
             let Some(val) = val else {
-                failures.push(format!("{expr_str}: Could not find RESULT_VAL in output: {stdout}"));
+                failures.push(format!(
+                    "{expr_str}: Could not find RESULT_VAL in output: {stdout}"
+                ));
                 continue;
             };
 
@@ -439,11 +454,15 @@ fn test_conformance() {
             if Some(&actual) == expected_str.as_ref() {
                 checked += 1;
             } else {
-                failures.push(format!("{expr_str}: expected {}, got {}", expected_str.unwrap(), actual));
+                failures.push(format!(
+                    "{expr_str}: expected {}, got {}",
+                    expected_str.unwrap(),
+                    actual
+                ));
             }
         }
     }
-    
+
     if !failures.is_empty() {
         for f in &failures {
             eprintln!("FAILURE: {}", f);
