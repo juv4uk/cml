@@ -58,7 +58,10 @@ pub fn execute_map(ir: &Ir, device_ordinal: usize) -> Result<CudaExecution, Cuda
         return Err(CudaRuntimeError::UnsupportedInput);
     }
 
-    let ptx = compile_ptx(source).map_err(|error| CudaRuntimeError::Nvrtc(error.to_string()))?;
+    let ptx = cudarc::nvrtc::compile_ptx_with_opts(source, cudarc::nvrtc::CompileOptions {
+        options: vec!["-arch=compute_61".to_string()],
+        ..Default::default()
+    }).map_err(|error| CudaRuntimeError::Nvrtc(error.to_string()))?;
     let context = CudaContext::new(device_ordinal)
         .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
     let device = device_evidence(&context)?;
