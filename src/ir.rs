@@ -17,6 +17,8 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Quoted {
     Int(i64),
+    Float(f64),
+    Rational(i64, u64),
     Sym(String),
     Str(String),
     Nil,
@@ -59,6 +61,9 @@ pub enum BufferLiteral {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ir {
     Int(i64),
+    Float(f64),
+    Rational(i64, u64),
+    String(String),
     Buffer(BufferLiteral),
     /// `nil` / `()` -- the empty list / false value.
     Nil,
@@ -68,6 +73,8 @@ pub enum Ir {
     /// (an alist walk on fpga-lisp today; a stack slot or register for a
     /// future C backend -- deliberately not specified here).
     Var(String),
+    /// A first-class builtin value or callable representation.
+    Builtin(String),
     Quote(Quoted),
     Lambda {
         params: Params,
@@ -113,5 +120,27 @@ pub enum Ir {
     /// `Ir::App` and are rejected by the x86 freestanding preflight.
     TailSelfCall {
         args: Vec<Ir>,
+    },
+    // GPU-oriented Compute IR
+    Map {
+        kernel: Box<Ir>,
+        buffers: Vec<Ir>,
+    },
+    Reduce {
+        kernel: Box<Ir>,
+        buffer: Box<Ir>,
+        initial: Box<Ir>,
+    },
+    Scan {
+        kernel: Box<Ir>,
+        buffer: Box<Ir>,
+        initial: Box<Ir>,
+    },
+    Index {
+        buffer: Box<Ir>,
+        index: Box<Ir>,
+    },
+    ParallelRegion {
+        body: Box<Ir>,
     },
 }

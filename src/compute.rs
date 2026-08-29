@@ -348,6 +348,7 @@ fn effect_of(ir: &Ir) -> EffectClass {
                 EffectClass::Unknown
             }
         }
+        _ => EffectClass::Unknown,
     }
 }
 

@@ -281,6 +281,11 @@ fn preflight(
                 "TailSelfCall outside a tail-call program",
             ));
         }
+        _ => {
+            return Err(CompileError::Unsupported(
+                "unsupported IR node in x86 preflight",
+            ));
+        }
     }
     Ok(())
 }
@@ -340,6 +345,11 @@ fn preflight_quoted(
                 preflight_quoted(value, symbols, slots)?;
             }
             preflight_quoted(tail, symbols, slots)?;
+        }
+        _ => {
+            return Err(CompileError::Unsupported(
+                "unsupported Quoted node in x86 preflight",
+            ));
         }
     }
     Ok(())
@@ -479,6 +489,11 @@ impl Emitter {
                     self.line(&format!("    movq {}(%rsp), %rdx", Self::slot_offset(tail)));
                     self.line("    call wsm_cons");
                 }
+            }
+            _ => {
+                return Err(CompileError::Unsupported(
+                    "unsupported Quoted node in x86 emit",
+                ));
             }
         }
         Ok(())

@@ -86,6 +86,7 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
         Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
         Ir::Nil | Ir::True | Ir::Var(_) => Ok(()),
         Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedNumericBuffer), // reuse Unsupported slot; TailSelfCall is x86-only
+        _ => Err(CompileError::UnsupportedNumericBuffer),
     }
 }
 
@@ -108,6 +109,7 @@ fn validate_quoted(q: &Quoted) -> Result<(), CompileError> {
             validate_quoted(tail)
         }
         Quoted::Str(_) | Quoted::Sym(_) | Quoted::Nil => Ok(()),
+        _ => Err(CompileError::UnsupportedNumericBuffer),
     }
 }
 
@@ -283,6 +285,7 @@ impl Compiler {
             Ir::Def { name, value } => self.compile_def(name, value, target_reg),
             Ir::Prim { op, args } => self.compile_prim(*op, args, target_reg),
             Ir::TailSelfCall { .. } => unreachable!("TailSelfCall is x86-only"),
+            _ => unreachable!("unsupported IR node in compiler"),
         }
     }
 
@@ -485,6 +488,7 @@ impl Compiler {
                     self.emit(&format!("CONS {} {} R12", target_reg, target_reg)); // target_reg = cons(item, tail)
                 }
             }
+            _ => unreachable!("unsupported quoted node in compiler"),
         }
     }
 

@@ -380,8 +380,13 @@ impl CBackend {
                 self.compile_app(&lambda, &args, env)
             }
             Ir::Def { .. } => Err(CompileError::NestedDef),
-            Ir::TailSelfCall { .. } => Err(CompileError::Unsupported("tail self call".to_string())),
+            Ir::TailSelfCall { .. } => Err(CompileError::Unsupported(
+                "TailSelfCall outside a tail-call program".to_string(),
+            )),
             Ir::Prim { op, args } => self.compile_prim(*op, args, env),
+            _ => Err(CompileError::Unsupported(
+                "unsupported IR node for C backend".to_string(),
+            )),
         }
     }
 
@@ -446,6 +451,7 @@ impl CBackend {
                 }
                 acc
             }
+            _ => unimplemented!("unsupported quoted node for C backend"),
         }
     }
 
