@@ -201,7 +201,25 @@
      (capabilities . (compiler rust fpga protocol testing proof))
      (done . t)
      (description . "Provide an additive compiler API that interns LOADSYM operands into deterministic per-program numeric IDs accepted by the fpga-lisp assembler.")
-     (context . "done 2026-08-24: Compiler::compile_with_symbols returns numeric LOADSYM assembly plus a (u16, name) table, starting at ID 900, while legacy name-oriented compile() remains unchanged. A compiler integration test assembles the numeric output with fpga-lisp/assembler.py. The bridge is per-program, not a global symbol ABI."))))))
+     (context . "done 2026-08-24: Compiler::compile_with_symbols returns numeric LOADSYM assembly plus a (u16, name) table, starting at ID 900, while legacy name-oriented compile() remains unchanged. A compiler integration test assembles the numeric output with fpga-lisp/assembler.py. The bridge is per-program, not a global symbol ABI.")))
+
+   ("CML-SEMANTIC-IR-RECOVERY-M0" .
+    ((priority . 10.0)
+     (capabilities . (cml compiler rust ir testing proof))
+     (depends-on . ())
+     (description . "Recover the falsely closed full-semantic-IR work from executable evidence. Inventory the exact current my-lisp contract obligations; implement only IR variants that are admitted and lowered from source; require every backend to classify each new variant explicitly as supported or named unsupported; replace wildcard todo! panic paths with fail-closed errors. Remove or archive temporary patch-helper artifacts only after identifying their provenance. Completion requires the real Ir enum, source lowering, backend classification and targeted tests in pushed code; patch.diff or generated rewrite scripts are not implementation evidence.")))
+
+   ("CML-CONTRACT-SCOPE-REALIGN-M1" .
+    ((priority . 9.5)
+     (capabilities . (cml compiler contract documentation testing proof))
+     (depends-on . (CML-SEMANTIC-IR-RECOVERY-M0))
+     (description . "Eliminate the split authority where compatibility.my declares global contract 2.0 while C-backend tests and task prose claim 2.1. Add one machine-readable per-backend contract/capability matrix and executable checks. Preserve the global supported level at 2.0 unless every backend claimed by the global statement earns 2.1; a C-backend-only 2.1 slice must be labelled as such. Reconcile the historical CML-IMPLEMENT-CONTRACT-2.1 claim without rewriting evidence history.")))
+
+   ("CML-CONFORMANCE-CLASSIFICATION-M2" .
+    ((priority . 9.0)
+     (capabilities . (cml compiler testing conformance proof))
+     (depends-on . (CML-CONTRACT-SCOPE-REALIGN-M1))
+     (description . "Make conformance classification genuinely fail closed. A compiler error may count as UNSUPPORTED only when the fixture obligation and backend capability matrix predeclare that exact unsupported reason; unexpected parse/lowering/backend errors are FAILED. Emit one explicit result per fixture and assert totals. Reopen or qualify the historical CML-CONFORMANCE-FAIL-CLOSED claim using executable evidence."))))))
 
 
   ("CML-FULL-SEMANTIC-IR" . (
