@@ -45,8 +45,12 @@ impl fmt::Display for CompileError {
             CompileError::UnsupportedNumericBuffer => {
                 write!(f, "unsupported typed numeric buffer for FPGA target")
             }
-            CompileError::SymbolTableOverflow => write!(f, "symbol table overflow (max {})", MAX_LOADI_MAGNITUDE),
-            CompileError::Unsupported(msg) => write!(f, "unsupported IR node for FPGA target: {}", msg),
+            CompileError::SymbolTableOverflow => {
+                write!(f, "symbol table overflow (max {})", MAX_LOADI_MAGNITUDE)
+            }
+            CompileError::Unsupported(msg) => {
+                write!(f, "unsupported IR node for FPGA target: {}", msg)
+            }
         }
     }
 }
@@ -82,8 +86,12 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
         Ir::Def { value, .. } => validate_ir(value),
         Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
         Ir::Nil | Ir::True | Ir::Var(_) | Ir::Builtin(_) => Ok(()),
-        Ir::TailSelfCall { .. } => Err(CompileError::Unsupported("TailSelfCall is x86-only".to_string())),
-        _ => Err(CompileError::Unsupported("unsupported IR node in compiler".to_string())),
+        Ir::TailSelfCall { .. } => Err(CompileError::Unsupported(
+            "TailSelfCall is x86-only".to_string(),
+        )),
+        _ => Err(CompileError::Unsupported(
+            "unsupported IR node in compiler".to_string(),
+        )),
     }
 }
 
@@ -106,7 +114,9 @@ fn validate_quoted(q: &Quoted) -> Result<(), CompileError> {
             validate_quoted(tail)
         }
         Quoted::Str(_) | Quoted::Sym(_) | Quoted::Nil => Ok(()),
-        _ => Err(CompileError::Unsupported("unsupported quoted node in compiler".to_string())),
+        _ => Err(CompileError::Unsupported(
+            "unsupported quoted node in compiler".to_string(),
+        )),
     }
 }
 

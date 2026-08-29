@@ -447,7 +447,9 @@ impl CBackend {
                 }
                 Ok(acc)
             }
-            _ => Err(CompileError::Unsupported("unsupported quoted node for C backend".to_string())),
+            _ => Err(CompileError::Unsupported(
+                "unsupported quoted node for C backend".to_string(),
+            )),
         }
     }
 
