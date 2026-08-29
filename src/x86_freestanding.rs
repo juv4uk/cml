@@ -143,6 +143,7 @@ fn preflight(
         Ir::Cond { .. } => return Err(CompileError::Unsupported("cond")),
         Ir::Let { .. } => return Err(CompileError::Unsupported("let")),
         Ir::Def { .. } => return Err(CompileError::Unsupported("def")),
+        _ => return Err(CompileError::Unsupported("extended node")),
     }
     Ok(())
 }

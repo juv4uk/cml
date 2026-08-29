@@ -1,0 +1,37 @@
+--- src/ir.rs
++++ src/ir.rs
+@@ -19,6 +19,13 @@
+     Nil,
+     List(Vec<Quoted>),
+     DottedList(Vec<Quoted>, Box<Quoted>),
++    /// Exact rational (numerator, denominator)
++    Rational(i64, i64),
++    /// Inexact (floating point)
++    Inexact(f64),
++    Vector(Vec<Quoted>),
++    /// First-class builtin reference
++    Builtin(String),
+ }
+ 
+ /// The primitive operations `compiler.rs` currently lowers directly to
+@@ -53,6 +60,9 @@
+     Int(i64),
+     Buffer(BufferLiteral),
++    Rational(i64, i64),
++    Inexact(f64),
++    Vector(Vec<Ir>),
++    Builtin(String),
+     /// `nil` / `()` -- the empty list / false value.
+     Nil,
+     /// `t` -- the canonical true atom.
+@@ -74,6 +84,13 @@
+     Def { name: String, value: Box<Ir> },
+     Prim { op: PrimOp, args: Vec<Ir> },
++    
++    // GPU / Compute IR Abstractions
++    Index { buffer: Box<Ir>, index: Box<Ir> },
++    Map { func: Box<Ir>, buffer: Box<Ir> },
++    Reduce { func: Box<Ir>, init: Box<Ir>, buffer: Box<Ir> },
++    Scan { func: Box<Ir>, init: Box<Ir>, buffer: Box<Ir> },
++    ParallelRegion { size: Box<Ir>, body: Box<Ir> },
+ }
