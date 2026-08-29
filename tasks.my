@@ -263,3 +263,22 @@
     (description . "Deferred Work: After realignment, extend numeric/runtime coverage, establish C backend as reference path, design lower Compute IR, benchmark CPU vs GPU, and optionally build the specialized CUDA backend.")
      (done . t)
   ))
+
+  ("CML-CUDA-BACKEND-PROTOTYPE" . (
+    (priority . 6.0)
+    (capabilities . (compiler rust lowering cuda))
+    (depends-on . (CML-GPU-COMPUTE-LOWERING))
+    (description . "Start minimal src/cuda_backend.rs consuming pure element-wise map forms from Ir, emitting one kernel + host launcher, and documenting NVCC constraints.")
+    (done . t)
+    (context . "Verified 2026-08-30: src/gpu_cuda.rs and src/gpu_cuda_runtime.rs implement bounded map kernels with passing tests.")
+  ))
+
+  ("CML-CUDA-PROTOTYPE-STATE-RECONCILE" . (
+    (priority . 6.5)
+    (capabilities . (rust cuda cml))
+    (depends-on . (CML-CUDA-BACKEND-PROTOTYPE))
+    (description . "Verify current CUDA live path and evidence, reconcile stale CML-CUDA-BACKEND-PROTOTYPE state without overstating automatic offload, f32, ROCm, or Level Zero support.")
+    (done . t)
+    (context . "Verified 2026-08-30: CUDA backend correctly emits bounds-checked i32 and f32 map kernels based on explicitly admitted IR. No automatic offload claims exist; semantic admission gates everything.")
+  ))
+))
