@@ -222,7 +222,7 @@
     (capabilities . (cml compiler rust ir testing))
     (depends-on . (CML-CONTRACT-REALIGNMENT-M0 CML-FULL-SEMANTIC-IR))
     (description . "Phase 3: Implement contract 2.1 in CML. Add first-class builtin value or faithful callable representation. Resolve builtins through ordinary lexical environment, support lexical shadowing, preserve special-form boundary, and add explicit not-callable behavior.")
-    (done . ())
+     (done . t)
   ))
 
   ("CML-CONFORMANCE-FAIL-CLOSED" . (
