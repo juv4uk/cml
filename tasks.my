@@ -214,6 +214,7 @@
     ((priority . 9.5)
      (capabilities . (cml compiler contract documentation testing proof))
      (depends-on . (CML-SEMANTIC-IR-RECOVERY-M0))
+     (done . t)
      (description . "Eliminate the split authority where compatibility.my declares global contract 2.0 while C-backend tests and task prose claim 2.1. Add one machine-readable per-backend contract/capability matrix and executable checks. Preserve the global supported level at 2.0 unless every backend claimed by the global statement earns 2.1; a C-backend-only 2.1 slice must be labelled as such. Reconcile the historical CML-IMPLEMENT-CONTRACT-2.1 claim without rewriting evidence history.")))
 
    ("CML-CONFORMANCE-CLASSIFICATION-M2" .
@@ -242,6 +243,7 @@
     (depends-on . (CML-CONTRACT-REALIGNMENT-M0 CML-FULL-SEMANTIC-IR))
     (description . "Phase 3: Implement contract 2.1 in CML. Add first-class builtin value or faithful callable representation. Resolve builtins through ordinary lexical environment, support lexical shadowing, preserve special-form boundary, and add explicit not-callable behavior.")
      (done . t)
+     (context . "C-backend-only slice is supported; global boundary remains 2.0")
   ))
 
   ("CML-CONFORMANCE-FAIL-CLOSED" . (

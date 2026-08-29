@@ -137,7 +137,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
 
         // These are explicit capability states, not silent skips. Contract
         // 2.1+ fixtures are upstream evidence but cannot be executed as proof
-        // for CML's declared supported contract 2.0.
+        // for C-backend.s declared supported contract slice 2.1. (Global CML remains 2.0)
         match parse_contract_version(line, "since-contract") {
             Some(version) if version > SUPPORTED_LANGUAGE_CONTRACT => {
                 unsupported_newer_contract += 1;
