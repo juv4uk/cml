@@ -57,7 +57,10 @@ impl fmt::Display for LowerError {
 }
 
 pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
-    let folded: Vec<Expr> = exprs.iter().map(crate::pratyahara::fold_constants).collect();
+    let folded: Vec<Expr> = exprs
+        .iter()
+        .map(crate::pratyahara::fold_constants)
+        .collect();
     semantic::analyze_program(&folded).map_err(LowerError::semantic)?;
     folded.iter().map(lower_expr).collect()
 }
