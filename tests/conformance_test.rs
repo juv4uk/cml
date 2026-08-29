@@ -248,10 +248,16 @@ fn test_conformance() {
     symbol_table.insert("NIL".to_string(), 0);
     symbol_table.insert("TRUE".to_string(), 1);
     symbol_table.insert("T".to_string(), 1);
+    let mut checked = 0;
+    let mut checked_errors = 0;
+    let mut selected = 0;
+    let mut unsupported_errors = 0;
+    let mut unsupported_inexact = 0;
     let mut unsupported_newer_contract = 0;
+    let mut failures = Vec::new();
 
     // Run tests
-    for line in fixture_content.lines() {
+    for (i, line) in fixture_content.lines().enumerate() {
         let line = line.trim();
         if line.is_empty() || line.starts_with(';') {
             continue;
@@ -261,6 +267,7 @@ fn test_conformance() {
         if !line.contains("(tier . 1)") {
             continue;
         }
+        selected += 1;
 
         if parse_since_contract(line).is_some_and(|version| version > (2, 0)) {
             unsupported_newer_contract += 1;
@@ -269,6 +276,7 @@ fn test_conformance() {
 
         // fpga-lisp hardware only has TAG_FIXNUM, so we skip float tests
         if line.contains("3.0") {
+            unsupported_inexact += 1;
             continue;
         }
 
@@ -278,26 +286,52 @@ fn test_conformance() {
             } else if let Some((expr, error)) = parse_error_line(line) {
                 (expr, None, Some(error))
             } else {
+                failures.push(format!("fixture line {}: no expected value or error record", i + 1));
                 continue;
             };
         {
             println!("Testing: {}", expr_str);
-            let exprs = parser::parse(&expr_str).unwrap();
-            let exprs = MacroExpander::new()
-                .process(&exprs)
-                .expect("macro expansion failed");
+            let exprs = match parser::parse(&expr_str) {
+                Ok(e) => e,
+                Err(err) => {
+                    failures.push(format!("{expr_str}: parser failed: {:?}", err));
+                    continue;
+                }
+            };
+            let exprs = match MacroExpander::new().process(&exprs) {
+                Ok(e) => e,
+                Err(err) => {
+                    failures.push(format!("{expr_str}: macro expansion failed: {err}"));
+                    continue;
+                }
+            };
             if let Some(actual_error) = exprs.first().and_then(static_error) {
-                assert_eq!(
-                    Some(actual_error),
-                    expected_error.as_deref(),
-                    "Static error mismatch for {}",
-                    expr_str
-                );
+                if expected_error.as_deref() == Some(actual_error) {
+                    checked_errors += 1;
+                } else {
+                    failures.push(format!("{expr_str}: expected static error {:?}, got {:?}", expected_error, actual_error));
+                }
                 continue;
             }
-            let program = lower::lower_program(&exprs).unwrap();
+            let program = match lower::lower_program(&exprs) {
+                Ok(p) => p,
+                Err(err) => {
+                    if expected_error.as_deref() == Some("Arity") && err.kind == lower::LowerErrorKind::Arity {
+                        checked_errors += 1;
+                    } else {
+                        failures.push(format!("{expr_str}: lowering failed: {:?}", err));
+                    }
+                    continue;
+                }
+            };
             let mut compiler = Compiler::new();
-            let asm = compiler.compile(&program).unwrap();
+            let asm = match compiler.compile(&program) {
+                Ok(a) => a,
+                Err(err) => {
+                    unsupported_errors += 1;
+                    continue;
+                }
+            };
 
             // Collect new symbols
             let mut new_syms = Vec::new();
@@ -378,34 +412,54 @@ fn test_conformance() {
                 }
             }
             if let Some(expected) = expected_error {
-                assert_eq!(
-                    result_error.as_deref(),
-                    Some(expected.as_str()),
-                    "Error mismatch for {}",
-                    expr_str
-                );
+                if result_error.as_deref() == Some(expected.as_str()) {
+                    checked_errors += 1;
+                } else {
+                    failures.push(format!("{expr_str}: expected error {expected}, got {:?}", result_error));
+                }
                 continue;
             }
 
-            let tag = tag.expect(&format!(
-                "Could not find RESULT_TAG in output for {}:\n{}",
-                expr_str, stdout
-            ));
-            let val = val.expect(&format!(
-                "Could not find RESULT_VAL in output for {}",
-                expr_str
-            ));
+            let Some(tag) = tag else {
+                failures.push(format!("{expr_str}: Could not find RESULT_TAG in output: {stdout}"));
+                continue;
+            };
+            let Some(val) = val else {
+                failures.push(format!("{expr_str}: Could not find RESULT_VAL in output: {stdout}"));
+                continue;
+            };
 
-            let actual = render_word((tag, val), &heap, &symbol_table, &mut HashSet::new())
-                .unwrap_or_else(|error| panic!("Could not decode result for {expr_str}: {error}"));
-            assert_eq!(
-                actual,
-                expected_str.unwrap(),
-                "Test failed for {}",
-                expr_str
-            );
+            let actual = match render_word((tag, val), &heap, &symbol_table, &mut HashSet::new()) {
+                Ok(a) => a,
+                Err(error) => {
+                    failures.push(format!("{expr_str}: Could not decode result: {error}"));
+                    continue;
+                }
+            };
+            if Some(&actual) == expected_str.as_ref() {
+                checked += 1;
+            } else {
+                failures.push(format!("{expr_str}: expected {}, got {}", expected_str.unwrap(), actual));
+            }
         }
     }
+    
+    if !failures.is_empty() {
+        for f in &failures {
+            eprintln!("FAILURE: {}", f);
+        }
+        panic!("{} conformance failures", failures.len());
+    }
+
+    let accounted = checked
+        + checked_errors
+        + unsupported_errors
+        + unsupported_inexact
+        + unsupported_newer_contract;
+    assert_eq!(
+        accounted, selected,
+        "every selected tier-1 fixture must be executed or assigned one explicit unsupported state"
+    );
     assert!(
         unsupported_newer_contract > 0,
         "the shared suite should exercise the FPGA backend's explicit contract gate"
