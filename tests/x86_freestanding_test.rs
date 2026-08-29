@@ -180,7 +180,9 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
     );
     assert_eq!(
         backend.compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX + 1)]),
-        Err(CompileError::FixnumOutOfRange(wsm_os_target::FIXNUM_MAX + 1))
+        Err(CompileError::FixnumOutOfRange(
+            wsm_os_target::FIXNUM_MAX + 1
+        ))
     );
 
     // Overflow: the assembly for FIXNUM_MAX + 1 would overflow — but that's a
@@ -188,10 +190,7 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
     let overflow_asm = backend
         .compile_program(&[Ir::Prim {
             op: PrimOp::Add,
-            args: vec![
-                Ir::Int(wsm_os_target::FIXNUM_MAX),
-                Ir::Int(1),
-            ],
+            args: vec![Ir::Int(wsm_os_target::FIXNUM_MAX), Ir::Int(1)],
         }])
         .unwrap();
     // Must assemble correctly — the overflow is caught at runtime by wsm_fail.
@@ -225,15 +224,12 @@ fn fixnum_range_is_owned_by_the_target_contract() {
 
 #[test]
 fn cond_branching_evaluates_only_truthy_branch() {
-    let program = vec![
-        Ir::Cond {
-            branches: vec![
-                (Ir::Nil, Ir::Int(1)),
-                (Ir::True, Ir::Int(42)),
-            ]
-        }
-    ];
-    let assembly = X86FreestandingBackend::new().compile_program(&program).unwrap();
+    let program = vec![Ir::Cond {
+        branches: vec![(Ir::Nil, Ir::Int(1)), (Ir::True, Ir::Int(42))],
+    }];
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .unwrap();
     assert!(assembly.contains("cmpq %rcx, %rax"));
     assert!(assembly.contains("je .Lcond_branch_"));
 }

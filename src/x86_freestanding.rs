@@ -254,24 +254,24 @@ impl Emitter {
     fn emit_cond(&mut self, branches: &[(Ir, Ir)]) -> Result<(), CompileError> {
         let end_label = self.allocate_label();
         let mut next_branch_label = self.allocate_label();
-        
+
         for (test, expr) in branches {
             self.line(&format!(".Lcond_branch_{}:", next_branch_label));
             self.emit_ir(test)?;
-            
+
             next_branch_label = self.allocate_label();
-            
+
             self.line(&format!("    movabsq ${}, %rcx", wsm_os_target::NIL));
             self.line("    cmpq %rcx, %rax");
             self.line(&format!("    je .Lcond_branch_{}", next_branch_label));
-            
+
             self.emit_ir(expr)?;
             self.line(&format!("    jmp .Lcond_end_{}", end_label));
         }
-        
+
         self.line(&format!(".Lcond_branch_{}:", next_branch_label));
         self.emit_immediate(wsm_os_target::NIL);
-        
+
         self.line(&format!(".Lcond_end_{}:", end_label));
         Ok(())
     }
@@ -372,18 +372,30 @@ impl Emitter {
         // Evaluate first arg → %rax, save to stack slot.
         self.emit_ir(&args[0])?;
         let slot0 = self.allocate_slot();
-        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot0)));
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(slot0)
+        ));
 
         // Evaluate second arg → %rax, save to stack slot.
         self.emit_ir(&args[1])?;
         let slot1 = self.allocate_slot();
-        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot1)));
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(slot1)
+        ));
 
         // Load and decode both operands.
         // %rcx = a (decoded i64), %rdx = b (decoded i64).
-        self.line(&format!("    movq {}(%rsp), %rcx", Self::slot_offset(slot0)));
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(slot0)
+        ));
         self.line("    sarq $3, %rcx");
-        self.line(&format!("    movq {}(%rsp), %rdx", Self::slot_offset(slot1)));
+        self.line(&format!(
+            "    movq {}(%rsp), %rdx",
+            Self::slot_offset(slot1)
+        ));
         self.line("    sarq $3, %rdx");
 
         // Perform the operation; check 64-bit overflow first.
@@ -412,14 +424,20 @@ impl Emitter {
 
         // Encode result back as fixnum.
         self.line("    shlq $3, %rcx");
-        self.line(&format!("    orq ${}, %rcx", wsm_os_target::Tag::Fixnum as u64));
+        self.line(&format!(
+            "    orq ${}, %rcx",
+            wsm_os_target::Tag::Fixnum as u64
+        ));
         self.line("    movq %rcx, %rax");
         self.line(&format!("    jmp .Larith_ok_{}", ok_label));
 
         // Overflow path — call wsm_fail(context, ErrorCode::Type=2).
         self.line(&format!(".Larith_overflow_{}:", overflow_label));
         self.line("    movq %r12, %rdi");
-        self.line(&format!("    movl ${}, %esi", wsm_os_target::ErrorCode::Type as u32));
+        self.line(&format!(
+            "    movl ${}, %esi",
+            wsm_os_target::ErrorCode::Type as u32
+        ));
         self.line("    call wsm_fail");
 
         self.line(&format!(".Larith_ok_{}:", ok_label));
