@@ -11,7 +11,7 @@ use cml::lower;
 use cml::macros::MacroExpander;
 use cml::parser;
 
-const SUPPORTED_LANGUAGE_CONTRACT: (u32, u32) = (2, 0);
+const SUPPORTED_LANGUAGE_CONTRACT: (u32, u32) = (2, 1);
 
 fn parse_conformance_line(line: &str) -> Option<(String, String)> {
     let expr_marker = "(expr . \"";
