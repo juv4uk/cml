@@ -6,7 +6,7 @@
 
 ## English
 
-`cml` is an Ahead-of-Time (AOT) compiler middle-end for `my-lisp`. It lowers one semantic IR toward CPU/C, GPU compute backends, and `fpga-lisp` execution. Backend capabilities remain explicit and fail-closed.
+`cml` is an Ahead-of-Time (AOT) compiler middle-end for `my-lisp`. It lowers one semantic IR toward CPU/C, GPU compute backends, `fpga-lisp` execution, and a bounded freestanding x86_64 assembly target for `wsm-os`. Backend capabilities remain explicit and fail-closed.
 
 This approach separates language semantics from physical execution. The current graph has live CPU, CUDA, and FPGA paths, including a host-staged typed-buffer-to-FPGA-register edge; direct GPU-to-FPGA transfer is not claimed.
 
@@ -28,6 +28,11 @@ The compiler handles:
 
 [`compatibility.my`](compatibility.my) records the exact my-lisp language contract, fpga-lisp ISA contract, tested SHAs, supported surface, and known gaps for this compiler revision.
 
+The freestanding x86_64 slice is documented separately in
+[`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). It
+currently supports only literals/quote and `cons`/`car`/`cdr`/`eq`/`atom`;
+this is not a claim of full language or boot parity.
+
 [View Test Results](test_results.md) · [Testing](docs/testing.md)
 
 ### Related Repositories
@@ -44,7 +49,7 @@ cargo run -- path/to/source.my
 
 ## Українська
 
-`cml` — це heterogeneous middle-end і Ahead-of-Time (AOT) компілятор для `my-lisp`. Він знижує єдиний semantic IR до CPU/C, GPU compute backends та виконання `fpga-lisp`, залишаючи можливості backend'ів явними й fail-closed.
+`cml` — це heterogeneous middle-end і Ahead-of-Time (AOT) компілятор для `my-lisp`. Він знижує єдиний semantic IR до CPU/C, GPU compute backends, виконання `fpga-lisp` і вузького freestanding x86_64 assembly target для `wsm-os`, залишаючи можливості backend'ів явними й fail-closed.
 
 Цей підхід відділяє семантику мови від фізичного виконання. Поточний graph має live CPU, CUDA і FPGA шляхи, включно з host-staged typed-buffer→FPGA-register edge; прямий GPU→FPGA transfer не заявляється.
 
@@ -65,6 +70,11 @@ cargo run -- path/to/source.my
 - Inexact numbers і точні rationals не підтримуються цільовим представленням.
 
 [`compatibility.my`](compatibility.my) фіксує точний language contract my-lisp, ISA contract fpga-lisp, перевірені SHA, підтриману поверхню й відомі прогалини цієї ревізії компілятора.
+
+Freestanding x86_64 зріз окремо описаний у
+[`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). Наразі
+це лише literals/quote і `cons`/`car`/`cdr`/`eq`/`atom`, без заяви про повну
+мовну або boot parity.
 
 [Переглянути результати тестів](test_results.md) · [Тестування](docs/testing.md)
 

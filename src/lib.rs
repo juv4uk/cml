@@ -19,3 +19,4 @@ pub mod macros;
 pub mod parser;
 pub mod pratyahara;
 pub mod semantic;
+pub mod x86_freestanding;

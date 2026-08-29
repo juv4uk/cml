@@ -105,6 +105,7 @@ dependencies = [
  "my-lisp",
  "pollster",
  "wgpu",
+ "wsm-os-target",
 ]
 
 [[package]]
@@ -1098,6 +1099,11 @@ checksum = "3949bd5b99cafdf1c7ca86b43ca564028dfe27d66958f2470940f73d86d75b37"
 dependencies = [
  "windows-link",
 ]
+
+[[package]]
+name = "wsm-os-target"
+version = "0.1.0"
+source = "git+https://github.com/juv4uk/wsm-os.git?rev=fe168ebc572c82c237faa4a952eec63e531dcc47#fe168ebc572c82c237faa4a952eec63e531dcc47"
 
 [[package]]
 name = "xml-rs"
