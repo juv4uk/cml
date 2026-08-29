@@ -102,4 +102,16 @@ pub enum Ir {
         op: PrimOp,
         args: Vec<Ir>,
     },
+    /// A self-tail-call recognised by the lowering pass inside a `Def` body.
+    ///
+    /// Produced only when a `Def`-named function calls *itself* in explicit
+    /// tail position. The x86 backend lowers this to a register reload + `jmp`
+    /// to the function loop-entry label rather than a native `call`, so the
+    /// stack frame depth stays constant for any recursion depth.
+    ///
+    /// Non-self calls, mutual recursion and general closures remain
+    /// `Ir::App` and are rejected by the x86 freestanding preflight.
+    TailSelfCall {
+        args: Vec<Ir>,
+    },
 }

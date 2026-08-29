@@ -75,6 +75,82 @@ pub fn lower_program_with_first_class_builtins(exprs: &[Expr]) -> Result<Vec<Ir>
     lower_program(exprs).map(|program| program.into_iter().map(reify_primitive_calls).collect())
 }
 
+/// Lower and mark explicit self-tail-calls inside `Def` bodies.
+///
+/// For each `Def { name, value: Lambda { body } }`, any `App { func:
+/// Var(name), args }` that appears in *tail position* inside the body is
+/// converted to `TailSelfCall { args }`. The x86 freestanding backend uses
+/// this to emit a `jmp` to the function loop-entry instead of a native `call`,
+/// keeping the stack depth bounded regardless of recursion depth.
+///
+/// Only direct self-calls are transformed; mutual recursion, closures and
+/// general function calls remain `Ir::App` and are rejected by the x86
+/// backend's preflight gate.
+pub fn lower_program_with_tail_calls(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
+    lower_program(exprs).map(|program| {
+        program
+            .into_iter()
+            .map(|node| match node {
+                Ir::Def {
+                    ref name,
+                    value: ref lambda,
+                } => {
+                    if let Ir::Lambda { ref params, ref body } = **lambda {
+                        let new_body = mark_tail_position(body, name);
+                        Ir::Def {
+                            name: name.clone(),
+                            value: Box::new(Ir::Lambda {
+                                params: params.clone(),
+                                body: Box::new(new_body),
+                            }),
+                        }
+                    } else {
+                        node
+                    }
+                }
+                other => other,
+            })
+            .collect()
+    })
+}
+
+/// Rewrite `App { func: Var(self_name), args }` → `TailSelfCall { args }`
+/// whenever it appears in tail position within `ir`.
+///
+/// "Tail position" here means: the node is the last value-producing
+/// expression — in particular, it is the result of a `Cond` branch, a `Let`
+/// body, or the lambda body itself.  Sub-expressions of `Prim` and `App`
+/// argument lists are *not* in tail position.
+fn mark_tail_position(ir: &Ir, self_name: &str) -> Ir {
+    match ir {
+        // Direct self-call in tail position.
+        Ir::App { func, args } => {
+            if let Ir::Var(name) = func.as_ref() {
+                if name == self_name {
+                    return Ir::TailSelfCall {
+                        args: args.clone(),
+                    };
+                }
+            }
+            ir.clone()
+        }
+        // Tail position propagates through the branches of Cond.
+        Ir::Cond { branches } => Ir::Cond {
+            branches: branches
+                .iter()
+                .map(|(test, body)| (test.clone(), mark_tail_position(body, self_name)))
+                .collect(),
+        },
+        // Tail position propagates through the body of Let.
+        Ir::Let { bindings, body } => Ir::Let {
+            bindings: bindings.clone(),
+            body: Box::new(mark_tail_position(body, self_name)),
+        },
+        // All other nodes are leaves or non-tail contexts — clone unchanged.
+        other => other.clone(),
+    }
+}
+
 fn reify_primitive_calls(ir: Ir) -> Ir {
     match ir {
         Ir::Prim { op, args } => Ir::App {

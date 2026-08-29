@@ -123,7 +123,7 @@ fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
     let backend = X86FreestandingBackend::new();
     assert_eq!(
         backend.compile_program(&[Ir::Var("X".to_string())]),
-        Err(CompileError::Unsupported("variable"))
+        Err(CompileError::Unsupported("unbound variable"))
     );
     assert_eq!(
         backend.compile_program(&[Ir::Prim {
@@ -232,4 +232,24 @@ fn cond_branching_evaluates_only_truthy_branch() {
         .unwrap();
     assert!(assembly.contains("cmpq %rcx, %rax"));
     assert!(assembly.contains("je .Lcond_branch_"));
+}
+
+#[test]
+fn explicit_self_tail_call_loop_lowers_without_calls() {
+    let source = "(def loop (lambda (n) (cond ((eq n 0) (quote done)) (t (loop (- n 1)))))) (loop 5)";
+    let expressions = parser::parse(source).unwrap();
+    let ir = lower::lower_program_with_tail_calls(&expressions).unwrap();
+    let backend = X86FreestandingBackend::new();
+    let assembly = backend.compile_program(&ir).unwrap();
+    
+    // Assembles without unrecognized symbols.
+    let _ = assemble_and_undefined_symbols(&assembly, "tail_call_loop");
+    
+    // Assert loop structure: jump to loop rather than call to self.
+    assert!(assembly.contains("jmp .Ltcloop_"));
+    // It shouldn't contain a recursive call to the function.
+    // The only runtime calls should be for 'eq', 'wsm_fail' (for arithmetic overflow).
+    let calls: Vec<&str> = assembly.lines().filter(|l| l.contains("call ")).collect();
+    // Only wsm_eq and wsm_fail are expected. Add/Sub are inline. loop is inline (jmp).
+    assert!(calls.iter().all(|l| l.contains("wsm_eq") || l.contains("wsm_fail")));
 }

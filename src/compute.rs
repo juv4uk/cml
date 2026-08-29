@@ -332,6 +332,7 @@ fn effect_of(ir: &Ir) -> EffectClass {
                 .chain([effect_of(body)]),
         ),
         Ir::Def { .. } => EffectClass::Stateful,
+        Ir::TailSelfCall { .. } => EffectClass::Stateful,
         Ir::App { func, args } => {
             let known_pure = matches!(
                 &**func,

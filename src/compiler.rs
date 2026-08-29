@@ -85,6 +85,7 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
         Ir::Def { value, .. } => validate_ir(value),
         Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
         Ir::Nil | Ir::True | Ir::Var(_) => Ok(()),
+        Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedNumericBuffer), // reuse Unsupported slot; TailSelfCall is x86-only
     }
 }
 
@@ -281,6 +282,7 @@ impl Compiler {
             Ir::Let { bindings, body } => self.compile_let(bindings, body, target_reg),
             Ir::Def { name, value } => self.compile_def(name, value, target_reg),
             Ir::Prim { op, args } => self.compile_prim(*op, args, target_reg),
+            Ir::TailSelfCall { .. } => unreachable!("TailSelfCall is x86-only"),
         }
     }
 

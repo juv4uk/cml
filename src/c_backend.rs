@@ -380,6 +380,7 @@ impl CBackend {
                 self.compile_app(&lambda, &args, env)
             }
             Ir::Def { .. } => Err(CompileError::NestedDef),
+            Ir::TailSelfCall { .. } => Err(CompileError::Unsupported("tail self call".to_string())),
             Ir::Prim { op, args } => self.compile_prim(*op, args, env),
         }
     }
