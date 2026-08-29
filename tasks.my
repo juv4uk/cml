@@ -214,7 +214,7 @@
     (priority . 8.0)
     (capabilities . (cml compiler rust proof documentation))
     (description . "Phase 2: Separate CML's supported contract from the observed upstream contract. Keep CML at supported contract 2.0 until 2.1 behavior is implemented. Make contract drift visible without forcing an unearned version claim.")
-    (done . ())
+     (done . t)
   ))
 
   ("CML-IMPLEMENT-CONTRACT-2.1" . (
