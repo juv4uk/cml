@@ -207,6 +207,7 @@
     ((priority . 10.0)
      (capabilities . (cml compiler rust ir testing proof))
      (depends-on . ())
+     (done . t)
      (description . "Recover the falsely closed full-semantic-IR work from executable evidence. Inventory the exact current my-lisp contract obligations; implement only IR variants that are admitted and lowered from source; require every backend to classify each new variant explicitly as supported or named unsupported; replace wildcard todo! panic paths with fail-closed errors. Remove or archive temporary patch-helper artifacts only after identifying their provenance. Completion requires the real Ir enum, source lowering, backend classification and targeted tests in pushed code; patch.diff or generated rewrite scripts are not implementation evidence.")))
 
    ("CML-CONTRACT-SCOPE-REALIGN-M1" .
