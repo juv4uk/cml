@@ -19,14 +19,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: juv4uk/my-lisp
-          ref: 6943f51afcdcd9bf41bf083e1a7ae2cd5aedbd3c
+          ref: 764c2398dd3136259c877c17e332371e8b7c1bf2
           path: my-lisp
 
       - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
         uses: actions/checkout@v4
         with:
           repository: juv4uk/fpga-lisp
-          ref: 36738759f281991646c45487ae6722fea561ea2b
+          ref: 80e2fc170650b391f128353985445291da493957
           path: fpga-lisp
 
       - name: Install Rust toolchain
