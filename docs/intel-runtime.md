@@ -32,3 +32,42 @@ Compute IR.
 
 Primary upstream reference:
 <https://github.com/intel/compute-runtime/blob/master/documentation/LEGACY_PLATFORMS.md>
+
+---
+
+# Межа середовища виконання Intel GPU (Ukrainian)
+
+CML розглядає Intel як вендор-незалежного (vendor-neutral) кандидата на роль 
+прискорювача з двома можливими шляхами виконання:
+
+```text
+портативний      → wgpu
+шлях вендора     → oneAPI Level Zero (заплановано)
+```
+
+Наявність бекенда визначається шляхом живого виявлення (live discovery), а не
+виводиться з назви вендора. `BackendCapability` записує `Live`, `Planned` або 
+`Unsupported`; лише `Live` може стати дескриптором прискорювача 
+(`AcceleratorDescriptor`), який використовується планувальником.
+
+## Поточні докази хоста WSL (2026-08-24)
+
+Windows повідомляє про наявність Intel HD Graphics 530 (Skylake / Gen9, 
+PCI `8086:1912`). Матриця застарілих платформ (legacy-platform matrix) середовища 
+виконання compute-runtime від Intel підтримує Skylake через пакети `legacy1` 
+для нативного Linux OpenCL 3.0 та Level Zero 1.5, але позначає підтримку WSL як 
+недоступну. Тому цей хост записано так:
+
+```text
+Intel HD Graphics 530 + нативний Linux + legacy1 → можливо, тут не перевірялося
+Intel HD Graphics 530 + WSL2                     → не підтримується апстрім-матрицею
+NVIDIA GTX 1050 Ti + WSL2 + CUDA                 → перевірений наживо шлях CML
+```
+
+Це обмеження хоста/платформи, а не причина видаляти Intel із міжвендорної 
+(cross-vendor) моделі CML. Майбутній пристрій Intel, виявлений через wgpu 
+або Level Zero, зможе увійти в ту саму політику вибору без змін у семантиці 
+`my-lisp` або Compute IR.
+
+Головне посилання на джерело (upstream):
+<https://github.com/intel/compute-runtime/blob/master/documentation/LEGACY_PLATFORMS.md>
