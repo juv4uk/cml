@@ -10,7 +10,13 @@
 
 ((kind . tasks-my)
  (tasks .
-  (("CML-LENGTH-E2E" .
+  (   ("BILINGUAL-DOCUMENTATION-AUDIT" .
+    ((priority . 9.0)
+     (capabilities . (documentation translation audit policy))
+     (origin . ecosystem)
+     (description . "Enforce the DOCUMENTATION LANGUAGE / МОВА ДОКУМЕНТАЦІЇ policy. Every human-authored markdown file (README, memory, plans, architecture, research) MUST have a substantive Ukrainian translation. Identify English-only documents and translate them. Do not translate machine identifiers or immutable historical records. Ensure every new or edited markdown document is bilingual.")))
+
+("CML-LENGTH-E2E" .
     ((priority . 0.9)
      (capabilities . (compiler rust proof))
      (done . t)
