@@ -32,3 +32,44 @@ the executable stack note, and returns the final value word in `rax`.
 assembler and inspects the resulting object with `nm -u`. Undefined symbols
 must be a subset of the target contract's `wsm_*` runtime imports. Runtime
 behavior and QEMU boot parity remain separate later milestones.
+
+---
+
+# x86_64 freestanding backend — перший зріз (Ukrainian)
+
+`src/x86_freestanding.rs` є детермінованим генератором GNU assembly з
+узгодженого (admitted) `Ir`. Він імпортує своє числове представлення значень
+через крейт `wsm-os-target`, закріплений (pinned) у `Cargo.toml`; він не копіює
+Rust `my_lisp::Value`, NaN-boxing, чи макети вказівників хоста.
+
+Початкова підтримувана поверхня навмисно обмежена:
+
+- integer, `()` та `t` літерали (immediates);
+- quoted integers, символи, звичайні (proper) та точкові (dotted) списки;
+- `cons`, `car`, `cdr`, `eq` та `atom` через версіонований ABI `wsm_*`;
+- логічні розгалуження `cond` (перевірка строгої ідентичності `()`);
+- безпечна (checked) fixnum арифметика (`+`, `-`), яка при переповненні
+  повертає помилку виходу за межі;
+- само-рекурсивні хвостові виклики, оптимізовані в цикли (сталий розмір фрейму стеку).
+
+Будь-який інший IR-вузол зазнає невдачі (fails) під час повного етапу
+попередньої перевірки (preflight) ще до створення вихідного буфера. Тут
+немає libc, системних викликів (syscalls), файлової системи, fallbacks на
+C-backend, чи претензій на повну підтримку `my-lisp 3.0`.
+
+Згенерована точка входу відповідає цільовому контракту:
+
+```text
+Value wsm_entry(RuntimeContext *context)
+```
+
+Він зберігає непрозорий (opaque) контекст у callee-saved регістрі `r12`,
+підтримує вирівнювання стеку перед викликами runtime, зберігає callee-saved
+регістри згідно із SysV AMD64, вимикає прапорець виконуваного стеку (executable
+stack note) і повертає кінцеве значення у регістрі `rax`.
+
+`tests/x86_freestanding_test.rs` асемблює згенерований `.s` за допомогою
+реального асемблера хоста та інспектує отриманий об'єкт через `nm -u`. 
+Невизначені (undefined) символи повинні бути лише підмножиною імпортів
+`wsm_*` з цільового контракту. Перевірка поведінки під час виконання та
+завантаження в QEMU (QEMU boot parity) є окремими, пізнішими віхами.
