@@ -30,7 +30,7 @@ The compiler handles:
 
 The freestanding x86_64 slice is documented separately in
 [`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). It
-currently supports only literals/quote and `cons`/`car`/`cdr`/`eq`/`atom`;
+currently supports literals/quote, `cons`/`car`/`cdr`/`eq`/`atom`, `cond`, checked fixnum arithmetic (`+`/`-`), and loop-optimized self-tail-calls;
 this is not a claim of full language or boot parity.
 
 [View Test Results](test_results.md) · [Testing](docs/testing.md)
@@ -73,7 +73,7 @@ cargo run -- path/to/source.my
 
 Freestanding x86_64 зріз окремо описаний у
 [`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). Наразі
-це лише literals/quote і `cons`/`car`/`cdr`/`eq`/`atom`, без заяви про повну
+він підтримує literals/quote, `cons`/`car`/`cdr`/`eq`/`atom`, `cond`, арифметику з перевіркою (`+`/`-`), та loop-optimized self-tail-calls, без заяви про повну
 мовну або boot parity.
 
 [Переглянути результати тестів](test_results.md) · [Тестування](docs/testing.md)

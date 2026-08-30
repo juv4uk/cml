@@ -77,39 +77,24 @@ this tractable:
 So the language's "encourages pure code" property is not a style bonus —
 it is the architectural precondition for multi-target execution.
 
-## Current reality (as of this commit)
+## Current Executable State (August 2026)
 
-`cml` is a **two-backend** compiler sharing one IR:
+`cml` is a **multi-backend** heterogeneous compiler sharing one semantic IR:
 
-- `src/parser.rs` → `src/ast.rs` → macro expansion → `src/lower.rs` →
-  `ir::Ir` (`src/ir.rs`) → either `src/compiler.rs` (fpga-lisp ISA,
-  hardware-verified, `docs/abi.md`'s register discipline) or
-  `src/c_backend.rs` (C source, built and run with real `gcc`, verified
-  against the live `my-lisp` oracle rather than by inspection).
-- `Ir` covers: literals, `nil`/`t`, variables, `quote` (integers/
-  symbols/lists/dotted lists), `lambda` (fixed, variadic, and
-  bare-symbol param lists), application, `cond`, `let`, `def`
-  (including self-recursive, via a letrec-placeholder-plus-backpatch
-  pattern both backends implement independently -- `SETCDR` on
-  fpga-lisp, a literal C struct-field mutation in `c_backend.rs`), and
-  the primitives `cons`/`car`/`cdr`/`eq`/`atom`/`equal?`/`+`.
-- Neither backend supports rationals/bignums/inexact numbers yet
-  (`compatibility.my`'s `limitations`) -- `*` was never implemented on
-  any backend either (the original `(def square (lambda (x) (* x x)))`
-  acceptance example in step 2 below used it before that was noticed;
-  the actually-verified fixtures use `+`).
-- Long-term goal in `README.md`: run `unify.my`/`reason.my` fast on
-  fpga-lisp hardware. That stays; it's the fpga-lisp backend's target,
-  same as before the IR existed.
+- `src/parser.rs` → `src/ast.rs` → macro expansion → `src/lower.rs` → `ir::Ir` (`src/ir.rs`)
+- Backends:
+  - **FPGA (`src/compiler.rs`)**: fpga-lisp ISA, hardware-verified.
+  - **C (`src/c_backend.rs`)**: Hosted C source, verified against the my-lisp oracle.
+  - **x86_64 Freestanding (`src/x86_freestanding.rs`)**: Target ABI compatible GNU assembly for `wsm-os`, featuring bounded fail-closed semantics.
+  - **CUDA (`src/gpu_cuda.rs` / `src/gpu_cuda_runtime.rs`)**: Emits and launches PTX compute kernels based on explicit execution graph analysis.
+  - **WGPU (`src/gpu_wgsl.rs` / `src/gpu_wgpu_runtime.rs`)**: Portable WGSL compute backend (optional).
+- `Ir` covers: literals, `nil`/`t`, variables, `quote`, `lambda`, application, `cond`, `let`, `def`, primitives, and new Compute representations (`Map`, `Reduce`, `Scan`, `Index`, `ParallelRegion`). It also features `Buffer` (I32/F32) and `TailSelfCall`.
+- Neither backend supports rationals/bignums/inexact numbers yet (`compatibility.my`'s `limitations`).
+- Backends explicitly fail-closed in a preflight validation step (`validate_ir`), meaning if an IR variant (like `Ir::Builtin`) is not supported, it is rejected with a typed `CompileError` rather than silently admitted and panicked upon.
 
-The C backend is real but intentionally narrower in one respect the
-fpga-lisp backend isn't held to: it hasn't been exercised against the
-full `tests/fixtures/conformance.my` suite the way `conformance_test.rs`
-exercises `compiler.rs` (`ir_lowering_test.rs` only proves *lowering*
-succeeds for every tier-1 fixture, not that `c_backend.rs` compiles and
-runs each one correctly) -- worth closing before claiming real parity.
+The Execution Graph (in `src/execution*.rs`) now orchestrates these nodes, ensuring typed buffers correctly map between CPU host logic and GPU compute kernels, without claiming direct GPU-to-FPGA transfers.
 
-## Incremental path (no rewrite)
+## Historical Plan & Architecture Path (Preserved)
 
 ### Symbol ABI bridge (2026-08-24)
 
@@ -122,53 +107,13 @@ proof only; it does not transfer language or backend authority to either
 assembler. The compiler-test harness now prefers the release `my-lisp`
 assembler and falls back to Python only when that binary is unavailable.
 
-1. **Draw the backend boundary inside cml.** ✅ Done (`src/ir.rs` +
-   `src/lower.rs`): a backend-neutral `Ir` covering every form `compile_*`
-   in `compiler.rs` handles (literals, `quote`, `cond`, `lambda`/variadic
-   params, `let`, `def`, the seven primitives + `+`/`equal?`, application),
-   plus `ast::Expr -> Ir` lowering. Verified: `tests/ir_lowering_test.rs`
-   lowers every tier-1 conformance fixture and the real `length`/
-   `length-onto` pair from `core.my` without error. **Additive only** —
-   `compiler.rs`'s existing `ast::Expr -> fpga-lisp-ISA` path is
-   untouched; nothing consumes `Ir` yet, so this step proves the
-   boundary is well-defined without risking the hardware-verified path.
-   ✅ Done (`a88970e`): `compiler.rs` rewritten form-for-form against
-   `Ir`/`Params`/`PrimOp`/`Quoted` instead of `ast::Expr` -- same
-   register sequences, same labels, same emit order. Zero external
-   behavior change verified: full regression clean, and the real
-   `length`/`length-onto` pair assembles to the identical 218
-   instructions as before. Also fixed a real lowering bug this surfaced
-   (a source string literal was wrongly lowering to a variable lookup
-   instead of a `LOADSYM` literal). `Ir` is now the only thing
-   `compiler.rs` sees -- `ast::Expr` never reaches code generation.
-   Next: start the C backend.
-2. **C backend next, not CUDA.** ✅ First increment done (`e7bc0df`):
-   `src/c_backend.rs`, a small tagged-union `Value` runtime with a
-   mutable-cons alist env, one C function per lambda, self-recursive
-   `def` via the same letrec-placeholder-plus-backpatch idea
-   `compile_def` uses on fpga-lisp. Verified against the real my-lisp
-   oracle (not just internal consistency): `((lambda (x) (+ x 1)) 41)`
-   and a self-recursive `(count 3)` both compile to C, build with real
-   `gcc`, run, and match the oracle exactly (`tests/c_backend_test.rs`).
-   Scoped down deliberately: fixed-arity lambda params only, no `let`,
-   no quoted lists yet (documented in the module's own doc comment, not
-   silently missing) -- the doc's own `(* x x)` example used a primitive
-   (`*`) `cml` has never actually implemented on any backend, so the
-   verified fixture uses `+` instead.
-3. **Compute analysis after C.** ✅ M0 implemented in `src/compute.rs`:
-   `map`/`reduce` are classified as element-wise/reduction regions, effects
-   and storage/numeric facts are recorded, and GPU admission fails closed.
-   Ordinary quoted lists remain linked storage and exact numbers are never
-   silently converted to floats. See `compute-contract.my`.
-4. **Portable GPU backend after a typed-buffer contract.** The backend may
-   be implemented in Rust through a portable GPU API; a later CUDA-specific
-   emitter is an optimization, not language semantics. No emitter is admitted
-   until my-lisp and CML share an explicit contiguous numeric representation.
-5. **fpga-lisp stays as a backend** of the same semantic IR, with a future
-   dataflow lowering as a separate specialization path.
+1. **Draw the backend boundary inside cml.** ✅ Done: a backend-neutral `Ir` covering every form `compile_*` in `compiler.rs` handles.
+2. **C backend next, not CUDA.** ✅ Done: `src/c_backend.rs`, a small tagged-union `Value` runtime.
+3. **Compute analysis after C.** ✅ Done: M0 implemented in `src/compute.rs`, GPU admission fails closed.
+4. **Portable GPU backend after a typed-buffer contract.** ✅ Done: WGPU and CUDA backends implemented and integrated into the execution graph.
+5. **fpga-lisp stays as a backend** of the same semantic IR, with a future dataflow lowering as a separate specialization path.
 
-Later, the target can even be *chosen by the compiler* when provably
-safe, and a single program can span all three:
+Later, the target can even be *chosen by the compiler* when provably safe, and a single program can span all three:
 
 ```lisp
 (let ((raw (fpga-read)))
@@ -180,7 +125,7 @@ safe, and a single program can span all three:
 
 The four-repo swarm already maps onto this: `my-lisp` (language/semantic
 source of truth), `cml` (compiler middle-end), `fpga-lisp` (FPGA
-backend), `my-idea` (observatory). New execution backends (C, CUDA) may
+backend), `my-idea` (observatory). New execution backends (C, CUDA, x86_64) may
 each become their own node in the P2P mesh — the mesh is designed for
 new members to join with a single `--connect` (see my-lisp
 `docs/swarm-mesh-v2.md`).
@@ -191,8 +136,5 @@ against each other's implementation.
 
 ## Non-goals for now
 
-- No separate "my-lisp → CUDA compiler" project; no CUDA work until the
-  IR and C backend exist.
-- No GPU in the build toolchain (Guix does not package the CUDA toolkit;
-  nvcc stays a host-side Ubuntu tool when/if CUDA work begins).
+- No GPU in the build toolchain (Guix does not package the CUDA toolkit; nvcc stays a host-side Ubuntu tool).
 - No change to fpga-lisp's contract or to `:9999` semantics.

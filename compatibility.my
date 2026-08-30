@@ -59,7 +59,7 @@
                cond lambda application cons car cdr eq atom equal? defmacro
                def recursive-def-letrec
                let-as-lambda-lowering variadic-up-to-eight-arguments))
- (representational-substitutions . ((source-string . target-symbol)))
+ (representational-substitutions . ((none-for-now . "Expr::String now properly lowers to Ir::String rather than Ir::Quote(Sym)")) )
  (contract-2.0-migration . ((change . "apostrophe-no-longer-quote-reader-sugar")
                             (fixed-in . "src/parser.rs, commit c631dbf")
                             (note . "a leading ' used to auto-expand into (quote ...); now folds into the identifier it's touching, matching real my-lisp's own apostrophe_is_no_longer_quote_sugar_but_part_of_symbol parser test. explicit (quote ...) is required from here on -- tests/fixtures/conformance.my already used only that form, which is why this gap survived undetected until a live contract-drift check found it")))

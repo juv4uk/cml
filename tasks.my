@@ -287,6 +287,7 @@
     (priority . 9.0)
     (capabilities . (cml compiler testing ir proof))
     (description . "Add exhaustive classification tests across all backends for every Ir and Quoted variant. Prove that each variant is either successfully emitted or rejected with a typed CompileError, ensuring no 'admit -> panic' paths remain (e.g. wildcard unreachable!).")
+    (done . t)
   ))
 
   ("CML-DOCS-ARCHITECTURAL-RECONCILIATION" . (
@@ -294,6 +295,7 @@
     (capabilities . (cml documentation architecture))
     (depends-on . (CML-EXHAUSTIVE-IR-CLASSIFICATION-TEST))
     (description . "Reconcile authoritative documentation with the current executable state. Update README, compatibility.my (e.g. string vs symbol lowering), heterogeneous-backends.md, and x86-freestanding-backend.md. Consider splitting historical plans from current execution reality.")
+    (done . t)
   ))
 
   ("CML-TARGET-ABI-PINNING" . (

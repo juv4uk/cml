@@ -9,7 +9,10 @@ The initial supported surface is intentionally bounded:
 
 - integer, `()` and `t` immediates;
 - quoted integers, symbols, proper lists and dotted lists;
-- `cons`, `car`, `cdr`, `eq` and `atom` through the versioned `wsm_*` ABI.
+- `cons`, `car`, `cdr`, `eq` and `atom` through the versioned `wsm_*` ABI;
+- `cond` boolean branching (checking strict `()` identity);
+- checked fixnum arithmetic (`+`, `-`) yielding opaque boundary errors on overflow;
+- loop-optimized self-tail-calls (constant stack frame footprint).
 
 Every other IR node fails during a complete preflight pass before the output
 buffer exists. There is no libc, syscall, filesystem, C-backend fallback, or
