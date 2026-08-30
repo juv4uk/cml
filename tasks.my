@@ -282,4 +282,23 @@
     (done . t)
     (context . "Verified 2026-08-30: CUDA backend correctly emits bounds-checked i32 and f32 map kernels based on explicitly admitted IR. No automatic offload claims exist; semantic admission gates everything.")
   ))
+
+  ("CML-EXHAUSTIVE-IR-CLASSIFICATION-TEST" . (
+    (priority . 9.0)
+    (capabilities . (cml compiler testing ir proof))
+    (description . "Add exhaustive classification tests across all backends for every Ir and Quoted variant. Prove that each variant is either successfully emitted or rejected with a typed CompileError, ensuring no 'admit -> panic' paths remain (e.g. wildcard unreachable!).")
+  ))
+
+  ("CML-DOCS-ARCHITECTURAL-RECONCILIATION" . (
+    (priority . 8.5)
+    (capabilities . (cml documentation architecture))
+    (depends-on . (CML-EXHAUSTIVE-IR-CLASSIFICATION-TEST))
+    (description . "Reconcile authoritative documentation with the current executable state. Update README, compatibility.my (e.g. string vs symbol lowering), heterogeneous-backends.md, and x86-freestanding-backend.md. Consider splitting historical plans from current execution reality.")
+  ))
+
+  ("CML-TARGET-ABI-PINNING" . (
+    (priority . 8.0)
+    (capabilities . (cml wsm-os cross-repo architecture))
+    (description . "Pin and verify the specific target ABI identity (schema, version, digest) consumed by CML. Update the git pin of wsm-os-target to align with the current ABI and implement stronger validation in artifacts so that target ABI can evolve without silent cross-repo drift.")
+  ))
 ))
