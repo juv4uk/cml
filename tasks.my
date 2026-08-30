@@ -228,8 +228,9 @@
   ("CML-FULL-SEMANTIC-IR" . (
     (priority . 7.5)
     (capabilities . (cml compiler rust ir))
-    (description . "Extend Ir to represent complete current my-lisp semantics and GPU-oriented Compute IR. Current lowering is structural AST-to-IR translation without full semantic analysis. Per VIVEKA-MY-LISP-CML-ANALYSIS section 4.")
+    (description . "Extend Ir to represent current my-lisp semantics and GPU-oriented Compute IR. Current lowering is structural AST-to-IR translation without full semantic analysis. Establish fail-closed backend boundaries for admitted IR.")
     (done . t)
+    (context . "Verified 2026-08-30: Semantic representations added, lowering correctly distinguishes strings/symbols, and backends fail-closed via exact CompileError::Unsupported variants without panicking. Full systematic semantic analysis remains a future milestone per heterogeneous-backends.md.")
   ))
   ("CML-CONTRACT-REALIGNMENT-M0" . (
     (priority . 8.0)
