@@ -85,7 +85,7 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
         }
         Ir::Def { value, .. } => validate_ir(value),
         Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
-        Ir::Nil | Ir::True | Ir::Var(_) | Ir::Builtin(_) => Ok(()),
+        Ir::Nil | Ir::True | Ir::Var(_) => Ok(()),
         Ir::TailSelfCall { .. } => Err(CompileError::Unsupported(
             "TailSelfCall is x86-only".to_string(),
         )),
