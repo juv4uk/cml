@@ -12,7 +12,7 @@ gpu-cuda = ["dep:cudarc"]
 cudarc = { version = "0.19.9", default-features = false, features = ["std", "driver", "nvrtc", "dynamic-loading", "cuda-12000"], optional = true }
 pollster = { version = "1.0.1", optional = true }
 wgpu = { version = "30.0.0", default-features = false, features = ["std", "wgsl", "vulkan", "gles"], optional = true }
-wsm-os-target = { git = "https://github.com/juv4uk/wsm-os.git", rev = "fe168ebc572c82c237faa4a952eec63e531dcc47" }
+wsm-os-target = { git = "https://github.com/juv4uk/wsm-os.git", rev = "d1e54b3" }
 
 [dev-dependencies]
 my-lisp = { path = "../my-lisp/crates/my-lisp" }
