@@ -267,7 +267,20 @@ fn preflight(
         Ir::Buffer(_) => return Err(CompileError::Unsupported("typed buffer")),
         Ir::Var(_) => {}
         Ir::Lambda { .. } => return Err(CompileError::Unsupported("lambda")),
-        Ir::App { .. } => return Err(CompileError::Unsupported("application")),
+        Ir::App { func, args } => {
+            if let Ir::Lambda {
+                params: Params::Fixed(params),
+                body,
+            } = func.as_ref()
+            {
+                if params.len() == 1 && args.len() == 1 {
+                    if matches!(body.as_ref(), Ir::Var(name) if name == &params[0]) {
+                        return preflight(&args[0], symbols, slots);
+                    }
+                }
+            }
+            return Err(CompileError::Unsupported("application"));
+        }
         Ir::Cond { branches } => {
             for (test, expr) in branches {
                 preflight(test, symbols, slots)?;
@@ -418,6 +431,24 @@ impl Emitter {
             Ir::Quote(value) => self.emit_quoted(value)?,
             Ir::Cond { branches } => self.emit_cond(branches)?,
             Ir::Prim { op, args } => self.emit_primitive(*op, args)?,
+            Ir::App { func, args } => {
+                if let Ir::Lambda {
+                    params: Params::Fixed(params),
+                    body,
+                } = func.as_ref()
+                {
+                    if params.len() == 1
+                        && args.len() == 1
+                        && matches!(body.as_ref(), Ir::Var(name) if name == &params[0])
+                    {
+                        self.emit_ir(&args[0])?;
+                    } else {
+                        unreachable!("preflight excludes non-identity application");
+                    }
+                } else {
+                    unreachable!("preflight excludes non-lambda application");
+                }
+            }
             Ir::Var(name) => {
                 if let Some(&slot) = self.env.get(name) {
                     self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(slot)));

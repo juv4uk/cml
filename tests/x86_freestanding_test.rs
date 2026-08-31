@@ -141,6 +141,22 @@ fn closures_are_rejected_before_x86_emission() {
 }
 
 #[test]
+fn identity_lambda_application_is_admitted_by_beta_reduction() {
+    let program = vec![Ir::App {
+        func: Box::new(Ir::Lambda {
+            params: Params::Fixed(vec!["x".to_string()]),
+            body: Box::new(Ir::Var("x".to_string())),
+        }),
+        args: vec![Ir::Int(7)],
+    }];
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("identity lambda is the first admitted application");
+    let encoded = wsm_os_target::encode_fixnum(7).unwrap();
+    assert!(assembly.contains(&format!("movabsq ${encoded}, %rax")));
+}
+
+#[test]
 fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
     let backend = X86FreestandingBackend::new();
     assert_eq!(
