@@ -122,6 +122,7 @@ impl X86FreestandingBackend {
             env: BTreeMap::new(),
             next_slot: 0,
             next_label: 0,
+            closure_labels: Vec::new(),
         };
         emitter.line(".text");
         emitter.line(".globl wsm_entry");
@@ -204,6 +205,7 @@ impl X86FreestandingBackend {
             // Body gets slots starting after the param slots.
             next_slot: param_count,
             next_label: 0,
+            closure_labels: Vec::new(),
         };
 
         emitter.line(".text");
@@ -266,6 +268,13 @@ fn preflight(
         }
         Ir::Buffer(_) => return Err(CompileError::Unsupported("typed buffer")),
         Ir::Var(_) => {}
+        Ir::Lambda {
+            params: Params::Fixed(params),
+            body,
+        } if params.len() == 1 => {
+            let bindings = BTreeSet::from([params[0].clone()]);
+            preflight_lambda_body(body, &bindings, symbols, slots)?;
+        }
         Ir::Lambda { .. } => return Err(CompileError::Unsupported("lambda")),
         Ir::App { func, args } => {
             if let Ir::Lambda {
@@ -279,7 +288,11 @@ fn preflight(
                     return preflight_lambda_body(body, &bindings, symbols, slots);
                 }
             }
-            return Err(CompileError::Unsupported("application"));
+            if args.len() != 1 {
+                return Err(CompileError::Unsupported("application"));
+            }
+            preflight(func, symbols, slots)?;
+            preflight(&args[0], symbols, slots)?;
         }
         Ir::Cond { branches } => {
             for (test, expr) in branches {
@@ -341,17 +354,16 @@ fn preflight_lambda_body(
             Ok(())
         }
         Ir::App { func, args } => {
-            let Ir::Lambda {
-                params: Params::Fixed(params),
-                body,
-            } = func.as_ref()
-            else {
-                return Err(CompileError::Unsupported("application"));
-            };
-            if params.len() != 1 || args.len() != 1 {
+            if args.len() != 1 {
                 return Err(CompileError::Unsupported("application"));
             }
-            preflight_lambda_body(&args[0], bindings, symbols, slots)?;
+            preflight_lambda_body(func, bindings, symbols, slots)?;
+            preflight_lambda_body(&args[0], bindings, symbols, slots)
+        }
+        Ir::Lambda {
+            params: Params::Fixed(params),
+            body,
+        } if params.len() == 1 => {
             let mut nested_bindings = bindings.clone();
             nested_bindings.insert(params[0].clone());
             preflight_lambda_body(body, &nested_bindings, symbols, slots)
@@ -452,6 +464,7 @@ struct Emitter {
     env: BTreeMap<String, usize>,
     next_slot: usize,
     next_label: usize,
+    closure_labels: Vec<usize>,
 }
 
 impl Emitter {
@@ -500,8 +513,14 @@ impl Emitter {
                         unreachable!("preflight excludes unsupported lambda application");
                     }
                 } else {
-                    unreachable!("preflight excludes non-lambda application");
+                    self.emit_single_argument_closure_call(func, &args[0])?;
                 }
+            }
+            Ir::Lambda {
+                params: Params::Fixed(params),
+                body,
+            } if params.len() == 1 => {
+                self.emit_single_argument_closure_value(&params[0], body)?;
             }
             Ir::Var(name) => {
                 if let Some(&slot) = self.env.get(name) {
@@ -579,6 +598,159 @@ impl Emitter {
         self.line(&format!("    addq ${frame_bytes}, %rsp"));
         self.line("    ret");
         self.line(&format!(".Llambda_after_{continuation_label}:"));
+        Ok(())
+    }
+
+    /// Materialize a unary closure in the runtime-owned closure arena. The
+    /// captured environment is a WSM list allocated in the ordinary cons heap,
+    /// so it outlives the defining native frame.
+    fn emit_single_argument_closure_value(
+        &mut self,
+        parameter: &str,
+        body: &Ir,
+    ) -> Result<(), CompileError> {
+        let captures = self.env.clone();
+        let definition_id = self.allocate_label() + 1;
+        self.closure_labels.push(definition_id);
+
+        self.emit_immediate(wsm_os_target::NIL);
+        for (_, slot) in captures.iter().rev() {
+            let tail_slot = self.allocate_slot();
+            self.line(&format!(
+                "    movq %rax, {}(%rsp)",
+                Self::slot_offset(tail_slot)
+            ));
+            self.line("    movq %r12, %rdi");
+            self.line(&format!(
+                "    movq {}(%rsp), %rsi",
+                Self::slot_offset(*slot)
+            ));
+            self.line(&format!(
+                "    movq {}(%rsp), %rdx",
+                Self::slot_offset(tail_slot)
+            ));
+            self.line("    call wsm_cons");
+        }
+        self.line("    movq %rax, %rdx");
+        self.line("    movq %r12, %rdi");
+        self.line(&format!("    movl ${definition_id}, %esi"));
+        self.line("    call wsm_closure_new");
+
+        let after_label = self.allocate_label();
+        self.line(&format!("    jmp .Lclosure_after_{after_label}"));
+        self.line(&format!(".Lclosure_{definition_id}:"));
+
+        let mut ignored_symbols = BTreeSet::new();
+        let mut body_slots = 0;
+        let mut bindings = BTreeSet::from([parameter.to_string()]);
+        bindings.extend(captures.keys().cloned());
+        preflight_lambda_body(body, &bindings, &mut ignored_symbols, &mut body_slots)?;
+        let required_slots = 2 + captures.len() + body_slots;
+        let frame_slots = if required_slots % 2 == 1 {
+            required_slots
+        } else {
+            required_slots + 1
+        };
+        let frame_bytes = frame_slots * 8;
+        self.line(&format!("    subq ${frame_bytes}, %rsp"));
+        self.line("    movq %rsi, 0(%rsp)");
+        self.line("    movq %rdx, 8(%rsp)");
+
+        let saved_env = core::mem::take(&mut self.env);
+        let saved_next_slot = self.next_slot;
+        self.env.insert(parameter.to_string(), 0);
+        self.next_slot = 2;
+        for name in captures.keys() {
+            let local_slot = self.next_slot;
+            self.next_slot += 1;
+            self.line("    movq %r12, %rdi");
+            self.line("    movq 8(%rsp), %rsi");
+            self.line("    call wsm_car");
+            self.line(&format!(
+                "    movq %rax, {}(%rsp)",
+                Self::slot_offset(local_slot)
+            ));
+            self.line("    movq %r12, %rdi");
+            self.line("    movq 8(%rsp), %rsi");
+            self.line("    call wsm_cdr");
+            self.line("    movq %rax, 8(%rsp)");
+            self.env.insert(name.clone(), local_slot);
+        }
+        self.emit_ir(body)?;
+        self.env = saved_env;
+        self.next_slot = saved_next_slot;
+        self.line(&format!("    addq ${frame_bytes}, %rsp"));
+        self.line("    ret");
+        self.line(&format!(".Lclosure_after_{after_label}:"));
+        Ok(())
+    }
+
+    fn emit_single_argument_closure_call(
+        &mut self,
+        function: &Ir,
+        argument: &Ir,
+    ) -> Result<(), CompileError> {
+        self.emit_ir(function)?;
+        let closure_slot = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(closure_slot)
+        ));
+        self.emit_ir(argument)?;
+        let argument_slot = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(argument_slot)
+        ));
+
+        self.line("    movq %r12, %rdi");
+        self.line(&format!(
+            "    movq {}(%rsp), %rsi",
+            Self::slot_offset(closure_slot)
+        ));
+        self.line("    call wsm_closure_environment");
+        let environment_slot = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(environment_slot)
+        ));
+        self.line("    movq %r12, %rdi");
+        self.line(&format!(
+            "    movq {}(%rsp), %rsi",
+            Self::slot_offset(closure_slot)
+        ));
+        self.line("    call wsm_closure_definition");
+
+        let known_labels = self.closure_labels.clone();
+        let end_label = self.allocate_label();
+        for definition_id in known_labels {
+            let next_label = self.allocate_label();
+            self.line(&format!("    cmpl ${definition_id}, %eax"));
+            self.line(&format!("    jne .Lclosure_dispatch_{next_label}"));
+            self.line(&format!(
+                "    movq {}(%rsp), %rsi",
+                Self::slot_offset(argument_slot)
+            ));
+            self.line(&format!(
+                "    movq {}(%rsp), %rdx",
+                Self::slot_offset(environment_slot)
+            ));
+            self.line(&format!("    call .Lclosure_{definition_id}"));
+            self.line(&format!("    jmp .Lclosure_call_end_{end_label}"));
+            self.line(&format!(".Lclosure_dispatch_{next_label}:"));
+        }
+        self.line("    movq %r12, %rdi");
+        self.line(&format!(
+            "    movl ${}, %esi",
+            wsm_os_target::ErrorCode::AbiViolation as u32
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rdx",
+            Self::slot_offset(closure_slot)
+        ));
+        self.line("    xorl %ecx, %ecx");
+        self.line("    call wsm_fail");
+        self.line(&format!(".Lclosure_call_end_{end_label}:"));
         Ok(())
     }
 

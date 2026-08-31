@@ -130,14 +130,31 @@ fn quoted_strings_are_rejected_instead_of_being_collapsed_into_symbols() {
 }
 
 #[test]
-fn closures_are_rejected_before_x86_emission() {
-    let error = X86FreestandingBackend::new()
+fn unary_closure_value_is_materialized_in_the_runtime_arena() {
+    let assembly = X86FreestandingBackend::new()
         .compile_program(&[Ir::Lambda {
             params: Params::Fixed(vec!["x".to_string()]),
             body: Box::new(Ir::Var("x".to_string())),
         }])
-        .expect_err("general closures are not admitted by the x86 slice");
-    assert_eq!(error, CompileError::Unsupported("lambda"));
+        .expect("bounded unary closure should be materialized");
+    assert!(assembly.contains("call wsm_closure_new"));
+    assert!(assembly.contains(".Lclosure_1:"));
+}
+
+#[test]
+fn escaping_captured_closure_source_reaches_x86_admission() {
+    let expressions = parser::parse(
+        "(((lambda (x) (lambda (y) (cons x (cons y (quote ()))))) (quote A)) (quote B))",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("escaping captured closure should reach the bounded target slice");
+    assert!(assembly.contains("call wsm_closure_new"));
+    assert!(assembly.contains("call wsm_closure_environment"));
+    assert!(assembly.contains("call wsm_closure_definition"));
+    assert!(assembly.contains("call .Lclosure_"));
 }
 
 #[test]
