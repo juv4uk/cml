@@ -119,6 +119,17 @@ fn symbols_are_image_local_and_ordered_independently_of_traversal() {
 }
 
 #[test]
+fn quoted_strings_are_rejected_instead_of_being_collapsed_into_symbols() {
+    let error = X86FreestandingBackend::new()
+        .compile_program(&[Ir::Quote(Quoted::Str("notes/today".to_string()))])
+        .expect_err("target ABI has no string representation");
+    assert_eq!(
+        error,
+        CompileError::Unsupported("quoted string (target ABI has no string representation)")
+    );
+}
+
+#[test]
 fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
     let backend = X86FreestandingBackend::new();
     assert_eq!(

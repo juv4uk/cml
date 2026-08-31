@@ -331,8 +331,16 @@ fn preflight_quoted(
         Quoted::Int(value) => {
             wsm_os_target::encode_fixnum(*value).ok_or(CompileError::FixnumOutOfRange(*value))?;
         }
-        Quoted::Sym(name) | Quoted::Str(name) => {
+        Quoted::Sym(name) => {
             symbols.insert(name.to_uppercase());
+        }
+        // The wsm-os target ABI has image-local symbols but no string
+        // representation.  Do not silently collapse a persistent WSM FS
+        // string (for example a binding name) into a symbol.
+        Quoted::Str(_) => {
+            return Err(CompileError::Unsupported(
+                "quoted string (target ABI has no string representation)",
+            ));
         }
         Quoted::Nil => {}
         Quoted::List(values) => {
@@ -464,7 +472,12 @@ impl Emitter {
                     .ok_or(CompileError::FixnumOutOfRange(*value))?;
                 self.emit_immediate(word);
             }
-            Quoted::Sym(name) | Quoted::Str(name) => self.emit_symbol(name),
+            Quoted::Sym(name) => self.emit_symbol(name),
+            Quoted::Str(_) => {
+                return Err(CompileError::Unsupported(
+                    "quoted string (target ABI has no string representation)",
+                ));
+            }
             Quoted::Nil => self.emit_immediate(wsm_os_target::NIL),
             Quoted::List(values) => {
                 self.emit_immediate(wsm_os_target::NIL);

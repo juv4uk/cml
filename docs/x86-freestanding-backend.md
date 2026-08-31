@@ -9,6 +9,7 @@ The initial supported surface is intentionally bounded:
 
 - integer, `()` and `t` immediates;
 - quoted integers, symbols, proper lists and dotted lists;
+- quoted strings are rejected (the target ABI has no distinct string value);
 - `cons`, `car`, `cdr`, `eq` and `atom` through the versioned `wsm_*` ABI;
 - `cond` boolean branching (checking strict `()` identity);
 - checked fixnum arithmetic (`+`, `-`) yielding opaque boundary errors on overflow;
@@ -46,6 +47,7 @@ Rust `my_lisp::Value`, NaN-boxing, чи макети вказівників хо
 
 - integer, `()` та `t` літерали (immediates);
 - quoted integers, символи, звичайні (proper) та точкові (dotted) списки;
+- quoted strings відхиляються: цільовий ABI ще не має окремого string value;
 - `cons`, `car`, `cdr`, `eq` та `atom` через версіонований ABI `wsm_*`;
 - логічні розгалуження `cond` (перевірка строгої ідентичності `()`);
 - безпечна (checked) fixnum арифметика (`+`, `-`), яка при переповненні
@@ -73,3 +75,13 @@ stack note) і повертає кінцеве значення у регіст�
 Невизначені (undefined) символи повинні бути лише підмножиною імпортів
 `wsm_*` з цільового контракту. Перевірка поведінки під час виконання та
 завантаження в QEMU (QEMU boot parity) є окремими, пізнішими віхами.
+
+FS boundary: hosted WSM filesystem names such as `"notes/today"` remain
+strings and are not silently re-encoded as image-local symbols by this
+backend. A future freestanding FS image needs a separately ratified string
+or name-reference representation.
+
+Межа FS: імена hosted WSM filesystem, наприклад `"notes/today"`, залишаються
+рядками й не перекодовуються мовчки в image-local symbols. Майбутній
+freestanding FS image потребує окремо ратифікованого представлення рядка або
+посилання на ім'я.
