@@ -317,8 +317,10 @@
   )
   ("CML-CONSTITUTION-FIRST-CLASS-CLOSURES" . (
     (priority . 9.9)
+    (done . t)
     (capabilities . (cml compiler x86 closures environments conformance))
     (origin . cml)
+    (context . "Completed 2026-09-01: CML 1266c83 admits/materializes a bounded escaping unary closure with heap-owned captured environment and image-local definition dispatch. Unchanged fixture oracle=(A B); wsm-os ba899a7 hosted=(A B) and QEMU=(A B), provenance chain verified. N-ary/variadic/general defs remain separate gates.")
     (description . "Compile an escaping closure value with captured lexical environment and later application. Preserve fail-closed admission for unsupported closure shapes; prove unchanged fixture against my-lisp, hosted runtime and QEMU before widening arity.")
   ))
   ("CML-CONSTITUTION-GENERAL-APPLICATION-DEFS" . (
