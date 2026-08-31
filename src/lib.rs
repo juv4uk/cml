@@ -4,6 +4,7 @@ pub mod c_backend;
 pub mod compiler;
 pub mod compute;
 pub mod execution;
+pub mod fs;
 mod execution_scheduler;
 mod execution_store;
 pub mod fpga_transport;
