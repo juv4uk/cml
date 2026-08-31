@@ -157,6 +157,17 @@ fn identity_lambda_application_is_admitted_by_beta_reduction() {
 }
 
 #[test]
+fn identity_lambda_source_reaches_x86_admission() {
+    let expressions = parser::parse("((lambda (x) x) 7)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("source identity lambda should reach the admitted slice");
+    let encoded = wsm_os_target::encode_fixnum(7).unwrap();
+    assert!(assembly.contains(&format!("movabsq ${encoded}, %rax")));
+}
+
+#[test]
 fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
     let backend = X86FreestandingBackend::new();
     assert_eq!(
