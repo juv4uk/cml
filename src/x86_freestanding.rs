@@ -617,13 +617,15 @@ impl Emitter {
         self.line("    movq %rcx, %rax");
         self.line(&format!("    jmp .Larith_ok_{}", ok_label));
 
-        // Overflow path — call wsm_fail(context, ErrorCode::Type=2).
+        // Overflow path — call wsm_fail(context, ErrorCode::Type=2, offending=0, source=0).
         self.line(&format!(".Larith_overflow_{}:", overflow_label));
         self.line("    movq %r12, %rdi");
         self.line(&format!(
             "    movl ${}, %esi",
             wsm_os_target::ErrorCode::Type as u32
         ));
+        self.line("    xorl %edx, %edx");
+        self.line("    xorl %ecx, %ecx");
         self.line("    call wsm_fail");
 
         self.line(&format!(".Larith_ok_{}:", ok_label));
