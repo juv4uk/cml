@@ -21,5 +21,7 @@ fn main() {
         stream.records().len(),
         output.len()
     );
-    io::stdout().write_all(&output).expect("write record stream");
+    io::stdout()
+        .write_all(&output)
+        .expect("write record stream");
 }

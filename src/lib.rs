@@ -4,10 +4,10 @@ pub mod c_backend;
 pub mod compiler;
 pub mod compute;
 pub mod execution;
-pub mod fs;
 mod execution_scheduler;
 mod execution_store;
 pub mod fpga_transport;
+pub mod fs;
 pub mod gpu_cuda;
 #[cfg(feature = "gpu-cuda")]
 pub mod gpu_cuda_runtime;
