@@ -3,7 +3,7 @@ use std::fs;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use cml::ir::{Ir, PrimOp, Quoted};
+use cml::ir::{Ir, Params, PrimOp, Quoted};
 use cml::lower;
 use cml::parser;
 use cml::x86_freestanding::{CompileError, X86FreestandingBackend};
@@ -127,6 +127,17 @@ fn quoted_strings_are_rejected_instead_of_being_collapsed_into_symbols() {
         error,
         CompileError::Unsupported("quoted string (target ABI has no string representation)")
     );
+}
+
+#[test]
+fn closures_are_rejected_before_x86_emission() {
+    let error = X86FreestandingBackend::new()
+        .compile_program(&[Ir::Lambda {
+            params: Params::Fixed(vec!["x".to_string()]),
+            body: Box::new(Ir::Var("x".to_string())),
+        }])
+        .expect_err("general closures are not admitted by the x86 slice");
+    assert_eq!(error, CompileError::Unsupported("lambda"));
 }
 
 #[test]
