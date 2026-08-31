@@ -441,7 +441,7 @@ impl Emitter {
                         && args.len() == 1
                         && matches!(body.as_ref(), Ir::Var(name) if name == &params[0])
                     {
-                        self.emit_ir(&args[0])?;
+                        self.emit_identity_lambda_call(&args[0])?;
                     } else {
                         unreachable!("preflight excludes non-identity application");
                     }
@@ -463,6 +463,24 @@ impl Emitter {
 
     fn emit_immediate(&mut self, word: u64) {
         self.line(&format!("    movabsq ${word}, %rax"));
+    }
+
+    /// Emit the first no-capture lambda/application witness as a real machine
+    /// call. `%rdi` stays reserved for the runtime context; the single value
+    /// argument is passed in `%rsi`. Captured environments and first-class
+    /// closure values remain rejected by preflight.
+    fn emit_identity_lambda_call(&mut self, argument: &Ir) -> Result<(), CompileError> {
+        self.emit_ir(argument)?;
+        self.line("    movq %rax, %rsi");
+        let lambda_label = self.allocate_label();
+        let continuation_label = self.allocate_label();
+        self.line(&format!("    call .Lidentity_lambda_{lambda_label}"));
+        self.line(&format!("    jmp .Lidentity_after_{continuation_label}"));
+        self.line(&format!(".Lidentity_lambda_{lambda_label}:"));
+        self.line("    movq %rsi, %rax");
+        self.line("    ret");
+        self.line(&format!(".Lidentity_after_{continuation_label}:"));
+        Ok(())
     }
 
     fn emit_symbol(&mut self, name: &str) {

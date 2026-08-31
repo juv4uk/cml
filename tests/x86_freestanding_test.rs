@@ -141,7 +141,7 @@ fn closures_are_rejected_before_x86_emission() {
 }
 
 #[test]
-fn identity_lambda_application_is_admitted_by_beta_reduction() {
+fn identity_lambda_application_emits_a_real_machine_call() {
     let program = vec![Ir::App {
         func: Box::new(Ir::Lambda {
             params: Params::Fixed(vec!["x".to_string()]),
@@ -154,6 +154,8 @@ fn identity_lambda_application_is_admitted_by_beta_reduction() {
         .expect("identity lambda is the first admitted application");
     let encoded = wsm_os_target::encode_fixnum(7).unwrap();
     assert!(assembly.contains(&format!("movabsq ${encoded}, %rax")));
+    assert!(assembly.contains("call .Lidentity_lambda_"));
+    assert!(assembly.contains("movq %rsi, %rax"));
 }
 
 #[test]
@@ -165,6 +167,7 @@ fn identity_lambda_source_reaches_x86_admission() {
         .expect("source identity lambda should reach the admitted slice");
     let encoded = wsm_os_target::encode_fixnum(7).unwrap();
     assert!(assembly.contains(&format!("movabsq ${encoded}, %rax")));
+    assert!(assembly.contains("call .Lidentity_lambda_"));
 }
 
 #[test]
