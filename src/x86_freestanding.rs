@@ -275,7 +275,8 @@ fn preflight(
             {
                 if params.len() == 1 && args.len() == 1 {
                     preflight(&args[0], symbols, slots)?;
-                    return preflight_lambda_body(body, &params[0], symbols, slots);
+                    let bindings = BTreeSet::from([params[0].clone()]);
+                    return preflight_lambda_body(body, &bindings, symbols, slots);
                 }
             }
             return Err(CompileError::Unsupported("application"));
@@ -304,13 +305,13 @@ fn preflight(
 
 fn preflight_lambda_body(
     ir: &Ir,
-    parameter: &str,
+    bindings: &BTreeSet<String>,
     symbols: &mut BTreeSet<String>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
     *slots += 1;
     match ir {
-        Ir::Var(name) if name == parameter => Ok(()),
+        Ir::Var(name) if bindings.contains(name) => Ok(()),
         Ir::Var(_) => Err(CompileError::Unsupported("unbound variable")),
         Ir::Int(value) => {
             wsm_os_target::encode_fixnum(*value).ok_or(CompileError::FixnumOutOfRange(*value))?;
@@ -328,16 +329,32 @@ fn preflight_lambda_body(
                 });
             }
             for argument in args {
-                preflight_lambda_body(argument, parameter, symbols, slots)?;
+                preflight_lambda_body(argument, bindings, symbols, slots)?;
             }
             Ok(())
         }
         Ir::Cond { branches } => {
             for (test, expression) in branches {
-                preflight_lambda_body(test, parameter, symbols, slots)?;
-                preflight_lambda_body(expression, parameter, symbols, slots)?;
+                preflight_lambda_body(test, bindings, symbols, slots)?;
+                preflight_lambda_body(expression, bindings, symbols, slots)?;
             }
             Ok(())
+        }
+        Ir::App { func, args } => {
+            let Ir::Lambda {
+                params: Params::Fixed(params),
+                body,
+            } = func.as_ref()
+            else {
+                return Err(CompileError::Unsupported("application"));
+            };
+            if params.len() != 1 || args.len() != 1 {
+                return Err(CompileError::Unsupported("application"));
+            }
+            preflight_lambda_body(&args[0], bindings, symbols, slots)?;
+            let mut nested_bindings = bindings.clone();
+            nested_bindings.insert(params[0].clone());
+            preflight_lambda_body(body, &nested_bindings, symbols, slots)
         }
         _ => Err(CompileError::Unsupported("lambda body")),
     }
@@ -504,16 +521,19 @@ impl Emitter {
 
     /// Emit a bounded, immediately-applied, one-argument lambda as a real
     /// machine call with its own lexical frame. `%rdi` remains the runtime
-    /// context register. Captured environments and first-class closure values
-    /// remain rejected by preflight.
+    /// context register. Existing lexical bindings are closure-converted by
+    /// passing the parent frame pointer and copying bounded captures into the
+    /// callee frame. First-class closure values remain rejected by preflight.
     fn emit_single_argument_lambda_call(
         &mut self,
         parameter: &str,
         body: &Ir,
         argument: &Ir,
     ) -> Result<(), CompileError> {
+        let captures = self.env.clone();
         self.emit_ir(argument)?;
         self.line("    movq %rax, %rsi");
+        self.line("    movq %rsp, %rdx");
         let lambda_label = self.allocate_label();
         let continuation_label = self.allocate_label();
         self.line(&format!("    call .Llambda_{lambda_label}"));
@@ -522,8 +542,10 @@ impl Emitter {
 
         let mut ignored_symbols = BTreeSet::new();
         let mut body_slots = 0;
-        preflight_lambda_body(body, parameter, &mut ignored_symbols, &mut body_slots)?;
-        let required_slots = 1 + body_slots;
+        let mut bindings = BTreeSet::from([parameter.to_string()]);
+        bindings.extend(captures.keys().cloned());
+        preflight_lambda_body(body, &bindings, &mut ignored_symbols, &mut body_slots)?;
+        let required_slots = 1 + captures.len() + body_slots;
         let frame_slots = if required_slots % 2 == 1 {
             required_slots
         } else {
@@ -537,6 +559,19 @@ impl Emitter {
         let saved_next_slot = self.next_slot;
         self.env.insert(parameter.to_string(), 0);
         self.next_slot = 1;
+        for (name, parent_slot) in &captures {
+            let local_slot = self.next_slot;
+            self.next_slot += 1;
+            self.line(&format!(
+                "    movq {}(%rdx), %rax",
+                Self::slot_offset(*parent_slot)
+            ));
+            self.line(&format!(
+                "    movq %rax, {}(%rsp)",
+                Self::slot_offset(local_slot)
+            ));
+            self.env.insert(name.clone(), local_slot);
+        }
         self.emit_ir(body)?;
         self.env = saved_env;
         self.next_slot = saved_next_slot;

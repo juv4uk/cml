@@ -184,6 +184,21 @@ fn single_argument_lambda_body_uses_a_real_lexical_frame() {
 }
 
 #[test]
+fn nested_lambda_copies_a_captured_outer_binding() {
+    let expressions = parser::parse(
+        "((lambda (x) ((lambda (y) (cons x (cons y (quote ())))) (quote B))) (quote A))",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("nested lambda should closure-convert the bounded outer binding");
+    assert_eq!(assembly.matches("call .Llambda_").count(), 2);
+    assert!(assembly.contains("movq %rsp, %rdx"));
+    assert!(assembly.contains("movq 0(%rdx), %rax"));
+}
+
+#[test]
 fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
     let backend = X86FreestandingBackend::new();
     assert_eq!(
