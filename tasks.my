@@ -309,4 +309,10 @@
     (capabilities . (cml wsm-os cross-repo architecture))
     (description . "Pin and verify the specific target ABI identity (schema, version, digest) consumed by CML. Update the git pin of wsm-os-target to align with the current ABI and implement stronger validation in artifacts so that target ABI can evolve without silent cross-repo drift.")
   ))
-))
+  ("CML-WSM-FS-TARGET-ADMISSION" . (
+    (priority . 8.7)
+    (capabilities . (cml wsm filesystem x86 freestanding contract testing))
+    (origin . cml)
+    (description . "Audit every FS-relevant IR path at the freestanding boundary. Keep hosted strings distinct from image-local symbols; reject unsupported string/name/object forms before emission; document the admitted data-only subset and prove deterministic lowering plus explicit unsupported classification. Do not add filesystem semantics or raw persistent pointers to CML.")
+  )
+)
