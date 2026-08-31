@@ -154,8 +154,9 @@ fn identity_lambda_application_emits_a_real_machine_call() {
         .expect("identity lambda is the first admitted application");
     let encoded = wsm_os_target::encode_fixnum(7).unwrap();
     assert!(assembly.contains(&format!("movabsq ${encoded}, %rax")));
-    assert!(assembly.contains("call .Lidentity_lambda_"));
-    assert!(assembly.contains("movq %rsi, %rax"));
+    assert!(assembly.contains("call .Llambda_"));
+    assert!(assembly.contains("movq %rsi, 0(%rsp)"));
+    assert!(assembly.contains("movq 0(%rsp), %rax"));
 }
 
 #[test]
@@ -167,7 +168,19 @@ fn identity_lambda_source_reaches_x86_admission() {
         .expect("source identity lambda should reach the admitted slice");
     let encoded = wsm_os_target::encode_fixnum(7).unwrap();
     assert!(assembly.contains(&format!("movabsq ${encoded}, %rax")));
-    assert!(assembly.contains("call .Lidentity_lambda_"));
+    assert!(assembly.contains("call .Llambda_"));
+}
+
+#[test]
+fn single_argument_lambda_body_uses_a_real_lexical_frame() {
+    let expressions = parser::parse("((lambda (x) (cons x (quote ()))) (quote A))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("one-argument lambda body should use the bounded lexical frame");
+    assert!(assembly.contains("call .Llambda_"));
+    assert!(assembly.contains("movq %rsi, 0(%rsp)"));
+    assert!(assembly.contains("call wsm_cons"));
 }
 
 #[test]

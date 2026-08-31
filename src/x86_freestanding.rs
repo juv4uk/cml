@@ -274,9 +274,8 @@ fn preflight(
             } = func.as_ref()
             {
                 if params.len() == 1 && args.len() == 1 {
-                    if matches!(body.as_ref(), Ir::Var(name) if name == &params[0]) {
-                        return preflight(&args[0], symbols, slots);
-                    }
+                    preflight(&args[0], symbols, slots)?;
+                    return preflight_lambda_body(body, &params[0], symbols, slots);
                 }
             }
             return Err(CompileError::Unsupported("application"));
@@ -301,6 +300,47 @@ fn preflight(
         }
     }
     Ok(())
+}
+
+fn preflight_lambda_body(
+    ir: &Ir,
+    parameter: &str,
+    symbols: &mut BTreeSet<String>,
+    slots: &mut usize,
+) -> Result<(), CompileError> {
+    *slots += 1;
+    match ir {
+        Ir::Var(name) if name == parameter => Ok(()),
+        Ir::Var(_) => Err(CompileError::Unsupported("unbound variable")),
+        Ir::Int(value) => {
+            wsm_os_target::encode_fixnum(*value).ok_or(CompileError::FixnumOutOfRange(*value))?;
+            Ok(())
+        }
+        Ir::Nil | Ir::True => Ok(()),
+        Ir::Quote(value) => preflight_quoted(value, symbols, slots),
+        Ir::Prim { op, args } => {
+            let (name, expected) = primitive_contract(*op)?;
+            if args.len() != expected {
+                return Err(CompileError::InvalidArity {
+                    operation: name,
+                    expected,
+                    actual: args.len(),
+                });
+            }
+            for argument in args {
+                preflight_lambda_body(argument, parameter, symbols, slots)?;
+            }
+            Ok(())
+        }
+        Ir::Cond { branches } => {
+            for (test, expression) in branches {
+                preflight_lambda_body(test, parameter, symbols, slots)?;
+                preflight_lambda_body(expression, parameter, symbols, slots)?;
+            }
+            Ok(())
+        }
+        _ => Err(CompileError::Unsupported("lambda body")),
+    }
 }
 
 /// Like `preflight` but permits `TailSelfCall` nodes (the body of an
@@ -437,13 +477,10 @@ impl Emitter {
                     body,
                 } = func.as_ref()
                 {
-                    if params.len() == 1
-                        && args.len() == 1
-                        && matches!(body.as_ref(), Ir::Var(name) if name == &params[0])
-                    {
-                        self.emit_identity_lambda_call(&args[0])?;
+                    if params.len() == 1 && args.len() == 1 {
+                        self.emit_single_argument_lambda_call(&params[0], body, &args[0])?;
                     } else {
-                        unreachable!("preflight excludes non-identity application");
+                        unreachable!("preflight excludes unsupported lambda application");
                     }
                 } else {
                     unreachable!("preflight excludes non-lambda application");
@@ -465,21 +502,48 @@ impl Emitter {
         self.line(&format!("    movabsq ${word}, %rax"));
     }
 
-    /// Emit the first no-capture lambda/application witness as a real machine
-    /// call. `%rdi` stays reserved for the runtime context; the single value
-    /// argument is passed in `%rsi`. Captured environments and first-class
-    /// closure values remain rejected by preflight.
-    fn emit_identity_lambda_call(&mut self, argument: &Ir) -> Result<(), CompileError> {
+    /// Emit a bounded, immediately-applied, one-argument lambda as a real
+    /// machine call with its own lexical frame. `%rdi` remains the runtime
+    /// context register. Captured environments and first-class closure values
+    /// remain rejected by preflight.
+    fn emit_single_argument_lambda_call(
+        &mut self,
+        parameter: &str,
+        body: &Ir,
+        argument: &Ir,
+    ) -> Result<(), CompileError> {
         self.emit_ir(argument)?;
         self.line("    movq %rax, %rsi");
         let lambda_label = self.allocate_label();
         let continuation_label = self.allocate_label();
-        self.line(&format!("    call .Lidentity_lambda_{lambda_label}"));
-        self.line(&format!("    jmp .Lidentity_after_{continuation_label}"));
-        self.line(&format!(".Lidentity_lambda_{lambda_label}:"));
-        self.line("    movq %rsi, %rax");
+        self.line(&format!("    call .Llambda_{lambda_label}"));
+        self.line(&format!("    jmp .Llambda_after_{continuation_label}"));
+        self.line(&format!(".Llambda_{lambda_label}:"));
+
+        let mut ignored_symbols = BTreeSet::new();
+        let mut body_slots = 0;
+        preflight_lambda_body(body, parameter, &mut ignored_symbols, &mut body_slots)?;
+        let required_slots = 1 + body_slots;
+        let frame_slots = if required_slots % 2 == 1 {
+            required_slots
+        } else {
+            required_slots + 1
+        };
+        let frame_bytes = frame_slots * 8;
+        self.line(&format!("    subq ${frame_bytes}, %rsp"));
+        self.line("    movq %rsi, 0(%rsp)");
+
+        let saved_env = core::mem::take(&mut self.env);
+        let saved_next_slot = self.next_slot;
+        self.env.insert(parameter.to_string(), 0);
+        self.next_slot = 1;
+        self.emit_ir(body)?;
+        self.env = saved_env;
+        self.next_slot = saved_next_slot;
+
+        self.line(&format!("    addq ${frame_bytes}, %rsp"));
         self.line("    ret");
-        self.line(&format!(".Lidentity_after_{continuation_label}:"));
+        self.line(&format!(".Llambda_after_{continuation_label}:"));
         Ok(())
     }
 
