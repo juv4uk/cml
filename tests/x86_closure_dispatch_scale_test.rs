@@ -41,7 +41,11 @@ fn escaping_closure_dispatch_cost_grows_quadratically_with_closure_count() {
     let small = total_dispatch_comparisons(3);
     let large = total_dispatch_comparisons(30);
 
-    assert_eq!(small, 3 * 4 / 2, "3 closures should yield the triangular count 6");
+    assert_eq!(
+        small,
+        3 * 4 / 2,
+        "3 closures should yield the triangular count 6"
+    );
     assert_eq!(
         large,
         30 * 31 / 2,
