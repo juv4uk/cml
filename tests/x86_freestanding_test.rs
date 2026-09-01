@@ -178,6 +178,51 @@ fn pci_config_calls_are_explicit_target_abi_imports() {
 }
 
 #[test]
+fn pci_config_read_composes_with_a_bounded_self_tail_call_retry_loop() {
+    // CML-X86-CAPABILITY-CALL-IN-BOUNDED-TAIL-LOOP: the concrete shape a
+    // real "wait for device status register bit" driver protocol needs --
+    // a capability read inside the tail loop's own Cond test (the ready
+    // check), with a separate countdown branch for timeout. Must go through
+    // lower_program_with_tail_calls, the same entry point
+    // wsm-os/crates/m4-generator actually uses for real fixtures --
+    // lower_program alone does not preserve the TailSelfCall shape.
+    let expressions = parser::parse(
+        "(def wait-ready
+           (lambda (pci tries)
+             (cond ((eq (pci-config-read16 pci 0 5 0 0) 1) (quote ok))
+                   ((eq tries 0) (quote timeout))
+                   (t (wait-ready pci (- tries 1))))))
+         (wait-ready (pci-config-capability) 3)",
+    )
+    .unwrap();
+    let program = lower::lower_program_with_tail_calls(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect(
+            "a capability read inside a bounded tail-loop's own Cond test should compile -- \
+             it already does, through the tail-call-aware lowering entry point; no prior test \
+             exercised this combination",
+        );
+    assert!(assembly.contains("call wsm_pci_config_capability"));
+    assert!(assembly.contains("call wsm_pci_config_read16"));
+    assert!(
+        assembly.contains("jmp .Ltcloop_"),
+        "must be a real jmp loop, not a call chain"
+    );
+    assert_eq!(
+        assemble_and_undefined_symbols(&assembly, "wait-ready-retry-loop"),
+        BTreeSet::from([
+            "wsm_pci_config_capability".to_string(),
+            "wsm_pci_config_read16".to_string(),
+            "wsm_eq".to_string(),
+            // Checked subtraction's overflow path, same as
+            // checked_add_and_sub_produce_inline_arithmetic below.
+            "wsm_fail".to_string(),
+        ])
+    );
+}
+
+#[test]
 fn pci_config_call_arity_is_fail_closed() {
     let expressions = parser::parse("(pci-config-read16 0 5 0 0)").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
