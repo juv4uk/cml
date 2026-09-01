@@ -114,7 +114,7 @@ fn c_backend_exhaustively_classifies_all_ir_without_panicking() {
 fn x86_freestanding_backend_exhaustively_classifies_all_ir_without_panicking() {
     for ir in all_ir() {
         let result = panic::catch_unwind(|| {
-            let mut backend = X86FreestandingBackend::new();
+            let backend = X86FreestandingBackend::new();
             let _ = backend.compile_program(&[ir.clone()]);
         });
         assert!(

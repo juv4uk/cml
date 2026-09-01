@@ -158,6 +158,40 @@ fn escaping_captured_closure_source_reaches_x86_admission() {
 }
 
 #[test]
+fn pci_config_calls_are_explicit_target_abi_imports() {
+    let expressions =
+        parser::parse("((lambda (pci) (pci-config-read16 pci 0 5 0 0)) (pci-config-capability))")
+            .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("bounded PCI capability calls should reach the x86 target profile");
+    assert!(assembly.contains("call wsm_pci_config_capability"));
+    assert!(assembly.contains("call wsm_pci_config_read16"));
+    assert_eq!(
+        assemble_and_undefined_symbols(&assembly, "pci-config-capability"),
+        BTreeSet::from([
+            "wsm_pci_config_capability".to_string(),
+            "wsm_pci_config_read16".to_string(),
+        ])
+    );
+}
+
+#[test]
+fn pci_config_call_arity_is_fail_closed() {
+    let expressions = parser::parse("(pci-config-read16 0 5 0 0)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    assert_eq!(
+        X86FreestandingBackend::new().compile_program(&program),
+        Err(CompileError::InvalidArity {
+            operation: "pci-config-read16",
+            expected: 5,
+            actual: 4,
+        })
+    );
+}
+
+#[test]
 fn identity_lambda_application_emits_a_real_machine_call() {
     let program = vec![Ir::App {
         func: Box::new(Ir::Lambda {

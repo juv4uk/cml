@@ -277,6 +277,19 @@ fn preflight(
         }
         Ir::Lambda { .. } => return Err(CompileError::Unsupported("lambda")),
         Ir::App { func, args } => {
+            if let Some((operation, expected, _)) = platform_call_contract(func) {
+                if args.len() != expected {
+                    return Err(CompileError::InvalidArity {
+                        operation,
+                        expected,
+                        actual: args.len(),
+                    });
+                }
+                for argument in args {
+                    preflight(argument, symbols, slots)?;
+                }
+                return Ok(());
+            }
             if let Ir::Lambda {
                 params: Params::Fixed(params),
                 body,
@@ -354,6 +367,21 @@ fn preflight_lambda_body(
             Ok(())
         }
         Ir::App { func, args } => {
+            if let Some((operation, expected, _)) = platform_call_contract(func) {
+                if !matches!(func.as_ref(), Ir::Var(name) if bindings.contains(name)) {
+                    if args.len() != expected {
+                        return Err(CompileError::InvalidArity {
+                            operation,
+                            expected,
+                            actual: args.len(),
+                        });
+                    }
+                    for argument in args {
+                        preflight_lambda_body(argument, bindings, symbols, slots)?;
+                    }
+                    return Ok(());
+                }
+            }
             if args.len() != 1 {
                 return Err(CompileError::Unsupported("application"));
             }
@@ -458,6 +486,17 @@ fn primitive_contract(operation: PrimOp) -> Result<(&'static str, usize), Compil
     }
 }
 
+fn platform_call_contract(func: &Ir) -> Option<(&'static str, usize, &'static str)> {
+    let Ir::Var(name) = func else {
+        return None;
+    };
+    match name.as_str() {
+        "PCI-CONFIG-CAPABILITY" => Some(("pci-config-capability", 0, "wsm_pci_config_capability")),
+        "PCI-CONFIG-READ16" => Some(("pci-config-read16", 5, "wsm_pci_config_read16")),
+        _ => None,
+    }
+}
+
 struct Emitter {
     output: String,
     symbols: BTreeMap<String, u64>,
@@ -502,7 +541,11 @@ impl Emitter {
             Ir::Cond { branches } => self.emit_cond(branches)?,
             Ir::Prim { op, args } => self.emit_primitive(*op, args)?,
             Ir::App { func, args } => {
-                if let Ir::Lambda {
+                if platform_call_contract(func).is_some()
+                    && !matches!(func.as_ref(), Ir::Var(name) if self.env.contains_key(name))
+                {
+                    self.emit_platform_call(func, args)?;
+                } else if let Ir::Lambda {
                     params: Params::Fixed(params),
                     body,
                 } = func.as_ref()
@@ -536,6 +579,30 @@ impl Emitter {
 
     fn emit_immediate(&mut self, word: u64) {
         self.line(&format!("    movabsq ${word}, %rax"));
+    }
+
+    fn emit_platform_call(&mut self, func: &Ir, args: &[Ir]) -> Result<(), CompileError> {
+        let (_, expected, runtime) =
+            platform_call_contract(func).expect("preflight classified platform call");
+        debug_assert_eq!(args.len(), expected);
+        let slots: Vec<usize> = args
+            .iter()
+            .map(|argument| {
+                self.emit_ir(argument)?;
+                let slot = self.allocate_slot();
+                self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                Ok(slot)
+            })
+            .collect::<Result<_, CompileError>>()?;
+        self.line("    movq %r12, %rdi");
+        for (slot, register) in slots.iter().zip(["%rsi", "%rdx", "%rcx", "%r8", "%r9"]) {
+            self.line(&format!(
+                "    movq {}(%rsp), {register}",
+                Self::slot_offset(*slot)
+            ));
+        }
+        self.line(&format!("    call {runtime}"));
+        Ok(())
     }
 
     /// Emit a bounded, immediately-applied, one-argument lambda as a real
