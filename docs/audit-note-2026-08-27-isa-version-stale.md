@@ -2,7 +2,7 @@
 
 **Статус:** ЗВІТ (виявлено, не виправлено).
 **Джерело:** agent-team аудит суперечностей/застарілих пунктів, повний
-звіт — `/home/agents/ecosystem/docs/agent-team-contradiction-audit-2026-08-27.md`
+звіт — `/home/agents/ecosystem/docs/agent-coordination/agent-team-contradiction-audit-2026-08-27.md`
 (§2.1).
 
 ## Знахідка
