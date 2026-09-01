@@ -351,4 +351,18 @@
     (depends-on . (CML-CONSTITUTION-DERIVED-CORE))
     (description . "Consume the canonical my-lisp fixture inventory and emit one bounded artifact/result expectation per stable fixture ID with exact CML, language-contract and target-ABI provenance. Unsupported fixtures must remain explicit records, not disappear from coverage.")
   ))
+  ("CML-X86-CLOSURE-DISPATCH-SCALABILITY" . (
+    (priority . 5.5)
+    (capabilities . (cml compiler x86 closures performance documentation))
+    (origin . cml)
+    (description . "src/x86_freestanding.rs's emit_single_argument_closure_call dispatches an escaping closure call via a linear chain of cmpl/jne against every closure definition ID ever compiled in the unit, falling through to wsm_fail(AbiViolation) on no match -- correct and honestly fail-closed, but O(n) per call site where n = total closures in the compiled program, not just ones reachable at that site. Fine at current bounded-fixture scale; not yet a proven problem. This task is scoped narrowly: name the limit explicitly in a comment near the dispatch chain (so a future reader doesn't assume O(1)) and add one benchmark/regression fixture with enough closures to make the linear cost visible in a test run. Do not redesign dispatch (jump table, hash, sorted binary search) unless the benchmark shows it's actually needed -- that redesign is a separate task if warranted.")
+    (done . ())
+  ))
+  ("CML-GPU-CUDA-INT-FLOAT-ADMISSION-DOCS" . (
+    (priority . 5.0)
+    (capabilities . (cml compiler gpu cuda documentation correctness))
+    (origin . cml)
+    (description . "src/gpu_cuda.rs admits a general CheckedAdd/ExactInteger expression tree for the int kernel-body path, but restricts the float path to exactly one shape (x + constant via f32_affine_offset) -- no general float arithmetic. This asymmetry is real and (per the code read this session) deliberate given the file's honest NotEligible/UnsupportedRegion error handling, but nothing in the file documents that the restriction is an intentional first-slice scope decision rather than an oversight. Add a doc comment directly on the float-path admission function stating this is deliberately narrower than the int path and why (or, if it turns out to be an actual gap rather than a decision, widen it) -- do not change kernel-admission behavior without evidence one way or the other.")
+    (done . ())
+  ))
 )
