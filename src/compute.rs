@@ -243,6 +243,16 @@ fn eval_f64(expression: &ScalarExpr, parameters: &[f64]) -> Option<f64> {
 /// Returns C for exactly the affine form `parameter-0 + C`. Addition trees
 /// are flattened so the backend performs one binary32 add, matching the
 /// evaluator's one final narrowing step.
+///
+/// This is deliberately narrower than the integer kernel-body path
+/// (`emit_i32_expr` in `gpu_cuda.rs`/`emit_wgsl_map_kernel` in the WGSL
+/// backend, which admit a general `CheckedAdd`/`ExactInteger` expression
+/// tree): float admission is scoped to this one shape because a general
+/// binary32 add tree does not have the same single-rounding-step parity
+/// with the canonical evaluator that one final `parameter + constant` add
+/// does -- widening it needs its own rounding-parity proof (see this
+/// module's f32-vs-canonical bit-exactness check above), not a copy of the
+/// integer path's admission rule. CML-GPU-CUDA-INT-FLOAT-ADMISSION-DOCS.
 pub(crate) fn f32_affine_offset(expression: &ScalarExpr) -> Option<i64> {
     fn collect(expression: &ScalarExpr) -> Option<(u32, i64)> {
         match expression {

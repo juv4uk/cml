@@ -752,6 +752,20 @@ impl Emitter {
         Ok(())
     }
 
+    /// Dispatches an escaping single-argument closure call.
+    ///
+    /// Emits a linear `cmpl $definition_id, %eax` / `jne` chain against
+    /// *every* closure definition compiled into this unit so far, falling
+    /// through to `wsm_fail(AbiViolation)` on no match -- correct and
+    /// honestly fail-closed, but O(n) machine instructions executed per call
+    /// site, where n = total closures compiled into the unit, not just ones
+    /// reachable from this call site. Fine at current bounded-fixture scale
+    /// (CML-CONSTITUTION-* fixtures); not yet a proven problem at larger n.
+    /// Named explicitly here (CML-X86-CLOSURE-DISPATCH-SCALABILITY) so a
+    /// future reader doesn't assume O(1) dispatch; see
+    /// tests/x86_closure_dispatch_scale_test.rs for a benchmark that makes
+    /// the linear cost measurable before any dispatch redesign (jump table,
+    /// hash, sorted binary search) is considered.
     fn emit_single_argument_closure_call(
         &mut self,
         function: &Ir,
