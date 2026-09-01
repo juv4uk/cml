@@ -228,7 +228,7 @@
      (capabilities . (cml compiler testing conformance proof))
      (depends-on . (CML-CONTRACT-SCOPE-REALIGN-M1))
      (done . t)
-     (description . "Make conformance classification genuinely fail closed. A compiler error may count as UNSUPPORTED only when the fixture obligation and backend capability matrix predeclare that exact unsupported reason; unexpected parse/lowering/backend errors are FAILED. Emit one explicit result per fixture and assert totals. Reopen or qualify the historical CML-CONFORMANCE-FAIL-CLOSED claim using executable evidence."))))))
+     (description . "Make conformance classification genuinely fail closed. A compiler error may count as UNSUPPORTED only when the fixture obligation and backend capability matrix predeclare that exact unsupported reason; unexpected parse/lowering/backend errors are FAILED. Emit one explicit result per fixture and assert totals. Reopen or qualify the historical CML-CONFORMANCE-FAIL-CLOSED claim using executable evidence.")))
 
 
   ("CML-FULL-SEMANTIC-IR" . (
@@ -314,7 +314,7 @@
     (capabilities . (cml wsm filesystem x86 freestanding contract testing))
     (origin . cml)
     (description . "Audit every FS-relevant IR path at the freestanding boundary. Keep hosted strings distinct from image-local symbols; reject unsupported string/name/object forms before emission; document the admitted data-only subset and prove deterministic lowering plus explicit unsupported classification. Do not add filesystem semantics or raw persistent pointers to CML.")
-  )
+  ))
   ("CML-CONSTITUTION-FIRST-CLASS-CLOSURES" . (
     (priority . 9.9)
     (done . t)
@@ -373,5 +373,4 @@
     (context . "From docs/WSM-TRAJECTORY-SYNTHESIS-2026-09-01.md (ecosystem, owner+session dialogue 2026-09-01): Line B of the two converging witnesses is machine control (capability -> PCI -> virtio-blk -> WSM driver -> real device protocol), feeding WSM-OS-VIRTIO-BLK-GUEST-DRIVER-Q6B and ultimately WSM-OS-TWO-WITNESSES-GRADUATION-CHECK (wsm-os tasks.my). ADR-003 names retries and timeout policy as things the WSM driver itself must own, not the substrate. Found this session, source-confirmed by reading the real code: tests/x86_freestanding_test.rs's pci_config_calls_are_explicit_target_abi_imports proves pci-config-read16 works ONLY inside a single-argument escaping-closure application; preflight_tail_body (src/x86_freestanding.rs) separately admits Ir::Cond+Ir::TailSelfCall bounded polling loops, but nothing proves a capability call (pci-config-read16 or the wsm_pci_config_capability handle itself) is admissible inside that tail-loop's condition or body. No test currently exercises the combination.")
     (description . "Prove (or, if genuinely blocked, name exactly why not) that a bounded self-tail-call polling loop can call a provisioned PCI capability inside its own condition -- the concrete shape a real 'wait for device status register bit' driver protocol needs: (def wait-ready (lambda (pci tries) (cond ((ready? (pci-config-read16 pci ...)) (quote ok)) ((zerop tries) (quote timeout)) (t (wait-ready pci (sub1 tries)))))). Add one x86_freestanding integration test proving this compiles and (if a hosted/QEMU harness is convenient) actually terminates correctly on both the ready and timeout branches. Do not add MMIO/DMA capability classes or general (non-tail) recursion in this task -- scoped strictly to composing the two admission paths (bounded capability calls, bounded tail loops) that already separately exist.")
     (done . (t . "wsl-nidana-1 2026-09-01: PREMISE WAS WRONG, corrected honestly rather than forcing a fix for a non-problem. Empirically probed the exact wait-ready shape (ready-check via pci-config-read16 in a Cond test, timeout via countdown, self-tail-call) -- it already compiles and correctly emits both call wsm_pci_config_capability and call wsm_pci_config_read16 with a real jmp .Ltcloop_ (not a call chain), through lower::lower_program_with_tail_calls -- the exact entry point wsm-os/crates/m4-generator's real fixture pipeline already uses (confirmed by reading m4-generator/src/main.rs directly). My first probe using plain lower_program (not the tail-call-aware one) gave a false 'unbound variable' failure -- a probe bug, not a compiler gap; a control test with zero capability calls failed identically, proving it wasn't PCI-specific. What genuinely didn't exist before: a regression test for this exact combination -- added pci_config_read_composes_with_a_bounded_self_tail_call_retry_loop to tests/x86_freestanding_test.rs (18/18 tests pass, cargo fmt clean, assembles with the expected symbol set including wsm_fail from checked subtraction's overflow path)."))
-  ))
-)
+  )))))
