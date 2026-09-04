@@ -72,7 +72,7 @@ const RUNTIME: &str = r##"
 #include <limits.h>
 
 typedef struct Value Value;
-typedef enum { TAG_NIL, TAG_TRUE, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_RATIONAL } Tag;
+typedef enum { TAG_NIL, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_RATIONAL } Tag;
 struct Value {
     Tag tag;
     union {
@@ -87,7 +87,15 @@ struct Value {
 };
 
 static Value NIL_V = { TAG_NIL, { .i = 0 } };
-static Value TRUE_V = { TAG_TRUE, { .i = 0 } };
+/* Canonical `t` as an ordinary Symbol, not a manufactured Tag::True
+ * primitive -- 2026-09-04, applying the owner's paradigm (substrates
+ * witness my-lisp's semantics, never invent their own; see
+ * docs/language-core-axioms.md's G1/G6/G7 boundary note in my-lisp).
+ * Same fix shape already proven in fpga-lisp's RTL and wsm-my-lisp's
+ * asm nucleus: t goes through the exact same representation any other
+ * interned symbol already uses. Every existing `&TRUE_V` call site is
+ * left untouched -- only what TRUE_V itself is changes. */
+static Value TRUE_V = { TAG_SYM, { .sym = "T" } };
 static Value *global_env = &NIL_V;
 
 static void runtime_error(const char *kind, const char *detail);
@@ -166,7 +174,7 @@ static int truthy(Value *v) { return v->tag != TAG_NIL; }
 static Value *v_eq(Value *a, Value *b) {
     if (a->tag != b->tag) return &NIL_V;
     switch (a->tag) {
-        case TAG_NIL: case TAG_TRUE: return &TRUE_V;
+        case TAG_NIL: return &TRUE_V;
         case TAG_INT: return a->u.i == b->u.i ? &TRUE_V : &NIL_V;
         case TAG_RATIONAL: return rational_checked_mul(a->u.rat.num, b->u.rat.den) == rational_checked_mul(b->u.rat.num, a->u.rat.den) ? &TRUE_V : &NIL_V;
         case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0 ? &TRUE_V : &NIL_V;
@@ -177,7 +185,7 @@ static Value *v_eq(Value *a, Value *b) {
 static int v_equal_p(Value *a, Value *b) {
     if (a->tag != b->tag) return 0;
     switch (a->tag) {
-        case TAG_NIL: case TAG_TRUE: return 1;
+        case TAG_NIL: return 1;
         case TAG_INT: return a->u.i == b->u.i;
         case TAG_RATIONAL: return rational_checked_mul(a->u.rat.num, b->u.rat.den) == rational_checked_mul(b->u.rat.num, a->u.rat.den);
         case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0;
@@ -366,7 +374,6 @@ static void bootstrap_builtins(void) {
 static void print_value(Value *v) {
     switch (v->tag) {
         case TAG_NIL: printf("()"); break;
-        case TAG_TRUE: printf("t"); break;
         case TAG_INT: printf("%ld", v->u.i); break;
         case TAG_RATIONAL:
             // Same shape as my-lisp's Value::Rational Display: `n` when the

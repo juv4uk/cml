@@ -603,3 +603,35 @@ fn c_backend_lowers_rational_int_mix_matches_oracle() {
 fn c_backend_lowers_rational_unary_minus_matches_oracle() {
     assert_eq!(compile_and_run_first_class("(- 1/2)", "rational_unary_minus"), "-1/2");
 }
+
+#[test]
+fn c_backend_true_is_an_ordinary_symbol_not_a_manufactured_tag() {
+    // Regression for CML-C-BACKEND-TAG-TRUE-MANUFACTURED-PRIMITIVE
+    // (2026-09-04): before the fix, the self-evaluating literal `t` and a
+    // quoted symbol `(quote t)` carried different C runtime tags
+    // (TAG_TRUE vs TAG_SYM), so `(eq t (quote t))` would have compared
+    // unequal tags and returned () -- exactly the class of bug the
+    // owner's paradigm forbids (a substrate inventing a primitive
+    // category the language itself never asked for; t is plain
+    // Symbol("t") in canonical WSM). Print, atom, and cross-representation
+    // eq must all agree t is just an ordinary symbol.
+    //
+    // The test harness lowercases captured stdout before comparing, so
+    // the expected strings below are lowercase regardless of the runtime's
+    // own internal case convention -- but the *internal* comparison inside
+    // the compiled program is case-sensitive strcmp, and that is where this
+    // test genuinely caught a real bug while being written: mk_sym stores
+    // canonical symbols uppercase (lower.rs uppercases every symbol name,
+    // cml's own established convention, distinct from my-lisp's lowercase
+    // display), so a first version of this fix using a lowercase "t"
+    // literal for TRUE_V made `(eq t (quote t))` compile to
+    // `strcmp("t", "T")` internally -- genuinely unequal, real () result,
+    // not a test-harness artifact. Fixed by storing TRUE_V's symbol as
+    // "T" to match mk_sym's own canonical case.
+    assert_eq!(compile_and_run_first_class("t", "true_prints_as_t"), "t");
+    assert_eq!(compile_and_run_first_class("(atom t)", "true_is_atom"), "t");
+    assert_eq!(
+        compile_and_run_first_class("(eq t (quote t))", "true_eq_quoted_symbol_t"),
+        "t"
+    );
+}
