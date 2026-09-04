@@ -221,6 +221,7 @@ pub fn lower_expr(expr: &Expr) -> Result<Ir, LowerError> {
 fn lower_expr_admitted(expr: &Expr, env: &Env) -> Result<Ir, LowerError> {
     match expr {
         Expr::Integer(n) => Ok(Ir::Int(*n)),
+        Expr::Rational(num, den) => Ok(Ir::Rational(*num, *den)),
         Expr::NumericBuffer(NumericBufferLiteral::I32(values)) => {
             Ok(Ir::Buffer(BufferLiteral::I32(values.clone())))
         }
@@ -445,6 +446,7 @@ fn lower_def(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
     match expr {
         Expr::Integer(n) => Ok(Quoted::Int(*n)),
+        Expr::Rational(num, den) => Ok(Quoted::Rational(*num, *den)),
         Expr::String(s) => Ok(Quoted::Str(s.to_uppercase())),
         Expr::Symbol(s) => Ok(Quoted::Sym(s.to_uppercase())),
         Expr::List(list) => {

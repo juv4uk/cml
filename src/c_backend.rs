@@ -72,7 +72,7 @@ const RUNTIME: &str = r##"
 #include <limits.h>
 
 typedef struct Value Value;
-typedef enum { TAG_NIL, TAG_TRUE, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN } Tag;
+typedef enum { TAG_NIL, TAG_TRUE, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_RATIONAL } Tag;
 struct Value {
     Tag tag;
     union {
@@ -82,6 +82,7 @@ struct Value {
         struct { int *data; size_t len; } i32_buffer;
         struct { Value *(*fn)(Value *args, Value *env); Value *env; } closure;
         struct { const char *name; Value *(*fn)(Value *args, Value *env); } builtin;
+        struct { long num; long den; } rat;
     } u;
 };
 
@@ -103,6 +104,60 @@ static Value *mk_i32_buffer(const int *data, size_t len) { Value *v = checked_ma
 static Value *mk_closure(Value *(*fn)(Value*, Value*), Value *env) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_CLOSURE; v->u.closure.fn = fn; v->u.closure.env = env; return v; }
 static Value *mk_builtin(const char *name, Value *(*fn)(Value*, Value*)) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_BUILTIN; v->u.builtin.name = name; v->u.builtin.fn = fn; return v; }
 
+static long rational_gcd(long a, long b) {
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    while (b != 0) { long t = a % b; a = b; b = t; }
+    return a;
+}
+
+static long rational_checked_mul(long a, long b) {
+    if (b != 0 && a > (LONG_MAX / b)) runtime_error("Overflow", "rational numerator/denominator overflow");
+    return a * b;
+}
+
+// Build a normalized rational: denominator normalized positive (a negative
+// value lives in the numerator), and both divided by their gcd. Values that
+// reduce to an integer are not collapsed here -- they stay TAG_RATIONAL so
+// the printed form is stable and the exact denominator is preserved -- but a
+// zero denominator is a hard Type error, matching the WSM exact-arithmetic
+// contract.
+static Value *mk_rational(long num, long den) {
+    if (den == 0) runtime_error("Type", "rational denominator is zero");
+    if (den < 0) { num = -num; den = -den; }
+    long g = rational_gcd(num, den);
+    if (g != 0) { num /= g; den /= g; }
+    Value *v = checked_malloc(sizeof(Value));
+    v->tag = TAG_RATIONAL;
+    v->u.rat.num = num;
+    v->u.rat.den = den;
+    return v;
+}
+
+static int rat_is_integer(Value *v) { return v->tag == TAG_RATIONAL && v->u.rat.den == 1; }
+
+static Value *v_rat_add(Value *a, Value *b) {
+    long n = rational_checked_mul(a->u.rat.num, b->u.rat.den) + rational_checked_mul(b->u.rat.num, a->u.rat.den);
+    long d = rational_checked_mul(a->u.rat.den, b->u.rat.den);
+    return mk_rational(n, d);
+}
+static Value *v_rat_sub(Value *a, Value *b) {
+    long n = rational_checked_mul(a->u.rat.num, b->u.rat.den) - rational_checked_mul(b->u.rat.num, a->u.rat.den);
+    long d = rational_checked_mul(a->u.rat.den, b->u.rat.den);
+    return mk_rational(n, d);
+}
+static Value *v_rat_mul(Value *a, Value *b) {
+    long n = rational_checked_mul(a->u.rat.num, b->u.rat.num);
+    long d = rational_checked_mul(a->u.rat.den, b->u.rat.den);
+    return mk_rational(n, d);
+}
+static Value *v_rat_div(Value *a, Value *b) {
+    if (b->u.rat.num == 0) runtime_error("Type", "rational division by zero");
+    long n = rational_checked_mul(a->u.rat.num, b->u.rat.den);
+    long d = rational_checked_mul(a->u.rat.den, b->u.rat.num);
+    return mk_rational(n, d);
+}
+
 static Value *v_car(Value *v) { return v->u.cons.car; }
 static Value *v_cdr(Value *v) { return v->u.cons.cdr; }
 static int is_atom(Value *v) { return v->tag != TAG_CONS; }
@@ -113,6 +168,7 @@ static Value *v_eq(Value *a, Value *b) {
     switch (a->tag) {
         case TAG_NIL: case TAG_TRUE: return &TRUE_V;
         case TAG_INT: return a->u.i == b->u.i ? &TRUE_V : &NIL_V;
+        case TAG_RATIONAL: return rational_checked_mul(a->u.rat.num, b->u.rat.den) == rational_checked_mul(b->u.rat.num, a->u.rat.den) ? &TRUE_V : &NIL_V;
         case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0 ? &TRUE_V : &NIL_V;
         default: return a == b ? &TRUE_V : &NIL_V;
     }
@@ -123,6 +179,7 @@ static int v_equal_p(Value *a, Value *b) {
     switch (a->tag) {
         case TAG_NIL: case TAG_TRUE: return 1;
         case TAG_INT: return a->u.i == b->u.i;
+        case TAG_RATIONAL: return rational_checked_mul(a->u.rat.num, b->u.rat.den) == rational_checked_mul(b->u.rat.num, a->u.rat.den);
         case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0;
         case TAG_CONS: return v_equal_p(a->u.cons.car, b->u.cons.car) && v_equal_p(a->u.cons.cdr, b->u.cons.cdr);
         case TAG_I32_BUFFER:
@@ -133,8 +190,23 @@ static int v_equal_p(Value *a, Value *b) {
     }
 }
 
-static Value *v_add(Value *a, Value *b) { return mk_int(a->u.i + b->u.i); }
-static Value *v_sub(Value *a, Value *b) { return mk_int(a->u.i - b->u.i); }
+// If either operand is rational, compute exactly using cross-multiplication;
+// otherwise use plain fixnum traces, preserving the existing fast path.
+static Value *to_rational(Value *v) {
+    if (v->tag == TAG_RATIONAL) return v;
+    if (v->tag == TAG_INT) return mk_rational(v->u.i, 1);
+    return NULL;
+}
+static Value *v_add(Value *a, Value *b) {
+    if (a->tag == TAG_RATIONAL || b->tag == TAG_RATIONAL)
+        return v_rat_add(to_rational(a), to_rational(b));
+    return mk_int(a->u.i + b->u.i);
+}
+static Value *v_sub(Value *a, Value *b) {
+    if (a->tag == TAG_RATIONAL || b->tag == TAG_RATIONAL)
+        return v_rat_sub(to_rational(a), to_rational(b));
+    return mk_int(a->u.i - b->u.i);
+}
 
 static void runtime_error(const char *kind, const char *detail) {
     fprintf(stderr, "%s: %s\n", kind, detail);
@@ -165,18 +237,55 @@ static Value *arg_at(Value *args, int index) {
     return v_car(args);
 }
 
-static Value *builtin_add(Value *args, Value *env) { (void)env; require_arity(args, 2, "+"); require_tag(arg_at(args, 0), TAG_INT, "+"); require_tag(arg_at(args, 1), TAG_INT, "+"); return v_add(arg_at(args, 0), arg_at(args, 1)); }
+static void require_number(Value *value, const char *name) {
+    if (value->tag != TAG_INT && value->tag != TAG_RATIONAL) runtime_error("Type", name);
+}
+
+static Value *builtin_add(Value *args, Value *env) { (void)env; require_arity(args, 2, "+"); require_number(arg_at(args, 0), "+"); require_number(arg_at(args, 1), "+"); return v_add(arg_at(args, 0), arg_at(args, 1)); }
 static Value *builtin_subtract(Value *args, Value *env) {
     (void)env;
     require_min_arity(args, 1, "-");
     Value *result = arg_at(args, 0);
-    require_tag(result, TAG_INT, "-");
+    require_number(result, "-");
     args = v_cdr(args);
-    if (args->tag == TAG_NIL) return mk_int(-result->u.i);
+    if (args->tag == TAG_NIL) {
+        if (result->tag == TAG_RATIONAL) return mk_rational(-result->u.rat.num, result->u.rat.den);
+        return mk_int(-result->u.i);
+    }
     while (args->tag == TAG_CONS) {
         Value *operand = v_car(args);
-        require_tag(operand, TAG_INT, "-");
+        require_number(operand, "-");
         result = v_sub(result, operand);
+        args = v_cdr(args);
+    }
+    return result;
+}
+static Value *builtin_mul(Value *args, Value *env) {
+    (void)env;
+    require_min_arity(args, 2, "*");
+    Value *result = arg_at(args, 0);
+    require_number(result, "*");
+    args = v_cdr(args);
+    while (args->tag == TAG_CONS) {
+        Value *operand = v_car(args);
+        require_number(operand, "*");
+        if (result->tag == TAG_RATIONAL || operand->tag == TAG_RATIONAL)
+            result = v_rat_mul(to_rational(result), to_rational(operand));
+        else result = mk_int(result->u.i * operand->u.i);
+        args = v_cdr(args);
+    }
+    return result;
+}
+static Value *builtin_div(Value *args, Value *env) {
+    (void)env;
+    require_min_arity(args, 2, "/");
+    Value *result = arg_at(args, 0);
+    require_number(result, "/");
+    args = v_cdr(args);
+    while (args->tag == TAG_CONS) {
+        Value *operand = v_car(args);
+        require_number(operand, "/");
+        result = v_rat_div(to_rational(result), to_rational(operand));
         args = v_cdr(args);
     }
     return result;
@@ -240,6 +349,8 @@ static void bind_global(const char *name, Value *value) {
 static void bootstrap_builtins(void) {
     bind_global("+", mk_builtin("+", builtin_add));
     bind_global("-", mk_builtin("-", builtin_subtract));
+    bind_global("*", mk_builtin("*", builtin_mul));
+    bind_global("/", mk_builtin("/", builtin_div));
     bind_global("CONS", mk_builtin("cons", builtin_cons));
     bind_global("CAR", mk_builtin("car", builtin_car));
     bind_global("CDR", mk_builtin("cdr", builtin_cdr));
@@ -257,6 +368,13 @@ static void print_value(Value *v) {
         case TAG_NIL: printf("()"); break;
         case TAG_TRUE: printf("t"); break;
         case TAG_INT: printf("%ld", v->u.i); break;
+        case TAG_RATIONAL:
+            // Same shape as my-lisp's Value::Rational Display: `n` when the
+            // reduced denominator is 1, else `n/d`. Keeps a compiled
+            // program's output directly comparable against the oracle.
+            if (v->u.rat.den == 1) printf("%ld", v->u.rat.num);
+            else printf("%ld/%ld", v->u.rat.num, v->u.rat.den);
+            break;
         case TAG_SYM: printf("%s", v->u.sym); break;
         case TAG_CLOSURE: printf("<closure>"); break;
         case TAG_BUILTIN: printf("#<builtin %s>", v->u.builtin.name); break;
@@ -351,6 +469,7 @@ impl CBackend {
     fn compile_expr(&mut self, ir: &Ir, env: &str) -> Result<String, CompileError> {
         match ir {
             Ir::Int(n) => Ok(format!("mk_int({n})")),
+            Ir::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
             Ir::Buffer(BufferLiteral::I32(values)) => {
                 let data = values
                     .iter()
@@ -429,6 +548,7 @@ impl CBackend {
     fn compile_quoted(&mut self, q: &Quoted) -> Result<String, CompileError> {
         match q {
             Quoted::Int(n) => Ok(format!("mk_int({n})")),
+            Quoted::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
             Quoted::Sym(s) | Quoted::Str(s) => Ok(format!("mk_sym(\"{s}\")")),
             Quoted::Nil => Ok("(&NIL_V)".to_string()),
             Quoted::List(items) => {

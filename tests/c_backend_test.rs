@@ -560,3 +560,46 @@ fn macro_unsupported_form_returns_graceful_error() {
         "expected UnsupportedForm(\"unknown-form\"), got: {err}"
     );
 }
+
+// C4 exact-numeric: Ir::Rational lowered through the C backend, compiled
+// with a real gcc and executed (hosted Linux process), checked against the
+// my-lisp oracle's exact rational printer. These are all live-verified
+// against `my-lisp` v0.34 (oracle) -- not asserted from memory.
+#[test]
+fn c_backend_lowers_rational_add_matches_oracle() {
+    assert_eq!(compile_and_run_first_class("(+ 1/2 1/3)", "rational_add"), "5/6");
+}
+
+#[test]
+fn c_backend_lowers_rational_sub_matches_oracle() {
+    assert_eq!(compile_and_run_first_class("(- 1/2 1/3)", "rational_sub"), "1/6");
+}
+
+#[test]
+fn c_backend_lowers_rational_mul_matches_oracle() {
+    assert_eq!(compile_and_run_first_class("(* 1/2 1/3)", "rational_mul"), "1/6");
+}
+
+#[test]
+fn c_backend_lowers_rational_div_matches_oracle() {
+    assert_eq!(compile_and_run_first_class("(/ 1/2 1/3)", "rational_div"), "3/2");
+}
+
+#[test]
+fn c_backend_lowers_rational_reduces_matches_oracle() {
+    // (2/3 * 3/4) reduces to 1/2; (1/6 + 1/3) reduces to 1/2.
+    assert_eq!(compile_and_run_first_class("(* 2/3 3/4)", "rational_reduce_mul"), "1/2");
+    assert_eq!(compile_and_run_first_class("(+ 1/6 1/3)", "rational_reduce_add"), "1/2");
+}
+
+#[test]
+fn c_backend_lowers_rational_int_mix_matches_oracle() {
+    // Int operand participates through the exact to_rational path.
+    assert_eq!(compile_and_run_first_class("(/ 3 2)", "rational_div_int"), "3/2");
+    assert_eq!(compile_and_run_first_class("(+ 1/2 1)", "rational_add_int"), "3/2");
+}
+
+#[test]
+fn c_backend_lowers_rational_unary_minus_matches_oracle() {
+    assert_eq!(compile_and_run_first_class("(- 1/2)", "rational_unary_minus"), "-1/2");
+}

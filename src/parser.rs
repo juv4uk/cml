@@ -87,11 +87,40 @@ fn parse_expr(
                 Ok(Expr::String(token[1..token.len() - 1].to_string()))
             } else if let Ok(n) = token.parse::<i64>() {
                 Ok(Expr::Integer(n))
+            } else if let Some(rat) = parse_rational_literal(&token) {
+                Ok(Expr::Rational(rat.0, rat.1))
             } else {
                 Ok(Expr::Symbol(token))
             }
         }
     }
+}
+
+/// Parses an exact rational numeral token of the form `n/d` (e.g. `1/2`,
+/// `-3/4`). Returns `(numerator, denominator)` reduced by gcd with a strictly
+/// positive denominator, or `None` if the token is not a rational numeral.
+/// A bare `/` (division operator) and non-numeric tokens are rejected.
+fn parse_rational_literal(token: &str) -> Option<(i64, u64)> {
+    let (num_str, den_str) = token.split_once('/')?;
+    if num_str.is_empty() || den_str.is_empty() {
+        return None;
+    }
+    let num = num_str.parse::<i64>().ok()?;
+    let den = den_str.parse::<u64>().ok()?;
+    if den == 0 {
+        return None;
+    }
+    let g = gcd(num.unsigned_abs(), den);
+    Some((num / g as i64, den / g))
+}
+
+fn gcd(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    a
 }
 
 fn parse_numeric_buffer(
