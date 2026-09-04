@@ -9,6 +9,21 @@ use crate::ir::{Ir, Params, PrimOp, Quoted};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+/// Canonical `t`, as an ordinary interned Symbol -- not the standalone
+/// `Tag::True` primitive canonical WSM never had (`t` is plain
+/// `Symbol("t")` in the Rust oracle, not a distinct primitive). Same value
+/// `wsm-os-runtime::CANONICAL_T` already computes (2026-09-02 fix) for
+/// eq/atom results; this crate emits it directly at compile time for the
+/// literal `Ir::True` case, closing the gap that fix left open (see
+/// wsm-os-runtime's own doc comment: "`Tag::True` itself stays declared...
+/// nothing in this crate produces it anymore" -- x86_freestanding did,
+/// until now). `wsm_os_target::TRUE` (the raw immediate) is deliberately
+/// no longer emitted here.
+const CANONICAL_T: wsm_os_target::Word = match wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX) {
+    Some(word) => word,
+    None => panic!("SYMBOL_ID_MAX must encode as a valid symbol word"),
+};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileError {
     EmptyProgram,
@@ -536,7 +551,7 @@ impl Emitter {
                 self.emit_immediate(word);
             }
             Ir::Nil => self.emit_immediate(wsm_os_target::NIL),
-            Ir::True => self.emit_immediate(wsm_os_target::TRUE),
+            Ir::True => self.emit_immediate(CANONICAL_T),
             Ir::Quote(value) => self.emit_quoted(value)?,
             Ir::Cond { branches } => self.emit_cond(branches)?,
             Ir::Prim { op, args } => self.emit_primitive(*op, args)?,

@@ -434,3 +434,47 @@ fn explicit_self_tail_call_loop_lowers_without_calls() {
             .all(|l| l.contains("wsm_eq") || l.contains("wsm_fail"))
     );
 }
+
+#[test]
+fn literal_true_emits_the_canonical_symbol_word_not_the_manufactured_tag_true_immediate() {
+    // Regression for WSM-OS-TARGET-TAG-TRUE-MANUFACTURED-PRIMITIVE
+    // (ecosystem/plans/tasks.my, 2026-09-04): before this fix, `Ir::True`
+    // compiled to `emit_immediate(wsm_os_target::TRUE)` -- the raw
+    // manufactured Tag::True immediate wsm-os-runtime's own eq/atom
+    // stopped producing back on 2026-09-02 (see wsm-os-runtime::CANONICAL_T's
+    // doc comment). That left a real inconsistency reachable from compiled
+    // WSM programs: a literal `t` in source and a runtime-computed `t`
+    // (via (atom ...) or (eq ...)) would carry different Word bit patterns
+    // -- not `eq` to each other despite both meaning canonical true.
+    //
+    // wsm_os_target::TRUE and the canonical symbol encoding are gnu-as
+    // constant expressions, not runtime values, so this checks the emitted
+    // immediate directly rather than requiring execution: the assembly
+    // must contain the SAME word wsm-os-runtime::CANONICAL_T computes
+    // (encode_symbol(SYMBOL_ID_MAX)), and must NOT contain the old raw
+    // TRUE immediate.
+    let canonical_t = wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX)
+        .expect("SYMBOL_ID_MAX must encode as a valid symbol word");
+    assert_ne!(
+        canonical_t,
+        wsm_os_target::TRUE,
+        "test assumption broken: canonical t and the old manufactured TRUE \
+         immediate must differ for this regression test to mean anything"
+    );
+
+    let program = vec![Ir::True];
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .unwrap();
+    let _ = assemble_and_undefined_symbols(&assembly, "literal_true");
+
+    assert!(
+        assembly.contains(&format!("movabsq ${canonical_t}, %rax")),
+        "expected the canonical symbol word {canonical_t} to be emitted for literal t:\n{assembly}"
+    );
+    assert!(
+        !assembly.contains(&format!("movabsq ${}, %rax", wsm_os_target::TRUE)),
+        "the old manufactured TAG_TRUE immediate {} must no longer be emitted:\n{assembly}",
+        wsm_os_target::TRUE
+    );
+}
