@@ -135,3 +135,7 @@ dies ist kein Anspruch auf vollständige Sprach-oder Boot-Parität.
 cargo build
 cargo run -- path/to/source.my
 ```
+
+## Ліцензія
+
+Цей твір поширюється під [ВОЛЬНІСТЮ](LICENSE) — простим словом про свободу творити, пам'ятаючи про волю іншого.
