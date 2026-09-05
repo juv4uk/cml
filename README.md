@@ -16,21 +16,21 @@ The compiler handles:
 - `lambda` (closures that self-bind arguments to an environment)
 - `let` lowered as an immediately invoked `lambda`, without a new FPGA primitive
 - Standard primitives (`cons`, `car`, `cdr`, `eq`, `atom`)
-- Quoted lists (`'(a b c)`)
+- Explicit quote forms (`(quote ...)`)
 - Call Stack (`R11` software stack for environment and link preservation)
 
 ### Current Limitations
 - Generic calls bind at most 8 arguments; additional arguments are not yet rejected explicitly.
 - The conformance runner canonically decodes atoms, fixnums, proper lists, and dotted lists from the FPGA heap; unsupported language forms are still skipped explicitly.
 - Tier-1 error fixtures are observable too: the compiler classifies static arity/unknown-symbol failures, while FPGA execution reports runtime type failures through a machine-readable result channel.
-- Source strings currently lower to target symbols; fpga-lisp has no distinct runtime string tag yet.
+- Source strings lower to `Ir::String` (separate IR variant); fpga-lisp still has no distinct runtime string tag.
 - Inexact numbers and exact rationals are not supported by the target representation.
 
 [`compatibility.my`](compatibility.my) records the exact my-lisp language contract, fpga-lisp ISA contract, tested SHAs, supported surface, and known gaps for this compiler revision.
 
 The freestanding x86_64 slice is documented separately in
 [`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). It
-currently supports literals/quote, `cons`/`car`/`cdr`/`eq`/`atom`, `cond`, checked fixnum arithmetic (`+`/`-`), and loop-optimized self-tail-calls;
+currently supports literals, explicit `(quote ...)`, `cons`/`car`/`cdr`/`eq`/`atom`, `cond`, checked fixnum arithmetic (`+`/`-`), and loop-optimized self-tail-calls;
 this is not a claim of full language or boot parity.
 
 [View Test Results](test_results.md) · [Testing](docs/testing.md)
@@ -59,21 +59,21 @@ cargo run -- path/to/source.my
 - `lambda` (замикання, які самостійно прив'язують аргументи до середовища)
 - `let`, знижений до негайно викликаної `lambda` без нової FPGA-примітиви
 - Стандартні примітиви (`cons`, `car`, `cdr`, `eq`, `atom`)
-- Списки з квотуванням (Quoted lists, `'(a b c)`)
+- Явні форми quote (`(quote ...)`)
 - Стек викликів (програмний стек `R11` для збереження середовища та адреси повернення)
 
 ### Поточні обмеження
 - Generic calls зв'язують щонайбільше 8 аргументів; зайві аргументи ще не відхиляються явно.
-- Conformance runner канонічно декодує atoms, fixnums, proper lists і dotted lists із FPGA heap; непідтримані мовні форми досі пропускаються явно.
+- Conformance runner канонічно декодує atoms, fixnums, proper lists і dotted lists із FPGA heap; непідтримувані мовні форми досі пропускаються явно.
 - Tier-1 error fixtures теж спостережувані: компілятор класифікує статичні помилки арності/невідомого символу, а FPGA повертає runtime-помилки типу через машинозчитуваний канал результату.
-- Сирцеві strings поки знижуються до target symbols; fpga-lisp ще не має окремого runtime string tag.
+- Сирцеві strings знижуються до `Ir::String` (окремий IR-варіант); fpga-lisp ще не має окремого runtime string tag.
 - Inexact numbers і точні rationals не підтримуються цільовим представленням.
 
 [`compatibility.my`](compatibility.my) фіксує точний language contract my-lisp, ISA contract fpga-lisp, перевірені SHA, підтриману поверхню й відомі прогалини цієї ревізії компілятора.
 
 Freestanding x86_64 зріз окремо описаний у
 [`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). Наразі
-він підтримує literals/quote, `cons`/`car`/`cdr`/`eq`/`atom`, `cond`, арифметику з перевіркою (`+`/`-`), та loop-optimized self-tail-calls, без заяви про повну
+він підтримує literals, явний `(quote ...)`, `cons`/`car`/`cdr`/`eq`/`atom`, `cond`, арифметику з перевіркою (`+`/`-`), та loop-optimized self-tail-calls, без заяви про повну
 мовну або boot parity.
 
 [Переглянути результати тестів](test_results.md) · [Тестування](docs/testing.md)
@@ -102,17 +102,22 @@ Der Compiler verarbeitet:
 - `lambda` (Closures, die ihre Argumente selbst an eine Umgebung binden)
 - `let`, abgesenkt zu einer sofort aufgerufenen `lambda` ohne neue FPGA-Primitive
 - Standardprimitiven (`cons`, `car`, `cdr`, `eq`, `atom`)
-- Zitierte Listen (`'(a b c)`)
+- Explizite Quote-Formen (`(quote ...)`)
 - Aufrufstapel (`R11` Software-Stack für Umgebungs- und Rücksprungadressenspeicherung)
 
 ### Aktuelle Einschränkungen
 - Generische Aufrufe binden höchstens 8 Argumente; zusätzliche Argumente werden noch nicht explizit abgelehnt.
 - Der Konformitätsrunner dekodiert Atome, Fixnums, echte Listen und Dotted Lists aus dem FPGA-Heap kanonisch; nicht unterstützte Sprachformen werden weiterhin explizit übersprungen.
 - Auch Tier-1-Fehler-Fixtures sind beobachtbar: Der Compiler klassifiziert statische Stelligkeits- und Unbekanntes-Symbol-Fehler, während das FPGA Laufzeit-Typfehler über einen maschinenlesbaren Ergebniskanal meldet.
-- Quell-Strings werden derzeit zu Zielsymbolen abgesenkt; fpga-lisp besitzt noch kein eigenes Laufzeit-String-Tag.
+- Quell-Strings werden zu `Ir::String` (separater IR-Variant) abgesenkt; fpga-lisp besitzt noch kein eigenes Laufzeit-String-Tag.
 - Inexakte Zahlen und exakte rationale Zahlen werden von der Zieldarstellung nicht unterstützt.
 
 [`compatibility.my`](compatibility.my) hält den genauen my-lisp-Sprachvertrag, fpga-lisp-ISA-Vertrag, geprüfte SHAs, die unterstützte Oberfläche und bekannte Lücken dieser Compilerrevision fest.
+
+Der freistehende x86_64-Slice ist separat dokumentiert in
+[`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). Er
+unterstützt derzeit Literale, explizites `(quote ...)`, `cons`/`car`/`cdr`/`eq`/`atom`, `cond`, überprüfte Fixnum-Arithmetik (`+`/`-`) und loop-optimierte Self-Tail-Calls;
+dies ist kein Anspruch auf vollständige Sprach-oder Boot-Parität.
 
 [Testergebnisse anzeigen](test_results.md) · [Testen](docs/testing.md)
 
