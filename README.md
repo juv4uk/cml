@@ -38,10 +38,11 @@ this is not a claim of full language or boot parity.
 
 [View Test Results](test_results.md) · [Testing](docs/testing.md)
 
-### Related Repositories
-- [fpga-lisp](https://github.com/juv4uk/fpga-lisp): The hardware architecture and assembler.
-- [my-lisp](https://github.com/juv4uk/my-lisp): The Lisp dialect.
-- [cml](https://github.com/juv4uk/cml): This compiler.
+### Related Repositories (my-lisp language line)
+- [my-lisp](https://github.com/juv4uk/my-lisp): The Lisp dialect and reference semantic contract.
+- [cml](https://github.com/juv4uk/cml): This heterogeneous compiler middle-end.
+- [fpga-lisp](https://github.com/juv4uk/fpga-lisp): The hardware Lisp machine and assembler.
+*(Note: independent foundational research projects like `wsm` (`() -> mathematics`) are separate research tracks and do not consume CML IR).*
 
 ### Build and Run
 
@@ -81,10 +82,11 @@ Freestanding x86_64 зріз окремо описаний у
 
 [Переглянути результати тестів](test_results.md) · [Тестування](docs/testing.md)
 
-### Пов'язані репозиторії
-- [fpga-lisp](https://github.com/juv4uk/fpga-lisp): Апаратна архітектура та асемблер.
-- [my-lisp](https://github.com/juv4uk/my-lisp): Діалект Lisp.
-- [cml](https://github.com/juv4uk/cml): Цей компілятор.
+### Пов'язані репозиторії (мовна лінія my-lisp)
+- [my-lisp](https://github.com/juv4uk/my-lisp): Мова Lisp та еталонний семантичний контракт.
+- [cml](https://github.com/juv4uk/cml): Цей гетерогенний middle-end компілятор.
+- [fpga-lisp](https://github.com/juv4uk/fpga-lisp): Апаратна Lisp-машина та асемблер.
+*(Примітка: фундаментальні проєкти на кшталт `wsm` (`() -> математика`) є окремими незалежними напрямами дослідження і не є споживачами CML IR).*
 
 ### Збірка та Запуск
 
