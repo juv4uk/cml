@@ -26,6 +26,9 @@ The compiler handles:
 - Source strings lower to `Ir::String` (separate IR variant); fpga-lisp still has no distinct runtime string tag.
 - Inexact numbers and exact rationals are not supported by the target representation.
 
+### Target ABI Pinning Status
+The x86_64 freestanding backend depends on `wsm-os-target` (git dependency in `Cargo.toml`), which is pinned to `wsm-os-lisp` rev `a6b92cd` — the OLD lab repository that the current `wsm-os` explicitly disclaims continuity with ("not a continuation of the old wsm-os-lisp lab, nothing kept beyond the name"). The `target-contract.wsm` defining the ABI exists only in the deprecated `wsm-os-lisp` repo; the current `wsm-os` has no `target-contract.wsm` and no Cargo crate. This is a known gap: the ABI pin is to a deprecated lab; the new `wsm-os` does not yet provide a target-contract or Cargo crate. Owner decision required on whether to migrate the ABI definition or accept the legacy pin.
+
 [`compatibility.my`](compatibility.my) records the exact my-lisp language contract, fpga-lisp ISA contract, tested SHAs, supported surface, and known gaps for this compiler revision.
 
 The freestanding x86_64 slice is documented separately in
