@@ -125,7 +125,7 @@ fn quoted_strings_are_rejected_instead_of_being_collapsed_into_symbols() {
         .expect_err("target ABI has no string representation");
     assert_eq!(
         error,
-        CompileError::Unsupported("quoted string (target ABI has no string representation)")
+        CompileError::UnsupportedVariant("quoted string (target ABI has no string representation)")
     );
 }
 
@@ -299,7 +299,7 @@ fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
     let backend = X86FreestandingBackend::new();
     assert_eq!(
         backend.compile_program(&[Ir::Var("X".to_string())]),
-        Err(CompileError::Unsupported("unbound variable"))
+        Err(CompileError::UnsupportedVariant("Var (unbound)"))
     );
     assert_eq!(
         backend.compile_program(&[Ir::Prim {
@@ -317,7 +317,7 @@ fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
             op: PrimOp::EqualP,
             args: vec![Ir::Int(1), Ir::Int(1)],
         }]),
-        Err(CompileError::Unsupported("equal? primitive"))
+        Err(CompileError::UnsupportedVariant("equal? primitive"))
     );
 }
 

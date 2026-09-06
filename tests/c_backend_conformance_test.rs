@@ -217,10 +217,10 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         let mut backend = CBackend::new();
         let c_source = match backend.compile_program(&program) {
             Ok(src) => src,
-            Err(cml::c_backend::CompileError::Unsupported(_)) => {
+            Err(cml::c_backend::CompileError::UnsupportedVariant(_)) => {
                 let required = parse_symbol_list_field(line, "requires").unwrap_or_default();
                 if required.is_empty() {
-                    failures.push(format!("{expr_str}: unexpected Unsupported error without a requires field in the fixture"));
+                    failures.push(format!("{expr_str}: unexpected UnsupportedVariant error without a requires field in the fixture"));
                 } else {
                     unsupported_errors += 1;
                 }

@@ -27,7 +27,7 @@ const CANONICAL_T: wsm_os_target::Word = match wsm_os_target::encode_symbol(wsm_
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileError {
     EmptyProgram,
-    Unsupported(&'static str),
+    UnsupportedVariant(&'static str),
     InvalidArity {
         operation: &'static str,
         expected: usize,
@@ -41,7 +41,7 @@ impl fmt::Display for CompileError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyProgram => write!(formatter, "empty program has no target value"),
-            Self::Unsupported(node) => {
+            Self::UnsupportedVariant(node) => {
                 write!(
                     formatter,
                     "unsupported IR in x86_64-freestanding backend: {node}"
@@ -281,7 +281,7 @@ fn preflight(
                 preflight(argument, symbols, slots)?;
             }
         }
-        Ir::Buffer(_) => return Err(CompileError::Unsupported("typed buffer")),
+        Ir::Buffer(_) => return Err(CompileError::UnsupportedVariant("typed buffer")),
         Ir::Var(_) => {}
         Ir::Lambda {
             params: Params::Fixed(params),
@@ -290,7 +290,7 @@ fn preflight(
             let bindings = BTreeSet::from([params[0].clone()]);
             preflight_lambda_body(body, &bindings, symbols, slots)?;
         }
-        Ir::Lambda { .. } => return Err(CompileError::Unsupported("lambda")),
+        Ir::Lambda { .. } => return Err(CompileError::UnsupportedVariant("lambda")),
         Ir::App { func, args } => {
             if let Some((operation, expected, _)) = platform_call_contract(func) {
                 if args.len() != expected {
@@ -317,7 +317,7 @@ fn preflight(
                 }
             }
             if args.len() != 1 {
-                return Err(CompileError::Unsupported("application"));
+                return Err(CompileError::UnsupportedVariant("application"));
             }
             preflight(func, symbols, slots)?;
             preflight(&args[0], symbols, slots)?;
@@ -328,15 +328,15 @@ fn preflight(
                 preflight(expr, symbols, slots)?;
             }
         }
-        Ir::Let { .. } => return Err(CompileError::Unsupported("let")),
-        Ir::Def { .. } => return Err(CompileError::Unsupported("def")),
+        Ir::Let { .. } => return Err(CompileError::UnsupportedVariant("let")),
+        Ir::Def { .. } => return Err(CompileError::UnsupportedVariant("def")),
         Ir::TailSelfCall { .. } => {
-            return Err(CompileError::Unsupported(
+            return Err(CompileError::UnsupportedVariant(
                 "TailSelfCall outside a tail-call program",
             ));
         }
         _ => {
-            return Err(CompileError::Unsupported(
+            return Err(CompileError::UnsupportedVariant(
                 "unsupported IR node in x86 preflight",
             ));
         }
@@ -353,7 +353,7 @@ fn preflight_lambda_body(
     *slots += 1;
     match ir {
         Ir::Var(name) if bindings.contains(name) => Ok(()),
-        Ir::Var(_) => Err(CompileError::Unsupported("unbound variable")),
+        Ir::Var(_) => Err(CompileError::UnsupportedVariant("unbound variable")),
         Ir::Int(value) => {
             wsm_os_target::encode_fixnum(*value).ok_or(CompileError::FixnumOutOfRange(*value))?;
             Ok(())
@@ -398,7 +398,7 @@ fn preflight_lambda_body(
                 }
             }
             if args.len() != 1 {
-                return Err(CompileError::Unsupported("application"));
+                return Err(CompileError::UnsupportedVariant("application"));
             }
             preflight_lambda_body(func, bindings, symbols, slots)?;
             preflight_lambda_body(&args[0], bindings, symbols, slots)
@@ -411,7 +411,7 @@ fn preflight_lambda_body(
             nested_bindings.insert(params[0].clone());
             preflight_lambda_body(body, &nested_bindings, symbols, slots)
         }
-        _ => Err(CompileError::Unsupported("lambda body")),
+        _ => Err(CompileError::UnsupportedVariant("lambda body")),
     }
 }
 
@@ -463,7 +463,7 @@ fn preflight_quoted(
         // representation.  Do not silently collapse a persistent WSM FS
         // string (for example a binding name) into a symbol.
         Quoted::Str(_) => {
-            return Err(CompileError::Unsupported(
+            return Err(CompileError::UnsupportedVariant(
                 "quoted string (target ABI has no string representation)",
             ));
         }
@@ -480,7 +480,7 @@ fn preflight_quoted(
             preflight_quoted(tail, symbols, slots)?;
         }
         _ => {
-            return Err(CompileError::Unsupported(
+            return Err(CompileError::UnsupportedVariant(
                 "unsupported Quoted node in x86 preflight",
             ));
         }
@@ -497,7 +497,7 @@ fn primitive_contract(operation: PrimOp) -> Result<(&'static str, usize), Compil
         PrimOp::Atom => Ok(("atom", 1)),
         PrimOp::Add => Ok(("add", 2)),
         PrimOp::Sub => Ok(("sub", 2)),
-        PrimOp::EqualP => Err(CompileError::Unsupported("equal? primitive")),
+        PrimOp::EqualP => Err(CompileError::UnsupportedVariant("equal? primitive")),
     }
 }
 
@@ -552,47 +552,73 @@ impl Emitter {
                 let word = wsm_os_target::encode_fixnum(*value)
                     .ok_or(CompileError::FixnumOutOfRange(*value))?;
                 self.emit_immediate(word);
+                Ok(())
             }
-            Ir::Nil => self.emit_immediate(wsm_os_target::NIL),
-            Ir::True => self.emit_immediate(CANONICAL_T),
-            Ir::Quote(value) => self.emit_quoted(value)?,
-            Ir::Cond { branches } => self.emit_cond(branches)?,
-            Ir::Prim { op, args } => self.emit_primitive(*op, args)?,
+            Ir::Float(_) => Err(CompileError::UnsupportedVariant("Float")),
+            Ir::Rational(_, _) => Err(CompileError::UnsupportedVariant("Rational")),
+            Ir::String(_) => Err(CompileError::UnsupportedVariant("String")),
+            Ir::Buffer(_) => Err(CompileError::UnsupportedVariant("Buffer")),
+            Ir::Nil => {
+                self.emit_immediate(wsm_os_target::NIL);
+                Ok(())
+            }
+            Ir::True => {
+                self.emit_immediate(CANONICAL_T);
+                Ok(())
+            }
+            Ir::Var(name) => {
+                if let Some(&slot) = self.env.get(name) {
+                    self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(slot)));
+                    Ok(())
+                } else {
+                    Err(CompileError::UnsupportedVariant("Var (unbound)"))
+                }
+            }
+            Ir::Builtin(_) => Err(CompileError::UnsupportedVariant("Builtin")),
+            Ir::Quote(value) => self.emit_quoted(value),
+            Ir::Lambda {
+                params: Params::Fixed(params),
+                body,
+            } if params.len() == 1 => {
+                self.emit_single_argument_closure_value(&params[0], body)
+            }
+            Ir::Lambda {
+                params: Params::Fixed(_),
+                ..
+            } => Err(CompileError::UnsupportedVariant("Lambda (fixed, arity != 1)")),
+            Ir::Lambda {
+                params: Params::Variadic { .. },
+                ..
+            }
+            | Ir::Lambda {
+                params: Params::AllRest(_),
+                ..
+            } => Err(CompileError::UnsupportedVariant("Lambda (variadic/all-rest)")),
             Ir::App { func, args } => {
                 if platform_call_contract(func).is_some()
                     && !matches!(func.as_ref(), Ir::Var(name) if self.env.contains_key(name))
                 {
-                    self.emit_platform_call(func, args)?;
+                    self.emit_platform_call(func, args)
                 } else if let Ir::Lambda {
                     params: Params::Fixed(params),
                     body,
                 } = func.as_ref()
                 {
                     if params.len() == 1 && args.len() == 1 {
-                        self.emit_single_argument_lambda_call(&params[0], body, &args[0])?;
+                        self.emit_single_argument_lambda_call(&params[0], body, &args[0])
                     } else {
-                        unreachable!("preflight excludes unsupported lambda application");
+                        Err(CompileError::UnsupportedVariant("App (multi-arg or non-lambda)"))
                     }
                 } else {
-                    self.emit_single_argument_closure_call(func, &args[0])?;
+                    self.emit_single_argument_closure_call(func, &args[0])
                 }
             }
-            Ir::Lambda {
-                params: Params::Fixed(params),
-                body,
-            } if params.len() == 1 => {
-                self.emit_single_argument_closure_value(&params[0], body)?;
-            }
-            Ir::Var(name) => {
-                if let Some(&slot) = self.env.get(name) {
-                    self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(slot)));
-                } else {
-                    return Err(CompileError::Unsupported("unbound variable"));
-                }
-            }
-            _ => unreachable!("preflight excludes unsupported IR"),
+            Ir::Cond { branches } => self.emit_cond(branches),
+            Ir::Let { .. } => Err(CompileError::UnsupportedVariant("Let")),
+            Ir::Def { .. } => Err(CompileError::UnsupportedVariant("Def")),
+            Ir::Prim { op, args } => self.emit_primitive(*op, args),
+            Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
         }
-        Ok(())
     }
 
     fn emit_immediate(&mut self, word: u64) {
@@ -893,7 +919,7 @@ impl Emitter {
             }
             Quoted::Sym(name) => self.emit_symbol(name),
             Quoted::Str(_) => {
-                return Err(CompileError::Unsupported(
+                return Err(CompileError::UnsupportedVariant(
                     "quoted string (target ABI has no string representation)",
                 ));
             }
@@ -923,7 +949,7 @@ impl Emitter {
                 }
             }
             _ => {
-                return Err(CompileError::Unsupported(
+                return Err(CompileError::UnsupportedVariant(
                     "unsupported Quoted node in x86 emit",
                 ));
             }

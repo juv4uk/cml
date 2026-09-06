@@ -36,8 +36,8 @@ pub enum CompileError {
     NestedDef,
     /// Floating buffers are not yet represented by this scalar C runtime.
     UnsupportedTypedBuffer,
-    /// An IR node that this backend does not yet support.
-    Unsupported(String),
+    /// An IR variant that this backend does not yet support.
+    UnsupportedVariant(&'static str),
 }
 
 impl fmt::Display for CompileError {
@@ -51,8 +51,8 @@ impl fmt::Display for CompileError {
                 f,
                 "unsupported typed numeric buffer in C backend: use a compute backend"
             ),
-            CompileError::Unsupported(node) => {
-                write!(f, "unsupported IR node in C backend: {node}")
+            CompileError::UnsupportedVariant(variant) => {
+                write!(f, "unsupported IR variant in C backend: {variant}")
             }
         }
     }
@@ -476,7 +476,9 @@ impl CBackend {
     fn compile_expr(&mut self, ir: &Ir, env: &str) -> Result<String, CompileError> {
         match ir {
             Ir::Int(n) => Ok(format!("mk_int({n})")),
+            Ir::Float(_) => Err(CompileError::UnsupportedVariant("Float")),
             Ir::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
+            Ir::String(_) => Err(CompileError::UnsupportedVariant("String")),
             Ir::Buffer(BufferLiteral::I32(values)) => {
                 let data = values
                     .iter()
@@ -492,6 +494,7 @@ impl CBackend {
             Ir::Nil => Ok("(&NIL_V)".to_string()),
             Ir::True => Ok("(&TRUE_V)".to_string()),
             Ir::Var(name) => Ok(format!("env_lookup({env}, \"{name}\")")),
+            Ir::Builtin(_) => Err(CompileError::UnsupportedVariant("Builtin")),
             Ir::Quote(q) => self.compile_quoted(q),
             Ir::Lambda { params, body } => self.compile_lambda(params, body, env),
             Ir::App { func, args } => self.compile_app(func, args, env),
@@ -506,13 +509,8 @@ impl CBackend {
                 self.compile_app(&lambda, &args, env)
             }
             Ir::Def { .. } => Err(CompileError::NestedDef),
-            Ir::TailSelfCall { .. } => Err(CompileError::Unsupported(
-                "TailSelfCall outside a tail-call program".to_string(),
-            )),
+            Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
             Ir::Prim { op, args } => self.compile_prim(*op, args, env),
-            _ => Err(CompileError::Unsupported(
-                "unsupported IR node for C backend".to_string(),
-            )),
         }
     }
 
@@ -555,6 +553,7 @@ impl CBackend {
     fn compile_quoted(&mut self, q: &Quoted) -> Result<String, CompileError> {
         match q {
             Quoted::Int(n) => Ok(format!("mk_int({n})")),
+            Quoted::Float(_) => Err(CompileError::UnsupportedVariant("Quoted::Float")),
             Quoted::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
             Quoted::Sym(s) | Quoted::Str(s) => Ok(format!("mk_sym(\"{s}\")")),
             Quoted::Nil => Ok("(&NIL_V)".to_string()),
@@ -574,9 +573,6 @@ impl CBackend {
                 }
                 Ok(acc)
             }
-            _ => Err(CompileError::Unsupported(
-                "unsupported quoted node for C backend".to_string(),
-            )),
         }
     }
 

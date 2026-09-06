@@ -25,7 +25,7 @@ pub enum CompileError {
     /// A symbol-table-aware emission would exceed the 16-bit LOADSYM field.
     SymbolTableOverflow,
     /// An IR variant that is semantically supported by CML but lacks an fpga-lisp emission path.
-    Unsupported(String),
+    UnsupportedVariant(&'static str),
 }
 
 impl fmt::Display for CompileError {
@@ -48,8 +48,8 @@ impl fmt::Display for CompileError {
             CompileError::SymbolTableOverflow => {
                 write!(f, "symbol table overflow (max {})", MAX_LOADI_MAGNITUDE)
             }
-            CompileError::Unsupported(msg) => {
-                write!(f, "unsupported IR node for FPGA target: {}", msg)
+            CompileError::UnsupportedVariant(variant) => {
+                write!(f, "unsupported IR variant for FPGA target: {variant}")
             }
         }
     }
@@ -60,7 +60,12 @@ impl std::error::Error for CompileError {}
 fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
     match ir {
         Ir::Int(n) => validate_int(*n),
+        Ir::Float(_) => Err(CompileError::UnsupportedVariant("Float")),
+        Ir::Rational(_, _) => Err(CompileError::UnsupportedVariant("Rational")),
+        Ir::String(_) => Err(CompileError::UnsupportedVariant("String")),
         Ir::Buffer(_) => Err(CompileError::UnsupportedNumericBuffer),
+        Ir::Nil | Ir::True | Ir::Var(_) => Ok(()),
+        Ir::Builtin(_) => Err(CompileError::UnsupportedVariant("Builtin")),
         Ir::Quote(q) => validate_quoted(q),
         Ir::Lambda { body, .. } => validate_ir(body),
         Ir::App { func, args } => {
@@ -85,13 +90,7 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
         }
         Ir::Def { value, .. } => validate_ir(value),
         Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
-        Ir::Nil | Ir::True | Ir::Var(_) => Ok(()),
-        Ir::TailSelfCall { .. } => Err(CompileError::Unsupported(
-            "TailSelfCall is x86-only".to_string(),
-        )),
-        _ => Err(CompileError::Unsupported(
-            "unsupported IR node in compiler".to_string(),
-        )),
+        Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
     }
 }
 
@@ -114,9 +113,8 @@ fn validate_quoted(q: &Quoted) -> Result<(), CompileError> {
             validate_quoted(tail)
         }
         Quoted::Str(_) | Quoted::Sym(_) | Quoted::Nil => Ok(()),
-        _ => Err(CompileError::Unsupported(
-            "unsupported quoted node in compiler".to_string(),
-        )),
+        Quoted::Float(_) => Err(CompileError::UnsupportedVariant("Quoted::Float")),
+        Quoted::Rational(_, _) => Err(CompileError::UnsupportedVariant("Quoted::Rational")),
     }
 }
 
@@ -265,7 +263,10 @@ impl Compiler {
             Ir::Int(n) => {
                 self.emit_integer_literal(*n, target_reg);
             }
-            Ir::Buffer(_) => unreachable!("numeric buffers are rejected by validate_ir"),
+            Ir::Float(_) => unreachable!("Float rejected by validate_ir"),
+            Ir::Rational(_, _) => unreachable!("Rational rejected by validate_ir"),
+            Ir::String(_) => unreachable!("String rejected by validate_ir"),
+            Ir::Buffer(_) => unreachable!("Buffer rejected by validate_ir"),
             Ir::Nil => {
                 self.emit("LOADI R13 0");
                 self.emit("LOADI R12 1");
@@ -276,14 +277,14 @@ impl Compiler {
                 self.emit(&format!("ATOM {} {}", target_reg, target_reg));
             }
             Ir::Var(s) => {
-                // Variable lookup
                 self.used_lookup = true;
                 self.emit(&format!("; LOOKUP {}", s));
                 self.emit(&format!("LOADSYM R12 {}", s));
-                self.emit("MOV R13 R4"); // R4 is our standard ENV register
+                self.emit("MOV R13 R4");
                 self.call_subroutine("cml_lookup");
                 self.emit(&format!("MOV {} R15", target_reg));
             }
+            Ir::Builtin(_) => unreachable!("Builtin rejected by validate_ir"),
             Ir::Quote(q) => self.compile_quoted(q, target_reg),
             Ir::Lambda { params, body } => self.compile_lambda(params, body, target_reg),
             Ir::App { func, args } => self.compile_generic_call(func, args, target_reg),
@@ -291,8 +292,7 @@ impl Compiler {
             Ir::Let { bindings, body } => self.compile_let(bindings, body, target_reg),
             Ir::Def { name, value } => self.compile_def(name, value, target_reg),
             Ir::Prim { op, args } => self.compile_prim(*op, args, target_reg),
-            Ir::TailSelfCall { .. } => unreachable!("TailSelfCall is x86-only"),
-            _ => unreachable!("unsupported IR node in compiler"),
+            Ir::TailSelfCall { .. } => unreachable!("TailSelfCall rejected by validate_ir"),
         }
     }
 
