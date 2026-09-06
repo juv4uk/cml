@@ -241,13 +241,6 @@ fn test_conformance() {
         );
     }
 
-    // Track symbols globally across the runner
-    let mut symbol_table = HashMap::new();
-    let mut next_sym_id = 10; // Start dynamic symbols at 10
-
-    symbol_table.insert("NIL".to_string(), 0);
-    symbol_table.insert("TRUE".to_string(), 1);
-    symbol_table.insert("T".to_string(), 1);
     let mut checked = 0;
     let mut checked_errors = 0;
     let mut selected = 0;
@@ -341,7 +334,15 @@ fn test_conformance() {
                 }
             };
 
-            // Collect new symbols
+            // Each fixture gets its own fresh local symbol table (starting at id 10).
+            // Fixtures run as separate FPGA programs; no cross-fixture symbol identity required.
+            let mut symbol_table = HashMap::new();
+            symbol_table.insert("NIL".to_string(), 0);
+            symbol_table.insert("TRUE".to_string(), 1);
+            symbol_table.insert("T".to_string(), 1);
+            let mut next_sym_id = 10;
+
+            // Collect symbols from THIS fixture only
             let mut new_syms = Vec::new();
             for e in &exprs {
                 collect_symbols(e, &mut new_syms);
