@@ -508,6 +508,9 @@ fn platform_call_contract(func: &Ir) -> Option<(&'static str, usize, &'static st
     match name.as_str() {
         "PCI-CONFIG-CAPABILITY" => Some(("pci-config-capability", 0, "wsm_pci_config_capability")),
         "PCI-CONFIG-READ16" => Some(("pci-config-read16", 5, "wsm_pci_config_read16")),
+        "MMIO-CAPABILITY" => Some(("mmio-capability", 0, "wsm_mmio_capability")),
+        "MMIO-READ32" => Some(("mmio-read32", 2, "wsm_mmio_read32")),
+        "MMIO-WRITE32" => Some(("mmio-write32", 3, "wsm_mmio_write32")),
         _ => None,
     }
 }
