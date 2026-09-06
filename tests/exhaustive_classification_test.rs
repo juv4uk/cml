@@ -58,27 +58,6 @@ fn all_ir() -> Vec<Ir> {
         Ir::TailSelfCall {
             args: vec![Ir::Int(1)],
         },
-        Ir::Map {
-            kernel: Box::new(Ir::Var("f".to_string())),
-            buffers: vec![Ir::Var("b".to_string())],
-        },
-        Ir::Reduce {
-            kernel: Box::new(Ir::Var("f".to_string())),
-            buffer: Box::new(Ir::Var("b".to_string())),
-            initial: Box::new(Ir::Int(0)),
-        },
-        Ir::Scan {
-            kernel: Box::new(Ir::Var("f".to_string())),
-            buffer: Box::new(Ir::Var("b".to_string())),
-            initial: Box::new(Ir::Int(0)),
-        },
-        Ir::Index {
-            buffer: Box::new(Ir::Var("b".to_string())),
-            index: Box::new(Ir::Int(0)),
-        },
-        Ir::ParallelRegion {
-            body: Box::new(Ir::Nil),
-        },
     ];
 
     for q in all_quoted() {

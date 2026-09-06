@@ -109,7 +109,7 @@ pub enum Ir {
         op: PrimOp,
         args: Vec<Ir>,
     },
-    /// A self-tail-call recognised by the lowering pass inside a `Def` body.
+/// A self-tail-call recognised by the lowering pass inside a `Def` body.
     ///
     /// Produced only when a `Def`-named function calls *itself* in explicit
     /// tail position. The x86 backend lowers this to a register reload + `jmp`
@@ -120,27 +120,5 @@ pub enum Ir {
     /// `Ir::App` and are rejected by the x86 freestanding preflight.
     TailSelfCall {
         args: Vec<Ir>,
-    },
-    // GPU-oriented Compute IR
-    Map {
-        kernel: Box<Ir>,
-        buffers: Vec<Ir>,
-    },
-    Reduce {
-        kernel: Box<Ir>,
-        buffer: Box<Ir>,
-        initial: Box<Ir>,
-    },
-    Scan {
-        kernel: Box<Ir>,
-        buffer: Box<Ir>,
-        initial: Box<Ir>,
-    },
-    Index {
-        buffer: Box<Ir>,
-        index: Box<Ir>,
-    },
-    ParallelRegion {
-        body: Box<Ir>,
     },
 }
