@@ -138,6 +138,7 @@ impl X86FreestandingBackend {
             next_slot: 0,
             next_label: 0,
             closure_labels: Vec::new(),
+            functions: BTreeMap::new(),
         };
         emitter.line(".text");
         emitter.line(".globl wsm_entry");
@@ -221,6 +222,7 @@ impl X86FreestandingBackend {
             next_slot: param_count,
             next_label: 0,
             closure_labels: Vec::new(),
+            functions: BTreeMap::new(),
         };
 
         emitter.line(".text");
@@ -329,7 +331,24 @@ fn preflight(
             }
         }
         Ir::Let { .. } => return Err(CompileError::UnsupportedVariant("let")),
-        Ir::Def { .. } => return Err(CompileError::UnsupportedVariant("def")),
+        Ir::Def { name, value } => {
+            // Admit a single self-tail-recursive named function with no free variables.
+            // Shape: Def { name, Lambda { params: Fixed(params), body } }
+            // where body only uses params and uses TailSelfCall for recursion.
+            if let Ir::Lambda {
+                params: Params::Fixed(param_names),
+                body,
+            } = value.as_ref()
+            {
+                let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
+                preflight_def_body(body, &bindings, symbols, slots)?;
+                // Record the function name as a known symbol (for call dispatch).
+                symbols.insert(name.clone());
+                return Ok(());
+            } else {
+                return Err(CompileError::UnsupportedVariant("def (non-fixed-arity lambda)"));
+            }
+        }
         Ir::TailSelfCall { .. } => {
             return Err(CompileError::UnsupportedVariant(
                 "TailSelfCall outside a tail-call program",
@@ -446,6 +465,43 @@ fn preflight_tail_body(
     Ok(())
 }
 
+/// Like `preflight` but permits `TailSelfCall` nodes and accepts the given
+/// bindings as valid variables (for Def body preflight).
+fn preflight_def_body(
+    ir: &Ir,
+    bindings: &BTreeSet<String>,
+    symbols: &mut BTreeSet<String>,
+    slots: &mut usize,
+) -> Result<(), CompileError> {
+    *slots += 1;
+    match ir {
+        Ir::Var(name) if bindings.contains(name) => Ok(()),
+        Ir::Var(_) => Err(CompileError::UnsupportedVariant("unbound variable")),
+        Ir::TailSelfCall { args } => {
+            for arg in args {
+                preflight_def_body(arg, bindings, symbols, slots)?;
+            }
+            Ok(())
+        }
+        Ir::Cond { branches } => {
+            for (test, expr) in branches {
+                preflight_def_body(test, bindings, symbols, slots)?;
+                preflight_def_body(expr, bindings, symbols, slots)?;
+            }
+            Ok(())
+        }
+        Ir::Let { bindings: let_bindings, body } => {
+            let mut new_bindings = bindings.clone();
+            for (name, val) in let_bindings {
+                preflight_def_body(val, bindings, symbols, slots)?;
+                new_bindings.insert(name.clone());
+            }
+            preflight_def_body(body, &new_bindings, symbols, slots)
+        }
+        other => preflight(other, symbols, slots),
+    }
+}
+
 fn preflight_quoted(
     quoted: &Quoted,
     symbols: &mut BTreeSet<String>,
@@ -522,6 +578,7 @@ struct Emitter {
     next_slot: usize,
     next_label: usize,
     closure_labels: Vec<usize>,
+    functions: BTreeMap<String, usize>,
 }
 
 impl Emitter {
@@ -609,13 +666,87 @@ impl Emitter {
                     } else {
                         Err(CompileError::UnsupportedVariant("App (multi-arg or non-lambda)"))
                     }
+                } else if let Ir::Var(name) = func.as_ref() {
+                    // Call a named function (admitted via Def)
+                    if let Some(&label) = self.functions.get(name) {
+                        // Evaluate arguments into registers/stack per SysV AMD64
+                        if args.len() > 6 {
+                            return Err(CompileError::UnsupportedVariant("App (too many args for named function)"));
+                        }
+                        // Evaluate args in reverse order (right to left) for stack allocation
+                        // For SysV AMD64: arg1=%rdi, arg2=%rsi, arg3=%rdx, arg4=%rcx, arg5=%r8, arg6=%r9
+                        // But we keep %rdi as context, so user args start at %rsi
+                        // For simplicity, evaluate all args to stack slots then load into registers
+                        let arg_slots: Vec<usize> = args
+                            .iter()
+                            .map(|arg| {
+                                self.emit_ir(arg)?;
+                                let slot = self.allocate_slot();
+                                self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                                Ok(slot)
+                            })
+                            .collect::<Result<_, CompileError>>()?;
+                        // Load args into registers (context in %rdi, user args in %rsi, %rdx, %rcx, %r8, %r9)
+                        self.line("    movq %r12, %rdi"); // context
+                        let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+                        for (i, slot) in arg_slots.iter().enumerate() {
+                            if i < regs.len() {
+                                self.line(&format!("    movq {}(%rsp), {}", Self::slot_offset(*slot), regs[i]));
+                            }
+                        }
+                        self.line(&format!("    call .Ltcloop_{label}"));
+                        Ok(())
+                    } else {
+                        // Fall through to closure call
+                        self.emit_single_argument_closure_call(func, &args[0])
+                    }
                 } else {
                     self.emit_single_argument_closure_call(func, &args[0])
                 }
             }
             Ir::Cond { branches } => self.emit_cond(branches),
             Ir::Let { .. } => Err(CompileError::UnsupportedVariant("Let")),
-            Ir::Def { .. } => Err(CompileError::UnsupportedVariant("Def")),
+            Ir::Def { name, value } => {
+                if let Ir::Lambda {
+                    params: Params::Fixed(param_names),
+                    body,
+                } = value.as_ref()
+                {
+                    // For a self-tail-recursive function, the entry point IS the loop label.
+                    // TailSelfCall jumps to .Ltcloop_{label}, so we emit the function there.
+                    let label = self.allocate_label();
+                    self.functions.insert(name.clone(), label);
+                    self.line(&format!(".Ltcloop_{label}:"));
+                    // Function prologue
+                    self.line("    pushq %rbp");
+                    self.line("    movq %rsp, %rbp");
+                    // Params are in registers: %rdi=context, %rsi=arg1, %rdx=arg2, %rcx=arg3, %r8=arg4, %r9=arg5
+                    // Save params to stack slots for body access
+                    let mut param_env = BTreeMap::new();
+                    let regs = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+                    for (i, param) in param_names.iter().enumerate() {
+                        let slot = self.allocate_slot();
+                        if i < regs.len() {
+                            self.line(&format!("    movq {}, {}(%rsp)", regs[i], Self::slot_offset(slot)));
+                        } else {
+                            return Err(CompileError::UnsupportedVariant("Def (too many params)"));
+                        }
+                        param_env.insert(param.clone(), slot);
+                    }
+                    // Save current env and use param_env for body
+                    let old_env = std::mem::replace(&mut self.env, param_env);
+                    // Emit body in tail-call context (allows TailSelfCall)
+                    self.emit_tail_body(body, label, param_names.len())?;
+                    // Restore env
+                    self.env = old_env;
+                    // Function epilogue (reached only from non-recursive branches)
+                    self.line("    popq %rbp");
+                    self.line("    ret");
+                    Ok(())
+                } else {
+                    Err(CompileError::UnsupportedVariant("def (non-fixed-arity lambda)"))
+                }
+            }
             Ir::Prim { op, args } => self.emit_primitive(*op, args),
             Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
         }

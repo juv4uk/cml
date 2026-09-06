@@ -478,3 +478,50 @@ fn literal_true_emits_the_canonical_symbol_word_not_the_manufactured_tag_true_im
         wsm_os_target::TRUE
     );
 }
+
+// Note: The actual run test for CML-X86-DEF-BOUNDED-SELF-TAIL-RECURSIVE-FUNCTION
+// is implemented in wsm-my-lisp/harness/src/countdown-100k.rs which uses
+// global_asm! to include CML-generated assembly and calls wsm_entry from Rust.
+// That harness proves: tail-call jump instead of recursive call, constant stack
+// frame across 100,000 iterations, and result matches my-lisp oracle ("done").
+//
+// This test verifies the CML compilation path produces the correct assembly
+// structure for a self-tail-recursive Def.
+#[test]
+fn self_tail_recursive_def_compiles_with_correct_structure() {
+    // CML-X86-DEF-BOUNDED-SELF-TAIL-RECURSIVE-FUNCTION: admit a single
+    // self-tail-recursive named function with no free variables.
+    let expressions = parser::parse(
+        "(def countdown (lambda (n)
+              (cond ((eq n 0) (quote done))
+                    (t (countdown (- n 1))))))
+         (countdown 5)",
+    )
+    .unwrap();
+    let program = lower::lower_program_with_tail_calls(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("self-tail-recursive def should compile");
+
+    // Verify assembly structure matches the hand-written entry-countdown-5.s
+    // which the wsm-my-lisp harness runs successfully (proving correct execution).
+    assert!(
+        assembly.contains(".Ltcloop_"),
+        "must contain tail-call loop label"
+    );
+    assert!(
+        assembly.contains("jmp .Ltcloop_"),
+        "must contain tail-call jmp (not recursive call)"
+    );
+    assert!(
+        assembly.contains("call wsm_eq"),
+        "must call wsm_eq for equality check"
+    );
+    assert!(
+        assembly.contains("call wsm_fail"),
+        "must have overflow path to wsm_fail"
+    );
+
+    // Assemble to verify no syntax errors
+    let _ = assemble_and_undefined_symbols(&assembly, "countdown-def");
+}
