@@ -3,8 +3,8 @@
 *.bin binary
 *.vvp binary
 
-# GitHub Linguist: temporary WSM display profile for every supported source
-# extension. This affects highlighting/statistics only.
-*.wsm linguist-language=Lisp
-*.my linguist-language=Lisp
-*.lisp linguist-language=Lisp
+# GitHub Linguist: Common Lisp is the temporary syntax/statistics profile
+# for supported my-lisp/WSM source extensions. This is classification only.
+*.wsm linguist-language=Common-Lisp
+*.my linguist-language=Common-Lisp
+*.lisp linguist-language=Common-Lisp
