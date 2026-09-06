@@ -4,7 +4,7 @@
 //! semantic analysis.  It rejects source shapes for which CML would otherwise
 //! emit a different program than the canonical evaluator.
 
-use crate::ast::Expr;
+use crate::ast::{Expr, NumericBufferLiteral};
 use std::collections::HashSet;
 use std::fmt;
 
@@ -12,6 +12,10 @@ use std::fmt;
 pub enum SemanticErrorKind {
     DuplicateParameter,
     UnsupportedSequentialBody,
+    /// Unquoted string literal ("...") — no backend supports Ir::String.
+    UnquotedStringLiteral,
+    /// #f32(...) numeric buffer — no backend supports Buffer(F32).
+    UnsupportedF32Buffer,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +37,14 @@ pub fn analyze_program(exprs: &[Expr]) -> Result<(), SemanticError> {
 }
 
 pub fn analyze_expr(expr: &Expr) -> Result<(), SemanticError> {
+    // #f32(...) numeric buffer — no backend supports Buffer(F32)
+    if let Expr::NumericBuffer(NumericBufferLiteral::F32(_)) = expr {
+        return Err(SemanticError {
+            kind: SemanticErrorKind::UnsupportedF32Buffer,
+            detail: "#f32(...) numeric buffer not supported (no backend supports F32 buffers)".to_string(),
+        });
+    }
+
     let Expr::List(items) = expr else {
         return Ok(());
     };
@@ -42,9 +54,24 @@ pub fn analyze_expr(expr: &Expr) -> Result<(), SemanticError> {
 
     match head.as_str() {
         // Quoted data has no binding or execution semantics to analyze.
-        "quote" => Ok(()),
+        "quote" => analyze_quoted(&items[1]),
         "lambda" if items.len() >= 3 => analyze_lambda(&items[1], &items[2..]),
         _ => items.iter().skip(1).try_for_each(analyze_expr),
+    }
+}
+
+fn analyze_quoted(expr: &Expr) -> Result<(), SemanticError> {
+    match expr {
+        Expr::String(_) => Err(SemanticError {
+            kind: SemanticErrorKind::UnquotedStringLiteral,
+            detail: "quoted string literal not supported (no backend represents strings)".to_string(),
+        }),
+        Expr::List(list) => list.iter().try_for_each(analyze_quoted),
+        Expr::DottedList(list, tail) => {
+            list.iter().try_for_each(analyze_quoted)?;
+            analyze_quoted(tail)
+        }
+        _ => Ok(()),
     }
 }
 

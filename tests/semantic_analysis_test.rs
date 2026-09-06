@@ -43,3 +43,24 @@ fn quoted_lambda_shaped_data_is_not_treated_as_executable_code() {
     let expressions = parser::parse("(quote (lambda (x x) x))").unwrap();
     semantic::analyze_program(&expressions).unwrap();
 }
+
+#[test]
+fn rejects_quoted_string_literal() {
+    let expressions = parser::parse("(quote \"hello\")").unwrap();
+    let error = semantic::analyze_program(&expressions).unwrap_err();
+    assert_eq!(error.kind, SemanticErrorKind::UnquotedStringLiteral);
+}
+
+#[test]
+fn rejects_quoted_string_in_list() {
+    let expressions = parser::parse("(quote (a \"hello\" b))").unwrap();
+    let error = semantic::analyze_program(&expressions).unwrap_err();
+    assert_eq!(error.kind, SemanticErrorKind::UnquotedStringLiteral);
+}
+
+#[test]
+fn rejects_f32_numeric_buffer() {
+    let expressions = parser::parse("#f32(1.0 2.0 3.0)").unwrap();
+    let error = semantic::analyze_program(&expressions).unwrap_err();
+    assert_eq!(error.kind, SemanticErrorKind::UnsupportedF32Buffer);
+}
