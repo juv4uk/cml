@@ -1,0 +1,143 @@
+; Focused execution queue for docs/standalone-binary-roadmap.md.
+; Data only. `done . t` requires in-repo evidence. Unsupported is not pass.
+;
+; This file is intentionally narrow: it tracks the second variant — broad,
+; declared my-lisp -> standalone native binary parity. The repository-level
+; tasks.my remains the global plan of record; agents working this track should
+; mirror accepted items there when taking ownership.
+
+((kind . standalone-binary-tasks)
+ (version . 0)
+ (goal . "Compile the declared my-lisp standalone-v1 surface to native executables and differentially verify every admitted fixture against reference semantics.")
+ (tasks .
+  (("STANDALONE-00-TRIPLE-ORACLE" .
+    ((priority . 1.00)
+     (done . nil)
+     (capabilities . (compiler testing lisp rust proof))
+     (depends-on . ())
+     (description . "Build one harness that runs the same source through native my-lisp, Lisp my-eval when supported, and the CML C-backend executable. Record value/error/unsupported structurally; never treat unsupported as pass.")
+     (acceptance . "At least 10 existing constitutive fixtures run through the harness; every mismatch identifies which observer diverged; no stdout-text grep is the semantic discriminator.")))
+
+   ("STANDALONE-01-BUILD-DRIVER" .
+    ((priority . 0.95)
+     (done . nil)
+     (capabilities . (compiler cli c toolchain testing))
+     (depends-on . ("STANDALONE-00-TRIPLE-ORACLE"))
+     (description . "Add a one-command Linux x86_64 pipeline: my-lisp source -> CML IR -> generated C -> system C compiler -> native executable.")
+     (acceptance . "A command equivalent to `cml build program.my -o program` creates and runs an executable; debug mode can retain generated C; compiler/toolchain failures remain explicit.")))
+
+   ("STANDALONE-02-RUNTIME-ABI-V0" .
+    ((priority . 0.95)
+     (done . nil)
+     (capabilities . (compiler c abi runtime design testing))
+     (depends-on . ("STANDALONE-01-BUILD-DRIVER"))
+     (description . "Separate generated program code from a small target runtime ABI: Value representation, constructors, predicates, call convention, allocation interface, entry point and error channel.")
+     (acceptance . "Generated code and runtime build as separate translation units and link without emitter-private struct knowledge leaking across the ABI.")))
+
+   ("STANDALONE-03-VALUE-SURFACE" .
+    ((priority . 0.90)
+     (done . nil)
+     (capabilities . (compiler runtime representation conformance))
+     (depends-on . ("STANDALONE-02-RUNTIME-ABI-V0"))
+     (description . "Close standalone runtime representation for canonical empty list, symbols, proper/dotted pairs, strings, exact integers and exact rationals. Decide inexact representation separately; no truncation or implicit lossy conversion.")
+     (acceptance . "Every admitted value fixture round-trips through compiled execution to the same canonical printed/decoded value as native my-lisp; unsupported numeric classes are explicit.")))
+
+   ("STANDALONE-04-BINDING-CLOSURE-PARITY" .
+    ((priority . 0.90)
+     (done . nil)
+     (capabilities . (compiler closures lisp conformance))
+     (depends-on . ("STANDALONE-02-RUNTIME-ABI-V0"))
+     (description . "Prove fixed, dotted and all-rest lambda parameters; lexical capture; first-class builtin values; self-recursion; then mutual recursion. Keep semantics aligned with native evaluator and Lisp meta-evaluator.")
+     (acceptance . "Dedicated fixtures for each binding mode match the reference evaluator; arity mismatch is not silently accepted or truncated.")))
+
+   ("STANDALONE-05-STRUCTURED-ERRORS" .
+    ((priority . 0.88)
+     (done . nil)
+     (capabilities . (compiler errors runtime conformance))
+     (depends-on . ("STANDALONE-02-RUNTIME-ABI-V0"))
+     (description . "Give compiled programs stable machine-readable error identity distinct from optional platform diagnostic text. Cover arity, unknown symbol, type, not-callable, division by zero and backend unsupported cases as applicable.")
+     (acceptance . "Differential harness compares error identity as data; no test branches on libc/OS/compiler prose.")))
+
+   ("STANDALONE-06-BOUNDED-ALLOCATION" .
+    ((priority . 0.80)
+     (done . nil)
+     (capabilities . (runtime memory compiler testing))
+     (depends-on . ("STANDALONE-03-VALUE-SURFACE"))
+     (description . "Define deterministic allocation ownership for bounded standalone programs before adding GC. Arena/region allocation is acceptable when lifetime and failure are explicit.")
+     (acceptance . "Stress fixtures allocate many pairs/closures without UB; exhaustion produces a named failure; lifetime rules are documented and tested.")))
+
+   ("STANDALONE-07-GC-EVIDENCE-GATE" .
+    ((priority . 0.65)
+     (done . nil)
+     (capabilities . (runtime gc proof testing))
+     (depends-on . ("STANDALONE-06-BOUNDED-ALLOCATION"))
+     (description . "Add GC only after a corpus demonstrates that bounded allocation is insufficient for the standalone-v1 target. If required, define roots across globals, frames, closures and current result before choosing collector complexity.")
+     (acceptance . "Either evidence records GC as not required for v1, or a stress corpus proves bounded memory under collection with no lost live objects.")))
+
+   ("STANDALONE-08-LANGUAGE-LIBRARIES" .
+    ((priority . 0.85)
+     (done . nil)
+     (capabilities . (compiler lisp bootstrap macros testing))
+     (depends-on . ("STANDALONE-04-BINDING-CLOSURE-PARITY"))
+     (description . "Compile language-owned macro/core libraries through the normal source->IR path instead of manually duplicating their semantics in C runtime helpers.")
+     (acceptance . "A nontrivial slice of real core.my is compiled into the standalone program and passes the same oracle fixtures without a backend-specific reimplementation.")))
+
+   ("STANDALONE-09-HOST-CAPABILITY-ABI" .
+    ((priority . 0.75)
+     (done . nil)
+     (capabilities . (compiler host abi portability runtime))
+     (depends-on . ("STANDALONE-02-RUNTIME-ABI-V0"))
+     (description . "Map the minimal my-lisp host portability substrate into standalone executables. Link only capabilities a program requires; absence must be explicit.")
+     (acceptance . "At least raw file/time/process or TCP capability is exercised end-to-end without moving language-level interpretation back into C; unsupported host capability fails explicitly.")))
+
+   ("STANDALONE-10-CONFORMANCE-MATRIX" .
+    ((priority . 1.00)
+     (done . nil)
+     (capabilities . (compiler conformance proof automation))
+     (depends-on . ("STANDALONE-00-TRIPLE-ORACLE"))
+     (description . "Maintain a generated matrix: fixture | native | my-eval | compiled | status | reason. Every constitutive fixture must appear exactly once.")
+     (acceptance . "CI fails if a constitutive fixture disappears, is silently skipped, or changes from PASS to unsupported without an explicit reviewed reason.")))
+
+   ("STANDALONE-11-MACRO-OWNERSHIP" .
+    ((priority . 0.78)
+     (done . nil)
+     (capabilities . (compiler lisp macros bootstrap differential-testing))
+     (depends-on . ("STANDALONE-08-LANGUAGE-LIBRARIES"))
+     (description . "Move the proven Lisp macro-expansion path toward authority in the compile pipeline, with the Rust implementation retained as differential oracle until parity evidence is strong enough for a cutover.")
+     (acceptance . "A macro corpus expands identically through both paths; compiled results match native execution; no unsupported macro is silently erased.")))
+
+   ("STANDALONE-12-MUTUAL-RECURSION" .
+    ((priority . 0.72)
+     (done . nil)
+     (capabilities . (compiler closures recursion lisp testing))
+     (depends-on . ("STANDALONE-04-BINDING-CLOSURE-PARITY"))
+     (description . "Define and prove top-level mutual recursion in the semantic IR/runtime rather than relying on emitter-order accidents.")
+     (acceptance . "even?/odd?-style mutually recursive definitions compile and match native semantics; forward-reference behavior is explicit.")))
+
+   ("STANDALONE-13-SECOND-HOST-PROOF" .
+    ((priority . 0.60)
+     (done . nil)
+     (capabilities . (compiler portability windows linux c testing))
+     (depends-on . ("STANDALONE-10-CONFORMANCE-MATRIX" "STANDALONE-09-HOST-CAPABILITY-ABI"))
+     (description . "Run the same standalone corpus on a second host/toolchain, preferably Windows/MinGW after Linux, with no duplicate language semantics.")
+     (acceptance . "The same admitted source corpus produces the same structured observations on both hosts; differences are confined to target adapter/toolchain details.")))
+
+   ("STANDALONE-14-V1-RELEASE-GATE" .
+    ((priority . 1.00)
+     (done . nil)
+     (capabilities . (compiler release conformance audit proof))
+     (depends-on . ("STANDALONE-03-VALUE-SURFACE"
+                    "STANDALONE-04-BINDING-CLOSURE-PARITY"
+                    "STANDALONE-05-STRUCTURED-ERRORS"
+                    "STANDALONE-08-LANGUAGE-LIBRARIES"
+                    "STANDALONE-10-CONFORMANCE-MATRIX"))
+     (description . "Ratify the exact standalone-v1 language surface and release claim only from executable conformance evidence.")
+     (acceptance . "All admitted fixtures PASS; every remaining unsupported item is explicit, reviewed and outside the declared v1 surface; release documentation states no stronger claim than the corpus proves.")))
+
+   ("STANDALONE-15-SELF-HOSTING-COMPILER-NONBLOCKER" .
+    ((priority . 0.30)
+     (done . nil)
+     (capabilities . (compiler lisp research))
+     (depends-on . ("STANDALONE-14-V1-RELEASE-GATE"))
+     (description . "After standalone-v1, evaluate moving compiler stages themselves into Lisp. This is intentionally not a prerequisite for native binary generation.")
+     (acceptance . "A separate experiment shows at least one compiler stage implemented in Lisp and differentially equivalent to its existing reference implementation."))))))
