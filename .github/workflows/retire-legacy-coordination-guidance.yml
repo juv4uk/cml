@@ -1,0 +1,45 @@
+name: Retire legacy coordination guidance
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/retire-legacy-coordination-guidance.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-guidance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace stale tasks.my coordination instructions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("tasks.my")
+          text = path.read_text(encoding="utf-8")
+          old = '''; tasks.my — durable task plan for the cml agent, per my-lisp
+; docs/swarm-autonomy.md (P2P on one server: this file is this repo's
+; plan of record; sync it into the shared 127.0.0.1:9999 registry with
+; the sync-tasks op after edits and after any server restart).
+'''
+          new = '''; tasks.my — durable task plan for the cml agent.
+; Coordination authority is my-lisp swarm-node (:910x, swarm/1): sync this
+; plan with swarm-node `sync-tasks` after edits/restarts. 127.0.0.1:9999 is
+; the my-lisp semantic oracle only and must not be used for coordination.
+'''
+          if old not in text:
+              raise SystemExit("expected legacy tasks.my guidance not found")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          Path(".github/workflows/retire-legacy-coordination-guidance.yml").unlink()
+          PY
+      - name: Commit migration
+        run: |
+          git config user.name "C5 migration"
+          git config user.email "85576956+juv4uk@users.noreply.github.com"
+          git add tasks.my .github/workflows/retire-legacy-coordination-guidance.yml
+          git commit -m "docs(coordination): point CML task plan at swarm-node"
+          git push
