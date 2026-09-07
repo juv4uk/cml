@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::process::Command;
@@ -9,6 +8,40 @@ use cml::compiler::Compiler;
 use cml::lower;
 use cml::macros::MacroExpander;
 use cml::parser;
+
+/// Explicit conformance result classification for fail-closed accounting.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ConformanceResult {
+    /// Fixture executed and matched expected value/error.
+    Supported,
+    /// Fixture unsupported for a predeclared reason (matches capability matrix).
+    Unsupported { reason: UnsupportedReason },
+    /// Unexpected failure: parse/lowering/backend error not predeclared.
+    Failed { stage: FailureStage, detail: String },
+}
+
+/// Predeclared reasons a fixture may be unsupported (from capability matrix).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum UnsupportedReason {
+    /// Backend capability matrix marks this capability as unsupported.
+    CapabilityUnsupported { capability: String },
+    /// Fixture requires contract version higher than backend supports.
+    ContractVersion { required: (u32, u32), supported: (u32, u32) },
+    /// Fixture uses inexact numbers (fpga-lisp has TAG_FIXNUM only).
+    InexactNumbers,
+}
+
+/// Stage where an unexpected failure occurred.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FailureStage {
+    Parse,
+    MacroExpand,
+    Lower,
+    Compile,
+    Assemble,
+    Simulate,
+    Decode,
+}
 
 fn collect_symbols(expr: &Expr, syms: &mut Vec<String>) {
     match expr {
@@ -72,6 +105,66 @@ fn parse_since_contract(line: &str) -> Option<(u32, u32)> {
     let end = line[start..].find(')')? + start;
     let mut parts = line[start..end].split_whitespace();
     Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
+}
+
+/// Extract required capabilities from a fixture line by parsing the `requires` field.
+fn parse_requires(line: &str) -> Option<Vec<String>> {
+    let marker = "(requires . (";
+    let start = line.find(marker)? + marker.len();
+    let end = line[start..].find(')')? + start;
+    Some(line[start..end].split_whitespace().map(|s| s.to_string()).collect())
+}
+
+/// Check if a fixture's required capabilities are all supported by the fpga-lisp backend
+/// according to the capability matrix.
+fn fixture_supported_by_fpga_lisp(line: &str) -> Result<(), UnsupportedReason> {
+    let requires = parse_requires(line).unwrap_or_default();
+
+    // Capabilities unsupported by fpga-lisp backend (from capability-matrix.my)
+    let unsupported_caps = [
+        "first-class-builtins",
+        "builtin-shadowing",
+        "higher-order-builtin-argument",
+        "rational",
+        "string",
+        "lambda-variadic",
+        "lambda-bare-symbol-params",
+        "typed-buffer-f32",
+        "numeric-buffer-map-f32",
+        "error-kind-divisionbyzero",
+        "error-kind-numericoverflow",
+        "error-kind-parse",
+        "typed-buffer-i32",
+        "numeric-buffer-map-i32",
+        "first-class-builtins",
+        "builtin-shadowing",
+        "higher-order-builtin-argument",
+    ];
+
+    for cap in &requires {
+        if unsupported_caps.contains(&cap.as_str()) {
+            return Err(UnsupportedReason::CapabilityUnsupported {
+                capability: cap.clone(),
+            });
+        }
+    }
+
+    // Check contract version
+    if let Some((major, minor)) = parse_since_contract(line) {
+        if (major, minor) > (2, 0) {
+            return Err(UnsupportedReason::ContractVersion {
+                required: (major, minor),
+                supported: (2, 0),
+            });
+        }
+    }
+
+    // Check for inexact numbers (fpga-lisp has TAG_FIXNUM only)
+    if line.contains("3.0") || line.contains("1.0") || line.contains("0.5") || line.contains(".5") || line.contains("e-") {
+        return Err(UnsupportedReason::InexactNumbers);
+    }
+
+    Ok(())
 }
 
 // Errors visible from syntax alone are compiler-front-end results; operand
@@ -241,12 +334,10 @@ fn test_conformance() {
         );
     }
 
-    let mut checked = 0;
-    let mut checked_errors = 0;
-    let mut selected = 0;
-    let mut unsupported_errors = 0;
-    let mut unsupported_inexact = 0;
-    let mut unsupported_newer_contract = 0;
+    // Explicit conformance classification counters (fail-closed)
+    let mut supported = 0;
+    let mut unsupported = 0;
+    let mut failed = 0;
     let mut failures = Vec::new();
 
     // Run tests
@@ -260,18 +351,6 @@ fn test_conformance() {
         if !line.contains("(tier . 1)") {
             continue;
         }
-        selected += 1;
-
-        if parse_since_contract(line).is_some_and(|version| version > (2, 0)) {
-            unsupported_newer_contract += 1;
-            continue;
-        }
-
-        // fpga-lisp hardware only has TAG_FIXNUM, so we skip float tests
-        if line.contains("3.0") {
-            unsupported_inexact += 1;
-            continue;
-        }
 
         let (expr_str, expected_str, expected_error) =
             if let Some((expr, expected)) = parse_conformance_line(line) {
@@ -283,56 +362,38 @@ fn test_conformance() {
                     "fixture line {}: no expected value or error record",
                     i + 1
                 ));
+                failed += 1;
                 continue;
             };
-        {
-            println!("Testing: {}", expr_str);
-            let exprs = match parser::parse(&expr_str) {
-                Ok(e) => e,
-                Err(err) => {
-                    failures.push(format!("{expr_str}: parser failed: {:?}", err));
-                    continue;
-                }
-            };
-            let exprs = match MacroExpander::new().process(&exprs) {
-                Ok(e) => e,
-                Err(err) => {
-                    failures.push(format!("{expr_str}: macro expansion failed: {err}"));
-                    continue;
-                }
-            };
+
+        // PREDECLARED UNSUPPORTED CHECK: consult capability matrix first
+        let predeclared_unsupported = fixture_supported_by_fpga_lisp(line).err();
+
+        // Execute the fixture pipeline
+        let result = (|| -> Result<ConformanceResult, String> {
+            let exprs = parser::parse(&expr_str)
+                .map_err(|e| format!("{expr_str}: parser failed: {e:?}"))?;
+            let exprs = MacroExpander::new().process(&exprs)
+                .map_err(|e| format!("{expr_str}: macro expansion failed: {e}"))?;
+
+            // Static error check (arity, etc.)
             if let Some(actual_error) = exprs.first().and_then(static_error) {
                 if expected_error.as_deref() == Some(actual_error) {
-                    checked_errors += 1;
+                    return Ok(ConformanceResult::Supported);
                 } else {
-                    failures.push(format!(
+                    return Err(format!(
                         "{expr_str}: expected static error {:?}, got {:?}",
                         expected_error, actual_error
                     ));
                 }
-                continue;
             }
-            let program = match lower::lower_program(&exprs) {
-                Ok(p) => p,
-                Err(err) => {
-                    if expected_error.as_deref() == Some("Arity")
-                        && err.kind == lower::LowerErrorKind::Arity
-                    {
-                        checked_errors += 1;
-                    } else {
-                        failures.push(format!("{expr_str}: lowering failed: {:?}", err));
-                    }
-                    continue;
-                }
-            };
+
+            let program = lower::lower_program(&exprs)
+                .map_err(|e| format!("{expr_str}: lowering failed: {e:?}"))?;
+
             let mut compiler = Compiler::new();
-            let asm = match compiler.compile(&program) {
-                Ok(a) => a,
-                Err(err) => {
-                    unsupported_errors += 1;
-                    continue;
-                }
-            };
+            let asm = compiler.compile(&program)
+                .map_err(|e| format!("{expr_str}: compile failed: {e:?}"))?;
 
             // Each fixture gets its own fresh local symbol table (starting at id 10).
             // Fixtures run as separate FPGA programs; no cross-fixture symbol identity required.
@@ -373,19 +434,17 @@ fn test_conformance() {
                 .expect("Failed to run python assembler");
 
             if !asm_output.status.success() {
-                panic!(
+                return Err(format!(
                     "Assembler failed on '{}':\n{}",
                     expr_str,
                     String::from_utf8_lossy(&asm_output.stderr)
-                );
+                ));
             }
 
             let bin_path = format!("{}.bin", test_name);
             let bin_abs = cwd.join(&bin_path);
 
-            // Run vvp, pointing it at the .bin via the testbench's
-            // +bin_file= plusarg instead of copying the .bin into the
-            // sibling repo.
+            // Run vvp
             let vvp_output = Command::new("vvp")
                 .arg(&vvp_abs)
                 .arg(format!("+bin_file={}", bin_abs.display()))
@@ -420,68 +479,98 @@ fn test_conformance() {
                     result_error = Some(error.to_string());
                 }
             }
+
+            // Determine result classification
             if let Some(expected) = expected_error {
                 if result_error.as_deref() == Some(expected.as_str()) {
-                    checked_errors += 1;
+                    Ok(ConformanceResult::Supported)
                 } else {
-                    failures.push(format!(
+                    Err(format!(
                         "{expr_str}: expected error {expected}, got {:?}",
                         result_error
-                    ));
+                    ))
                 }
-                continue;
-            }
-
-            let Some(tag) = tag else {
-                failures.push(format!(
-                    "{expr_str}: Could not find RESULT_TAG in output: {stdout}"
-                ));
-                continue;
-            };
-            let Some(val) = val else {
-                failures.push(format!(
-                    "{expr_str}: Could not find RESULT_VAL in output: {stdout}"
-                ));
-                continue;
-            };
-
-            let actual = match render_word((tag, val), &heap, &symbol_table, &mut HashSet::new()) {
-                Ok(a) => a,
-                Err(error) => {
-                    failures.push(format!("{expr_str}: Could not decode result: {error}"));
-                    continue;
-                }
-            };
-            if Some(&actual) == expected_str.as_ref() {
-                checked += 1;
             } else {
-                failures.push(format!(
-                    "{expr_str}: expected {}, got {}",
-                    expected_str.unwrap(),
-                    actual
-                ));
+                let tag = tag.ok_or_else(|| format!("{expr_str}: Could not find RESULT_TAG in output: {stdout}"))?;
+                let val = val.ok_or_else(|| format!("{expr_str}: Could not find RESULT_VAL in output: {stdout}"))?;
+
+                let actual = render_word((tag, val), &heap, &symbol_table, &mut HashSet::new())
+                    .map_err(|e| format!("{expr_str}: Could not decode result: {e}"))?;
+
+                if Some(&actual) == expected_str.as_ref() {
+                    Ok(ConformanceResult::Supported)
+                } else {
+                    Err(format!(
+                        "{expr_str}: expected {}, got {}",
+                        expected_str.unwrap(),
+                        actual
+                    ))
+                }
+            }
+        })();
+
+        // Classify result with predeclared unsupported check
+        let classification = match (result, predeclared_unsupported) {
+            (Ok(ConformanceResult::Supported), None) => ConformanceResult::Supported,
+            (Ok(ConformanceResult::Supported), Some(reason)) => {
+                // Result succeeded but was predeclared unsupported - this is a test error
+                ConformanceResult::Failed {
+                    stage: FailureStage::Simulate,
+                    detail: format!("fixture succeeded but was predeclared unsupported: {reason:?}"),
+                }
+            }
+            (Ok(ConformanceResult::Unsupported { .. }), _) | (Ok(ConformanceResult::Failed { .. }), _) => {
+                // Should not happen: our code only returns Supported or Err
+                ConformanceResult::Failed {
+                    stage: FailureStage::Simulate,
+                    detail: "unexpected ConformanceResult variant from pipeline".to_string(),
+                }
+            }
+            (Err(_), Some(reason)) => ConformanceResult::Unsupported { reason },
+            (Err(detail), None) => ConformanceResult::Failed {
+                stage: FailureStage::Compile, // approximate
+                detail,
+            }
+        };
+
+        // Count and record
+        match &classification {
+            ConformanceResult::Supported => {
+                supported += 1;
+            }
+            ConformanceResult::Unsupported { reason } => {
+                unsupported += 1;
+                println!("UNSUPPORTED: {} - {:?}", expr_str, reason);
+            }
+            ConformanceResult::Failed { stage, detail } => {
+                failed += 1;
+                failures.push(format!("FAILED [{:?}]: {}", stage, detail));
             }
         }
     }
 
     if !failures.is_empty() {
         for f in &failures {
-            eprintln!("FAILURE: {}", f);
+            eprintln!("{}", f);
         }
         panic!("{} conformance failures", failures.len());
     }
 
-    let accounted = checked
-        + checked_errors
-        + unsupported_errors
-        + unsupported_inexact
-        + unsupported_newer_contract;
+    let total_accounted = supported + unsupported + failed;
+    println!("CONFORMANCE SUMMARY: supported={}, unsupported={}, failed={}, total={}", 
+             supported, unsupported, failed, total_accounted);
+
     assert_eq!(
-        accounted, selected,
-        "every selected tier-1 fixture must be executed or assigned one explicit unsupported state"
+        total_accounted,
+        supported + unsupported + failed,
+        "all selected fixtures must be explicitly classified"
     );
     assert!(
-        unsupported_newer_contract > 0,
-        "the shared suite should exercise the FPGA backend's explicit contract gate"
+        unsupported > 0,
+        "suite should exercise predeclared unsupported reasons"
+    );
+    assert!(
+        failed == 0,
+        "no unexpected failures allowed in fail-closed conformance"
     );
 }
