@@ -1,0 +1,192 @@
+; capability-matrix.my — machine-readable per-backend contract/capability matrix
+; Машинно-читабельна матриця можливостей/контракту на бекенд.
+; THIS IS THE SINGLE SOURCE OF TRUTH for what each backend supports.
+; compatibility.my's global `supported` list is DEPRECATED for backend-specific
+; queries; this matrix is authoritative for CI gates and per-backend contracts.
+;
+; Structure:
+; - global-contract: the highest contract ALL backends collectively support
+; - backends: map backend-name -> {contract, capabilities, evidence, status}
+;
+; Contract versioning:
+;   (major . N) — breaking semantic change
+;   (minor . N) — additive, backward-compatible semantic change
+;
+; Capabilities are lowercase keywords matching the IR variants and forms
+; that lowering admits and backends classify.
+;
+; Evidence references: each capability MUST have a test or physical evidence
+; traceable to pushed code. Unverified capabilities are rejected at CI time.
+;
+; Status values:
+;   supported    — capability implemented, tested, evidence in pushed code
+;   unsupported  — capability explicitly NOT implemented, fail-closed
+;   planned      — capability on roadmap, not yet implemented
+;   experimental — capability partially implemented, not production-ready
+
+((kind . cml-capability-matrix)
+ (version . (1 0))
+ (global-contract . (2 0))
+ (note . "Global contract remains 2.0 because fpga-lisp backend does not yet support contract 2.1 features (first-class builtins, rationals, strings, error kinds). C-backend's 2.1 slice is explicitly labelled per-backend below.")
+
+ (backends
+  . ((fpga-lisp
+      . ((contract . (2 0))
+         (status . supported)
+         (isa . (1 1))
+         (capabilities
+          . ((integer . supported)
+             (rational . unsupported)
+             (string . unsupported)
+             (nil . supported)
+             (true . supported)
+             (quote . supported)
+             (proper-list . supported)
+             (dotted-list . supported)
+             (cond . supported)
+             (lambda-fixed-arity . supported)
+             (lambda-variadic . unsupported)
+             (lambda-bare-symbol-params . unsupported)
+             (application . supported)
+             (cons . supported)
+             (car . supported)
+             (cdr . supported)
+             (eq . supported)
+             (atom . supported)
+             (equal? . supported)
+             (defmacro . supported)
+             (def . supported)
+             (recursive-def-letrec . supported)
+             (let-as-lambda-lowering . supported)
+             (variadic-up-to-eight-arguments . supported)
+             (typed-buffer-i32 . unsupported)
+             (typed-buffer-f32 . unsupported)
+             (numeric-buffer-map-i32 . unsupported)
+             (numeric-buffer-map-f32 . unsupported)
+             (first-class-builtins . unsupported)
+             (builtin-shadowing . unsupported)
+             (error-kind-divisionbyzero . unsupported)
+             (error-kind-numericoverflow . unsupported)
+             (error-kind-parse . unsupported)
+             (error-kind-invalidform . supported)))
+         (evidence
+          . ((tier-1-conformance . "tests/conformance_test.rs: 35 fixtures selected, 32 checked, 3 skipped")
+             (def-letrec . "evidence/length/")
+             (equal? . "cml_equal subroutine verified")
+             (defmacro . "macro expansion verified"))))
+
+     (c-backend
+      . ((contract . (2 1))
+         (status . supported)
+         (note . "C-backend-only 2.1 slice. Global contract remains 2.0. This backend implements first-class builtins, rationals, let, and structural equal?.")
+         (capabilities
+          . ((integer . supported)
+             (rational . supported)
+             (string . unsupported)
+             (nil . supported)
+             (true . supported)
+             (quote . supported)
+             (proper-list . supported)
+             (dotted-list . supported)
+             (cond . supported)
+             (lambda-fixed-arity . supported)
+             (lambda-variadic . supported)
+             (lambda-bare-symbol-params . supported)
+             (application . supported)
+             (cons . supported)
+             (car . supported)
+             (cdr . supported)
+             (eq . supported)
+             (atom . supported)
+             (equal? . supported)
+             (defmacro . unsupported)
+             (def . supported)
+             (recursive-def-letrec . supported)
+             (let . supported)
+             (variadic-all-arities . supported)
+             (typed-buffer-i32 . supported)
+             (typed-buffer-f32 . unsupported)
+             (numeric-buffer-map-i32 . supported)
+             (numeric-buffer-map-f32 . unsupported)
+             (first-class-builtins . supported)
+             (builtin-shadowing . supported)
+             (higher-order-builtin-argument . supported)
+             (error-kind-divisionbyzero . supported)
+             (error-kind-numericoverflow . supported)
+             (error-kind-parse . supported)
+             (error-kind-invalidform . supported)))
+         (evidence
+          . ((tier-1-matrix . "c_backend_conformance_test.rs: 35 selected, 26 supported-value, 9 supported-error")
+             (contract-2.1-matrix . "c_backend_conformance_test.rs: 3 selected, 3 supported")
+             (rational . "c_backend_test.rs: rational add/sub/mul/div/unary_minus/int_mix")
+             (first-class-builtins . "c_backend_test.rs: builtin_value, builtin_shadowing, higher_order_builtin")
+             (let . "c_backend_test.rs: compiles_let_to_c_and_runs_it")
+             (structural-equal? . "c_backend_test.rs: structural_equal_*"))))
+
+     (x86-freestanding
+      . ((contract . (2 0))
+         (status . supported)
+         (target-abi . wsm-os)
+         (capabilities
+          . ((integer . supported)
+             (rational . unsupported)
+             (string . unsupported)
+             (nil . supported)
+             (true . supported)
+             (quote . supported)
+             (proper-list . supported)
+             (dotted-list . supported)
+             (cond . supported)
+             (lambda-fixed-arity-one . supported)
+             (lambda-variadic . unsupported)
+             (lambda-bare-symbol-params . unsupported)
+             (application . supported)
+             (cons . unsupported)
+             (car . unsupported)
+             (cdr . unsupported)
+             (eq . supported)
+             (atom . supported)
+             (equal? . unsupported)
+             (defmacro . unsupported)
+             (def . supported)
+             (recursive-def-letrec . unsupported)
+             (def-self-tail-recursive . supported)
+             (let . unsupported)
+             (variadic . unsupported)
+             (typed-buffer-i32 . unsupported)
+             (typed-buffer-f32 . unsupported)
+             (numeric-buffer-map-i32 . unsupported)
+             (numeric-buffer-map-f32 . unsupported)
+             (first-class-builtins . unsupported)
+             (builtin-shadowing . unsupported)
+             (platform-calls . supported)
+             (pci-config . supported)
+             (mmio . supported)
+             (tail-self-call . supported)
+             (error-kind-divisionbyzero . unsupported)
+             (error-kind-numericoverflow . unsupported)
+             (error-kind-parse . unsupported)
+             (error-kind-invalidform . supported)))
+         (evidence
+          . ((frozen-cons . "frozen_cons_fixture_is_deterministic_and_assembles")
+             (pci-config . "pci_config_calls_are_explicit_target_abi_imports")
+             (tail-recursion . "explicit_self_tail_call_loop_lowers_without_calls")
+             (self-tail-recursive-def . "self_tail_recursive_def_compiles_with_correct_structure")))))))
+
+
+ (contract-claims
+  . ((CML-IMPLEMENT-CONTRACT-2.1
+      . ((status . reconciled)
+         (note . "Historical task claimed CML implements contract 2.1 globally. Reconciled: C-backend implements 2.1 slice; fpga-lisp and x86-freestanding remain at 2.0. Global contract stays 2.0. This claim is not evidence of global 2.1 conformance.")
+         (per-backend . ((c-backend . supported) (fpga-lisp . unsupported) (x86-freestanding . unsupported)))))))
+
+
+ (validation-rules
+  . ((global-contract-is-min-of-backends
+      . "global-contract major/minor must equal the minimum contract version across all backends with status=supported")
+     (no-claim-without-evidence
+      . "every capability marked 'supported' must have a corresponding evidence entry")
+     (fail-closed-on-missing
+      . "capabilities not explicitly listed default to 'unsupported' for that backend")
+     (no-silent-downgrade
+      . "a capability once 'supported' cannot become 'unsupported' without explicit evidence of removal"))))
