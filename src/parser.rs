@@ -1,15 +1,13 @@
 use crate::ast::{Expr, NumericBufferLiteral};
 
-// my-lisp's language-contract.my bumped 1.0 -> 2.0 (commit d287a16,
-// "complete quote migration"): `'` is no longer reader shorthand for
-// `quote` -- it's now a plain identifier character (enabling symbols
-// like Ukrainian об'єкт/зв'язок/п'ять), matching real my-lisp's own
-// parser test `apostrophe_is_no_longer_quote_sugar_but_part_of_symbol`.
-// `tokenize` therefore folds `'` into whatever token it's touching
-// instead of splitting on it, and `parse_expr` has no `"'"` case --
-// this file used to auto-expand a leading `'` into `(quote ...)`, which
-// would have silently misparsed any symbol using an apostrophe under
-// the current contract.
+// my-lisp language-contract 4.0 makes apostrophe context-sensitive reader
+// syntax. At expression start, `'form` is exactly `(quote form)`. Inside an
+// identifier, apostrophe remains an ordinary character, so Ukrainian symbols
+// such as об'єкт, зв'язок and п'ять remain single identifiers.
+//
+// CML deliberately implements this reader invariant without claiming full
+// contract-4.0 conformance: compatibility.my still records older unsupported
+// contract requirements separately.
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -51,6 +49,12 @@ fn tokenize(input: &str) -> Vec<String> {
                 in_string = true;
                 current.push(c);
             }
+            '\'' if current.is_empty() => {
+                // Expression-initial apostrophe is reader syntax. If an
+                // identifier is already being accumulated, the same character
+                // falls through to the default arm and remains part of it.
+                tokens.push("'".to_string());
+            }
             _ => {
                 current.push(c);
             }
@@ -80,6 +84,10 @@ fn parse_expr(
     match token.as_str() {
         "(" => parse_list(tokens),
         ")" => Err(ParseError::UnexpectedToken(")".to_string())),
+        "'" => {
+            let quoted = parse_expr(tokens)?;
+            Ok(Expr::List(vec![Expr::Symbol("quote".to_string()), quoted]))
+        }
         "#i32" => parse_numeric_buffer(tokens, false),
         "#f32" => parse_numeric_buffer(tokens, true),
         _ => {
