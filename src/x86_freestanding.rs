@@ -33,6 +33,11 @@ pub enum CompileError {
         expected: usize,
         actual: usize,
     },
+    DefArityMismatch {
+        name: String,
+        expected: usize,
+        actual: usize,
+    },
     FixnumOutOfRange(i64),
     TooManySymbols,
 }
@@ -54,6 +59,14 @@ impl fmt::Display for CompileError {
             } => write!(
                 formatter,
                 "{operation} expects {expected} argument(s), got {actual}"
+            ),
+            Self::DefArityMismatch {
+                name,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "named function {name} expects {expected} argument(s), got {actual}"
             ),
             Self::FixnumOutOfRange(value) => {
                 write!(formatter, "fixnum outside wsm-os target range: {value}")
@@ -114,9 +127,10 @@ impl X86FreestandingBackend {
 
         // Flat (non-tail-call) program path.
         let mut symbol_names = BTreeSet::new();
+        let mut def_arities = BTreeMap::new();
         let mut slots = 0_usize;
         for expression in program {
-            preflight(expression, &mut symbol_names, &mut slots)?;
+            preflight(expression, &mut symbol_names, &mut def_arities, &mut slots)?;
         }
         if symbol_names.len() as u64 > wsm_os_target::SYMBOL_ID_MAX {
             return Err(CompileError::TooManySymbols);
@@ -189,10 +203,11 @@ impl X86FreestandingBackend {
     ) -> Result<String, CompileError> {
         // Preflight the body (admits TailSelfCall, rejects closures/general App).
         let mut symbol_names = BTreeSet::new();
+        let mut def_arities = BTreeMap::new();
         let mut slots = 0_usize;
-        preflight_tail_body(body, &mut symbol_names, &mut slots)?;
+        preflight_tail_body(body, &mut symbol_names, &mut def_arities, &mut slots)?;
         for arg in initial_args {
-            preflight(arg, &mut symbol_names, &mut slots)?;
+            preflight(arg, &mut symbol_names, &mut def_arities, &mut slots)?;
         }
         if symbol_names.len() as u64 > wsm_os_target::SYMBOL_ID_MAX {
             return Err(CompileError::TooManySymbols);
@@ -261,6 +276,7 @@ impl X86FreestandingBackend {
 fn preflight(
     ir: &Ir,
     symbols: &mut BTreeSet<String>,
+    def_arities: &mut BTreeMap<String, usize>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
     *slots += 1;
@@ -280,8 +296,9 @@ fn preflight(
                 });
             }
             for argument in args {
-                preflight(argument, symbols, slots)?;
+                preflight(argument, symbols, def_arities, slots)?;
             }
+            return Ok(());
         }
         Ir::Buffer(_) => return Err(CompileError::UnsupportedVariant("typed buffer")),
         Ir::Var(_) => {}
@@ -303,7 +320,7 @@ fn preflight(
                     });
                 }
                 for argument in args {
-                    preflight(argument, symbols, slots)?;
+                    preflight(argument, symbols, def_arities, slots)?;
                 }
                 return Ok(());
             }
@@ -313,21 +330,36 @@ fn preflight(
             } = func.as_ref()
             {
                 if params.len() == 1 && args.len() == 1 {
-                    preflight(&args[0], symbols, slots)?;
+                    preflight(&args[0], symbols, def_arities, slots)?;
                     let bindings = BTreeSet::from([params[0].clone()]);
                     return preflight_lambda_body(body, &bindings, symbols, slots);
+                }
+            }
+            if let Ir::Var(name) = func.as_ref() {
+                if let Some(&arity) = def_arities.get(name) {
+                    if args.len() != arity {
+                        return Err(CompileError::DefArityMismatch {
+                            name: name.clone(),
+                            expected: arity,
+                            actual: args.len(),
+                        });
+                    }
+                    for argument in args {
+                        preflight(argument, symbols, def_arities, slots)?;
+                    }
+                    return Ok(());
                 }
             }
             if args.len() != 1 {
                 return Err(CompileError::UnsupportedVariant("application"));
             }
-            preflight(func, symbols, slots)?;
-            preflight(&args[0], symbols, slots)?;
+            preflight(func, symbols, def_arities, slots)?;
+            preflight(&args[0], symbols, def_arities, slots)?;
         }
         Ir::Cond { branches } => {
             for (test, expr) in branches {
-                preflight(test, symbols, slots)?;
-                preflight(expr, symbols, slots)?;
+                preflight(test, symbols, def_arities, slots)?;
+                preflight(expr, symbols, def_arities, slots)?;
             }
         }
         Ir::Let { .. } => return Err(CompileError::UnsupportedVariant("let")),
@@ -341,9 +373,10 @@ fn preflight(
             } = value.as_ref()
             {
                 let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
-                preflight_def_body(body, &bindings, symbols, slots)?;
+                preflight_def_body(body, &bindings, symbols, def_arities, slots)?;
                 // Record the function name as a known symbol (for call dispatch).
                 symbols.insert(name.clone());
+                def_arities.insert(name.clone(), param_names.len());
                 return Ok(());
             } else {
                 return Err(CompileError::UnsupportedVariant("def (non-fixed-arity lambda)"));
@@ -439,28 +472,29 @@ fn preflight_lambda_body(
 fn preflight_tail_body(
     ir: &Ir,
     symbols: &mut BTreeSet<String>,
+    def_arities: &mut BTreeMap<String, usize>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
     *slots += 1;
     match ir {
         Ir::TailSelfCall { args } => {
             for arg in args {
-                preflight(arg, symbols, slots)?;
+                preflight(arg, symbols, def_arities, slots)?;
             }
         }
         Ir::Cond { branches } => {
             for (test, expr) in branches {
-                preflight(test, symbols, slots)?;
-                preflight_tail_body(expr, symbols, slots)?;
+                preflight(test, symbols, def_arities, slots)?;
+                preflight_tail_body(expr, symbols, def_arities, slots)?;
             }
         }
         Ir::Let { bindings, body } => {
             for (_, val) in bindings {
-                preflight(val, symbols, slots)?;
+                preflight(val, symbols, def_arities, slots)?;
             }
-            preflight_tail_body(body, symbols, slots)?;
+            preflight_tail_body(body, symbols, def_arities, slots)?;
         }
-        other => preflight(other, symbols, slots)?,
+        other => preflight(other, symbols, def_arities, slots)?,
     }
     Ok(())
 }
@@ -471,6 +505,7 @@ fn preflight_def_body(
     ir: &Ir,
     bindings: &BTreeSet<String>,
     symbols: &mut BTreeSet<String>,
+    def_arities: &mut BTreeMap<String, usize>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
     *slots += 1;
@@ -479,26 +514,26 @@ fn preflight_def_body(
         Ir::Var(_) => Err(CompileError::UnsupportedVariant("unbound variable")),
         Ir::TailSelfCall { args } => {
             for arg in args {
-                preflight_def_body(arg, bindings, symbols, slots)?;
+                preflight_def_body(arg, bindings, symbols, def_arities, slots)?;
             }
             Ok(())
         }
         Ir::Cond { branches } => {
             for (test, expr) in branches {
-                preflight_def_body(test, bindings, symbols, slots)?;
-                preflight_def_body(expr, bindings, symbols, slots)?;
+                preflight_def_body(test, bindings, symbols, def_arities, slots)?;
+                preflight_def_body(expr, bindings, symbols, def_arities, slots)?;
             }
             Ok(())
         }
         Ir::Let { bindings: let_bindings, body } => {
             let mut new_bindings = bindings.clone();
             for (name, val) in let_bindings {
-                preflight_def_body(val, bindings, symbols, slots)?;
+                preflight_def_body(val, bindings, symbols, def_arities, slots)?;
                 new_bindings.insert(name.clone());
             }
-            preflight_def_body(body, &new_bindings, symbols, slots)
+            preflight_def_body(body, &new_bindings, symbols, def_arities, slots)
         }
-        other => preflight(other, symbols, slots),
+        other => preflight(other, symbols, def_arities, slots),
     }
 }
 
@@ -670,7 +705,7 @@ impl Emitter {
                     // Call a named function (admitted via Def)
                     if let Some(&label) = self.functions.get(name) {
                         // Evaluate arguments into registers/stack per SysV AMD64
-                        if args.len() > 6 {
+                        if args.len() > 5 {
                             return Err(CompileError::UnsupportedVariant("App (too many args for named function)"));
                         }
                         // Evaluate args in reverse order (right to left) for stack allocation
@@ -720,10 +755,11 @@ impl Emitter {
                     // Function prologue
                     self.line("    pushq %rbp");
                     self.line("    movq %rsp, %rbp");
-                    // Params are in registers: %rdi=context, %rsi=arg1, %rdx=arg2, %rcx=arg3, %r8=arg4, %r9=arg5
+                    // Params arrive in user registers: %rsi=arg1, %rdx=arg2, %rcx=arg3, %r8=arg4, %r9=arg5
+                    // (%rdi holds the runtime context, matching the caller convention).
                     // Save params to stack slots for body access
                     let mut param_env = BTreeMap::new();
-                    let regs = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+                    let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
                     for (i, param) in param_names.iter().enumerate() {
                         let slot = self.allocate_slot();
                         if i < regs.len() {
