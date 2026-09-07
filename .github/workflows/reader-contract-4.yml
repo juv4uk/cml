@@ -1,0 +1,45 @@
+name: Reader Contract 4
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "src/parser.rs"
+      - "tests/reader_contract_test.rs"
+      - "tests/revision_contract_test.rs"
+      - "compatibility.my"
+      - ".github/workflows/reader-contract-4.yml"
+  pull_request:
+    paths:
+      - "src/parser.rs"
+      - "tests/reader_contract_test.rs"
+      - "tests/revision_contract_test.rs"
+      - "compatibility.my"
+      - ".github/workflows/reader-contract-4.yml"
+
+jobs:
+  reader-contract-4:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CML
+        uses: actions/checkout@v4
+        with:
+          path: cml
+
+      - name: Checkout ratified my-lisp contract 4.0
+        uses: actions/checkout@v4
+        with:
+          repository: juv4uk/my-lisp
+          ref: 67b6ab17222413af9bf671fee0d5a79217eb6d9a
+          path: my-lisp
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Prove apostrophe reader boundary
+        working-directory: cml
+        run: cargo test --test reader_contract_test
+
+      - name: Prove compatibility record observes contract 4 without overclaiming
+        working-directory: cml
+        run: cargo test --test revision_contract_test compatibility_my_contract_version_matches_language_contract_my
