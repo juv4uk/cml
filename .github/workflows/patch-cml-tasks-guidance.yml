@@ -1,0 +1,46 @@
+name: Patch CML task guidance
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/patch-cml-tasks-guidance.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-guidance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace legacy header
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("tasks.my")
+          text = path.read_text(encoding="utf-8")
+          old = (
+              "; tasks.my — durable task plan for the cml agent, per my-lisp\n"
+              "; docs/swarm-autonomy.md (P2P on one server: this file is this repo's\n"
+              "; plan of record; sync it into the shared 127.0.0.1:9999 registry with\n"
+              "; the sync-tasks op after edits and after any server restart).\n"
+          )
+          new = (
+              "; tasks.my — durable task plan for the cml agent.\n"
+              "; Coordination authority is my-lisp swarm-node (:910x, swarm/1): sync this\n"
+              "; plan with swarm-node `sync-tasks` after edits/restarts. 127.0.0.1:9999 is\n"
+              "; the my-lisp semantic oracle only and must not be used for coordination.\n"
+          )
+          if old not in text:
+              raise SystemExit("expected legacy tasks.my header not found")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          Path(".github/workflows/patch-cml-tasks-guidance.yml").unlink()
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "C5 migration"
+          git config user.email "85576956+juv4uk@users.noreply.github.com"
+          git add tasks.my .github/workflows/patch-cml-tasks-guidance.yml
+          git commit -m "docs(coordination): point CML task plan at swarm-node"
+          git push
