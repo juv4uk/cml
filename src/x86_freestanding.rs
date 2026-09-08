@@ -1385,13 +1385,19 @@ impl Emitter {
             }
             Ir::Cond { branches } => self.emit_cond_tail(branches, loop_label, param_count),
             Ir::Let { bindings, body } => {
-                // Evaluate and spill bindings (not in tail position themselves).
-                for (_, val) in bindings {
+                // Evaluate each binding in the enclosing environment, then
+                // expose its slot only to the body. This is lexical `let`,
+                // not an assignment into the caller's frame.
+                let saved_env = self.env.clone();
+                for (name, val) in bindings {
                     self.emit_ir(val)?;
                     let slot = self.allocate_slot();
                     self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                    self.env.insert(name.clone(), slot);
                 }
-                self.emit_tail_body(body, loop_label, param_count)
+                let result = self.emit_tail_body(body, loop_label, param_count);
+                self.env = saved_env;
+                result
             }
             // Non-tail-call node: ordinary emit, result in %rax, epilogue follows.
             other => self.emit_ir(other),

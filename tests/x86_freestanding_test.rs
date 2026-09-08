@@ -741,3 +741,37 @@ fn two_argument_named_definition_uses_the_target_argument_registers() {
     let _ = fs::remove_file(executable);
     assert!(run.status.success(), "compiled (add2 19 23) must return fixnum 42");
 }
+
+#[test]
+fn named_definition_uses_a_lexical_let_binding() {
+    let expressions = parser::parse(
+        "(def twice-plus-two (lambda (x)\n           (let ((once (+ x 1))) (+ once 1))))\n         (twice-plus-two 40)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("let inside a named definition should compile");
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-let-def-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) { (void)ctx; (void)code; (void)a; (void)b; abort(); }\nint main(void) { return wsm_entry(0) == 339 ? 0 : 1; }\n",
+    )
+    .unwrap();
+    let linked = Command::new("cc").arg(&harness).arg(&source).arg("-o").arg(&executable).output().unwrap();
+    assert!(linked.status.success(), "lexical-let witness must link");
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(run.status.success(), "compiled lexical let program must return fixnum 42");
+}
