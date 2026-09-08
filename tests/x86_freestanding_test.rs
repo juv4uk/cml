@@ -583,3 +583,60 @@ fn ordinary_named_def_runs_out_of_line_and_returns_its_value() {
     let _ = fs::remove_file(executable);
     assert!(run.status.success(), "compiled (increment 41) must return fixnum 42");
 }
+
+#[test]
+fn ordinary_self_recursion_uses_real_calls_and_returns_its_value() {
+    // This is intentionally not a tail call: `down` must return before the
+    // enclosing addition can finish, so every recursive step has a frame.
+    let expressions = parser::parse(
+        "(def down (lambda (n)\n             (cond ((eq n 0) 0)\n                   (t (+ 1 (down (- n 1)))))))\n         (down 4)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("ordinary self recursion should compile");
+
+    assert_eq!(
+        assembly.matches("call .Ltcloop_0").count(),
+        2,
+        "one entry call plus one recursive call must be emitted:\n{assembly}"
+    );
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-ordinary-recursion-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) { (void)ctx; return a == b ? 2 : 1; }\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) { (void)ctx; (void)code; (void)a; (void)b; abort(); }\nint main(void) { uint64_t result = wsm_entry(0); printf(\"%llu\\n\", (unsigned long long)result); return result == 35 ? 0 : 1; }\n",
+    )
+    .unwrap();
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "linking ordinary-recursion runtime witness failed: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(
+        run.status.success(),
+        "compiled (down 4) must return fixnum 4; got stdout={} stderr={}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+}

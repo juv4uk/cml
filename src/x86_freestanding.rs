@@ -416,10 +416,13 @@ fn preflight(
             } = value.as_ref()
             {
                 let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
+                // The function name is callable inside its own body.  It is
+                // deliberately registered only as a call target, not a first-
+                // class value: `(f ...)` is admitted, bare `f` remains not.
+                def_arities.insert(name.clone(), param_names.len());
                 preflight_def_body(body, &bindings, symbols, def_arities, slots)?;
                 // Record the function name as a known symbol (for call dispatch).
                 symbols.insert(name.clone());
-                def_arities.insert(name.clone(), param_names.len());
                 return Ok(());
             } else {
                 return Err(CompileError::UnsupportedVariant("def (non-fixed-arity lambda)"));
@@ -801,6 +804,7 @@ impl Emitter {
                     // spills bounded by the same preflight discipline.
                     let mut ignored_symbols = BTreeSet::new();
                     let mut ignored_arities = BTreeMap::new();
+                    ignored_arities.insert(name.clone(), param_names.len());
                     let mut body_slots = 0_usize;
                     let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
                     preflight_def_body(
