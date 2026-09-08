@@ -130,7 +130,21 @@ impl X86FreestandingBackend {
 
         // Flat (non-tail-call) program path.
         let mut symbol_names = BTreeSet::new();
+        // Declaration pass: every top-level fixed-arity definition is known
+        // before body validation. This admits a later definition as a named
+        // call target while still rejecting a bare function value.
         let mut def_arities = BTreeMap::new();
+        for expression in program {
+            if let Ir::Def { name, value } = expression {
+                if let Ir::Lambda {
+                    params: Params::Fixed(params),
+                    ..
+                } = value.as_ref()
+                {
+                    def_arities.insert(name.clone(), params.len());
+                }
+            }
+        }
         let mut slots = 0_usize;
         for expression in program {
             preflight(expression, &mut symbol_names, &mut def_arities, &mut slots)?;
@@ -156,6 +170,7 @@ impl X86FreestandingBackend {
             next_label: 0,
             closure_labels: Vec::new(),
             functions: BTreeMap::new(),
+            function_arities: def_arities.clone(),
         };
         // A top-level definition is executable code, not an expression to
         // fall through while `wsm_entry` is running.  Reserve every entry
@@ -265,6 +280,7 @@ impl X86FreestandingBackend {
             next_label: 0,
             closure_labels: Vec::new(),
             functions: BTreeMap::new(),
+            function_arities: BTreeMap::new(),
         };
 
         emitter.line(".text");
@@ -660,6 +676,7 @@ struct Emitter {
     next_label: usize,
     closure_labels: Vec<usize>,
     functions: BTreeMap<String, usize>,
+    function_arities: BTreeMap<String, usize>,
 }
 
 impl Emitter {
@@ -803,8 +820,7 @@ impl Emitter {
                     // Slots 0..arity store parameters; later slots are body
                     // spills bounded by the same preflight discipline.
                     let mut ignored_symbols = BTreeSet::new();
-                    let mut ignored_arities = BTreeMap::new();
-                    ignored_arities.insert(name.clone(), param_names.len());
+                    let mut ignored_arities = self.function_arities.clone();
                     let mut body_slots = 0_usize;
                     let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
                     preflight_def_body(

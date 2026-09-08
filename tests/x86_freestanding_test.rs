@@ -640,3 +640,18 @@ fn ordinary_self_recursion_uses_real_calls_and_returns_its_value() {
         String::from_utf8_lossy(&run.stderr)
     );
 }
+
+#[test]
+fn forward_named_definition_is_admitted_before_its_source_definition() {
+    let expressions = parser::parse(
+        "(increment 41)\n         (def increment (lambda (x) (+ x 1)))",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("a forward fixed-arity named definition should compile");
+    assert!(assembly.contains("call .Ltcloop_0"));
+    assert!(assembly.contains("\n.Ltcloop_0:"));
+    let _ = assemble_and_undefined_symbols(&assembly, "forward-named-def");
+}
