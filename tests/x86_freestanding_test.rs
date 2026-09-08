@@ -775,3 +775,41 @@ fn named_definition_uses_a_lexical_let_binding() {
     let _ = fs::remove_file(executable);
     assert!(run.status.success(), "compiled lexical let program must return fixnum 42");
 }
+
+#[test]
+fn named_definition_allocates_a_list_through_the_asm_nucleus() {
+    let expressions = parser::parse(
+        "(def singleton (lambda (x) (cons x (quote ()))))\n         (singleton 42)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("named list constructor should compile");
+
+    let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-list-def-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\nextern uint64_t wsm_entry(void *);\nextern uint64_t wsm_car(void *, uint64_t);\nint main(void) { uint64_t pair = wsm_entry(0); return wsm_car(0, pair) == 339 ? 0 : 1; }\n",
+    )
+    .unwrap();
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg("/home/agents/GitHub/wsm-my-lisp/asm/nucleus.s")
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(linked.status.success(), "asm-nucleus list witness must link");
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(run.status.success(), "singleton must preserve its car through asm nucleus");
+}
