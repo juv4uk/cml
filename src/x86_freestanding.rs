@@ -119,7 +119,10 @@ impl X86FreestandingBackend {
                 Ir::Var(call_name),
             ) = (value.as_ref(), func.as_ref())
             {
-                if call_name == def_name && call_args.len() == param_names.len() {
+                if call_name == def_name
+                    && call_args.len() == param_names.len()
+                    && contains_tail_self_call(body)
+                {
                     return self.compile_tail_call_program(def_name, param_names, body, call_args);
                 }
             }
@@ -154,6 +157,16 @@ impl X86FreestandingBackend {
             closure_labels: Vec::new(),
             functions: BTreeMap::new(),
         };
+        // A top-level definition is executable code, not an expression to
+        // fall through while `wsm_entry` is running.  Reserve every entry
+        // label before emitting the entry body, so calls are source-order
+        // independent and bodies can live after `wsm_entry`'s `ret`.
+        for expression in program {
+            if let Ir::Def { name, .. } = expression {
+                let label = emitter.allocate_label();
+                emitter.functions.insert(name.clone(), label);
+            }
+        }
         emitter.line(".text");
         emitter.line(".globl wsm_entry");
         emitter.line(".type wsm_entry, @function");
@@ -163,14 +176,28 @@ impl X86FreestandingBackend {
             emitter.line(&format!("    subq ${frame_bytes}, %rsp"));
         }
         emitter.line("    movq %rdi, %r12");
+        let mut has_entry_expression = false;
         for expression in program {
-            emitter.emit_ir(expression)?;
+            if !matches!(expression, Ir::Def { .. }) {
+                emitter.emit_ir(expression)?;
+                has_entry_expression = true;
+            }
+        }
+        if !has_entry_expression {
+            emitter.emit_immediate(wsm_os_target::NIL);
         }
         if frame_bytes != 0 {
             emitter.line(&format!("    addq ${frame_bytes}, %rsp"));
         }
         emitter.line("    popq %r12");
         emitter.line("    ret");
+        // Definition bodies are emitted out of line: reaching one requires
+        // an explicit named call, never accidental entry-point fall-through.
+        for expression in program {
+            if matches!(expression, Ir::Def { .. }) {
+                emitter.emit_ir(expression)?;
+            }
+        }
         emitter.line(".size wsm_entry, .-wsm_entry");
         emitter.line(".section .note.GNU-stack,\"\",@progbits");
         Ok(emitter.output)
@@ -270,6 +297,22 @@ impl X86FreestandingBackend {
 
         let _ = name; // name used only for detection, not emitted
         Ok(emitter.output)
+    }
+}
+
+fn contains_tail_self_call(ir: &Ir) -> bool {
+    match ir {
+        Ir::TailSelfCall { .. } => true,
+        Ir::Prim { args, .. } | Ir::App { args, .. } => args.iter().any(contains_tail_self_call),
+        Ir::Lambda { body, .. } | Ir::Def { value: body, .. } => contains_tail_self_call(body),
+        Ir::Cond { branches } => branches
+            .iter()
+            .any(|(test, body)| contains_tail_self_call(test) || contains_tail_self_call(body)),
+        Ir::Let { bindings, body } => {
+            bindings.iter().any(|(_, value)| contains_tail_self_call(value))
+                || contains_tail_self_call(body)
+        }
+        _ => false,
     }
 }
 
@@ -747,36 +790,57 @@ impl Emitter {
                     body,
                 } = value.as_ref()
                 {
-                    // For a self-tail-recursive function, the entry point IS the loop label.
-                    // TailSelfCall jumps to .Ltcloop_{label}, so we emit the function there.
-                    let label = self.allocate_label();
-                    self.functions.insert(name.clone(), label);
+                    let label = *self
+                        .functions
+                        .get(name)
+                        .ok_or(CompileError::UnsupportedVariant("Def (not top-level)"))?;
+
+                    // Named functions own an aligned native frame. `%rdi` is
+                    // the runtime context; user arguments begin in `%rsi`.
+                    // Slots 0..arity store parameters; later slots are body
+                    // spills bounded by the same preflight discipline.
+                    let mut ignored_symbols = BTreeSet::new();
+                    let mut ignored_arities = BTreeMap::new();
+                    let mut body_slots = 0_usize;
+                    let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
+                    preflight_def_body(
+                        body,
+                        &bindings,
+                        &mut ignored_symbols,
+                        &mut ignored_arities,
+                        &mut body_slots,
+                    )?;
+                    let required_slots = param_names.len() + body_slots;
+                    // A SysV callee begins at RSP = 8 (mod 16); an odd number
+                    // of eight-byte slots restores alignment before a call.
+                    let frame_slots = required_slots.max(1) | 1;
+                    let frame_bytes = frame_slots * 8;
                     self.line(&format!(".Ltcloop_{label}:"));
-                    // Function prologue
-                    self.line("    pushq %rbp");
-                    self.line("    movq %rsp, %rbp");
+                    self.line(&format!("    subq ${frame_bytes}, %rsp"));
                     // Params arrive in user registers: %rsi=arg1, %rdx=arg2, %rcx=arg3, %r8=arg4, %r9=arg5
                     // (%rdi holds the runtime context, matching the caller convention).
                     // Save params to stack slots for body access
                     let mut param_env = BTreeMap::new();
                     let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
                     for (i, param) in param_names.iter().enumerate() {
-                        let slot = self.allocate_slot();
                         if i < regs.len() {
-                            self.line(&format!("    movq {}, {}(%rsp)", regs[i], Self::slot_offset(slot)));
+                            self.line(&format!("    movq {}, {}(%rsp)", regs[i], Self::slot_offset(i)));
                         } else {
                             return Err(CompileError::UnsupportedVariant("Def (too many params)"));
                         }
-                        param_env.insert(param.clone(), slot);
+                        param_env.insert(param.clone(), i);
                     }
                     // Save current env and use param_env for body
                     let old_env = std::mem::replace(&mut self.env, param_env);
+                    let old_next_slot = self.next_slot;
+                    self.next_slot = param_names.len();
                     // Emit body in tail-call context (allows TailSelfCall)
                     self.emit_tail_body(body, label, param_names.len())?;
                     // Restore env
                     self.env = old_env;
+                    self.next_slot = old_next_slot;
                     // Function epilogue (reached only from non-recursive branches)
-                    self.line("    popq %rbp");
+                    self.line(&format!("    addq ${frame_bytes}, %rsp"));
                     self.line("    ret");
                     Ok(())
                 } else {

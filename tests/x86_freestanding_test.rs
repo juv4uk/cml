@@ -525,3 +525,61 @@ fn self_tail_recursive_def_compiles_with_correct_structure() {
     // Assemble to verify no syntax errors
     let _ = assemble_and_undefined_symbols(&assembly, "countdown-def");
 }
+
+#[test]
+fn ordinary_named_def_runs_out_of_line_and_returns_its_value() {
+    // First vertical slice of CML-CONSTITUTION-GENERAL-APPLICATION-DEFS:
+    // the definition must not execute by fall-through from wsm_entry.
+    let expressions = parser::parse(
+        "(def increment (lambda (x) (+ x 1)))\n         (increment 41)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("a fixed-arity ordinary named definition should compile");
+
+    let entry_ret = assembly.find("wsm_entry:").and_then(|start| {
+        assembly[start..]
+            .find("    ret")
+            .map(|offset| start + offset)
+    });
+    let function = assembly.find("\n.Ltcloop_");
+    assert!(
+        entry_ret.is_some_and(|entry_ret| function.is_some_and(|function| function > entry_ret)),
+        "named function must be emitted after wsm_entry returns:\n{assembly}"
+    );
+    assert!(assembly.contains("call .Ltcloop_0"));
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-named-def-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) { (void)ctx; (void)code; (void)a; (void)b; abort(); }\nint main(void) { return wsm_entry(0) == 339 ? 0 : 1; }\n",
+    )
+    .unwrap();
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "linking named-def runtime witness failed: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(run.status.success(), "compiled (increment 41) must return fixnum 42");
+}

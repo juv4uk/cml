@@ -329,6 +329,7 @@
     (capabilities . (cml compiler x86 application definitions recursion conformance))
     (origin . cml)
     (depends-on . (CML-CONSTITUTION-FIRST-CLASS-CLOSURES))
+    (context . "First verified vertical slice 2026-09-08: ordinary fixed-arity named Def is emitted out of line after wsm_entry rather than falling through from it; its own SysV-aligned frame stores parameters and bounded spills. tests/x86_freestanding_test.rs links and executes (def increment (lambda (x) (+ x 1))) (increment 41), yielding target fixnum 42; my-lisp oracle yields 42. N-ary, variadic, ordinary recursion and mutual recursion remain open.")
     (description . "Admit fixed/N-ary and variadic application, def/global bindings, ordinary recursion, mutual recursion and tail calls required by constitutional fixtures; each added shape needs oracle→host→QEMU evidence.")
   ))
   ("CML-CONSTITUTION-VALUE-ERROR-PARITY" . (
