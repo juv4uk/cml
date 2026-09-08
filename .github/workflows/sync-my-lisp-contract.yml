@@ -1,0 +1,27 @@
+name: Sync my-lisp language contract
+
+on:
+  schedule:
+    - cron: "11 4 * * *"
+  workflow_dispatch: {}
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/sync-my-lisp-contract.yml"
+  pull_request:
+    paths:
+      - "contracts/my-lisp/**"
+
+jobs:
+  sync:
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: juv4uk/my-lisp/.github/workflows/sync-language-contract.yml@main
+
+  verify:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: juv4uk/my-lisp/.github/workflows/verify-language-contract.yml@main
