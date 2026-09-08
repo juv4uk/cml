@@ -5,6 +5,6 @@
 
 # GitHub Linguist: Common Lisp is the temporary syntax/statistics profile
 # for supported my-lisp/WSM source extensions. This is classification only.
-*.wsm linguist-language=Common-Lisp linguist-detectable
-*.my linguist-language=Common-Lisp linguist-detectable
-*.lisp linguist-language=Common-Lisp linguist-detectable
+*.wsm linguist-language=Lisp linguist-detectable=true
+*.my linguist-language=Lisp linguist-detectable=true
+*.lisp linguist-language=Lisp linguist-detectable=true
