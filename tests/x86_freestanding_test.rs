@@ -699,3 +699,45 @@ fn mutual_recursion_runs_through_two_out_of_line_named_definitions() {
     let _ = fs::remove_file(executable);
     assert!(run.status.success(), "compiled (even 4) must return fixnum 1");
 }
+
+#[test]
+fn two_argument_named_definition_uses_the_target_argument_registers() {
+    let expressions = parser::parse(
+        "(def add2 (lambda (a b) (+ a b)))\n         (add2 19 23)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("a two-argument named definition should compile");
+    assert!(assembly.contains("movq %rsi, 0(%rsp)"));
+    assert!(assembly.contains("movq %rdx, 8(%rsp)"));
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-two-arg-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) { (void)ctx; (void)code; (void)a; (void)b; abort(); }\nint main(void) { return wsm_entry(0) == 339 ? 0 : 1; }\n",
+    )
+    .unwrap();
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(linked.status.success(), "two-argument witness must link");
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(run.status.success(), "compiled (add2 19 23) must return fixnum 42");
+}
