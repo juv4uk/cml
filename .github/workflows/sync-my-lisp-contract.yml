@@ -1,5 +1,6 @@
 name: Sync my-lisp language contract
 
+# Contract-sync probe: touching this file triggers the reusable authority sync.
 on:
   schedule:
     - cron: "11 4 * * *"
