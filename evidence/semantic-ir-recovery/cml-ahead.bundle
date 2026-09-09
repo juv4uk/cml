@@ -1,1 +1,3 @@
-PLACEHOLDER
+# This path previously held a placeholder.
+# Use contract3-src-patches.diff + local git push instead of binary bundle.
+# See APPLY-REMAINING.md.
