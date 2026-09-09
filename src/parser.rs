@@ -65,7 +65,7 @@ fn tokenize(input: &str) -> Vec<String> {
                 // Expression-initial apostrophe is reader syntax. If an
                 // identifier is already being accumulated, the same character
                 // falls through to the default arm and remains part of it.
-                tokens.push("'").to_string());
+                tokens.push(String::from_utf8(vec![39u8]).unwrap());
             }
             _ => {
                 current.push(c);
