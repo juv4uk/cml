@@ -33,23 +33,23 @@ impl fmt::Display for CompileError {
         match self {
             CompileError::TooManyArguments { found, max } => write!(
                 f,
-                "call has {found} arguments, but the fpga-lisp target supports at most {max}"
+                "Arity: call has {found} arguments, but the fpga-lisp target supports at most {max}"
             ),
             CompileError::IntegerOutOfRange {
                 value,
                 max_magnitude,
             } => write!(
                 f,
-                "integer literal {value} exceeds the fpga-lisp target's LOADI range (magnitude > {max_magnitude})"
+                "NumericOverflow: integer literal {value} exceeds the fpga-lisp target's LOADI range (magnitude > {max_magnitude})"
             ),
             CompileError::UnsupportedNumericBuffer => {
-                write!(f, "unsupported typed numeric buffer for FPGA target")
+                write!(f, "Unsupported: typed numeric buffer for FPGA target")
             }
             CompileError::SymbolTableOverflow => {
-                write!(f, "symbol table overflow (max {})", MAX_LOADI_MAGNITUDE)
+                write!(f, "NumericOverflow: symbol table overflow (max {})", MAX_LOADI_MAGNITUDE)
             }
             CompileError::UnsupportedVariant(variant) => {
-                write!(f, "unsupported IR variant for FPGA target: {variant}")
+                write!(f, "Unsupported: IR variant for FPGA target: {variant}")
             }
         }
     }
@@ -495,7 +495,8 @@ impl Compiler {
                     self.emit(&format!("CONS {} {} R12", target_reg, target_reg)); // target_reg = cons(item, tail)
                 }
             }
-            _ => unreachable!("unsupported quoted node in compiler"),
+            Quoted::Float(_) => unreachable!("Quoted::Float rejected by validate_quoted"),
+            Quoted::Rational(_, _) => unreachable!("Quoted::Rational rejected by validate_quoted"),
         }
     }
 

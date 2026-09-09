@@ -120,7 +120,14 @@ static long rational_gcd(long a, long b) {
 }
 
 static long rational_checked_mul(long a, long b) {
-    if (b != 0 && a > (LONG_MAX / b)) runtime_error("Overflow", "rational numerator/denominator overflow");
+    // Contract 3.0 named kind: NumericOverflow
+    if (a > 0) {
+        if (b > 0) { if (a > LONG_MAX / b) runtime_error("NumericOverflow", "rational numerator/denominator overflow"); }
+        else if (b < 0) { if (b < LONG_MIN / a) runtime_error("NumericOverflow", "rational numerator/denominator overflow"); }
+    } else if (a < 0) {
+        if (b > 0) { if (a < LONG_MIN / b) runtime_error("NumericOverflow", "rational numerator/denominator overflow"); }
+        else if (b < 0) { if (a != 0 && b < LONG_MAX / a) runtime_error("NumericOverflow", "rational numerator/denominator overflow"); }
+    }
     return a * b;
 }
 
@@ -160,7 +167,7 @@ static Value *v_rat_mul(Value *a, Value *b) {
     return mk_rational(n, d);
 }
 static Value *v_rat_div(Value *a, Value *b) {
-    if (b->u.rat.num == 0) runtime_error("Type", "rational division by zero");
+    if (b->u.rat.num == 0) runtime_error("DivisionByZero", "rational division by zero");
     long n = rational_checked_mul(a->u.rat.num, b->u.rat.den);
     long d = rational_checked_mul(a->u.rat.den, b->u.rat.num);
     return mk_rational(n, d);
@@ -205,15 +212,35 @@ static Value *to_rational(Value *v) {
     if (v->tag == TAG_INT) return mk_rational(v->u.i, 1);
     return NULL;
 }
+static long checked_long_add(long a, long b) {
+    if ((b > 0 && a > LONG_MAX - b) || (b < 0 && a < LONG_MIN - b))
+        runtime_error("NumericOverflow", "integer addition overflow");
+    return a + b;
+}
+static long checked_long_sub(long a, long b) {
+    if ((b < 0 && a > LONG_MAX + b) || (b > 0 && a < LONG_MIN + b))
+        runtime_error("NumericOverflow", "integer subtraction overflow");
+    return a - b;
+}
+static long checked_long_mul(long a, long b) {
+    if (a > 0) {
+        if (b > 0) { if (a > LONG_MAX / b) runtime_error("NumericOverflow", "integer multiplication overflow"); }
+        else if (b < 0) { if (b < LONG_MIN / a) runtime_error("NumericOverflow", "integer multiplication overflow"); }
+    } else if (a < 0) {
+        if (b > 0) { if (a < LONG_MIN / b) runtime_error("NumericOverflow", "integer multiplication overflow"); }
+        else if (b < 0) { if (a != 0 && b < LONG_MAX / a) runtime_error("NumericOverflow", "integer multiplication overflow"); }
+    }
+    return a * b;
+}
 static Value *v_add(Value *a, Value *b) {
     if (a->tag == TAG_RATIONAL || b->tag == TAG_RATIONAL)
         return v_rat_add(to_rational(a), to_rational(b));
-    return mk_int(a->u.i + b->u.i);
+    return mk_int(checked_long_add(a->u.i, b->u.i));
 }
 static Value *v_sub(Value *a, Value *b) {
     if (a->tag == TAG_RATIONAL || b->tag == TAG_RATIONAL)
         return v_rat_sub(to_rational(a), to_rational(b));
-    return mk_int(a->u.i - b->u.i);
+    return mk_int(checked_long_sub(a->u.i, b->u.i));
 }
 
 static void runtime_error(const char *kind, const char *detail) {
@@ -279,7 +306,7 @@ static Value *builtin_mul(Value *args, Value *env) {
         require_number(operand, "*");
         if (result->tag == TAG_RATIONAL || operand->tag == TAG_RATIONAL)
             result = v_rat_mul(to_rational(result), to_rational(operand));
-        else result = mk_int(result->u.i * operand->u.i);
+        else result = mk_int(checked_long_mul(result->u.i, operand->u.i));
         args = v_cdr(args);
     }
     return result;
