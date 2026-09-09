@@ -1,0 +1,44 @@
+name: Apply Contract 3.0 src patches
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'evidence/semantic-ir-recovery/contract3-src-patches.diff'
+      - '.github/workflows/apply-contract3-patches.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply patch if needed
+        id: patch
+        run: |
+          set -euo pipefail
+          if grep -q 'Arity:' src/compiler.rs && grep -q 'DivisionByZero' src/c_backend.rs; then
+            echo "already_applied=true" >> "$GITHUB_OUTPUT"
+            echo "Contract 3.0 markers already present — nothing to do."
+            exit 0
+          fi
+          echo "already_applied=false" >> "$GITHUB_OUTPUT"
+          patch -p1 < evidence/semantic-ir-recovery/contract3-src-patches.diff
+          grep -q 'Arity:' src/compiler.rs
+          grep -q 'DivisionByZero' src/c_backend.rs
+          echo "Patch applied successfully."
+
+      - name: Commit and push
+        if: steps.patch.outputs.already_applied == 'false'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/compiler.rs src/c_backend.rs
+          git commit -m "feat(cml): Contract 3.0 C-backend + compiler error prefixes (via CI patch)"
+          git push origin HEAD:master
