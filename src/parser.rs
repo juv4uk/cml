@@ -110,7 +110,6 @@ fn parse_expr(
             } else if let Some(rat) = parse_rational_literal(&token) {
                 Ok(Expr::Rational(rat.0, rat.1))
             } else if let Some(dec) = parse_decimal_literal(&token) {
-                // Whole numbers prefer Integer; non-integers stay Rational.
                 if dec.1 == 1 {
                     Ok(Expr::Integer(dec.0))
                 } else {
@@ -123,10 +122,6 @@ fn parse_expr(
     }
 }
 
-/// Parses an exact rational numeral token of the form `n/d` (e.g. `1/2`,
-/// `-3/4`). Returns `(numerator, denominator)` reduced by gcd with a strictly
-/// positive denominator, or `None` if the token is not a rational numeral.
-/// A bare `/` (division operator) and non-numeric tokens are rejected.
 fn parse_rational_literal(token: &str) -> Option<(i64, u64)> {
     let (num_str, den_str) = token.split_once('/')?;
     if num_str.is_empty() || den_str.is_empty() {
@@ -141,21 +136,6 @@ fn parse_rational_literal(token: &str) -> Option<(i64, u64)> {
     Some((num / g as i64, den / g))
 }
 
-/// Contract 5.0 decimal-separator semantics.
-///
-/// Dot and comma are equivalent decimal separators **only** when the entire
-/// token is a well-formed finite decimal / base-10 scientific numeral.
-/// Examples that parse as the same exact value:
-///   `12.455` ≡ `12,455`
-///   `-0.25`  ≡ `-0,25`
-///   `1.5e3`  ≡ `1,5e3` ≡ `1500`
-///
-/// Tokens that are not valid numerals (e.g. `а,б`, `версія1,2`, `1.2.3`,
-/// `1ee3`) remain ordinary symbols — this function returns `None`.
-///
-/// Exponent magnitude is capped at ±10000 (same order as my-lisp) to bound
-/// intermediate digit allocation; exceeding the cap yields `None` so the
-/// token stays a symbol rather than a silent overflow.
 fn parse_decimal_literal(token: &str) -> Option<(i64, u64)> {
     const MAX_EXP_MAG: i32 = 10_000;
 
@@ -165,7 +145,6 @@ fn parse_decimal_literal(token: &str) -> Option<(i64, u64)> {
         None => (lower.as_str(), None),
     };
 
-    // Exactly one decimal separator (dot or comma), or none.
     let dot_count = base_str.matches('.').count();
     let comma_count = base_str.matches(',').count();
     if dot_count + comma_count > 1 {
@@ -188,7 +167,6 @@ fn parse_decimal_literal(token: &str) -> Option<(i64, u64)> {
     let (mantissa_str, decimal_places) = if let Some((int_part, frac_part)) =
         base_str.split_once('.').or_else(|| base_str.split_once(','))
     {
-        // Sign may only appear on the integer part.
         if frac_part.is_empty() {
             return None;
         }
@@ -206,7 +184,6 @@ fn parse_decimal_literal(token: &str) -> Option<(i64, u64)> {
     if mantissa_str.is_empty() || mantissa_str == "-" || mantissa_str == "+" {
         return None;
     }
-    // Mantissa must be optional-sign + digits only (no leftover separators).
     let mant_digits = mantissa_str.strip_prefix(['+', '-']).unwrap_or(&mantissa_str);
     if mant_digits.is_empty() || !mant_digits.chars().all(|c| c.is_ascii_digit()) {
         return None;
@@ -218,7 +195,6 @@ fn parse_decimal_literal(token: &str) -> Option<(i64, u64)> {
         return None;
     }
 
-    // value = mantissa * 10^total_exp  as exact rational
     let (num, den): (i128, u128) = if total_exp >= 0 {
         let factor = 10i128.checked_pow(total_exp as u32)?;
         (mantissa.checked_mul(factor)?, 1)
@@ -230,7 +206,6 @@ fn parse_decimal_literal(token: &str) -> Option<(i64, u64)> {
     if den == 0 {
         return None;
     }
-    // Reduce and fit into (i64, u64).
     let g = gcd_u128(num.unsigned_abs(), den);
     let num = num / g as i128;
     let den = den / g;
