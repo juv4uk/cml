@@ -19,10 +19,11 @@ use std::fmt;
 /// nothing in this crate produces it anymore" -- x86_freestanding did,
 /// until now). `wsm_os_target::TRUE` (the raw immediate) is deliberately
 /// no longer emitted here.
-const CANONICAL_T: wsm_os_target::Word = match wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX) {
-    Some(word) => word,
-    None => panic!("SYMBOL_ID_MAX must encode as a valid symbol word"),
-};
+const CANONICAL_T: wsm_os_target::Word =
+    match wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX) {
+        Some(word) => word,
+        None => panic!("SYMBOL_ID_MAX must encode as a valid symbol word"),
+    };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileError {
@@ -100,16 +101,13 @@ impl X86FreestandingBackend {
         // This is the only first-order self-tail-call pattern admitted by the
         // x86 freestanding backend. All other shapes fall through to the flat
         // preflight path, which rejects Def/Lambda/App as unsupported.
-        if let [
-            Ir::Def {
-                name: def_name,
-                value,
-            },
-            Ir::App {
-                func,
-                args: call_args,
-            },
-        ] = program
+        if let [Ir::Def {
+            name: def_name,
+            value,
+        }, Ir::App {
+            func,
+            args: call_args,
+        }] = program
         {
             if let (
                 Ir::Lambda {
@@ -325,7 +323,9 @@ fn contains_tail_self_call(ir: &Ir) -> bool {
             .iter()
             .any(|(test, body)| contains_tail_self_call(test) || contains_tail_self_call(body)),
         Ir::Let { bindings, body } => {
-            bindings.iter().any(|(_, value)| contains_tail_self_call(value))
+            bindings
+                .iter()
+                .any(|(_, value)| contains_tail_self_call(value))
                 || contains_tail_self_call(body)
         }
         _ => false,
@@ -441,7 +441,9 @@ fn preflight(
                 symbols.insert(name.clone());
                 return Ok(());
             } else {
-                return Err(CompileError::UnsupportedVariant("def (non-fixed-arity lambda)"));
+                return Err(CompileError::UnsupportedVariant(
+                    "def (non-fixed-arity lambda)",
+                ));
             }
         }
         Ir::TailSelfCall { .. } => {
@@ -587,7 +589,10 @@ fn preflight_def_body(
             }
             Ok(())
         }
-        Ir::Let { bindings: let_bindings, body } => {
+        Ir::Let {
+            bindings: let_bindings,
+            body,
+        } => {
             let mut new_bindings = bindings.clone();
             for (name, val) in let_bindings {
                 preflight_def_body(val, bindings, symbols, def_arities, slots)?;
@@ -734,13 +739,13 @@ impl Emitter {
             Ir::Lambda {
                 params: Params::Fixed(params),
                 body,
-            } if params.len() == 1 => {
-                self.emit_single_argument_closure_value(&params[0], body)
-            }
+            } if params.len() == 1 => self.emit_single_argument_closure_value(&params[0], body),
             Ir::Lambda {
                 params: Params::Fixed(_),
                 ..
-            } => Err(CompileError::UnsupportedVariant("Lambda (fixed, arity != 1)")),
+            } => Err(CompileError::UnsupportedVariant(
+                "Lambda (fixed, arity != 1)",
+            )),
             Ir::Lambda {
                 params: Params::Variadic { .. },
                 ..
@@ -748,7 +753,9 @@ impl Emitter {
             | Ir::Lambda {
                 params: Params::AllRest(_),
                 ..
-            } => Err(CompileError::UnsupportedVariant("Lambda (variadic/all-rest)")),
+            } => Err(CompileError::UnsupportedVariant(
+                "Lambda (variadic/all-rest)",
+            )),
             Ir::App { func, args } => {
                 if platform_call_contract(func).is_some()
                     && !matches!(func.as_ref(), Ir::Var(name) if self.env.contains_key(name))
@@ -762,14 +769,18 @@ impl Emitter {
                     if params.len() == 1 && args.len() == 1 {
                         self.emit_single_argument_lambda_call(&params[0], body, &args[0])
                     } else {
-                        Err(CompileError::UnsupportedVariant("App (multi-arg or non-lambda)"))
+                        Err(CompileError::UnsupportedVariant(
+                            "App (multi-arg or non-lambda)",
+                        ))
                     }
                 } else if let Ir::Var(name) = func.as_ref() {
                     // Call a named function (admitted via Def)
                     if let Some(&label) = self.functions.get(name) {
                         // Evaluate arguments into registers/stack per SysV AMD64
                         if args.len() > 5 {
-                            return Err(CompileError::UnsupportedVariant("App (too many args for named function)"));
+                            return Err(CompileError::UnsupportedVariant(
+                                "App (too many args for named function)",
+                            ));
                         }
                         // Evaluate args in reverse order (right to left) for stack allocation
                         // For SysV AMD64: arg1=%rdi, arg2=%rsi, arg3=%rdx, arg4=%rcx, arg5=%r8, arg6=%r9
@@ -780,7 +791,10 @@ impl Emitter {
                             .map(|arg| {
                                 self.emit_ir(arg)?;
                                 let slot = self.allocate_slot();
-                                self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                                self.line(&format!(
+                                    "    movq %rax, {}(%rsp)",
+                                    Self::slot_offset(slot)
+                                ));
                                 Ok(slot)
                             })
                             .collect::<Result<_, CompileError>>()?;
@@ -789,10 +803,19 @@ impl Emitter {
                         let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
                         for (i, slot) in arg_slots.iter().enumerate() {
                             if i < regs.len() {
-                                self.line(&format!("    movq {}(%rsp), {}", Self::slot_offset(*slot), regs[i]));
+                                self.line(&format!(
+                                    "    movq {}(%rsp), {}",
+                                    Self::slot_offset(*slot),
+                                    regs[i]
+                                ));
                             }
                         }
-                        self.line(&format!("    call .Ltcloop_{label}"));
+                        // `.Lfn_N` is the native-call entry: it allocates the
+                        // function frame and receives arguments in registers.
+                        // `.Ltcloop_N` is deliberately *after* that prologue,
+                        // so TailSelfCall may jump there without allocating a
+                        // second frame on every recursive iteration.
+                        self.line(&format!("    call .Lfn_{label}"));
                         Ok(())
                     } else {
                         // Fall through to closure call
@@ -835,7 +858,11 @@ impl Emitter {
                     // of eight-byte slots restores alignment before a call.
                     let frame_slots = required_slots.max(1) | 1;
                     let frame_bytes = frame_slots * 8;
-                    self.line(&format!(".Ltcloop_{label}:"));
+                    // Keep the native-call entry distinct from the tail-loop
+                    // target.  A native call must allocate the frame exactly
+                    // once; a TailSelfCall jumps below the prologue and only
+                    // reloads parameter slots in that existing frame.
+                    self.line(&format!(".Lfn_{label}:"));
                     self.line(&format!("    subq ${frame_bytes}, %rsp"));
                     // Params arrive in user registers: %rsi=arg1, %rdx=arg2, %rcx=arg3, %r8=arg4, %r9=arg5
                     // (%rdi holds the runtime context, matching the caller convention).
@@ -844,12 +871,17 @@ impl Emitter {
                     let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
                     for (i, param) in param_names.iter().enumerate() {
                         if i < regs.len() {
-                            self.line(&format!("    movq {}, {}(%rsp)", regs[i], Self::slot_offset(i)));
+                            self.line(&format!(
+                                "    movq {}, {}(%rsp)",
+                                regs[i],
+                                Self::slot_offset(i)
+                            ));
                         } else {
                             return Err(CompileError::UnsupportedVariant("Def (too many params)"));
                         }
                         param_env.insert(param.clone(), i);
                     }
+                    self.line(&format!(".Ltcloop_{label}:"));
                     // Save current env and use param_env for body
                     let old_env = std::mem::replace(&mut self.env, param_env);
                     let old_next_slot = self.next_slot;
@@ -864,7 +896,9 @@ impl Emitter {
                     self.line("    ret");
                     Ok(())
                 } else {
-                    Err(CompileError::UnsupportedVariant("def (non-fixed-arity lambda)"))
+                    Err(CompileError::UnsupportedVariant(
+                        "def (non-fixed-arity lambda)",
+                    ))
                 }
             }
             Ir::Prim { op, args } => self.emit_primitive(*op, args),

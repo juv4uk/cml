@@ -349,11 +349,9 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
     assert!(!sub_asm.contains("call wsm_sub"), "no runtime wsm_sub call");
 
     // Boundary: FIXNUM_MAX must assemble OK, FIXNUM_MAX+1 must be rejected at preflight.
-    assert!(
-        backend
-            .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX)])
-            .is_ok()
-    );
+    assert!(backend
+        .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX)])
+        .is_ok());
     assert_eq!(
         backend.compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX + 1)]),
         Err(CompileError::FixnumOutOfRange(
@@ -380,16 +378,12 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
 #[test]
 fn fixnum_range_is_owned_by_the_target_contract() {
     let backend = X86FreestandingBackend::new();
-    assert!(
-        backend
-            .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MIN)])
-            .is_ok()
-    );
-    assert!(
-        backend
-            .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX)])
-            .is_ok()
-    );
+    assert!(backend
+        .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MIN)])
+        .is_ok());
+    assert!(backend
+        .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX)])
+        .is_ok());
     assert_eq!(
         backend.compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX + 1)]),
         Err(CompileError::FixnumOutOfRange(
@@ -428,11 +422,9 @@ fn explicit_self_tail_call_loop_lowers_without_calls() {
     // The only runtime calls should be for 'eq', 'wsm_fail' (for arithmetic overflow).
     let calls: Vec<&str> = assembly.lines().filter(|l| l.contains("call ")).collect();
     // Only wsm_eq and wsm_fail are expected. Add/Sub are inline. loop is inline (jmp).
-    assert!(
-        calls
-            .iter()
-            .all(|l| l.contains("wsm_eq") || l.contains("wsm_fail"))
-    );
+    assert!(calls
+        .iter()
+        .all(|l| l.contains("wsm_eq") || l.contains("wsm_fail")));
 }
 
 #[test]
@@ -527,13 +519,91 @@ fn self_tail_recursive_def_compiles_with_correct_structure() {
 }
 
 #[test]
+fn out_of_line_named_self_tail_recursion_reuses_its_native_frame() {
+    // This deliberately has two top-level definitions, so it takes the
+    // ordinary out-of-line named-definition emitter rather than the compact
+    // single-def `compile_tail_call_program` special case.  `countdown` must
+    // enter through `.Lfn_0` once, then tail-jump to `.Ltcloop_0` below the
+    // frame prologue on every recursive step.
+    let expressions = parser::parse(
+        "(def countdown (lambda (n)
+              (cond ((eq n 0) t)
+                    (t (countdown (- n 1))))))
+         (def identity (lambda (x) x))
+         (countdown 5)",
+    )
+    .unwrap();
+    let program = lower::lower_program_with_tail_calls(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("out-of-line named tail recursion should compile");
+
+    let entry = assembly
+        .find(".Lfn_0:")
+        .expect("named call entry must exist");
+    let frame = assembly[entry..]
+        .find("    subq $")
+        .map(|offset| entry + offset)
+        .expect("named call entry must allocate its frame");
+    let loop_entry = assembly.find(".Ltcloop_0:").expect("tail loop must exist");
+    assert!(
+        entry < frame && frame < loop_entry,
+        "tail loop must be below the one-time native frame prologue:\n{assembly}"
+    );
+    assert!(assembly.contains("    call .Lfn_0"));
+    assert!(assembly.contains("    jmp .Ltcloop_0"));
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!(
+        "cml-out-of-line-tail-{}-{nonce}",
+        std::process::id()
+    ));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    let canonical_t = wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX)
+        .expect("the target must encode its canonical t symbol");
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        format!(
+            "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) {{ (void)ctx; return a == b ? 2 : 1; }}\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) {{ (void)ctx; (void)code; (void)a; (void)b; abort(); }}\nint main(void) {{ return wsm_entry(0) == {canonical_t}ULL ? 0 : 1; }}\n"
+        ),
+    )
+    .unwrap();
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "linking out-of-line tail witness failed: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(
+        run.status.success(),
+        "countdown must return canonical t without corrupting its return stack; stdout={} stderr={}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+}
+
+#[test]
 fn ordinary_named_def_runs_out_of_line_and_returns_its_value() {
     // First vertical slice of CML-CONSTITUTION-GENERAL-APPLICATION-DEFS:
     // the definition must not execute by fall-through from wsm_entry.
-    let expressions = parser::parse(
-        "(def increment (lambda (x) (+ x 1)))\n         (increment 41)",
-    )
-    .unwrap();
+    let expressions =
+        parser::parse("(def increment (lambda (x) (+ x 1)))\n         (increment 41)").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
@@ -549,7 +619,7 @@ fn ordinary_named_def_runs_out_of_line_and_returns_its_value() {
         entry_ret.is_some_and(|entry_ret| function.is_some_and(|function| function > entry_ret)),
         "named function must be emitted after wsm_entry returns:\n{assembly}"
     );
-    assert!(assembly.contains("call .Ltcloop_0"));
+    assert!(assembly.contains("call .Lfn_0"));
 
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -581,7 +651,10 @@ fn ordinary_named_def_runs_out_of_line_and_returns_its_value() {
     let _ = fs::remove_file(source);
     let _ = fs::remove_file(harness);
     let _ = fs::remove_file(executable);
-    assert!(run.status.success(), "compiled (increment 41) must return fixnum 42");
+    assert!(
+        run.status.success(),
+        "compiled (increment 41) must return fixnum 42"
+    );
 }
 
 #[test]
@@ -598,7 +671,7 @@ fn ordinary_self_recursion_uses_real_calls_and_returns_its_value() {
         .expect("ordinary self recursion should compile");
 
     assert_eq!(
-        assembly.matches("call .Ltcloop_0").count(),
+        assembly.matches("call .Lfn_0").count(),
         2,
         "one entry call plus one recursive call must be emitted:\n{assembly}"
     );
@@ -607,7 +680,10 @@ fn ordinary_self_recursion_uses_real_calls_and_returns_its_value() {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let base = std::env::temp_dir().join(format!("cml-ordinary-recursion-{}-{nonce}", std::process::id()));
+    let base = std::env::temp_dir().join(format!(
+        "cml-ordinary-recursion-{}-{nonce}",
+        std::process::id()
+    ));
     let source = base.with_extension("s");
     let harness = base.with_extension("c");
     let executable = base.with_extension("bin");
@@ -643,15 +719,13 @@ fn ordinary_self_recursion_uses_real_calls_and_returns_its_value() {
 
 #[test]
 fn forward_named_definition_is_admitted_before_its_source_definition() {
-    let expressions = parser::parse(
-        "(increment 41)\n         (def increment (lambda (x) (+ x 1)))",
-    )
-    .unwrap();
+    let expressions =
+        parser::parse("(increment 41)\n         (def increment (lambda (x) (+ x 1)))").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
         .expect("a forward fixed-arity named definition should compile");
-    assert!(assembly.contains("call .Ltcloop_0"));
+    assert!(assembly.contains("call .Lfn_0"));
     assert!(assembly.contains("\n.Ltcloop_0:"));
     let _ = assemble_and_undefined_symbols(&assembly, "forward-named-def");
 }
@@ -668,14 +742,17 @@ fn mutual_recursion_runs_through_two_out_of_line_named_definitions() {
         .expect("mutual fixed-arity recursion should compile");
     assert!(assembly.contains("\n.Ltcloop_0:"));
     assert!(assembly.contains("\n.Ltcloop_1:"));
-    assert!(assembly.contains("call .Ltcloop_0"));
-    assert!(assembly.contains("call .Ltcloop_1"));
+    assert!(assembly.contains("call .Lfn_0"));
+    assert!(assembly.contains("call .Lfn_1"));
 
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let base = std::env::temp_dir().join(format!("cml-mutual-recursion-{}-{nonce}", std::process::id()));
+    let base = std::env::temp_dir().join(format!(
+        "cml-mutual-recursion-{}-{nonce}",
+        std::process::id()
+    ));
     let source = base.with_extension("s");
     let harness = base.with_extension("c");
     let executable = base.with_extension("bin");
@@ -692,20 +769,24 @@ fn mutual_recursion_runs_through_two_out_of_line_named_definitions() {
         .arg(&executable)
         .output()
         .unwrap();
-    assert!(linked.status.success(), "mutual-recursion witness must link");
+    assert!(
+        linked.status.success(),
+        "mutual-recursion witness must link"
+    );
     let run = Command::new(&executable).output().unwrap();
     let _ = fs::remove_file(source);
     let _ = fs::remove_file(harness);
     let _ = fs::remove_file(executable);
-    assert!(run.status.success(), "compiled (even 4) must return fixnum 1");
+    assert!(
+        run.status.success(),
+        "compiled (even 4) must return fixnum 1"
+    );
 }
 
 #[test]
 fn two_argument_named_definition_uses_the_target_argument_registers() {
-    let expressions = parser::parse(
-        "(def add2 (lambda (a b) (+ a b)))\n         (add2 19 23)",
-    )
-    .unwrap();
+    let expressions =
+        parser::parse("(def add2 (lambda (a b) (+ a b)))\n         (add2 19 23)").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
@@ -739,7 +820,10 @@ fn two_argument_named_definition_uses_the_target_argument_registers() {
     let _ = fs::remove_file(source);
     let _ = fs::remove_file(harness);
     let _ = fs::remove_file(executable);
-    assert!(run.status.success(), "compiled (add2 19 23) must return fixnum 42");
+    assert!(
+        run.status.success(),
+        "compiled (add2 19 23) must return fixnum 42"
+    );
 }
 
 #[test]
@@ -767,27 +851,38 @@ fn named_definition_uses_a_lexical_let_binding() {
         "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) { (void)ctx; (void)code; (void)a; (void)b; abort(); }\nint main(void) { return wsm_entry(0) == 339 ? 0 : 1; }\n",
     )
     .unwrap();
-    let linked = Command::new("cc").arg(&harness).arg(&source).arg("-o").arg(&executable).output().unwrap();
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
     assert!(linked.status.success(), "lexical-let witness must link");
     let run = Command::new(&executable).output().unwrap();
     let _ = fs::remove_file(source);
     let _ = fs::remove_file(harness);
     let _ = fs::remove_file(executable);
-    assert!(run.status.success(), "compiled lexical let program must return fixnum 42");
+    assert!(
+        run.status.success(),
+        "compiled lexical let program must return fixnum 42"
+    );
 }
 
 #[test]
 fn named_definition_allocates_a_list_through_the_asm_nucleus() {
-    let expressions = parser::parse(
-        "(def singleton (lambda (x) (cons x (quote ()))))\n         (singleton 42)",
-    )
-    .unwrap();
+    let expressions =
+        parser::parse("(def singleton (lambda (x) (cons x (quote ()))))\n         (singleton 42)")
+            .unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
         .expect("named list constructor should compile");
 
-    let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let base = std::env::temp_dir().join(format!("cml-list-def-{}-{nonce}", std::process::id()));
     let source = base.with_extension("s");
     let harness = base.with_extension("c");
@@ -806,10 +901,16 @@ fn named_definition_allocates_a_list_through_the_asm_nucleus() {
         .arg(&executable)
         .output()
         .unwrap();
-    assert!(linked.status.success(), "asm-nucleus list witness must link");
+    assert!(
+        linked.status.success(),
+        "asm-nucleus list witness must link"
+    );
     let run = Command::new(&executable).output().unwrap();
     let _ = fs::remove_file(source);
     let _ = fs::remove_file(harness);
     let _ = fs::remove_file(executable);
-    assert!(run.status.success(), "singleton must preserve its car through asm nucleus");
+    assert!(
+        run.status.success(),
+        "singleton must preserve its car through asm nucleus"
+    );
 }
