@@ -2,7 +2,51 @@
 
 **Heterogeneous AOT compiler middle-end for my-lisp**
 
-[English](#english) · [Українська](#українська) · [Deutsch](#deutsch)
+[Українська](#українська) · [English](#english) · [Deutsch](#deutsch)
+
+## Українська
+
+`cml` — це heterogeneous middle-end і Ahead-of-Time (AOT) компілятор для `my-lisp`. Він знижує єдиний semantic IR до CPU/C, GPU compute backends, виконання `fpga-lisp` і вузького freestanding x86_64 assembly target для `wsm-os`, залишаючи можливості backend'ів явними й fail-closed.
+
+Цей підхід відділяє семантику мови від фізичного виконання. Поточний graph має live CPU, CUDA і FPGA шляхи, включно з host-staged typed-buffer→FPGA-register edge; прямий GPU→FPGA transfer не заявляється.
+
+Компілятор підтримує:
+- Змінні (через ін'єкцію пошуку в середовищі на етапі компіляції)
+- `cond` (логіка розгалуження, скомпільована в `JF`/`RET`)
+- `lambda` (замикання, які самостійно прив'язують аргументи до середовища)
+- `let`, знижений до негайно викликаної `lambda` без нової FPGA-примітиви
+- Стандартні примітиви (`cons`, `car`, `cdr`, `eq`, `atom`)
+- Явні форми quote (`(quote ...)`)
+- Стек викликів (програмний стек `R11` для збереження середовища та адреси повернення)
+
+### Поточні обмеження
+- Generic calls зв'язують щонайбільше 8 аргументів; зайві аргументи ще не відхиляються явно.
+- Conformance runner канонічно декодує atoms, fixnums, proper lists і dotted lists із FPGA heap; непідтримувані мовні форми досі пропускаються явно.
+- Tier-1 error fixtures теж спостережувані: компілятор класифікує статичні помилки арності/невідомого символу, а FPGA повертає runtime-помилки типу через машинозчитуваний канал результату.
+- Сирцеві strings знижуються до `Ir::String` (окремий IR-варіант); fpga-lisp ще не має окремого runtime string tag.
+- Inexact numbers і точні rationals не підтримуються цільовим представленням.
+
+[`compatibility.my`](compatibility.my) фіксує точний language contract my-lisp, ISA contract fpga-lisp, перевірені SHA, підтриману поверхню й відомі прогалини цієї ревізії компілятора.
+
+Freestanding x86_64 зріз окремо описаний у
+[`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). Наразі
+він підтримує literals, явний `(quote ...)`, `cons`/`car`/`cdr`/`eq`/`atom`, `cond`, арифметику з перевіркою (`+`/`-`), та loop-optimized self-tail-calls, без заяви про повну
+мовну або boot parity.
+
+[Переглянути результати тестів](test_results.md) · [Тестування](docs/testing.md)
+
+### Пов'язані репозиторії (мовна лінія my-lisp)
+- [my-lisp](https://github.com/juv4uk/my-lisp): Мова Lisp та еталонний семантичний контракт.
+- [cml](https://github.com/juv4uk/cml): Цей гетерогенний middle-end компілятор.
+- [fpga-lisp](https://github.com/juv4uk/fpga-lisp): Апаратна Lisp-машина та асемблер.
+*(Примітка: фундаментальні проєкти на кшталт `wsm` (`() -> математика`) є окремими незалежними напрямами дослідження і не є споживачами CML IR).*
+
+### Збірка та Запуск
+
+```bash
+cargo build
+cargo run -- path/to/source.my
+```
 
 ## English
 
@@ -45,50 +89,6 @@ this is not a claim of full language or boot parity.
 *(Note: independent foundational research projects like `wsm` (`() -> mathematics`) are separate research tracks and do not consume CML IR).*
 
 ### Build and Run
-
-```bash
-cargo build
-cargo run -- path/to/source.my
-```
-
-## Українська
-
-`cml` — це heterogeneous middle-end і Ahead-of-Time (AOT) компілятор для `my-lisp`. Він знижує єдиний semantic IR до CPU/C, GPU compute backends, виконання `fpga-lisp` і вузького freestanding x86_64 assembly target для `wsm-os`, залишаючи можливості backend'ів явними й fail-closed.
-
-Цей підхід відділяє семантику мови від фізичного виконання. Поточний graph має live CPU, CUDA і FPGA шляхи, включно з host-staged typed-buffer→FPGA-register edge; прямий GPU→FPGA transfer не заявляється.
-
-Компілятор підтримує:
-- Змінні (через ін'єкцію пошуку в середовищі на етапі компіляції)
-- `cond` (логіка розгалуження, скомпільована в `JF`/`RET`)
-- `lambda` (замикання, які самостійно прив'язують аргументи до середовища)
-- `let`, знижений до негайно викликаної `lambda` без нової FPGA-примітиви
-- Стандартні примітиви (`cons`, `car`, `cdr`, `eq`, `atom`)
-- Явні форми quote (`(quote ...)`)
-- Стек викликів (програмний стек `R11` для збереження середовища та адреси повернення)
-
-### Поточні обмеження
-- Generic calls зв'язують щонайбільше 8 аргументів; зайві аргументи ще не відхиляються явно.
-- Conformance runner канонічно декодує atoms, fixnums, proper lists і dotted lists із FPGA heap; непідтримувані мовні форми досі пропускаються явно.
-- Tier-1 error fixtures теж спостережувані: компілятор класифікує статичні помилки арності/невідомого символу, а FPGA повертає runtime-помилки типу через машинозчитуваний канал результату.
-- Сирцеві strings знижуються до `Ir::String` (окремий IR-варіант); fpga-lisp ще не має окремого runtime string tag.
-- Inexact numbers і точні rationals не підтримуються цільовим представленням.
-
-[`compatibility.my`](compatibility.my) фіксує точний language contract my-lisp, ISA contract fpga-lisp, перевірені SHA, підтриману поверхню й відомі прогалини цієї ревізії компілятора.
-
-Freestanding x86_64 зріз окремо описаний у
-[`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). Наразі
-він підтримує literals, явний `(quote ...)`, `cons`/`car`/`cdr`/`eq`/`atom`, `cond`, арифметику з перевіркою (`+`/`-`), та loop-optimized self-tail-calls, без заяви про повну
-мовну або boot parity.
-
-[Переглянути результати тестів](test_results.md) · [Тестування](docs/testing.md)
-
-### Пов'язані репозиторії (мовна лінія my-lisp)
-- [my-lisp](https://github.com/juv4uk/my-lisp): Мова Lisp та еталонний семантичний контракт.
-- [cml](https://github.com/juv4uk/cml): Цей гетерогенний middle-end компілятор.
-- [fpga-lisp](https://github.com/juv4uk/fpga-lisp): Апаратна Lisp-машина та асемблер.
-*(Примітка: фундаментальні проєкти на кшталт `wsm` (`() -> математика`) є окремими незалежними напрямами дослідження і не є споживачами CML IR).*
-
-### Збірка та Запуск
 
 ```bash
 cargo build
