@@ -8,8 +8,10 @@ use cml::lower;
 use cml::parser;
 use cml::x86_freestanding::{CompileError, X86FreestandingBackend};
 
+const FIRST_FIXTURE_SOURCE: &str = "(cons (quote A) (quote B))";
+
 fn frozen_fixture() -> Vec<Ir> {
-    let expressions = parser::parse(wsm_os_target::FIRST_FIXTURE_SOURCE).unwrap();
+    let expressions = parser::parse(FIRST_FIXTURE_SOURCE).unwrap();
     lower::lower_program(&expressions).unwrap()
 }
 
