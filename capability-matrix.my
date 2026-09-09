@@ -78,7 +78,7 @@
      (c-backend
       . ((contract . (2 1))
          (status . supported)
-         (note . "C-backend-only 2.1 slice. Global contract remains 2.0. This backend implements first-class builtins, rationals, let, and structural equal?.")
+         (note . "C-backend-only 2.1+ slice. Global contract remains 2.0. Implements first-class builtins, rationals, let, structural equal?, Contract 3.0 named errors (DivisionByZero/NumericOverflow), and decimal-comma literals via reader→IR.")
          (capabilities
           . ((integer . supported)
              (rational . supported)
@@ -118,7 +118,7 @@
          (evidence
           . ((tier-1-matrix . "c_backend_conformance_test.rs: 35 selected, 26 supported-value, 9 supported-error")
              (contract-2.1-matrix . "c_backend_conformance_test.rs: 3 selected, 3 supported")
-             (rational . "c_backend_test.rs: rational add/sub/mul/div/unary_minus/int_mix")
+             (rational . "c_backend_test.rs: rational add/sub/mul/div/unary_minus/int_mix; decimal_comma_equals_dot_through_runtime; rational_literal_from_decimal_reduces")
              (first-class-builtins . "c_backend_test.rs: builtin_value, builtin_shadowing, higher_order_builtin")
              (let . "c_backend_test.rs: compiles_let_to_c_and_runs_it")
              (structural-equal? . "c_backend_test.rs: structural_equal_*"))))
@@ -173,6 +173,18 @@
              (tail-recursion . "explicit_self_tail_call_loop_lowers_without_calls")
              (self-tail-recursive-def . "self_tail_recursive_def_compiles_with_correct_structure")))))))
 
+
+ ; Global (backend-independent) admission gates — not backend capabilities.
+ ; These never raise global-contract above 2.0 (see claim-authority in compatibility.my).
+ (global-admission
+  . ((reader-apostrophe-4.0 . ((status . supported)
+                               (evidence . "tests/reader_contract_test.rs")))
+     (reader-decimal-comma-5.0 . ((status . partial)
+                                  (evidence . "tests/decimal_separator_test.rs tests/c_backend_test.rs")))
+     (canon-binder-reservation-6.0 . ((status . partial)
+                                      (evidence . "tests/canon_reservation_test.rs tests/shadowing_test.rs")))
+     (claim-authority-guard . ((status . supported)
+                               (evidence . "tests/contract_claim_authority_test.rs")))))
 
  (contract-claims
   . ((CML-IMPLEMENT-CONTRACT-2.1
