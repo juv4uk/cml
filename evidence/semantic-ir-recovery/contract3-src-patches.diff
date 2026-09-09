@@ -1,12 +1,7 @@
 --- a/src/compiler.rs
 +++ b/src/compiler.rs
-@@ -31,25 +31,32 @@
- impl fmt::Display for CompileError {
-     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+@@ -33,23 +33,23 @@
          match self {
-+            // Prefixed kind tags align static FPGA rejection messages with the
-+            // Contract 3.0 named-error surface used by the C backend / reader.
-+            // Full runtime FPGA parity is still open (compatibility.my).
              CompileError::TooManyArguments { found, max } => write!(
                  f,
 -                "call has {found} arguments, but the fpga-lisp target supports at most {max}"
@@ -26,11 +21,7 @@
              }
              CompileError::SymbolTableOverflow => {
 -                write!(f, "symbol table overflow (max {})", MAX_LOADI_MAGNITUDE)
-+                write!(
-+                    f,
-+                    "NumericOverflow: symbol table overflow (max {})",
-+                    MAX_LOADI_MAGNITUDE
-+                )
++                write!(f, "NumericOverflow: symbol table overflow (max {})", MAX_LOADI_MAGNITUDE)
              }
              CompileError::UnsupportedVariant(variant) => {
 -                write!(f, "unsupported IR variant for FPGA target: {variant}")
@@ -38,13 +29,11 @@
              }
          }
      }
-@@ -501,6 +508,9 @@
-             Quoted::List(items) => {
-                 self.compile_quoted_list(items, target_reg);
+@@ -495,7 +495,8 @@
+                     self.emit(&format!("CONS {} {} R12", target_reg, target_reg)); // target_reg = cons(item, tail)
+                 }
              }
 -            _ => unreachable!("unsupported quoted node in compiler"),
-+            // Explicit arms (not `_`) so adding a Quoted variant is a compile error here.
-+            // validate_quoted rejects these before emission; panic only if that gate is bypassed.
 +            Quoted::Float(_) => unreachable!("Quoted::Float rejected by validate_quoted"),
 +            Quoted::Rational(_, _) => unreachable!("Quoted::Rational rejected by validate_quoted"),
          }
@@ -52,11 +41,12 @@
  
 --- a/src/c_backend.rs
 +++ b/src/c_backend.rs
-@@ -121,7 +121,14 @@
+@@ -120,7 +120,14 @@
+ }
  
  static long rational_checked_mul(long a, long b) {
 -    if (b != 0 && a > (LONG_MAX / b)) runtime_error("Overflow", "rational numerator/denominator overflow");
-+    // Contract 3.0 named kind: NumericOverflow (not generic "Overflow").
++    // Contract 3.0 named kind: NumericOverflow
 +    if (a > 0) {
 +        if (b > 0) { if (a > LONG_MAX / b) runtime_error("NumericOverflow", "rational numerator/denominator overflow"); }
 +        else if (b < 0) { if (b < LONG_MIN / a) runtime_error("NumericOverflow", "rational numerator/denominator overflow"); }
@@ -67,15 +57,17 @@
      return a * b;
  }
  
-@@ -161,7 +168,8 @@
+@@ -164,7 +171,7 @@
+     return mk_rational(n, d);
  }
  static Value *v_rat_div(Value *a, Value *b) {
 -    if (b->u.rat.num == 0) runtime_error("Type", "rational division by zero");
-+    // Contract 3.0 named kind: DivisionByZero (aligned with my-lisp ErrorKind).
 +    if (b->u.rat.num == 0) runtime_error("DivisionByZero", "rational division by zero");
      long n = rational_checked_mul(a->u.rat.num, b->u.rat.den);
      long d = rational_checked_mul(a->u.rat.den, b->u.rat.num);
-@@ -206,16 +214,36 @@
+     return mk_rational(n, d);
+@@ -205,15 +212,35 @@
+     if (v->tag == TAG_INT) return mk_rational(v->u.i, 1);
      return NULL;
  }
 +static long checked_long_add(long a, long b) {
@@ -111,7 +103,9 @@
 +    return mk_int(checked_long_sub(a->u.i, b->u.i));
  }
  
-@@ -300,7 +328,7 @@
+ static void runtime_error(const char *kind, const char *detail) {
+@@ -279,7 +306,7 @@
+         require_number(operand, "*");
          if (result->tag == TAG_RATIONAL || operand->tag == TAG_RATIONAL)
              result = v_rat_mul(to_rational(result), to_rational(operand));
 -        else result = mk_int(result->u.i * operand->u.i);
