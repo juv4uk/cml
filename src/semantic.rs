@@ -3,6 +3,13 @@
 //! This is intentionally a small gate, not a claim of complete my-lisp
 //! semantic analysis.  It rejects source shapes for which CML would otherwise
 //! emit a different program than the canonical evaluator.
+//!
+//! Contract 6.0 (my-lisp, ratified 2026-09-08): the finite Canon 0+7 surface
+//! name set is RESERVED and unshadowable. Any binder (def / lambda / let)
+//! that attempts to bind a Canon spelling fails as InvalidForm. This module
+//! enforces that reservation before IR lowering. CML still claims only
+//! language contract 2.0 globally; this is a targeted static rejection that
+//! aligns binder behaviour with upstream without upgrading the full claim.
 
 use crate::ast::{Expr, NumericBufferLiteral};
 use std::collections::HashSet;
@@ -16,6 +23,8 @@ pub enum SemanticErrorKind {
     UnquotedStringLiteral,
     /// #f32(...) numeric buffer — no backend supports Buffer(F32).
     UnsupportedF32Buffer,
+    /// Attempt to bind a reserved Canon 0+7 surface name (Contract 6.0).
+    ReservedCanonName,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,6 +41,75 @@ impl fmt::Display for SemanticError {
 
 impl std::error::Error for SemanticError {}
 
+/// Finite reserved Canon 0+7 surface spellings (EN / UK / SA / symbolic).
+/// Matching is case-insensitive for Latin identifiers; Ukrainian and Sanskrit
+/// surfaces are matched exactly as written (Unicode).
+///
+/// Source of truth: my-lisp Contract 6.0 + lib/surface/semantic-registry.wsm.
+/// Empty list `()` is a ground value, not a binder name, so it is absent.
+fn is_reserved_canon_surface(name: &str) -> bool {
+    // Fast path: uppercase Latin historical + symbolic forms used by CML IR.
+    let upper = name.to_uppercase();
+    matches!(
+        upper.as_str(),
+        "QUOTE"
+            | "ATOM"
+            | "EQ"
+            | "CONS"
+            | "CAR"
+            | "CDR"
+            | "COND"
+            // Symbolic keyboard surfaces (Ukrainian layout)
+            | "'"
+            | ".?"
+            | "=?"
+            | ":"
+            | ":П"
+            | ":Р"
+            | "?:"
+    ) || matches!(
+        name,
+        // Ukrainian surfaces
+        "як-є"
+            | "атом?"
+            | "тотожне?"
+            | "сполучити"
+            | "перше"
+            | "решта"
+            | "за-умовою"
+            // Sanskrit surfaces (IAST)
+            | "svarūpa"
+            | "aṇu"
+            | "abheda"
+            | "saṃyuj"
+            | "ādi"
+            | "śeṣa"
+            | "anukrama"
+            // Lowercase Latin already covered by uppercase path; keep explicit
+            // for documentation parity with my-lisp tests.
+            | "quote"
+            | "atom"
+            | "eq"
+            | "cons"
+            | "car"
+            | "cdr"
+            | "cond"
+    )
+}
+
+fn reject_if_reserved(name: &str) -> Result<(), SemanticError> {
+    if is_reserved_canon_surface(name) {
+        Err(SemanticError {
+            kind: SemanticErrorKind::ReservedCanonName,
+            detail: format!(
+                "canonical name is immutable · канонічне ім'я незмінне: {name}"
+            ),
+        })
+    } else {
+        Ok(())
+    }
+}
+
 pub fn analyze_program(exprs: &[Expr]) -> Result<(), SemanticError> {
     exprs.iter().try_for_each(analyze_expr)
 }
@@ -41,7 +119,8 @@ pub fn analyze_expr(expr: &Expr) -> Result<(), SemanticError> {
     if let Expr::NumericBuffer(NumericBufferLiteral::F32(_)) = expr {
         return Err(SemanticError {
             kind: SemanticErrorKind::UnsupportedF32Buffer,
-            detail: "#f32(...) numeric buffer not supported (no backend supports F32 buffers)".to_string(),
+            detail: "#f32(...) numeric buffer not supported (no backend supports F32 buffers)"
+                .to_string(),
         });
     }
 
@@ -54,8 +133,16 @@ pub fn analyze_expr(expr: &Expr) -> Result<(), SemanticError> {
 
     match head.as_str() {
         // Quoted data has no binding or execution semantics to analyze.
-        "quote" => analyze_quoted(&items[1]),
+        "quote" => {
+            if items.len() > 1 {
+                analyze_quoted(&items[1])
+            } else {
+                Ok(())
+            }
+        }
         "lambda" if items.len() >= 3 => analyze_lambda(&items[1], &items[2..]),
+        "def" if items.len() >= 2 => analyze_def(&items[1..]),
+        "let" if items.len() >= 2 => analyze_let(&items[1], &items[2..]),
         _ => items.iter().skip(1).try_for_each(analyze_expr),
     }
 }
@@ -64,7 +151,8 @@ fn analyze_quoted(expr: &Expr) -> Result<(), SemanticError> {
     match expr {
         Expr::String(_) => Err(SemanticError {
             kind: SemanticErrorKind::UnquotedStringLiteral,
-            detail: "quoted string literal not supported (no backend represents strings)".to_string(),
+            detail: "quoted string literal not supported (no backend represents strings)"
+                .to_string(),
         }),
         Expr::List(list) => list.iter().try_for_each(analyze_quoted),
         Expr::DottedList(list, tail) => {
@@ -73,6 +161,28 @@ fn analyze_quoted(expr: &Expr) -> Result<(), SemanticError> {
         }
         _ => Ok(()),
     }
+}
+
+fn analyze_def(args: &[Expr]) -> Result<(), SemanticError> {
+    if let Some(Expr::Symbol(name)) = args.first() {
+        reject_if_reserved(name)?;
+    }
+    args.iter().skip(1).try_for_each(analyze_expr)
+}
+
+fn analyze_let(bindings_expr: &Expr, body: &[Expr]) -> Result<(), SemanticError> {
+    if let Expr::List(bindings) = bindings_expr {
+        for binding in bindings {
+            if let Expr::List(pair) = binding {
+                if let Some(Expr::Symbol(name)) = pair.first() {
+                    reject_if_reserved(name)?;
+                }
+                // Analyse binding values.
+                pair.iter().skip(1).try_for_each(analyze_expr)?;
+            }
+        }
+    }
+    body.iter().try_for_each(analyze_expr)
 }
 
 fn analyze_lambda(params: &Expr, body: &[Expr]) -> Result<(), SemanticError> {
@@ -101,6 +211,9 @@ fn analyze_lambda(params: &Expr, body: &[Expr]) -> Result<(), SemanticError> {
 
     let mut seen = HashSet::new();
     for name in names {
+        // Contract 6.0: Canon surfaces cannot be lambda parameters.
+        reject_if_reserved(name)?;
+
         // CML's current IR/backend symbol representation is uppercase.  Two
         // source names that collide after that normalization cannot be
         // compiled faithfully, even if their original spelling differs.
@@ -120,6 +233,39 @@ fn collect_parameter_names<'a>(params: &'a [Expr], names: &mut Vec<&'a str>) {
     for param in params {
         if let Expr::Symbol(name) = param {
             names.push(name);
+        }
+    }
+}
+
+#[cfg(test)]
+mod reserved_canon_unit {
+    use super::*;
+
+    #[test]
+    fn latin_canon_names_are_reserved() {
+        for name in ["car", "CAR", "Car", "quote", "cond", "atom", "eq", "cons", "cdr"] {
+            assert!(is_reserved_canon_surface(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn ukrainian_canon_names_are_reserved() {
+        for name in ["перше", "решта", "як-є", "атом?", "тотожне?", "сполучити", "за-умовою"] {
+            assert!(is_reserved_canon_surface(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn sanskrit_canon_names_are_reserved() {
+        for name in ["ādi", "śeṣa", "svarūpa", "aṇu", "abheda", "saṃyuj", "anukrama"] {
+            assert!(is_reserved_canon_surface(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn ordinary_names_are_not_reserved() {
+        for name in ["map", "length", "x", "f", "+", "numeric-buffer-map", "відобразити"] {
+            assert!(!is_reserved_canon_surface(name), "{name}");
         }
     }
 }
