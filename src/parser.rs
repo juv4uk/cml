@@ -15,6 +15,18 @@ pub enum ParseError {
     UnexpectedToken(String),
 }
 
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Contract 3.0 named kind prefix: Parse
+        match self {
+            ParseError::UnexpectedEOF => write!(f, "Parse: unexpected end of input"),
+            ParseError::UnexpectedToken(tok) => write!(f, "Parse: unexpected token `{tok}`"),
+        }
+    }
+}
+
+impl std::error::Error for ParseError {}
+
 fn tokenize(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
@@ -53,7 +65,7 @@ fn tokenize(input: &str) -> Vec<String> {
                 // Expression-initial apostrophe is reader syntax. If an
                 // identifier is already being accumulated, the same character
                 // falls through to the default arm and remains part of it.
-                tokens.push("'".to_string());
+                tokens.push("'").to_string());
             }
             _ => {
                 current.push(c);
@@ -97,6 +109,13 @@ fn parse_expr(
                 Ok(Expr::Integer(n))
             } else if let Some(rat) = parse_rational_literal(&token) {
                 Ok(Expr::Rational(rat.0, rat.1))
+            } else if let Some(dec) = parse_decimal_literal(&token) {
+                // Whole numbers prefer Integer; non-integers stay Rational.
+                if dec.1 == 1 {
+                    Ok(Expr::Integer(dec.0))
+                } else {
+                    Ok(Expr::Rational(dec.0, dec.1))
+                }
             } else {
                 Ok(Expr::Symbol(token))
             }
@@ -122,7 +141,114 @@ fn parse_rational_literal(token: &str) -> Option<(i64, u64)> {
     Some((num / g as i64, den / g))
 }
 
+/// Contract 5.0 decimal-separator semantics.
+///
+/// Dot and comma are equivalent decimal separators **only** when the entire
+/// token is a well-formed finite decimal / base-10 scientific numeral.
+/// Examples that parse as the same exact value:
+///   `12.455` ≡ `12,455`
+///   `-0.25`  ≡ `-0,25`
+///   `1.5e3`  ≡ `1,5e3` ≡ `1500`
+///
+/// Tokens that are not valid numerals (e.g. `а,б`, `версія1,2`, `1.2.3`,
+/// `1ee3`) remain ordinary symbols — this function returns `None`.
+///
+/// Exponent magnitude is capped at ±10000 (same order as my-lisp) to bound
+/// intermediate digit allocation; exceeding the cap yields `None` so the
+/// token stays a symbol rather than a silent overflow.
+fn parse_decimal_literal(token: &str) -> Option<(i64, u64)> {
+    const MAX_EXP_MAG: i32 = 10_000;
+
+    let lower = token.to_ascii_lowercase();
+    let (base_str, exp_str) = match lower.split_once('e') {
+        Some((b, e)) => (b, Some(e)),
+        None => (lower.as_str(), None),
+    };
+
+    // Exactly one decimal separator (dot or comma), or none.
+    let dot_count = base_str.matches('.').count();
+    let comma_count = base_str.matches(',').count();
+    if dot_count + comma_count > 1 {
+        return None;
+    }
+    if dot_count == 1 && comma_count == 1 {
+        return None;
+    }
+
+    let scientific_exp: i32 = if let Some(e) = exp_str {
+        let digits = e.strip_prefix(['+', '-']).unwrap_or(e);
+        if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        e.parse().ok()?
+    } else {
+        0
+    };
+
+    let (mantissa_str, decimal_places) = if let Some((int_part, frac_part)) =
+        base_str.split_once('.').or_else(|| base_str.split_once(','))
+    {
+        // Sign may only appear on the integer part.
+        if frac_part.is_empty() {
+            return None;
+        }
+        if !frac_part.chars().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        let mut m = String::with_capacity(int_part.len() + frac_part.len());
+        m.push_str(int_part);
+        m.push_str(frac_part);
+        (m, frac_part.len() as i32)
+    } else {
+        (base_str.to_string(), 0)
+    };
+
+    if mantissa_str.is_empty() || mantissa_str == "-" || mantissa_str == "+" {
+        return None;
+    }
+    // Mantissa must be optional-sign + digits only (no leftover separators).
+    let mant_digits = mantissa_str.strip_prefix(['+', '-']).unwrap_or(&mantissa_str);
+    if mant_digits.is_empty() || !mant_digits.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+
+    let mantissa: i128 = mantissa_str.parse().ok()?;
+    let total_exp = scientific_exp.checked_sub(decimal_places)?;
+    if !(-MAX_EXP_MAG..=MAX_EXP_MAG).contains(&total_exp) {
+        return None;
+    }
+
+    // value = mantissa * 10^total_exp  as exact rational
+    let (num, den): (i128, u128) = if total_exp >= 0 {
+        let factor = 10i128.checked_pow(total_exp as u32)?;
+        (mantissa.checked_mul(factor)?, 1)
+    } else {
+        let factor = 10u128.checked_pow((-total_exp) as u32)?;
+        (mantissa, factor)
+    };
+
+    if den == 0 {
+        return None;
+    }
+    // Reduce and fit into (i64, u64).
+    let g = gcd_u128(num.unsigned_abs(), den);
+    let num = num / g as i128;
+    let den = den / g;
+    let num_i64 = i64::try_from(num).ok()?;
+    let den_u64 = u64::try_from(den).ok()?;
+    Some((num_i64, den_u64))
+}
+
 fn gcd(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    a
+}
+
+fn gcd_u128(mut a: u128, mut b: u128) -> u128 {
     while b != 0 {
         let t = b;
         b = a % b;
