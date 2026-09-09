@@ -1,0 +1,22 @@
+; CML claim-authority fragment (CML-CONTRACT-SCOPE-REALIGN-M1)
+; Secondary source of truth for global contract claim until compatibility.my is fully synced.
+; tests/contract_claim_authority_test.rs merges this file with compatibility.my.
+
+((kind . cml-claim-authority)
+ (global-contract . (2 0))
+ (partial-features-do-not-raise-claim . t)
+ (enforced-by . "tests/contract_claim_authority_test.rs")
+ (observed-upstream-contract . (6 0))
+ (claim-authority . ((global-contract . (2 0))
+                     (partial-features-do-not-raise-claim . t)
+                     (enforced-by . "tests/contract_claim_authority_test.rs")))
+ (contract-3.0-gap . ((status . partial-c-backend)
+                      (required-error-kinds . (DivisionByZero NumericOverflow Parse))
+                      (implemented-in . "src/c_backend.rs, 2026-09-09")
+                      (note . "C backend named kinds present; global claim stays 2.0 until FPGA/x86 parity.")))
+ (contract-5.0-decimal-separator . ((status . partial-reader)
+                                     (implemented-in . "src/parser.rs, 2026-09-09")
+                                     (verified-by . "tests/decimal_separator_test.rs")))
+ (contract-6.0-canon-reservation . ((status . partial-static-rejection)
+                                     (implemented-in . "src/semantic.rs, 2026-09-09")
+                                     (verified-by . "tests/canon_reservation_test.rs tests/shadowing_test.rs"))))

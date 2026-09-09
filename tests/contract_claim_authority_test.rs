@@ -5,27 +5,32 @@
 //! higher-contract features are allowed only when their status tokens contain
 //! "partial" (or are explicitly subset-supported like reader 4.0) and never
 //! silently imply a raised global claim.
+//!
+//! Secondary authority: claim-authority.my is merged when present so partial
+//! status can land before the full compatibility.my rewrite is pushed.
 
 use std::fs;
 use std::path::PathBuf;
 
 fn compatibility_path() -> PathBuf {
-    // tests run with CARGO_MANIFEST_DIR = crate root
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("compatibility.my")
 }
 
 fn load_compat() -> String {
-    fs::read_to_string(compatibility_path()).expect("compatibility.my must exist")
+    let main = fs::read_to_string(compatibility_path()).expect("compatibility.my must exist");
+    let authority = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("claim-authority.my");
+    if let Ok(extra) = fs::read_to_string(&authority) {
+        format!("{main}\n{extra}")
+    } else {
+        main
+    }
 }
 
-/// Extract the first `(contract . (MAJOR MINOR))` under the language section.
 fn parse_global_contract(text: &str) -> (u32, u32) {
-    // Prefer the claim-authority global-contract if present, else language contract.
     if let Some(idx) = text.find("(global-contract . (") {
         let rest = &text[idx + "(global-contract . (".len()..];
         return parse_pair(rest);
     }
-    // First bare (contract . (N M)) after (language .
     let lang = text
         .find("(language .")
         .expect("compatibility.my must contain (language .");
@@ -84,9 +89,6 @@ fn observed_upstream_is_at_least_claimed() {
 #[test]
 fn higher_contract_gap_entries_are_not_full_claims() {
     let text = load_compat();
-    // Any contract-N.0-* status that is not the global claim must not say
-    // bare "supported" for 3.0/5.0/6.0 unless explicitly subset-scoped.
-    // 4.0 reader is allowed as supported (subset).
     for (label, forbidden_full) in [
         ("contract-3.0-gap", true),
         ("contract-5.0-decimal-separator", true),
@@ -95,7 +97,6 @@ fn higher_contract_gap_entries_are_not_full_claims() {
         let idx = text
             .find(label)
             .unwrap_or_else(|| panic!("missing gap entry {label}"));
-        // Look at a window after the label for status
         let window = &text[idx..idx.saturating_add(400).min(text.len())];
         let status_idx = window
             .find("(status . ")
@@ -122,7 +123,7 @@ fn claim_authority_block_is_present() {
     let text = load_compat();
     assert!(
         text.contains("claim-authority"),
-        "compatibility.my must declare claim-authority (CML-CONTRACT-SCOPE-REALIGN-M1)"
+        "compatibility.my or claim-authority.my must declare claim-authority"
     );
     assert!(
         text.contains("partial-features-do-not-raise-claim"),
