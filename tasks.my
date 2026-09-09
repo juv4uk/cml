@@ -409,4 +409,32 @@
     (context . "Owner's paradigm (2026-09-04, docs/language-core-axioms.md G1/G6/G7 boundary note in my-lisp): substrates (Rust, C+asm, FPGA, Guile) must witness my-lisp's own semantics, never invent their own. Same violation already found and FIXED in fpga-lisp's RTL (FPGA-TAG-TRUE-MANUFACTURED-PRIMITIVE, fpga-lisp/tasks.my): canonical WSM has no standalone `true` primitive -- t is plain Symbol(\"t\"). Found live in a second, independent substrate 2026-09-04: src/c_backend.rs's `typedef enum { TAG_NIL, TAG_TRUE, TAG_INT, TAG_SYM, ... }` gives true its own manufactured tag (TRUE_V global, line 90), used directly as eq/atom's positive result (e.g. line 172: symbol eq returns &TRUE_V) instead of routing through the C backend's own already-working, already-general symbol machinery (TAG_SYM + mk_sym, already used for every other symbol including t itself when quoted). Not yet audited for full blast radius (unlike the fpga-lisp case, which was audited before any RTL change) -- do that first, per the same discipline, before changing anything.")
     (description . "Audit every producer/consumer of TAG_TRUE and TRUE_V in c_backend.rs (not just the ones already spotted), plus any test fixture or C-backend regression test that asserts on TAG_TRUE by name. Then apply the same minimal fix shape fpga-lisp already proved: t becomes an ordinary interned symbol (TAG_SYM, via mk_sym(\"t\")) wherever it's currently produced as TRUE_V, with truthy()/print and every equality path updated to match. Do not invent a new TRUE-like entity to replace it -- that repeats the identical mistake fpga-lisp's task explicitly warned against. Re-run the full c_backend_test.rs suite (30+ tests as of 2026-09-04) and the C-backend conformance harness; report before/after pass counts, not just 'still passes'.")
     (done . (t . "Claude Sonnet 5 (Pramana) 2026-09-04, commit 7108185: full audit done first (5 producer/consumer sites: enum decl, TRUE_V definition, v_eq, v_equal_p, print_value -- no test fixture asserted on TAG_TRUE by name). Fixed exactly as scoped: TAG_TRUE removed from the enum, TRUE_V redefined as { TAG_SYM, \"T\" } (uppercase, matching mk_sym's own canonical case -- caught live by the new regression test, which found a real bug in a first lowercase-\"t\" attempt: (eq t (quote t)) compiled to strcmp(\"t\",\"T\") internally, genuinely unequal). Every existing &TRUE_V call site left untouched. New regression test c_backend_true_is_an_ordinary_symbol_not_a_manufactured_tag added. Before/after: c_backend_test.rs 30/30 -> 31/31 (0 regressions, 1 new); c_backend_conformance_test.rs's full Tier-1 constitutive fixture sweep still passes."))
-  )))))
+  ))
+
+  ("CML-MYLISP-SEMANTIC-SYNC-GATE" . (
+    (priority . 10.0)
+    (capabilities . (cml compiler my-lisp semantics contract ci provenance testing))
+    (origin . owner)
+    (depends-on . (MYLISP-CML-SEMANTIC-EXPORT-V1))
+    (description . "Зробити CML залежним від versioned semantic export my-lisp, а не від вручну дубльованих чисел contract або вибіркових parser/semantic правил. CI мусить fail-closed з точним diff, якщо contract identity чи semantic digest змінився, але CML mapping/coverage evidence не оновлено. Не змінювати backend semantics у цій задачі.")
+    (context . "Пряма настанова власника 2026-09-10: CML є компілятором Lisp і має завжди синхронізуватися з ним. Backend capability — окрема вісь: вона відповідає, що вже може x86/C/FPGA, але не визначає значення Lisp. Поточний global claim 2.0 поруч із частково прийнятими Contract 5/6 формами є симптомом drift, який gate має зробити видимим." )
+    (done . nil)))
+
+  ("CML-MYLISP-SEMANTIC-IR-BRIDGE-V1" . (
+    (priority . 9.8)
+    (capabilities . (cml compiler my-lisp semantics ir lowering testing))
+    (origin . owner)
+    (depends-on . (CML-MYLISP-SEMANTIC-SYNC-GATE))
+    (description . "Побудувати перший вузький міст від авторитетного my-lisp semantic export до наявного CML IR. Почати з named fixed-arity def + recursion, які вже мають x86 runtime witness. Довести однаковий semantic identity та observable result через my-lisp oracle і CML x86; не переносити весь parser, macro system або всі backend-и одним rewrite." )
+    (context . "Мета — прибрати два незалежні уявлення про мову, але зберегти CML IR як спільне фізичне представлення для C/x86/FPGA. Після кожного малого зрізу показувати власникові: language fact, Rust/IR representation, x86 calling convention/memory representation та runtime witness." )
+    (done . nil)))
+
+  ("CML-BACKEND-COVERAGE-FROM-LISP-SEMANTICS" . (
+    (priority . 9.4)
+    (capabilities . (cml compiler semantics backend capability evidence testing))
+    (origin . owner)
+    (depends-on . (CML-MYLISP-SEMANTIC-IR-BRIDGE-V1))
+    (description . "Згенерувати або перевірити backend coverage matrix від semantic identities Lisp: кожна форма має мати статус supported-with-witness, explicitly-unsupported або pending для кожного CML backend-а. Global language contract не занижувати до найслабшого backend-а; окремо показувати x86/C/FPGA coverage і точну причину межі." )
+    (context . "Це замінює розмиту практику, де parser уже частково читає нову форму, а global claim лишається старим числом без provenance. Результат має дозволяти agent-у й власнику одразу побачити: змінилася семантика Lisp, mapping у IR чи лише capability конкретної машини." )
+    (done . nil)))
+  )))
