@@ -26,6 +26,16 @@
 - Сирцеві strings знижуються до `Ir::String` (окремий IR-варіант); fpga-lisp ще не має окремого runtime string tag.
 - Inexact numbers і точні rationals не підтримуються цільовим представленням.
 
+### Стан фіксації Target ABI
+
+Freestanding x86_64 backend залежить від `wsm-os-target`, зафіксованого на
+нейтральному репозиторії
+[`wsm-target-contract`](https://github.com/juv4uk/wsm-target-contract). CML і
+`wsm-os-lisp` є рівноправними споживачами цього ABI: CML емітує код за його
+правилами, а `wsm-os-lisp` надає рантайм і платформові докази. Це прибирає
+старий циклічний зв'язок репозиторіїв і не є заявою, що поточний рантайм чи
+boot-шлях `wsm-os` уже покритий.
+
 [`compatibility.my`](compatibility.my) фіксує точний language contract my-lisp, ISA contract fpga-lisp, перевірені SHA, підтриману поверхню й відомі прогалини цієї ревізії компілятора.
 
 Freestanding x86_64 зріз окремо описаний у
@@ -71,7 +81,12 @@ The compiler handles:
 - Inexact numbers and exact rationals are not supported by the target representation.
 
 ### Target ABI Pinning Status
-The x86_64 freestanding backend depends on `wsm-os-target` (git dependency in `Cargo.toml`), which is pinned to `wsm-os-lisp` rev `a6b92cd` — the OLD lab repository that the current `wsm-os` explicitly disclaims continuity with ("not a continuation of the old wsm-os-lisp lab, nothing kept beyond the name"). The `target-contract.wsm` defining the ABI exists only in the deprecated `wsm-os-lisp` repo; the current `wsm-os` has no `target-contract.wsm` and no Cargo crate. This is a known gap: the ABI pin is to a deprecated lab; the new `wsm-os` does not yet provide a target-contract or Cargo crate. Owner decision required on whether to migrate the ABI definition or accept the legacy pin.
+The x86_64 freestanding backend depends on `wsm-os-target`, pinned to the
+neutral [`wsm-target-contract`](https://github.com/juv4uk/wsm-target-contract)
+repository. CML and `wsm-os-lisp` are equal consumers of this target ABI:
+CML emits code against it; `wsm-os-lisp` supplies its runtime and platform
+evidence. This replaces the legacy repository cycle and does not claim that
+the current `wsm-os` runtime or boot path is already covered.
 
 [`compatibility.my`](compatibility.my) records the exact my-lisp language contract, fpga-lisp ISA contract, tested SHAs, supported surface, and known gaps for this compiler revision.
 
