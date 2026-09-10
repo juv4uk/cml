@@ -460,13 +460,24 @@ impl CBackend {
     /// `evidence/`-worthy `cml` fixture in this repo already has.
     pub fn compile_program(&mut self, program: &[Ir]) -> Result<String, CompileError> {
         let mut main_body = String::new();
+        // COMPILER-04 / COMPILER-12: two-pass top-level defs so mutual
+        // recursion sees sibling placeholders before any closure captures
+        // global_env (env list pointer at creation time).
+        for ir in program {
+            if let Ir::Def { name, .. } = ir {
+                main_body.push_str(&self.compile_def_placeholder(name));
+            }
+        }
+        for ir in program {
+            if let Ir::Def { name, value } = ir {
+                main_body.push_str(&self.compile_def_backpatch(name, value)?);
+            }
+        }
         // my-lisp empty-program semantics (TASK-001)
         let mut printed_result = false;
         for ir in program {
             match ir {
-                Ir::Def { name, value } => {
-                    main_body.push_str(&self.compile_def(name, value)?);
-                }
+                Ir::Def { .. } => {}
                 other => {
                     let expr = self.compile_expr(other, "global_env")?;
                     main_body.push_str(&format!(
@@ -476,9 +487,8 @@ impl CBackend {
                 }
             }
         }
-
         if !printed_result {
-            main_body.push_str("    { print_value(&NIL_V); printf(\"\\n\"); }\\n");
+            main_body.push_str("    { print_value(&NIL_V); printf(\"\\n\"); }\n");
         }
 
         Ok(format!(
@@ -488,22 +498,26 @@ impl CBackend {
         ))
     }
 
-    /// `(def name value)`: extends `global_env` with a placeholder pair
-    /// `(name . nil)` *before* compiling `value`, so a `value` that's a
-    /// lambda captures the extended env and can look itself up by name;
-    /// then backpatches the placeholder's cdr in place -- the same
-    /// letrec-placeholder-plus-SETCDR idea `compiler.rs`'s `compile_def`
-    /// uses on fpga-lisp, here as a literal C struct-field mutation.
-    fn compile_def(&mut self, name: &str, value: &Ir) -> Result<String, CompileError> {
-        let mut out = String::new();
-        out.push_str(&format!(
-            "    Value *ph_{name} = mk_cons(mk_sym(\"{name}\"), &NIL_V);\n"
-        ));
-        out.push_str(&format!(
-            "    global_env = mk_cons(ph_{name}, global_env);\n"
-        ));
+    /// Install `(name . nil)` on `global_env` before any value is compiled.
+    fn compile_def_placeholder(&self, name: &str) -> String {
+        format!(
+            "    Value *ph_{name} = mk_cons(mk_sym(\"{name}\"), &NIL_V);\n    global_env = mk_cons(ph_{name}, global_env);\n"
+        )
+    }
+
+    /// Compile `value` and SETCDR the placeholder.
+    fn compile_def_backpatch(
+        &mut self,
+        name: &str,
+        value: &Ir,
+    ) -> Result<String, CompileError> {
         let value_expr = self.compile_expr(value, "global_env")?;
-        out.push_str(&format!("    ph_{name}->u.cons.cdr = {value_expr};\n"));
+        Ok(format!("    ph_{name}->u.cons.cdr = {value_expr};\n"))
+    }
+
+    fn compile_def(&mut self, name: &str, value: &Ir) -> Result<String, CompileError> {
+        let mut out = self.compile_def_placeholder(name);
+        out.push_str(&self.compile_def_backpatch(name, value)?);
         Ok(out)
     }
 
