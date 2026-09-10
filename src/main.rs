@@ -1,3 +1,4 @@
+use cml::build::{self, BuildOptions};
 use cml::compiler::{CompiledAssembly, Compiler};
 use cml::lower;
 use cml::macros::MacroExpander;
@@ -5,24 +6,41 @@ use cml::parser;
 use cml::x86_freestanding::X86FreestandingBackend;
 use std::env;
 use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+fn usage() -> ! {
+    eprintln!(
+        "Usage:\n\
+         \  cml <file.my>                    emit fpga-lisp assembly\n\
+         \  cml build <file.my> [-o out] [--keep-c]\n\
+         \                                   COMPILER-01: C backend → native executable\n\
+         \  cml x86-asm <file.wsm>           emit x86 freestanding assembly\n\
+         \  cml x86-elf <file.wsm> <output>  link x86 freestanding ELF"
+    );
+    std::process::exit(1);
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: cml <file.my> | cml x86-asm <file.wsm> | cml x86-elf <file.wsm> <output>");
-        std::process::exit(1);
+        usage();
+    }
+
+    // COMPILER-01: cml build <file.my> [-o out] [--keep-c]
+    if args.get(1).map(|s| s.as_str()) == Some("build") {
+        run_build(&args[2..]);
+        return;
     }
 
     let (x86_asm, x86_elf, filename, output) = match args.as_slice() {
-        [_, command, filename, output] if command == "x86-elf" => (false, true, filename, Some(output)),
+        [_, command, filename, output] if command == "x86-elf" => {
+            (false, true, filename, Some(output))
+        }
         [_, command, filename] if command == "x86-asm" => (true, false, filename, None),
         [_, filename] => (false, false, filename, None),
-        _ => {
-            eprintln!("Usage: cml <file.my> | cml x86-asm <file.wsm> | cml x86-elf <file.wsm> <output>");
-            std::process::exit(1);
-        }
+        _ => usage(),
     };
     let contents = fs::read_to_string(filename).unwrap_or_else(|err| {
         eprintln!("Error reading file {}: {}", filename, err);
@@ -59,18 +77,12 @@ fn main() {
         return;
     }
     let mut compiler = Compiler::new();
-    // M1.1d bridge (LOADSYM contract, F6): emit numeric tagged-symbol
-    // immediates + per-program symbol table, per the directive that
-    // computational transforms live in CML while the fpga-lisp assembler
-    // stays a numeric reference. The legacy name-oriented compile remains
-    // available in the library for readable diagnostics.
-    let compiled: CompiledAssembly =
-        compiler
-            .compile_with_symbols(&program)
-            .unwrap_or_else(|err| {
-                eprintln!("Compile error: {err}");
-                std::process::exit(1);
-            });
+    let compiled: CompiledAssembly = compiler
+        .compile_with_symbols(&program)
+        .unwrap_or_else(|err| {
+            eprintln!("Compile error: {err}");
+            std::process::exit(1);
+        });
 
     println!("{}", compiled.assembly);
     if !compiled.symbols.is_empty() {
@@ -81,24 +93,86 @@ fn main() {
     }
 }
 
+fn run_build(args: &[String]) {
+    let mut file: Option<&str> = None;
+    let mut output = PathBuf::from("a.out");
+    let mut keep_c = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-o" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("build: -o requires a path");
+                    std::process::exit(1);
+                }
+                output = PathBuf::from(&args[i]);
+            }
+            "--keep-c" => keep_c = true,
+            "-h" | "--help" => usage(),
+            flag if flag.starts_with('-') => {
+                eprintln!("build: unknown flag {flag}");
+                usage();
+            }
+            path => {
+                if file.is_some() {
+                    eprintln!("build: unexpected extra argument {path}");
+                    usage();
+                }
+                file = Some(path);
+            }
+        }
+        i += 1;
+    }
+    let file = file.unwrap_or_else(|| {
+        eprintln!("build: missing <file.my>");
+        usage();
+    });
+    let opts = BuildOptions {
+        output: output.clone(),
+        keep_c,
+        c_path: None,
+    };
+    if let Err(err) = build::build_file(std::path::Path::new(file), &opts) {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }
+    eprintln!("wrote {}", output.display());
+}
+
 fn link_x86_elf(assembly: &str, output: &str) {
-    let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let base = env::temp_dir().join(format!("cml-x86-elf-{}-{nonce}", std::process::id()));
     let source = base.with_extension("s");
     let launcher = base.with_extension("c");
     fs::write(&source, assembly).unwrap_or_else(|err| fatal(&format!("writing assembly: {err}")));
-    fs::write(&launcher, "#include <stdint.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { (void)wsm_entry(0); return 0; }\n")
-        .unwrap_or_else(|err| fatal(&format!("writing launcher: {err}")));
+    fs::write(
+        &launcher,
+        "#include <stdint.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { (void)wsm_entry(0); return 0; }\n",
+    )
+    .unwrap_or_else(|err| fatal(&format!("writing launcher: {err}")));
     let linked = Command::new("cc")
-        .arg(&launcher).arg(&source)
+        .arg(&launcher)
+        .arg(&source)
         .arg("/home/agents/GitHub/wsm-my-lisp/asm/nucleus.s")
-        .arg("-o").arg(output).output()
+        .arg("-o")
+        .arg(output)
+        .output()
         .unwrap_or_else(|err| fatal(&format!("starting linker: {err}")));
     let _ = fs::remove_file(source);
     let _ = fs::remove_file(launcher);
     if !linked.status.success() {
-        fatal(&format!("x86 ELF link failed: {}", String::from_utf8_lossy(&linked.stderr)));
+        fatal(&format!(
+            "x86 ELF link failed: {}",
+            String::from_utf8_lossy(&linked.stderr)
+        ));
     }
 }
 
-fn fatal(message: &str) -> ! { eprintln!("{message}"); std::process::exit(1) }
+fn fatal(message: &str) -> ! {
+    eprintln!("{message}");
+    std::process::exit(1)
+}

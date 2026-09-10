@@ -1,6 +1,7 @@
 pub mod accelerator;
 pub mod ast;
 pub mod c_backend;
+pub mod build;
 pub mod compiler;
 pub mod compute;
 pub mod execution;
