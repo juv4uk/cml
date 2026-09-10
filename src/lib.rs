@@ -1,8 +1,7 @@
 pub mod accelerator;
 pub mod ast;
-pub mod c_backend;
 pub mod build;
-pub mod runtime_abi;
+pub mod c_backend;
 pub mod compiler;
 pub mod compute;
 pub mod execution;
@@ -21,6 +20,7 @@ pub mod lower;
 pub mod macros;
 pub mod parser;
 pub mod pratyahara;
+pub mod runtime_abi;
 pub mod semantic;
 pub mod semantic_export;
 pub mod x86_freestanding;

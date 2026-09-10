@@ -101,9 +101,7 @@ fn reject_if_reserved(name: &str) -> Result<(), SemanticError> {
     if is_reserved_canon_surface(name) {
         Err(SemanticError {
             kind: SemanticErrorKind::ReservedCanonName,
-            detail: format!(
-                "canonical name is immutable · канонічне ім'я незмінне: {name}"
-            ),
+            detail: format!("canonical name is immutable · канонічне ім'я незмінне: {name}"),
         })
     } else {
         Ok(())
@@ -243,28 +241,48 @@ mod reserved_canon_unit {
 
     #[test]
     fn latin_canon_names_are_reserved() {
-        for name in ["car", "CAR", "Car", "quote", "cond", "atom", "eq", "cons", "cdr"] {
+        for name in [
+            "car", "CAR", "Car", "quote", "cond", "atom", "eq", "cons", "cdr",
+        ] {
             assert!(is_reserved_canon_surface(name), "{name}");
         }
     }
 
     #[test]
     fn ukrainian_canon_names_are_reserved() {
-        for name in ["перше", "решта", "як-є", "атом?", "тотожне?", "сполучити", "за-умовою"] {
+        for name in [
+            "перше",
+            "решта",
+            "як-є",
+            "атом?",
+            "тотожне?",
+            "сполучити",
+            "за-умовою",
+        ] {
             assert!(is_reserved_canon_surface(name), "{name}");
         }
     }
 
     #[test]
     fn sanskrit_canon_names_are_reserved() {
-        for name in ["ādi", "śeṣa", "svarūpa", "aṇu", "abheda", "saṃyuj", "anukrama"] {
+        for name in [
+            "ādi", "śeṣa", "svarūpa", "aṇu", "abheda", "saṃyuj", "anukrama",
+        ] {
             assert!(is_reserved_canon_surface(name), "{name}");
         }
     }
 
     #[test]
     fn ordinary_names_are_not_reserved() {
-        for name in ["map", "length", "x", "f", "+", "numeric-buffer-map", "відобразити"] {
+        for name in [
+            "map",
+            "length",
+            "x",
+            "f",
+            "+",
+            "numeric-buffer-map",
+            "відобразити",
+        ] {
             assert!(!is_reserved_canon_surface(name), "{name}");
         }
     }

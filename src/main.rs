@@ -72,12 +72,13 @@ fn main() {
         return;
     }
     let mut compiler = Compiler::new();
-    let compiled: CompiledAssembly = compiler
-        .compile_with_symbols(&program)
-        .unwrap_or_else(|err| {
-            eprintln!("Compile error: {err}");
-            std::process::exit(1);
-        });
+    let compiled: CompiledAssembly =
+        compiler
+            .compile_with_symbols(&program)
+            .unwrap_or_else(|err| {
+                eprintln!("Compile error: {err}");
+                std::process::exit(1);
+            });
 
     println!("{}", compiled.assembly);
     if !compiled.symbols.is_empty() {

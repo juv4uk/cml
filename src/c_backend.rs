@@ -39,7 +39,13 @@ use std::fmt;
 fn c_ident(name: &str) -> String {
     let mut out: String = name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if out.chars().next().is_none_or(|c| c.is_ascii_digit()) {
         out.insert(0, '_');
@@ -375,7 +381,11 @@ static Value *builtin_equal_p(Value *args, Value *env) { (void)env; require_arit
 static Value *v_apply(Value *callable, Value *args) {
     if (callable->tag == TAG_CLOSURE) return callable->u.closure.fn(args, callable->u.closure.env);
     if (callable->tag == TAG_BUILTIN) return callable->u.builtin.fn(args, &NIL_V);
-    runtime_error("NotCallable", "attempted to call a non-callable value");
+    // Issue cml#3 item 4: my-lisp authority classifies a non-callable
+    // application under ErrorKind::Type (crates/my-lisp/src/eval/closures.rs),
+    // not a dedicated NotCallable kind -- observable output must agree with
+    // authority even though "not callable" is a distinct internal condition.
+    runtime_error("Type", "attempted to call a non-callable value");
     return &NIL_V;
 }
 
@@ -540,11 +550,7 @@ impl CBackend {
     }
 
     /// Compile `value` and SETCDR the placeholder.
-    fn compile_def_backpatch(
-        &mut self,
-        name: &str,
-        value: &Ir,
-    ) -> Result<String, CompileError> {
+    fn compile_def_backpatch(&mut self, name: &str, value: &Ir) -> Result<String, CompileError> {
         let ident = c_ident(name);
         let value_expr = self.compile_expr(value, "global_env")?;
         Ok(format!("    ph_{ident}->u.cons.cdr = {value_expr};\n"))
@@ -562,9 +568,9 @@ impl CBackend {
             Ir::Float(_) => Err(CompileError::UnsupportedVariant("Float")),
             Ir::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
             Ir::String(s) => {
-                let escaped = s.replace('\', "\\").replace('"', "\"");
-                Ok(format!("mk_string("{escaped}")"))
-            },
+                let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+                Ok(format!("mk_string(\"{escaped}\")"))
+            }
             Ir::Buffer(BufferLiteral::I32(values)) => {
                 let data = values
                     .iter()

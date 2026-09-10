@@ -46,7 +46,11 @@ impl fmt::Display for CompileError {
                 write!(f, "Unsupported: typed numeric buffer for FPGA target")
             }
             CompileError::SymbolTableOverflow => {
-                write!(f, "NumericOverflow: symbol table overflow (max {})", MAX_LOADI_MAGNITUDE)
+                write!(
+                    f,
+                    "NumericOverflow: symbol table overflow (max {})",
+                    MAX_LOADI_MAGNITUDE
+                )
             }
             CompileError::UnsupportedVariant(variant) => {
                 write!(f, "Unsupported: IR variant for FPGA target: {variant}")

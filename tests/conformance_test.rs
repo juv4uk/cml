@@ -26,7 +26,10 @@ enum UnsupportedReason {
     /// Backend capability matrix marks this capability as unsupported.
     CapabilityUnsupported { capability: String },
     /// Fixture requires contract version higher than backend supports.
-    ContractVersion { required: (u32, u32), supported: (u32, u32) },
+    ContractVersion {
+        required: (u32, u32),
+        supported: (u32, u32),
+    },
     /// Fixture uses inexact numbers (fpga-lisp has TAG_FIXNUM only).
     InexactNumbers,
 }
@@ -112,7 +115,12 @@ fn parse_requires(line: &str) -> Option<Vec<String>> {
     let marker = "(requires . (";
     let start = line.find(marker)? + marker.len();
     let end = line[start..].find(')')? + start;
-    Some(line[start..end].split_whitespace().map(|s| s.to_string()).collect())
+    Some(
+        line[start..end]
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect(),
+    )
 }
 
 /// Check if a fixture's required capabilities are all supported by the fpga-lisp backend
@@ -160,7 +168,12 @@ fn fixture_supported_by_fpga_lisp(line: &str) -> Result<(), UnsupportedReason> {
     }
 
     // Check for inexact numbers (fpga-lisp has TAG_FIXNUM only)
-    if line.contains("3.0") || line.contains("1.0") || line.contains("0.5") || line.contains(".5") || line.contains("e-") {
+    if line.contains("3.0")
+        || line.contains("1.0")
+        || line.contains("0.5")
+        || line.contains(".5")
+        || line.contains("e-")
+    {
         return Err(UnsupportedReason::InexactNumbers);
     }
 
@@ -373,7 +386,8 @@ fn test_conformance() {
         let result = (|| -> Result<ConformanceResult, String> {
             let exprs = parser::parse(&expr_str)
                 .map_err(|e| format!("{expr_str}: parser failed: {e:?}"))?;
-            let exprs = MacroExpander::new().process(&exprs)
+            let exprs = MacroExpander::new()
+                .process(&exprs)
                 .map_err(|e| format!("{expr_str}: macro expansion failed: {e}"))?;
 
             // Static error check (arity, etc.)
@@ -392,7 +406,8 @@ fn test_conformance() {
                 .map_err(|e| format!("{expr_str}: lowering failed: {e:?}"))?;
 
             let mut compiler = Compiler::new();
-            let asm = compiler.compile(&program)
+            let asm = compiler
+                .compile(&program)
                 .map_err(|e| format!("{expr_str}: compile failed: {e:?}"))?;
 
             // Each fixture gets its own fresh local symbol table (starting at id 10).
@@ -491,8 +506,12 @@ fn test_conformance() {
                     ))
                 }
             } else {
-                let tag = tag.ok_or_else(|| format!("{expr_str}: Could not find RESULT_TAG in output: {stdout}"))?;
-                let val = val.ok_or_else(|| format!("{expr_str}: Could not find RESULT_VAL in output: {stdout}"))?;
+                let tag = tag.ok_or_else(|| {
+                    format!("{expr_str}: Could not find RESULT_TAG in output: {stdout}")
+                })?;
+                let val = val.ok_or_else(|| {
+                    format!("{expr_str}: Could not find RESULT_VAL in output: {stdout}")
+                })?;
 
                 let actual = render_word((tag, val), &heap, &symbol_table, &mut HashSet::new())
                     .map_err(|e| format!("{expr_str}: Could not decode result: {e}"))?;
@@ -516,10 +535,13 @@ fn test_conformance() {
                 // Result succeeded but was predeclared unsupported - this is a test error
                 ConformanceResult::Failed {
                     stage: FailureStage::Simulate,
-                    detail: format!("fixture succeeded but was predeclared unsupported: {reason:?}"),
+                    detail: format!(
+                        "fixture succeeded but was predeclared unsupported: {reason:?}"
+                    ),
                 }
             }
-            (Ok(ConformanceResult::Unsupported { .. }), _) | (Ok(ConformanceResult::Failed { .. }), _) => {
+            (Ok(ConformanceResult::Unsupported { .. }), _)
+            | (Ok(ConformanceResult::Failed { .. }), _) => {
                 // Should not happen: our code only returns Supported or Err
                 ConformanceResult::Failed {
                     stage: FailureStage::Simulate,
@@ -530,7 +552,7 @@ fn test_conformance() {
             (Err(detail), None) => ConformanceResult::Failed {
                 stage: FailureStage::Compile, // approximate
                 detail,
-            }
+            },
         };
 
         // Count and record
@@ -557,8 +579,10 @@ fn test_conformance() {
     }
 
     let total_accounted = supported + unsupported + failed;
-    println!("CONFORMANCE SUMMARY: supported={}, unsupported={}, failed={}, total={}", 
-             supported, unsupported, failed, total_accounted);
+    println!(
+        "CONFORMANCE SUMMARY: supported={}, unsupported={}, failed={}, total={}",
+        supported, unsupported, failed, total_accounted
+    );
 
     assert_eq!(
         total_accounted,

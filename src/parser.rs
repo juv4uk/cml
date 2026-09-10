@@ -164,8 +164,9 @@ fn parse_decimal_literal(token: &str) -> Option<(i64, u64)> {
         0
     };
 
-    let (mantissa_str, decimal_places) = if let Some((int_part, frac_part)) =
-        base_str.split_once('.').or_else(|| base_str.split_once(','))
+    let (mantissa_str, decimal_places) = if let Some((int_part, frac_part)) = base_str
+        .split_once('.')
+        .or_else(|| base_str.split_once(','))
     {
         if frac_part.is_empty() {
             return None;
@@ -184,7 +185,9 @@ fn parse_decimal_literal(token: &str) -> Option<(i64, u64)> {
     if mantissa_str.is_empty() || mantissa_str == "-" || mantissa_str == "+" {
         return None;
     }
-    let mant_digits = mantissa_str.strip_prefix(['+', '-']).unwrap_or(&mantissa_str);
+    let mant_digits = mantissa_str
+        .strip_prefix(['+', '-'])
+        .unwrap_or(&mantissa_str);
     if mant_digits.is_empty() || !mant_digits.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }

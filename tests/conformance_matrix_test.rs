@@ -5,7 +5,7 @@
 //! a sibling checkout is present; this harness stays green on compiled-only
 //! hosts by embedding a mini-corpus that mirrors tier-1 shape.
 
-use cml::build::{compile_and_run, Observation};
+use cml::build::{Observation, compile_and_run};
 use std::fmt::Write as _;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,7 +104,7 @@ fn corpus() -> Vec<Row> {
         Row {
             id: "t1-not-callable",
             source: "(1 2)",
-            expect: Expect::ErrorContains("NotCallable"),
+            expect: Expect::ErrorContains("Type"),
         },
         Row {
             id: "t1-canon-reserved",

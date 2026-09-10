@@ -5,7 +5,7 @@
 //! runtime helpers. Mutual/self recursion relies on two-pass top-level defs
 //! (COMPILER-04/12).
 
-use cml::build::{compile_and_run, Observation};
+use cml::build::{Observation, compile_and_run};
 
 fn value(source: &str) -> String {
     match compile_and_run(source).expect("compile_and_run") {
@@ -33,9 +33,7 @@ const MAP_LIB: &str = r#"
 
 #[test]
 fn length_of_quoted_list_is_three() {
-    let src = format!(
-        "{LENGTH_LIB}\n(length (quote (a b c)))"
-    );
+    let src = format!("{LENGTH_LIB}\n(length (quote (a b c)))");
     assert_eq!(value(&src), "3");
 }
 
@@ -47,32 +45,24 @@ fn length_of_empty_list_is_zero() {
 
 #[test]
 fn length_of_nested_structure_counts_top_level_only() {
-    let src = format!(
-        "{LENGTH_LIB}\n(length (quote ((a b) c)))"
-    );
+    let src = format!("{LENGTH_LIB}\n(length (quote ((a b) c)))");
     assert_eq!(value(&src), "2");
 }
 
 #[test]
 fn map_add1_over_quoted_list() {
-    let src = format!(
-        "{MAP_LIB}\n(map (lambda (x) (+ x 1)) (quote (1 2 3)))"
-    );
+    let src = format!("{MAP_LIB}\n(map (lambda (x) (+ x 1)) (quote (1 2 3)))");
     assert_eq!(value(&src), "(2 3 4)");
 }
 
 #[test]
 fn map_over_empty_is_nil() {
-    let src = format!(
-        "{MAP_LIB}\n(map (lambda (x) (+ x 1)) (quote ()))"
-    );
+    let src = format!("{MAP_LIB}\n(map (lambda (x) (+ x 1)) (quote ()))");
     assert_eq!(value(&src), "()");
 }
 
 #[test]
 fn length_composed_with_map() {
-    let src = format!(
-        "{LENGTH_LIB}\n{MAP_LIB}\n(length (map (lambda (x) x) (quote (a b c d))))"
-    );
+    let src = format!("{LENGTH_LIB}\n{MAP_LIB}\n(length (map (lambda (x) x) (quote (a b c d))))");
     assert_eq!(value(&src), "4");
 }

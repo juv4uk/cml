@@ -4,7 +4,7 @@
 //! integers, exact rationals. Strings remain Unsupported (no Ir::String path).
 //! Inexact floats remain Unsupported.
 
-use cml::build::{compile_and_run, Observation};
+use cml::build::{Observation, compile_and_run};
 
 fn value(source: &str) -> String {
     match compile_and_run(source).expect("compile_and_run") {

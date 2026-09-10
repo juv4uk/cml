@@ -24,8 +24,7 @@ fn must_reject_reserved(source: &str) {
         error.detail
     );
     assert!(
-        error.detail.contains("canonical name is immutable")
-            || error.detail.contains("канонічне"),
+        error.detail.contains("canonical name is immutable") || error.detail.contains("канонічне"),
         "detail should mention immutability: {}",
         error.detail
     );

@@ -32,10 +32,7 @@ fn quoted_float_is_typed_rejection_not_panic_on_fpga() {
         .compile(&[Ir::Quote(Quoted::Float(1.5))])
         .expect_err("Quoted::Float must not compile on FPGA");
     let s = err.to_string();
-    assert!(
-        s.contains("Float") || s.contains("Unsupported"),
-        "got {s}"
-    );
+    assert!(s.contains("Float") || s.contains("Unsupported"), "got {s}");
 }
 
 #[test]

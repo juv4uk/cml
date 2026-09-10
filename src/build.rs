@@ -7,7 +7,7 @@
 //! (`expand_macros`) before lowering. The Rust `MacroExpander` is the
 //! live authority in-process; `macros.my` is the parallel Lisp
 //! implementation (differential evidence only until a host embedding
-//! decision wires it). 
+//! decision wires it).
 
 use crate::ast::Expr;
 use crate::c_backend::{self, CBackend};
@@ -106,10 +106,7 @@ pub fn compile_c_to_executable(c_source: &str, output: &Path) -> Result<(), Buil
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let tmp = std::env::temp_dir().join(format!(
-        "cml-build-{}-{nonce}.c",
-        std::process::id()
-    ));
+    let tmp = std::env::temp_dir().join(format!("cml-build-{}-{nonce}.c", std::process::id()));
     fs::write(&tmp, c_source).map_err(|e| BuildError::Io(e.to_string()))?;
     let cc = Command::new("cc")
         .arg(&tmp)

@@ -351,9 +351,11 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
     assert!(!sub_asm.contains("call wsm_sub"), "no runtime wsm_sub call");
 
     // Boundary: FIXNUM_MAX must assemble OK, FIXNUM_MAX+1 must be rejected at preflight.
-    assert!(backend
-        .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX)])
-        .is_ok());
+    assert!(
+        backend
+            .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX)])
+            .is_ok()
+    );
     assert_eq!(
         backend.compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX + 1)]),
         Err(CompileError::FixnumOutOfRange(
@@ -380,12 +382,16 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
 #[test]
 fn fixnum_range_is_owned_by_the_target_contract() {
     let backend = X86FreestandingBackend::new();
-    assert!(backend
-        .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MIN)])
-        .is_ok());
-    assert!(backend
-        .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX)])
-        .is_ok());
+    assert!(
+        backend
+            .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MIN)])
+            .is_ok()
+    );
+    assert!(
+        backend
+            .compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX)])
+            .is_ok()
+    );
     assert_eq!(
         backend.compile_program(&[Ir::Int(wsm_os_target::FIXNUM_MAX + 1)]),
         Err(CompileError::FixnumOutOfRange(
@@ -424,9 +430,11 @@ fn explicit_self_tail_call_loop_lowers_without_calls() {
     // The only runtime calls should be for 'eq', 'wsm_fail' (for arithmetic overflow).
     let calls: Vec<&str> = assembly.lines().filter(|l| l.contains("call ")).collect();
     // Only wsm_eq and wsm_fail are expected. Add/Sub are inline. loop is inline (jmp).
-    assert!(calls
-        .iter()
-        .all(|l| l.contains("wsm_eq") || l.contains("wsm_fail")));
+    assert!(
+        calls
+            .iter()
+            .all(|l| l.contains("wsm_eq") || l.contains("wsm_fail"))
+    );
 }
 
 #[test]

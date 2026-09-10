@@ -4,17 +4,16 @@
 ; Digest is FNV-1a-64 over the forms block bytes as produced by my-lisp.
 ; When the producer re-emits, replace this file and update the pinned digest test.
 ;
-; NOTE: surface spellings below mirror design-doc examples + registry IDs.
-; If my-lisp re-runs cml-export with different admitted surfaces, CML must
-; re-vendor and re-check digest — never silently invent aliases.
+; Real producer run (cargo run --bin cml-export in my-lisp), not hand-authored --
+; issue cml#3 item 1: replaces the earlier pending-producer-byte-pin placeholder.
 
 (cml-export/1
   (contract (major 6) (minor 0))
-  (digest "pending-producer-byte-pin")
+  (digest "dfc880e5e5ae80f9")
   (forms
-    (0001 (surfaces (en quote) (uk як-є) (sym ')) (role syntax) (callable nil))
-    (0007 (surfaces (en cond) (uk за-умовою) (sym ?:)) (role syntax) (callable nil))
+    (0001 (surfaces (en quote) (sa svarūpa) (sym ') (uk як-є)) (role syntax) (callable nil))
+    (0007 (surfaces (en cond) (sa anukrama) (sym ?:) (uk за-умовою)) (role syntax) (callable nil))
     (0010 (surfaces (en lambda) (uk функція)) (role syntax) (callable nil))
     (0011 (surfaces (en define) (uk визначити)) (role syntax) (callable nil))
-    (0003 (surfaces (en eq) (uk тотожне?) (sym =?)) (role primitive) (callable t))
-    (1001 (surfaces (uk відняти) (sym -)) (role library) (callable t))))
+    (0003 (surfaces (en eq) (sa abheda) (sym =?) (uk тотожне?)) (role primitive) (callable t))
+    (1001 (surfaces (sa viyoga) (sym -) (uk відняти)) (role library) (callable t))))

@@ -10,14 +10,23 @@ fn main() {
     ] {
         println!("=== SRC: {src}");
         match parser::parse(src) {
-            Err(e) => { println!("parse error: {e:?}"); continue; }
+            Err(e) => {
+                println!("parse error: {e:?}");
+                continue;
+            }
             Ok(exprs) => match lower::lower_program(&exprs) {
-                Err(e) => { println!("lower error: {e}"); continue; }
+                Err(e) => {
+                    println!("lower error: {e}");
+                    continue;
+                }
                 Ok(ir) => {
                     println!("IR: {ir:?}");
                     let backend = X86FreestandingBackend::new();
                     match backend.compile_program(&ir) {
-                        Ok(asm) => { println!("=== COMPILES ==="); println!("{asm}"); }
+                        Ok(asm) => {
+                            println!("=== COMPILES ===");
+                            println!("{asm}");
+                        }
                         Err(e) => println!("=== COMPILE ERROR: {e} ==="),
                     }
                 }

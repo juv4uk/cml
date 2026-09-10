@@ -5,7 +5,7 @@
 //! Default builds leave the limit unbounded (SIZE_MAX) so existing suites
 //! keep their behaviour.
 
-use cml::build::{compile_and_run, emit_c, front_end_to_ir, Observation};
+use cml::build::{Observation, compile_and_run, emit_c, front_end_to_ir};
 use std::fs;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -38,7 +38,7 @@ fn many_closures_via_map_style_recursion() {
     let src = r#"
 (def map
   (lambda (f xs)
-    (cond ((eq xs ()) ())
+    (cond ((atom xs) ())
           (t (cons (f (car xs)) (map f (cdr xs)))))))
 (map (lambda (x) (+ x 1)) (quote (1 2 3 4 5 6 7 8 9 10)))
 "#;

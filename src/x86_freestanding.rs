@@ -101,13 +101,16 @@ impl X86FreestandingBackend {
         // This is the only first-order self-tail-call pattern admitted by the
         // x86 freestanding backend. All other shapes fall through to the flat
         // preflight path, which rejects Def/Lambda/App as unsupported.
-        if let [Ir::Def {
-            name: def_name,
-            value,
-        }, Ir::App {
-            func,
-            args: call_args,
-        }] = program
+        if let [
+            Ir::Def {
+                name: def_name,
+                value,
+            },
+            Ir::App {
+                func,
+                args: call_args,
+            },
+        ] = program
         {
             if let (
                 Ir::Lambda {

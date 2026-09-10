@@ -6,7 +6,7 @@
 //! `MacroExpander`; `macros.my` remains the parallel Lisp implementation.
 
 use cml::ast::Expr;
-use cml::build::{compile_and_run, expand_macros, parse_source, Observation};
+use cml::build::{Observation, compile_and_run, expand_macros, parse_source};
 
 fn value(source: &str) -> String {
     match compile_and_run(source).expect("compile_and_run") {
@@ -17,7 +17,8 @@ fn value(source: &str) -> String {
 
 #[test]
 fn expand_macros_is_explicit_stage() {
-    let src = "(defmacro my-list items (cons (quote quote) (cons items (quote ())))) (my-list 1 2 3)";
+    let src =
+        "(defmacro my-list items (cons (quote quote) (cons items (quote ())))) (my-list 1 2 3)";
     let exprs = parse_source(src).expect("parse");
     let expanded = expand_macros(&exprs).expect("expand");
     // defmacro form is consumed; remaining form is expanded to (quote (1 2 3))

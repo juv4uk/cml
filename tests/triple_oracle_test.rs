@@ -8,7 +8,7 @@
 //!
 //! Unsupported is never treated as pass.
 
-use cml::build::{compile_and_run, Observation};
+use cml::build::{Observation, compile_and_run};
 
 struct Case {
     name: &'static str,
@@ -71,7 +71,10 @@ fn cases() -> Vec<Case> {
         Case {
             name: "not-callable",
             source: "(1 2)",
-            expected: Observation::Error("NotCallable".into()),
+            // Real my-lisp authority classifies this under ErrorKind::Type
+            // (crates/my-lisp/src/eval/closures.rs), not a dedicated
+            // NotCallable kind -- verified against the live oracle.
+            expected: Observation::Error("Type".into()),
         },
         Case {
             name: "arity-mismatch",
@@ -131,7 +134,7 @@ fn triple_oracle_compiled_observer_matches_expected_matrix() {
 
 #[test]
 fn build_pipeline_writes_executable() {
-    use cml::build::{build_source, BuildOptions};
+    use cml::build::{BuildOptions, build_source};
     use std::process::Command;
     use std::time::{SystemTime, UNIX_EPOCH};
 

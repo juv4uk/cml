@@ -58,7 +58,10 @@ impl fmt::Display for ExportError {
             ExportError::MissingForms => write!(f, "semantic export: missing forms block"),
             ExportError::Malformed(m) => write!(f, "semantic export: malformed: {m}"),
             ExportError::DigestMismatch { expected, found } => {
-                write!(f, "semantic export: digest mismatch expected={expected} found={found}")
+                write!(
+                    f,
+                    "semantic export: digest mismatch expected={expected} found={found}"
+                )
             }
             ExportError::MissingSlice1Form(id) => {
                 write!(f, "semantic export: missing slice-1 form id {id}")
@@ -139,18 +142,14 @@ fn extract_quoted_field(text: &str, field: &str) -> Option<String> {
 fn extract_paren_int(text: &str, field: &str) -> Option<u32> {
     let marker = format!("({field} ");
     let start = text.find(&marker)? + marker.len();
-    let end = text[start..]
-        .find(|c: char| c == ')' || c.is_whitespace())?
-        + start;
+    let end = text[start..].find(|c: char| c == ')' || c.is_whitespace())? + start;
     text[start..end].parse().ok()
 }
 
 fn extract_symbol_field(text: &str, field: &str) -> Option<String> {
     let marker = format!("({field} ");
     let start = text.find(&marker)? + marker.len();
-    let end = text[start..]
-        .find(|c: char| c == ')' || c.is_whitespace())?
-        + start;
+    let end = text[start..].find(|c: char| c == ')' || c.is_whitespace())? + start;
     Some(text[start..end].to_string())
 }
 
@@ -159,7 +158,10 @@ fn extract_surfaces(row: &str) -> Vec<(String, String)> {
         return Vec::new();
     };
     let region = &row[start + "(surfaces ".len()..];
-    let end = region.find(") (role").or_else(|| region.find(')')).unwrap_or(region.len());
+    let end = region
+        .find(") (role")
+        .or_else(|| region.find(')'))
+        .unwrap_or(region.len());
     let body = &region[..end];
     let mut out = Vec::new();
     // (en quote) (uk ...) ...
@@ -198,12 +200,14 @@ pub fn validate_slice1(export: &SemanticExport) -> Result<(), ExportError> {
     Ok(())
 }
 
-/// Optional: pin expected digest once my-lisp publishes a stable file.
+/// Pin the vendored export's digest against the expected producer digest.
+/// Fail-closed: issue cml#3 item 2 removed the earlier soft bypass that
+/// treated `"pending-producer-byte-pin"` as an automatic match now that
+/// `contracts/mylisp-cml-export.wsm` vendors a real producer digest
+/// (`dfc880e5e5ae80f9`, from my-lisp's `cml-export` binary). Any drift
+/// between the vendored file and the pin below must fail the build, not
+/// silently pass.
 pub fn check_digest(export: &SemanticExport, expected: &str) -> Result<(), ExportError> {
-    if expected == "pending-producer-byte-pin" || export.digest == "pending-producer-byte-pin" {
-        // Soft pin until producer artifact is byte-vendored from a real run.
-        return Ok(());
-    }
     if export.digest != expected {
         return Err(ExportError::DigestMismatch {
             expected: expected.into(),

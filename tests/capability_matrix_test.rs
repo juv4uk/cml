@@ -57,7 +57,10 @@ fn capability_matrix_every_supported_capability_has_evidence() {
         ("dotted-list", "tier-1-conformance"),
         ("cond", "tier-1-conformance"),
         ("lambda-fixed-arity", "tier-1-conformance"),
-        ("lambda-fixed-arity-one", "self_tail_recursive_def_compiles_with_correct_structure"),
+        (
+            "lambda-fixed-arity-one",
+            "self_tail_recursive_def_compiles_with_correct_structure",
+        ),
         ("lambda-variadic", "c_backend_conformance_test.rs"),
         ("lambda-bare-symbol-params", "c_backend_conformance_test.rs"),
         ("application", "tier-1-conformance"),
@@ -74,7 +77,10 @@ fn capability_matrix_every_supported_capability_has_evidence() {
         ("let-as-lambda-lowering", "tier-1-conformance"),
         ("variadic-up-to-eight-arguments", "tier-1-conformance"),
         ("variadic-all-arities", "c_backend_conformance_test.rs"),
-        ("def-self-tail-recursive", "self_tail_recursive_def_compiles_with_correct_structure"),
+        (
+            "def-self-tail-recursive",
+            "self_tail_recursive_def_compiles_with_correct_structure",
+        ),
         ("typed-buffer-i32", "c_backend_conformance_test.rs"),
         ("typed-buffer-f32", ""),
         ("numeric-buffer-map-i32", "c_backend_conformance_test.rs"),
@@ -83,10 +89,19 @@ fn capability_matrix_every_supported_capability_has_evidence() {
         ("builtin-shadowing", "c_backend_test.rs"),
         ("higher-order-builtin-argument", "c_backend_test.rs"),
         ("structural-equal?", "c_backend_test.rs"),
-        ("platform-calls", "pci_config_calls_are_explicit_target_abi_imports"),
-        ("pci-config", "pci_config_calls_are_explicit_target_abi_imports"),
+        (
+            "platform-calls",
+            "pci_config_calls_are_explicit_target_abi_imports",
+        ),
+        (
+            "pci-config",
+            "pci_config_calls_are_explicit_target_abi_imports",
+        ),
         ("mmio", "pci_config_calls_are_explicit_target_abi_imports"),
-        ("tail-self-call", "explicit_self_tail_call_loop_lowers_without_calls"),
+        (
+            "tail-self-call",
+            "explicit_self_tail_call_loop_lowers_without_calls",
+        ),
         ("error-kind-divisionbyzero", "c_backend_test.rs"),
         ("error-kind-numericoverflow", "c_backend_test.rs"),
         ("error-kind-parse", "c_backend_test.rs"),
@@ -98,12 +113,26 @@ fn capability_matrix_every_supported_capability_has_evidence() {
         ("error-kind-numericoverflow", "c_backend_test.rs"),
         ("error-kind-parse", "c_backend_test.rs"),
         ("error-kind-invalidform", "c_backend_test.rs"),
-        ("platform-calls", "pci_config_calls_are_explicit_target_abi_imports"),
-        ("pci-config", "pci_config_calls_are_explicit_target_abi_imports"),
+        (
+            "platform-calls",
+            "pci_config_calls_are_explicit_target_abi_imports",
+        ),
+        (
+            "pci-config",
+            "pci_config_calls_are_explicit_target_abi_imports",
+        ),
         ("mmio", "pci_config_calls_are_explicit_target_abi_imports"),
-        ("tail-self-call", "explicit_self_tail_call_loop_lowers_without_calls"),
-        ("def-self-tail-recursive", "self_tail_recursive_def_compiles_with_correct_structure"),
-    ].into_iter().collect();
+        (
+            "tail-self-call",
+            "explicit_self_tail_call_loop_lowers_without_calls",
+        ),
+        (
+            "def-self-tail-recursive",
+            "self_tail_recursive_def_compiles_with_correct_structure",
+        ),
+    ]
+    .into_iter()
+    .collect();
 
     // Parse the matrix to find all capabilities marked as "supported"
     let mut missing_evidence = Vec::new();
@@ -153,7 +182,8 @@ fn capability_matrix_c_backend_2_1_slice_explicitly_labelled() {
         .expect("c-backend must be defined in capability matrix");
 
     assert_eq!(
-        c_backend_contract, (2, 1),
+        c_backend_contract,
+        (2, 1),
         "C-backend contract must be explicitly 2.1 (slice)"
     );
 
@@ -181,7 +211,9 @@ fn capability_matrix_c_backend_2_1_slice_explicitly_labelled() {
         "Reconciled claim must have status 'reconciled'"
     );
     assert!(
-        matrix.contains("c-backend . supported") && matrix.contains("fpga-lisp . unsupported") && matrix.contains("x86-freestanding . unsupported"),
+        matrix.contains("c-backend . supported")
+            && matrix.contains("fpga-lisp . unsupported")
+            && matrix.contains("x86-freestanding . unsupported"),
         "Reconciled claim must show per-backend 2.1 support"
     );
 }
@@ -191,17 +223,19 @@ fn capability_matrix_fpga_lisp_stays_at_2_0() {
     let matrix = fs::read_to_string("capability-matrix.my")
         .expect("capability-matrix.my should exist and be readable");
 
-    let fpga_contract = extract_backend_contract(&matrix, "fpga-lisp")
-        .expect("fpga-lisp must be defined");
+    let fpga_contract =
+        extract_backend_contract(&matrix, "fpga-lisp").expect("fpga-lisp must be defined");
 
     assert_eq!(
-        fpga_contract, (2, 0),
+        fpga_contract,
+        (2, 0),
         "fpga-lisp must remain at contract 2.0"
     );
 
     let caps = extract_backend_capabilities(&matrix, "fpga-lisp");
     assert!(
-        caps.contains_key("first-class-builtins") == false || caps.get("first-class-builtins") == Some(&"unsupported".to_string()),
+        caps.contains_key("first-class-builtins") == false
+            || caps.get("first-class-builtins") == Some(&"unsupported".to_string()),
         "fpga-lisp must not claim first-class-builtins"
     );
     assert!(
@@ -223,7 +257,8 @@ fn capability_matrix_x86_freestanding_stays_at_2_0() {
         .expect("x86-freestanding must be defined");
 
     assert_eq!(
-        x86_contract, (2, 0),
+        x86_contract,
+        (2, 0),
         "x86-freestanding must remain at contract 2.0"
     );
 
@@ -268,10 +303,7 @@ fn extract_contract(text: &str, marker_name: &str) -> Option<(u32, u32)> {
     let start = text.find(&marker)? + marker.len();
     let end = text[start..].find(')')? + start;
     let mut parts = text[start..end].split_whitespace();
-    Some((
-        parts.next()?.parse().ok()?,
-        parts.next()?.parse().ok()?,
-    ))
+    Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
 }
 
 fn extract_backend_contract(text: &str, backend: &str) -> Option<(u32, u32)> {
@@ -281,21 +313,22 @@ fn extract_backend_contract(text: &str, backend: &str) -> Option<(u32, u32)> {
     let contract_start = text[start..].find(contract_marker)? + start + contract_marker.len();
     let contract_end = text[contract_start..].find(')')? + contract_start;
     let mut parts = text[contract_start..contract_end].split_whitespace();
-    Some((
-        parts.next()?.parse().ok()?,
-        parts.next()?.parse().ok()?,
-    ))
+    Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
 }
 
 fn extract_backend_capabilities(text: &str, backend: &str) -> BTreeMap<String, String> {
     let mut caps = BTreeMap::new();
     let backend_marker = format!("({backend}");
-    let Some(backend_start) = text.find(&backend_marker) else { return BTreeMap::new() };
+    let Some(backend_start) = text.find(&backend_marker) else {
+        return BTreeMap::new();
+    };
     let backend_section = &text[backend_start + backend_marker.len()..];
 
     // Find capabilities section within the backend
     let cap_marker = "(capabilities";
-    let Some(cap_start) = backend_section.find(cap_marker) else { return BTreeMap::new() };
+    let Some(cap_start) = backend_section.find(cap_marker) else {
+        return BTreeMap::new();
+    };
     let cap_start = cap_start + cap_marker.len();
 
     let mut depth = 1;
@@ -306,7 +339,9 @@ fn extract_backend_capabilities(text: &str, backend: &str) -> BTreeMap<String, S
             Some(')') => depth -= 1,
             _ => {}
         }
-        if depth == 0 { break; }
+        if depth == 0 {
+            break;
+        }
         i += 1;
     }
     let cap_section = &backend_section[cap_start..i];
@@ -344,11 +379,15 @@ fn extract_supported_capabilities(text: &str) -> Vec<String> {
     // Only search within backend capability sections
     for backend in ["fpga-lisp", "c-backend", "x86-freestanding"] {
         let backend_marker = format!("({backend}");
-        let Some(backend_start) = text.find(&backend_marker) else { continue };
+        let Some(backend_start) = text.find(&backend_marker) else {
+            continue;
+        };
         let backend_section = &text[backend_start + backend_marker.len()..];
 
         let cap_marker = "(capabilities";
-        let Some(cap_start) = backend_section.find("(capabilities") else { continue };
+        let Some(cap_start) = backend_section.find("(capabilities") else {
+            continue;
+        };
         let cap_start = cap_start + "(capabilities".len();
 
         // Find end of capabilities section
@@ -360,7 +399,9 @@ fn extract_supported_capabilities(text: &str) -> Vec<String> {
                 Some(')') => depth -= 1,
                 _ => {}
             }
-            if depth == 0 { break; }
+            if depth == 0 {
+                break;
+            }
             i += 1;
         }
         let cap_section = &backend_section[cap_start..i];
@@ -376,9 +417,16 @@ fn extract_supported_capabilities(text: &str) -> Vec<String> {
                 if let Some(open_pos) = search_text.rfind('(') {
                     let cap_start = search_start + open_pos + 1;
                     let cap = cap_section[cap_start..abs_dot].trim();
-                    if !cap.is_empty() && !cap.contains(' ') && !cap.contains('\n') && !cap.contains('"') {
+                    if !cap.is_empty()
+                        && !cap.contains(' ')
+                        && !cap.contains('\n')
+                        && !cap.contains('"')
+                    {
                         // Filter out false positives
-                        if !matches!(cap, "status" | "c-backend" | "fpga-lisp" | "x86-freestanding") {
+                        if !matches!(
+                            cap,
+                            "status" | "c-backend" | "fpga-lisp" | "x86-freestanding"
+                        ) {
                             caps.push(cap.to_string());
                         }
                     }

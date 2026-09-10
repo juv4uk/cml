@@ -3,7 +3,7 @@
 //! Runtime must print stable "Kind: detail" lines for admitted failures.
 //! Classification goes through build::classify_runtime_stderr / compile_and_run.
 
-use cml::build::{compile_and_run, Observation};
+use cml::build::{Observation, compile_and_run};
 use cml::runtime_abi::ERROR_KINDS;
 
 fn err(source: &str) -> String {

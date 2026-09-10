@@ -1,7 +1,7 @@
 use cml::c_backend::{CBackend, CompileError as CCompileError};
-use cml::compiler::{Compiler, CompileError as FpgaCompileError};
+use cml::compiler::{CompileError as FpgaCompileError, Compiler};
 use cml::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
-use cml::x86_freestanding::{X86FreestandingBackend, CompileError as X86CompileError};
+use cml::x86_freestanding::{CompileError as X86CompileError, X86FreestandingBackend};
 use std::panic;
 
 fn all_quoted() -> Vec<Quoted> {
@@ -167,13 +167,13 @@ fn fpga_backend_explicitly_classifies_every_ir_variant() {
             Classified::RejectedTypedError(err) => {
                 // Verify it's a typed FpgaCompileError, not a generic string
                 assert!(
-                    err.contains("UnsupportedVariant") ||
-                    err.contains("UnsupportedNumericBuffer") ||
-                    err.contains("TooManyArguments") ||
-                    err.contains("IntegerOutOfRange") ||
-                    err.contains("SymbolTableOverflow") ||
-                    err.contains("unsupported IR variant for FPGA target") ||
-                    err.contains("unsupported typed numeric buffer for FPGA target"),
+                    err.contains("UnsupportedVariant")
+                        || err.contains("UnsupportedNumericBuffer")
+                        || err.contains("TooManyArguments")
+                        || err.contains("IntegerOutOfRange")
+                        || err.contains("SymbolTableOverflow")
+                        || err.contains("unsupported IR variant for FPGA target")
+                        || err.contains("unsupported typed numeric buffer for FPGA target"),
                     "FPGA error must be a typed CompileError variant, got: {}",
                     err
                 );
@@ -182,7 +182,10 @@ fn fpga_backend_explicitly_classifies_every_ir_variant() {
         }
     }
     println!("FPGA: emitted={}, rejected={}", emitted, rejected);
-    assert!(emitted > 0 && rejected > 0, "FPGA must both emit and reject some variants");
+    assert!(
+        emitted > 0 && rejected > 0,
+        "FPGA must both emit and reject some variants"
+    );
 }
 
 #[test]
@@ -196,11 +199,11 @@ fn c_backend_explicitly_classifies_every_ir_variant() {
             Classified::Emitted => emitted += 1,
             Classified::RejectedTypedError(err) => {
                 assert!(
-                    err.contains("UnsupportedVariant") ||
-                    err.contains("UnsupportedTypedBuffer") ||
-                    err.contains("NestedDef") ||
-                    err.contains("unsupported IR variant in C backend") ||
-                    err.contains("unsupported typed numeric buffer in C backend"),
+                    err.contains("UnsupportedVariant")
+                        || err.contains("UnsupportedTypedBuffer")
+                        || err.contains("NestedDef")
+                        || err.contains("unsupported IR variant in C backend")
+                        || err.contains("unsupported typed numeric buffer in C backend"),
                     "C error must be a typed CompileError variant, got: {}",
                     err
                 );
@@ -209,7 +212,10 @@ fn c_backend_explicitly_classifies_every_ir_variant() {
         }
     }
     println!("C backend: emitted={}, rejected={}", emitted, rejected);
-    assert!(emitted > 0 && rejected > 0, "C backend must both emit and reject some variants");
+    assert!(
+        emitted > 0 && rejected > 0,
+        "C backend must both emit and reject some variants"
+    );
 }
 
 #[test]
@@ -223,11 +229,11 @@ fn x86_freestanding_explicitly_classifies_every_ir_variant() {
             Classified::Emitted => emitted += 1,
             Classified::RejectedTypedError(err) => {
                 assert!(
-                    err.contains("UnsupportedVariant") ||
-                    err.contains("InvalidArity") ||
-                    err.contains("FixnumOutOfRange") ||
-                    err.contains("TooManySymbols") ||
-                    err.contains("unsupported IR in x86_64-freestanding backend"),
+                    err.contains("UnsupportedVariant")
+                        || err.contains("InvalidArity")
+                        || err.contains("FixnumOutOfRange")
+                        || err.contains("TooManySymbols")
+                        || err.contains("unsupported IR in x86_64-freestanding backend"),
                     "x86 error must be a typed CompileError variant, got: {}",
                     err
                 );
@@ -235,6 +241,12 @@ fn x86_freestanding_explicitly_classifies_every_ir_variant() {
             }
         }
     }
-    println!("x86 freestanding: emitted={}, rejected={}", emitted, rejected);
-    assert!(emitted > 0 && rejected > 0, "x86 must both emit and reject some variants");
+    println!(
+        "x86 freestanding: emitted={}, rejected={}",
+        emitted, rejected
+    );
+    assert!(
+        emitted > 0 && rejected > 0,
+        "x86 must both emit and reject some variants"
+    );
 }

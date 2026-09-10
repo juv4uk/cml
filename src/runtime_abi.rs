@@ -40,14 +40,7 @@ pub const CONSTRUCTORS: &[&str] = &[
 ];
 
 /// Predicates / structural ops.
-pub const PREDICATES: &[&str] = &[
-    "v_car",
-    "v_cdr",
-    "is_atom",
-    "truthy",
-    "v_eq",
-    "v_equal_p",
-];
+pub const PREDICATES: &[&str] = &["v_car", "v_cdr", "is_atom", "truthy", "v_eq", "v_equal_p"];
 
 /// Arithmetic helpers (exact int + rational).
 pub const ARITHMETIC: &[&str] = &[
@@ -84,7 +77,6 @@ pub const ERROR_KINDS: &[&str] = &[
     "OutOfMemory",
     "DivisionByZero",
     "NumericOverflow",
-    "NotCallable",
 ];
 
 /// Allocation entry points (COMPILER-08).

@@ -108,9 +108,7 @@ fn higher_contract_gap_entries_are_not_full_claims() {
         let status = status_rest[..end].trim();
         if forbidden_full {
             assert!(
-                status.contains("partial")
-                    || status == "unsupported"
-                    || status.contains("subset"),
+                status.contains("partial") || status == "unsupported" || status.contains("subset"),
                 "{label} status `{status}` must remain partial/unsupported/subset — \
                  a bare full claim would silently raise authority past global 2.0"
             );

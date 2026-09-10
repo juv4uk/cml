@@ -109,7 +109,7 @@ pub enum Ir {
         op: PrimOp,
         args: Vec<Ir>,
     },
-/// A self-tail-call recognised by the lowering pass inside a `Def` body.
+    /// A self-tail-call recognised by the lowering pass inside a `Def` body.
     ///
     /// Produced only when a `Def`-named function calls *itself* in explicit
     /// tail position. The x86 backend lowers this to a register reload + `jmp`

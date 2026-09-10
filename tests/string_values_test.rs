@@ -4,7 +4,7 @@
 //! lands in RUNTIME, tests return early with an explicit message — never a
 //! silent pass that pretends strings work.
 
-use cml::build::{compile_and_run, emit_c, front_end_to_ir, Observation};
+use cml::build::{Observation, compile_and_run, emit_c, front_end_to_ir};
 
 fn value(source: &str) -> Result<String, String> {
     match compile_and_run(source).map_err(|e| e.to_string())? {

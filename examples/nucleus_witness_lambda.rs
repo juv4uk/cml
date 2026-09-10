@@ -15,7 +15,10 @@ fn main() {
     let ir = lower::lower_program(&expressions).expect("lower");
     let backend = X86FreestandingBackend::new();
     let assembly = backend.compile_program(&ir).expect("compile");
-    std::fs::write("../wsm-os/artifacts/nucleus-witness-lambda-fixture.s", assembly)
-        .expect("write");
+    std::fs::write(
+        "../wsm-os/artifacts/nucleus-witness-lambda-fixture.s",
+        assembly,
+    )
+    .expect("write");
     println!("wrote nucleus-witness-lambda-fixture.s for: {source}");
 }
