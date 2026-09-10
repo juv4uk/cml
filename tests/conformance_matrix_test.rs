@@ -28,7 +28,6 @@ impl Status {
 struct Row {
     id: &'static str,
     source: &'static str,
-    /// Expected observation class + payload substring / exact value.
     expect: Expect,
 }
 
@@ -127,6 +126,22 @@ fn corpus() -> Vec<Row> {
             source: "(def length-onto (lambda (x acc) (cond ((atom x) acc) (t (length-onto (cdr x) (+ acc 1)))))) (def length (lambda (x) (length-onto x 0))) (length (quote (a b c)))",
             expect: Expect::ValueExact("3"),
         },
+        // CP-DISPATCH-CORPUS
+        Row {
+            id: "cp-dispatch-weapon",
+            source: "(def dispatch (lambda (event) (cond ((eq (car event) (quote give-weapon)) (car (cdr event))) (t (quote unknown-event))))) (dispatch (cons (quote give-weapon) (cons (quote pistol) (quote ()))))",
+            expect: Expect::ValueExact("pistol"),
+        },
+        Row {
+            id: "cp-dispatch-unknown",
+            source: "(def dispatch (lambda (event) (cond ((eq (car event) (quote give-weapon)) (car (cdr event))) (t (quote unknown-event))))) (dispatch (cons (quote boom) (cons 1 (quote ()))))",
+            expect: Expect::ValueExact("unknown-event"),
+        },
+        Row {
+            id: "cp-count-down",
+            source: "(def count-down (lambda (n) (cond ((eq n 0) (quote done)) (t (count-down (- n 1)))))) (count-down 3)",
+            expect: Expect::ValueExact("done"),
+        },
     ]
 }
 
@@ -179,7 +194,10 @@ fn render_matrix(entries: &[MatrixEntry]) -> String {
             e.id,
             e.status.as_str(),
             e.reason.replace('\\', "\\\\").replace('"', "\\\""),
-            e.compiled.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', " ")
+            e.compiled
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\n', " ")
         );
     }
     out.push_str(")))\n");
@@ -216,7 +234,6 @@ fn constitutive_matrix_every_row_accounted() {
                 }
             }
             Err(e) => {
-                // Toolchain/IO must not masquerade as semantic unsupported.
                 failures.push(format!("{}: harness error (not semantic): {e}", row.id));
                 entries.push(MatrixEntry {
                     id: row.id.into(),
@@ -229,13 +246,8 @@ fn constitutive_matrix_every_row_accounted() {
     }
 
     let matrix = render_matrix(&entries);
-    // Fail closed: matrix text must mention every id.
     for row in corpus() {
-        assert!(
-            matrix.contains(row.id),
-            "matrix missing row id {}",
-            row.id
-        );
+        assert!(matrix.contains(row.id), "matrix missing row id {}", row.id);
     }
 
     assert_eq!(entries.len(), corpus().len(), "silent drop of a matrix row");
@@ -259,7 +271,6 @@ fn constitutive_matrix_every_row_accounted() {
 
 #[test]
 fn matrix_rejects_empty_reason_on_unsupported() {
-    // Policy check: unsupported rows must carry a reason string.
     let entries = [MatrixEntry {
         id: "example".into(),
         status: Status::Unsupported,
