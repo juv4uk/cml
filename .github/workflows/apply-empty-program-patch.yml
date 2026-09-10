@@ -1,0 +1,75 @@
+name: Apply empty-program NIL patch
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'evidence/semantic-ir-recovery/empty-program-nil.diff'
+      - '.github/workflows/apply-empty-program-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply if needed
+        id: patch
+        run: |
+          set -euo pipefail
+          if grep -q 'printed_result' src/c_backend.rs; then
+            echo "already_applied=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "already_applied=false" >> "$GITHUB_OUTPUT"
+          # Surgical in-place edit (diff context may drift; use markers)
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('src/c_backend.rs')
+          t = p.read_text()
+          if 'printed_result' in t:
+              raise SystemExit(0)
+          old = '''        let mut main_body = String::new();
+        for ir in program {
+            match ir {
+                Ir::Def { name, value } => {
+                    main_body.push_str(&self.compile_def(name, value)?);
+                }
+                other => {
+                    let expr = self.compile_expr(other, "global_env")?;
+                    main_body.push_str(&format!(
+                        "    {{ Value *result = {expr}; print_value(result); printf(\\"\\\\n\\"); }}\\n"
+                    ));
+                }
+            }
+        }'''
+          # Fallback: line-based insert after main_body init
+          needle = '        let mut main_body = String::new();\n'
+          if needle not in t:
+              raise SystemExit('needle missing')
+          insert = needle + '''        // my-lisp empty-program semantics (TASK-001 / 484cf619)\n        let mut printed_result = false;\n'''
+          t = t.replace(needle, insert, 1)
+          # after format! push for other arm, set flag
+          mark = 'print_value(result); printf(\"\\n\"); }}\\n"\n                    ));\n'
+          # simpler marker
+          mark2 = '                    ));\n                }\n            }\n        }\n\n        Ok(format!('
+          if mark2 in t and 'printed_result = true' not in t:
+              t = t.replace(
+                  mark2,
+                  '                    ));\n                    printed_result = true;\n                }\n            }\n        }\n        if !printed_result {\n            main_body.push_str("    { print_value(&NIL_V); printf(\\"\\\\n\\"); }\\n");\n        }\n\n        Ok(format!(',
+                  1,
+              )
+          p.write_text(t)
+          assert 'printed_result' in p.read_text()
+          print('patched')
+          PY
+      - name: Commit
+        if: steps.patch.outputs.already_applied == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/c_backend.rs
+          git commit -m "fix(c-backend): empty program prints () (my-lisp TASK-001)"
+          git push origin HEAD:master

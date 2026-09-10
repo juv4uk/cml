@@ -1,6 +1,10 @@
 --- a/src/c_backend.rs
 +++ b/src/c_backend.rs
-@@ compile_program empty-program alignment with my-lisp TASK-001
+@@ -458,22 +459,29 @@
+     /// value is printed. Program shape assumed: zero or more `Def`s
+     /// followed by exactly one expression -- the same shape every
+     /// `evidence/`-worthy `cml` fixture in this repo already has.
+     pub fn compile_program(&mut self, program: &[Ir]) -> Result<String, CompileError> {
          let mut main_body = String::new();
 +        // my-lisp empty-program semantics (TASK-001 / 484cf619): no forms →
 +        // preserve env and return ().  Mirror that for zero non-def exprs.
@@ -22,3 +26,9 @@
 +        if !printed_result {
 +            main_body.push_str("    { print_value(&NIL_V); printf(\"\\n\"); }\\n");
 +        }
+ 
+         Ok(format!(
+             "{RUNTIME}\\n{}\\n\\nint main(void) {{\\n    bootstrap_builtins();\\n{}    return 0;\\n}}\\n",
+             self.functions.join("\\n"),
+             main_body,
+         ))
