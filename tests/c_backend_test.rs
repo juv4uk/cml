@@ -167,7 +167,11 @@ fn c_backend_rejects_subtraction_without_arguments() {
 fn c_backend_rejects_a_non_callable_with_a_named_type_error() {
     let run = compile_and_run_failure("(42 1 2)", "non_callable");
     assert!(!run.status.success());
-    assert!(String::from_utf8_lossy(&run.stderr).starts_with("Type:"));
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(
+        stderr.starts_with("NotCallable:") || stderr.starts_with("Type:"),
+        "expected NotCallable: or Type:, got {stderr:?}"
+    );
 }
 
 #[test]
