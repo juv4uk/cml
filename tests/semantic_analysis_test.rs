@@ -45,17 +45,20 @@ fn quoted_lambda_shaped_data_is_not_treated_as_executable_code() {
 }
 
 #[test]
-fn rejects_quoted_string_literal() {
+fn accepts_quoted_string_literal() {
+    // Both backends represent Ir::String/Quoted::Str now (c_backend.rs's
+    // TAG_STRING, compiler.rs's LOADSYM substitution) -- quoted strings are
+    // data like any other quoted literal, not a rejected shape.
     let expressions = parser::parse("(quote \"hello\")").unwrap();
-    let error = semantic::analyze_program(&expressions).unwrap_err();
-    assert_eq!(error.kind, SemanticErrorKind::UnquotedStringLiteral);
+    semantic::analyze_program(&expressions).unwrap();
+    lower::lower_program(&expressions).unwrap();
 }
 
 #[test]
-fn rejects_quoted_string_in_list() {
+fn accepts_quoted_string_in_list() {
     let expressions = parser::parse("(quote (a \"hello\" b))").unwrap();
-    let error = semantic::analyze_program(&expressions).unwrap_err();
-    assert_eq!(error.kind, SemanticErrorKind::UnquotedStringLiteral);
+    semantic::analyze_program(&expressions).unwrap();
+    lower::lower_program(&expressions).unwrap();
 }
 
 #[test]

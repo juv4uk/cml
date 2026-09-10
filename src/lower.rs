@@ -447,7 +447,12 @@ fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
     match expr {
         Expr::Integer(n) => Ok(Quoted::Int(*n)),
         Expr::Rational(num, den) => Ok(Quoted::Rational(*num, *den)),
-        Expr::String(s) => Ok(Quoted::Str(s.to_uppercase())),
+        // Case-preserving: unlike a symbol, a string's character content is
+        // user data, not a target identifier -- cml's uppercasing convention
+        // is specific to how the target represents symbols (see the
+        // unquoted Expr::String -> Ir::String arm above, which already
+        // preserves case), and must never touch string content.
+        Expr::String(s) => Ok(Quoted::Str(s.clone())),
         Expr::Symbol(s) => Ok(Quoted::Sym(s.to_uppercase())),
         Expr::List(list) => {
             if list.is_empty() {

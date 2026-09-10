@@ -453,6 +453,7 @@ static void print_value(Value *v) {
             else printf("%ld/%ld", v->u.rat.num, v->u.rat.den);
             break;
         case TAG_SYM: printf("%s", v->u.sym); break;
+        case TAG_STRING: printf("%s", v->u.str); break;
         case TAG_CLOSURE: printf("<closure>"); break;
         case TAG_BUILTIN: printf("#<builtin %s>", v->u.builtin.name); break;
         case TAG_I32_BUFFER:

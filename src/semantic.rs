@@ -19,8 +19,6 @@ use std::fmt;
 pub enum SemanticErrorKind {
     DuplicateParameter,
     UnsupportedSequentialBody,
-    /// Unquoted string literal ("...") — no backend supports Ir::String.
-    UnquotedStringLiteral,
     /// #f32(...) numeric buffer — no backend supports Buffer(F32).
     UnsupportedF32Buffer,
     /// Attempt to bind a reserved Canon 0+7 surface name (Contract 6.0).
@@ -147,11 +145,10 @@ pub fn analyze_expr(expr: &Expr) -> Result<(), SemanticError> {
 
 fn analyze_quoted(expr: &Expr) -> Result<(), SemanticError> {
     match expr {
-        Expr::String(_) => Err(SemanticError {
-            kind: SemanticErrorKind::UnquotedStringLiteral,
-            detail: "quoted string literal not supported (no backend represents strings)"
-                .to_string(),
-        }),
+        // A quoted string is data like any other quoted literal -- both
+        // backends represent Ir::String/Quoted::Str (c_backend.rs's
+        // TAG_STRING, compiler.rs's LOADSYM representational substitution),
+        // so this no longer needs rejecting ahead of lowering.
         Expr::List(list) => list.iter().try_for_each(analyze_quoted),
         Expr::DottedList(list, tail) => {
             list.iter().try_for_each(analyze_quoted)?;
