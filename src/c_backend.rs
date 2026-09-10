@@ -99,9 +99,21 @@ static Value TRUE_V = { TAG_SYM, { .sym = "T" } };
 static Value *global_env = &NIL_V;
 
 static void runtime_error(const char *kind, const char *detail);
+/* COMPILER-08: optional bounded heap. Default unbounded (SIZE_MAX).
+ * Compile with -DCML_HEAP_LIMIT=N to cap total bytes from checked_malloc. */
+#ifndef CML_HEAP_LIMIT
+#define CML_HEAP_LIMIT ((size_t)-1)
+#endif
+static size_t cml_bytes_allocated = 0;
 static void *checked_malloc(size_t bytes) {
-    void *memory = malloc(bytes == 0 ? 1 : bytes);
+    size_t need = bytes == 0 ? 1 : bytes;
+    if (CML_HEAP_LIMIT != ((size_t)-1)) {
+        if (cml_bytes_allocated > CML_HEAP_LIMIT || need > CML_HEAP_LIMIT - cml_bytes_allocated)
+            runtime_error("OutOfMemory", "C backend heap limit exceeded");
+    }
+    void *memory = malloc(need);
     if (memory == NULL) runtime_error("OutOfMemory", "C backend heap allocation");
+    cml_bytes_allocated += need;
     return memory;
 }
 
