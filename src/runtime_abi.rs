@@ -81,6 +81,7 @@ pub const ERROR_KINDS: &[&str] = &[
     "OutOfMemory",
     "DivisionByZero",
     "NumericOverflow",
+    "NotCallable",
 ];
 
 /// Globals the generated `main` relies on.
