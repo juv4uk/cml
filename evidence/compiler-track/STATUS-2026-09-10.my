@@ -1,0 +1,48 @@
+; Machine-readable progress note for compiler-tasks.my (2026-09-10).
+; `done . t` in compiler-tasks.my still requires full acceptance text;
+; this file only records executable in-repo evidence SHAs.
+
+((kind . compiler-track-status)
+ (date . 2026-09-10)
+ (head-note . "cml master after COMPILER-07 language library slice")
+ (evidence .
+  ((COMPILER-00 .
+    ((status . partial)
+     (tests . (tests/triple_oracle_test.rs))
+     (note . "Compiled observer matrix; native my-lisp path still optional")))
+   (COMPILER-01 .
+    ((status . partial)
+     (cli . "cml build <file.my> [-o out] [--keep-c]")
+     (module . src/build.rs)))
+   (COMPILER-02 .
+    ((status . partial)
+     (module . src/runtime_abi.rs)
+     (note . "Named ABI surface; runtime still embedded in c_backend emit")))
+   (COMPILER-03 .
+    ((status . partial)
+     (tests . (tests/core_values_test.rs tests/language_libraries_test.rs))
+     (note . "Strings still UnsupportedVariant on C path")))
+   (COMPILER-04 .
+    ((status . partial)
+     (tests . (tests/closure_parity_test.rs))
+     (commit . de7b844)))
+   (COMPILER-05 .
+    ((status . partial)
+     (tests . (tests/structured_errors_test.rs tests/triple_oracle_test.rs))
+     (kinds . (Arity Type UnknownSymbol DivisionByZero NumericOverflow NotCallable OutOfMemory))))
+   (COMPILER-06 .
+    ((status . partial)
+     (tests . (tests/macro_pipeline_test.rs))
+     (authority . "Rust MacroExpander live; macros.my parallel")))
+   (COMPILER-07 .
+    ((status . partial)
+     (tests . (tests/language_libraries_test.rs))
+     (slice . (length length-onto map))))
+   (COMPILER-12 .
+    ((status . partial)
+     (mechanism . two-pass-top-level-defs)
+     (commit . de7b844)
+     (tests . (tests/closure_parity_test.rs::mutual_recursion_even_odd))))))
+ (my-lisp-alignment .
+  ((shared-definition-frame . "my-lisp aa696322 meta-eval TASK-004; cml two-pass defs parallel for compiled programs")
+   (semantic-export . "still awaiting CML-SEMANTIC-EXPORT-V1 producer artifact"))))
