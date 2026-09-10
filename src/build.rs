@@ -131,6 +131,22 @@ pub fn build_file(path: &Path, opts: &BuildOptions) -> Result<(), BuildError> {
     build_source(&source, opts)
 }
 
+/// COMPILER-05: map runtime stderr "Kind: detail" to Observation::Error
+/// with a stable kind prefix when recognized by Runtime ABI v0.
+pub fn classify_runtime_stderr(stderr: &str) -> Observation {
+    let line = stderr.lines().next().unwrap_or(stderr).trim();
+    if line.is_empty() {
+        return Observation::Error("exit failure".into());
+    }
+    for kind in crate::runtime_abi::ERROR_KINDS {
+        let prefix = format!("{kind}:");
+        if line.starts_with(&prefix) || line.starts_with(kind) {
+            return Observation::Error(line.to_string());
+        }
+    }
+    Observation::Error(line.to_string())
+}
+
 /// Compile source, run the executable, return stdout (trimmed) or structured error.
 pub fn compile_and_run(source: &str) -> Result<Observation, BuildError> {
     let nonce = SystemTime::now()
@@ -167,10 +183,10 @@ pub fn compile_and_run(source: &str) -> Result<Observation, BuildError> {
         Ok(Observation::Value(out))
     } else {
         let err = String::from_utf8_lossy(&run.stderr).trim().to_string();
-        Ok(Observation::Error(if err.is_empty() {
-            format!("exit {}", run.status)
+        if err.is_empty() {
+            Ok(Observation::Error(format!("exit {}", run.status)))
         } else {
-            err
-        }))
+            Ok(classify_runtime_stderr(&err))
+        }
     }
 }
