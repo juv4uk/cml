@@ -1,0 +1,35 @@
+name: Fix NotCallable test expectation
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-notcallable-test.yml'
+      - 'evidence/semantic-ir-recovery/fix_notcallable_test_expectation.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch
+        id: patch
+        run: |
+          set -euo pipefail
+          python3 evidence/semantic-ir-recovery/fix_notcallable_test_expectation.py
+          if git diff --quiet tests/c_backend_test.rs; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Commit
+        if: steps.patch.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/c_backend_test.rs
+          git commit -m "test(c-backend): accept NotCallable for non-callable (COMPILER-05)"
+          git push origin HEAD:master
