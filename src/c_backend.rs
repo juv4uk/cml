@@ -90,7 +90,7 @@ const RUNTIME: &str = r##"
 #include <limits.h>
 
 typedef struct Value Value;
-typedef enum { TAG_NIL, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_RATIONAL } Tag;
+typedef enum { TAG_NIL, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_RATIONAL, TAG_STRING } Tag;
 struct Value {
     Tag tag;
     union {
@@ -101,6 +101,7 @@ struct Value {
         struct { Value *(*fn)(Value *args, Value *env); Value *env; } closure;
         struct { const char *name; Value *(*fn)(Value *args, Value *env); } builtin;
         struct { long num; long den; } rat;
+        const char *str;
     } u;
 };
 
@@ -141,6 +142,7 @@ static Value *mk_cons(Value *a, Value *b) { Value *v = checked_malloc(sizeof(Val
 static Value *mk_i32_buffer(const int *data, size_t len) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_I32_BUFFER; v->u.i32_buffer.data = checked_malloc(len * sizeof(int)); v->u.i32_buffer.len = len; memcpy(v->u.i32_buffer.data, data, len * sizeof(int)); return v; }
 static Value *mk_closure(Value *(*fn)(Value*, Value*), Value *env) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_CLOSURE; v->u.closure.fn = fn; v->u.closure.env = env; return v; }
 static Value *mk_builtin(const char *name, Value *(*fn)(Value*, Value*)) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_BUILTIN; v->u.builtin.name = name; v->u.builtin.fn = fn; return v; }
+static Value *mk_string(const char *s) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_STRING; v->u.str = s; return v; }
 
 static long rational_gcd(long a, long b) {
     if (a < 0) a = -a;
@@ -215,6 +217,7 @@ static Value *v_eq(Value *a, Value *b) {
         case TAG_INT: return a->u.i == b->u.i ? &TRUE_V : &NIL_V;
         case TAG_RATIONAL: return rational_checked_mul(a->u.rat.num, b->u.rat.den) == rational_checked_mul(b->u.rat.num, a->u.rat.den) ? &TRUE_V : &NIL_V;
         case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0 ? &TRUE_V : &NIL_V;
+        case TAG_STRING: return strcmp(a->u.str, b->u.str) == 0 ? &TRUE_V : &NIL_V;
         default: return a == b ? &TRUE_V : &NIL_V;
     }
 }
@@ -558,7 +561,10 @@ impl CBackend {
             Ir::Int(n) => Ok(format!("mk_int({n})")),
             Ir::Float(_) => Err(CompileError::UnsupportedVariant("Float")),
             Ir::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
-            Ir::String(_) => Err(CompileError::UnsupportedVariant("String")),
+            Ir::String(s) => {
+                let escaped = s.replace('\', "\\").replace('"', "\"");
+                Ok(format!("mk_string("{escaped}")"))
+            },
             Ir::Buffer(BufferLiteral::I32(values)) => {
                 let data = values
                     .iter()
