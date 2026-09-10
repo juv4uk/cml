@@ -12,12 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 fn usage() -> ! {
     eprintln!(
-        "Usage:\n\
-         \  cml <file.my>                    emit fpga-lisp assembly\n\
-         \  cml build <file.my> [-o out] [--keep-c]\n\
-         \                                   COMPILER-01: C backend → native executable\n\
-         \  cml x86-asm <file.wsm>           emit x86 freestanding assembly\n\
-         \  cml x86-elf <file.wsm> <output>  link x86 freestanding ELF"
+        "Usage:\n  cml <file.my>                    emit fpga-lisp assembly\n  cml build <file.my> [-o out] [--keep-c]\n                                   COMPILER-01: C backend \u{2192} native executable\n  cml x86-asm <file.wsm>           emit x86 freestanding assembly\n  cml x86-elf <file.wsm> <output>  link x86 freestanding ELF"
     );
     std::process::exit(1);
 }
