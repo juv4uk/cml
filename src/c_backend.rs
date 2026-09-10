@@ -342,7 +342,7 @@ static Value *builtin_equal_p(Value *args, Value *env) { (void)env; require_arit
 static Value *v_apply(Value *callable, Value *args) {
     if (callable->tag == TAG_CLOSURE) return callable->u.closure.fn(args, callable->u.closure.env);
     if (callable->tag == TAG_BUILTIN) return callable->u.builtin.fn(args, &NIL_V);
-    runtime_error("Type", "attempted to call a non-callable value");
+    runtime_error("NotCallable", "attempted to call a non-callable value");
     return &NIL_V;
 }
 
