@@ -9,9 +9,12 @@
 //! Scope (v0): Value representation, constructors, predicates, call
 //! convention, entry/bootstrap, structured failure kinds. Not a claim of
 //! multi-backend ABI parity.
+//!
+//! COMPILER-08: allocation goes through `checked_malloc`. Optional compile
+//! macro `CML_HEAP_LIMIT` caps total bytes; exhaustion is `OutOfMemory`.
 
 /// ABI revision. Bump only on breaking changes to the C surface.
-pub const ABI_VERSION: (u32, u32) = (0, 1);
+pub const ABI_VERSION: (u32, u32) = (0, 2);
 
 /// Tag discriminant names as emitted in RUNTIME.
 pub const TAGS: &[&str] = &[
@@ -84,6 +87,9 @@ pub const ERROR_KINDS: &[&str] = &[
     "NotCallable",
 ];
 
+/// Allocation entry points (COMPILER-08).
+pub const ALLOCATION: &[&str] = &["checked_malloc", "CML_HEAP_LIMIT"];
+
 /// Globals the generated `main` relies on.
 pub const GLOBALS: &[&str] = &["NIL_V", "TRUE_V", "global_env"];
 
@@ -124,7 +130,7 @@ mod tests {
 
     #[test]
     fn abi_version_is_v0() {
-        assert_eq!(ABI_VERSION, (0, 1));
+        assert_eq!(ABI_VERSION.0, 0);
     }
 
     #[test]
