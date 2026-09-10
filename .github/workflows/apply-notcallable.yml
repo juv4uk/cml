@@ -1,0 +1,44 @@
+name: Apply NotCallable kind
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/apply-notcallable.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rename Type non-callable to NotCallable
+        id: patch
+        run: |
+          set -euo pipefail
+          if grep -q 'NotCallable' src/c_backend.rs; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 -c "
+from pathlib import Path
+p=Path('src/c_backend.rs')
+t=p.read_text()
+old='runtime_error(\"Type\", \"attempted to call a non-callable value\");'
+new='runtime_error(\"NotCallable\", \"attempted to call a non-callable value\");'
+assert old in t, 'anchor missing'
+p.write_text(t.replace(old,new,1))
+assert 'NotCallable' in p.read_text()
+print('ok')
+"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Commit
+        if: steps.patch.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/c_backend.rs
+          git commit -m "fix(c-backend): NotCallable named error kind (COMPILER-05)"
+          git push origin HEAD:master
