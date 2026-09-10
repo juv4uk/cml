@@ -18,7 +18,7 @@ fn value(source: &str) -> String {
 const LENGTH_LIB: &str = r#"
 (def length-onto
   (lambda (x acc)
-    (cond ((eq x ()) acc)
+    (cond ((atom x) acc)
           (t (length-onto (cdr x) (+ acc 1))))))
 (def length
   (lambda (x) (length-onto x 0)))
@@ -27,7 +27,7 @@ const LENGTH_LIB: &str = r#"
 const MAP_LIB: &str = r#"
 (def map
   (lambda (f xs)
-    (cond ((eq xs ()) ())
+    (cond ((atom xs) ())
           (t (cons (f (car xs)) (map f (cdr xs)))))))
 "#;
 

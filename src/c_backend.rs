@@ -29,6 +29,24 @@
 use crate::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
 use std::fmt;
 
+/// Sanitizes a my-lisp def name into a valid C identifier for use as a raw
+/// (non-string-literal) C token, e.g. the `ph_<name>` placeholder variable
+/// in `compile_def_placeholder`/`compile_def_backpatch`. Lisp names
+/// routinely contain characters invalid in C identifiers (`length-onto`,
+/// `equal?`, ...) -- this must never touch the original name string used
+/// inside `mk_sym("...")` literals, which stays exactly as the source wrote
+/// it (cml's target-symbol uppercasing convention included).
+fn c_ident(name: &str) -> String {
+    let mut out: String = name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+        .collect();
+    if out.chars().next().is_none_or(|c| c.is_ascii_digit()) {
+        out.insert(0, '_');
+    }
+    out
+}
+
 /// Errors that can occur during C code generation.
 #[derive(Debug, Clone)]
 pub enum CompileError {
@@ -512,8 +530,9 @@ impl CBackend {
 
     /// Install `(name . nil)` on `global_env` before any value is compiled.
     fn compile_def_placeholder(&self, name: &str) -> String {
+        let ident = c_ident(name);
         format!(
-            "    Value *ph_{name} = mk_cons(mk_sym(\"{name}\"), &NIL_V);\n    global_env = mk_cons(ph_{name}, global_env);\n"
+            "    Value *ph_{ident} = mk_cons(mk_sym(\"{name}\"), &NIL_V);\n    global_env = mk_cons(ph_{ident}, global_env);\n"
         )
     }
 
@@ -523,8 +542,9 @@ impl CBackend {
         name: &str,
         value: &Ir,
     ) -> Result<String, CompileError> {
+        let ident = c_ident(name);
         let value_expr = self.compile_expr(value, "global_env")?;
-        Ok(format!("    ph_{name}->u.cons.cdr = {value_expr};\n"))
+        Ok(format!("    ph_{ident}->u.cons.cdr = {value_expr};\n"))
     }
 
     fn compile_def(&mut self, name: &str, value: &Ir) -> Result<String, CompileError> {

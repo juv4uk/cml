@@ -124,7 +124,7 @@ fn corpus() -> Vec<Row> {
         },
         Row {
             id: "t1-length-lib",
-            source: "(def length-onto (lambda (x acc) (cond ((eq x ()) acc) (t (length-onto (cdr x) (+ acc 1)))))) (def length (lambda (x) (length-onto x 0))) (length (quote (a b c)))",
+            source: "(def length-onto (lambda (x acc) (cond ((atom x) acc) (t (length-onto (cdr x) (+ acc 1)))))) (def length (lambda (x) (length-onto x 0))) (length (quote (a b c)))",
             expect: Expect::ValueExact("3"),
         },
     ]
