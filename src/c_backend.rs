@@ -460,6 +460,8 @@ impl CBackend {
     /// `evidence/`-worthy `cml` fixture in this repo already has.
     pub fn compile_program(&mut self, program: &[Ir]) -> Result<String, CompileError> {
         let mut main_body = String::new();
+        // my-lisp empty-program semantics (TASK-001)
+        let mut printed_result = false;
         for ir in program {
             match ir {
                 Ir::Def { name, value } => {
@@ -470,8 +472,13 @@ impl CBackend {
                     main_body.push_str(&format!(
                         "    {{ Value *result = {expr}; print_value(result); printf(\"\\n\"); }}\n"
                     ));
+                    printed_result = true;
                 }
             }
+        }
+
+        if !printed_result {
+            main_body.push_str("    { print_value(&NIL_V); printf(\"\\n\"); }\\n");
         }
 
         Ok(format!(
