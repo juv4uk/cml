@@ -1,0 +1,24 @@
+--- a/src/c_backend.rs
++++ b/src/c_backend.rs
+@@ compile_program empty-program alignment with my-lisp TASK-001
+         let mut main_body = String::new();
++        // my-lisp empty-program semantics (TASK-001 / 484cf619): no forms →
++        // preserve env and return ().  Mirror that for zero non-def exprs.
++        let mut printed_result = false;
+         for ir in program {
+             match ir {
+                 Ir::Def { name, value } => {
+                     main_body.push_str(&self.compile_def(name, value)?);
+                 }
+                 other => {
+                     let expr = self.compile_expr(other, "global_env")?;
+                     main_body.push_str(&format!(
+                         "    {{ Value *result = {expr}; print_value(result); printf(\"\\n\"); }}\\n"
+                     ));
++                    printed_result = true;
+                 }
+             }
+         }
++        if !printed_result {
++            main_body.push_str("    { print_value(&NIL_V); printf(\"\\n\"); }\\n");
++        }

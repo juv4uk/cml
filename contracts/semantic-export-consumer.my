@@ -1,0 +1,39 @@
+; CML consumer expectations for my-lisp CML-SEMANTIC-EXPORT-V1
+; Consumer-side only — does NOT invent language semantics.
+; my-lisp remains the sole authority for program meaning.
+;
+; Owner directive 2026-09-10: compiler stays synchronized with Lisp;
+; CML must not hand-duplicate or invent language rules.
+
+((kind . cml-semantic-export-consumer)
+ (version . (0 1))
+ (status . awaiting-producer)
+ (producer . ((repository . juv4uk/my-lisp)
+              (task . CML-SEMANTIC-EXPORT-V1)
+              (authority . language-core)))
+ (consumer . ((repository . juv4uk/cml)
+              (path . contracts/semantic-export-consumer.my)
+              (authority . compiler-middle-end)))
+ (required-fields
+  . (contract-identity
+     semantic-form-identities
+     surface-aliases
+     admission-status
+     export-version
+     content-digest))
+ (first-vertical-slice
+  . ((program-shape . named-def-plus-recursion)
+     (note . "Producer must cover one real program shape deterministically; CML will lower via existing Ir without re-specifying evaluation.")))
+ (non-goals
+  . (backend-policy
+     second-specification
+     raising-global-compatibility-claim))
+ (integration-plan
+  . ((1 . "Accept versioned export artifact from my-lisp (path TBD by producer)")
+     (2 . "Verify content-digest before use")
+     (3 . "Map semantic-form identities onto existing Ir / PrimOp / Canon reservation")
+     (4 . "Fail closed on unknown admission-status or contract-identity drift")))
+ (current-cml-claim
+  . ((global-contract . (2 0))
+     (partial . (3.0-c-backend-errors 5.0-decimal-reader 6.0-canon-static-reject))
+     (via . claim-authority.my))))
