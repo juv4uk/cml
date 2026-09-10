@@ -1,20 +1,23 @@
 ; CML-local recommendations derived from CROSS-REPO-TASK-RECOMMENDATIONS-2026-09-10.
-; These are advisory next actions for cml agents — parallel to compiler-tasks.my.
+; Parallel to compiler-tasks.my.
 
 ((kind . cml-cyberpunk-recommendations)
- (version . 1)
+ (version . 2)
  (tasks .
   (("CP-DISPATCH-CORPUS" .
     ((priority . 9.0)
-     (done . nil)
+     (done . partial)
+     (evidence . (tests/cyberpunk_dispatch_test.rs tests/conformance_matrix_test.rs))
+     (commit . 10acff86)
      (capabilities . (compiler testing cyberpunk))
-     (description . "Add Ukrainian host-dispatch fixtures to compiled-C conformance matrix.")
-     (acceptance . "At least teleport/give-weapon style programs compile; unknown event -> named value; no silent skip.")))
+     (description . "Ukrainian/English host-dispatch fixtures through compiled-C path.")
+     (acceptance . "teleport/give-weapon style programs compile; unknown event named; no silent skip.")
+     (note . "Executable tests landed; full my-lisp fixture file automation still optional.")))
    ("CP-STRINGS-C-PATH" .
     ((priority . 8.8)
-     (done . nil)
-     (depends-on . ("COMPILER-03-CORE-VALUES"))
-     (description . "Complete string values on C path aligned with my-lisp non-interning strings / TAG_BOXED when contract allows.")))
+     (done . partial)
+     (evidence . (tests/string_values_test.rs src/c_backend.rs))
+     (description . "TAG_STRING on C path (CI applicator). Align with TAG_BOXED when contract ratifies.")))
    ("CP-EXPORT-HARD-PIN" .
     ((priority . 8.5)
      (done . nil)
