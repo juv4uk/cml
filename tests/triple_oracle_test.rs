@@ -69,6 +69,21 @@ fn cases() -> Vec<Case> {
             expected: Observation::Value("()".into()),
         },
         Case {
+            name: "not-callable",
+            source: "(1 2)",
+            expected: Observation::Error("NotCallable".into()),
+        },
+        Case {
+            name: "arity-mismatch",
+            source: "(+ 1)",
+            expected: Observation::Error("Arity".into()),
+        },
+        Case {
+            name: "cons-pair",
+            source: "(cons 1 2)",
+            expected: Observation::Value("(1 . 2)".into()),
+        },
+        Case {
             name: "cond-t-branch",
             source: "(cond ((eq 0 1) 99) (t 42))",
             expected: Observation::Value("42".into()),
