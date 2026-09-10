@@ -2,7 +2,14 @@
 //!
 //! Shared by the `cml build` CLI and the COMPILER-00 triple-oracle harness.
 //! Failures are explicit Results — never silent skip.
+//!
+//! COMPILER-06: macro expansion is an explicit front-end stage
+//! (`expand_macros`) before lowering. The Rust `MacroExpander` is the
+//! live authority in-process; `macros.my` is the parallel Lisp
+//! implementation (differential evidence only until a host embedding
+//! decision wires it). 
 
+use crate::ast::Expr;
 use crate::c_backend::{self, CBackend};
 use crate::ir::Ir;
 use crate::lower::{self, LowerError};
@@ -67,12 +74,22 @@ impl Default for BuildOptions {
     }
 }
 
+/// COMPILER-06: explicit macro-expansion stage.
+pub fn expand_macros(exprs: &[Expr]) -> Result<Vec<Expr>, BuildError> {
+    MacroExpander::new()
+        .process(exprs)
+        .map_err(BuildError::Macro)
+}
+
+/// Parse only.
+pub fn parse_source(source: &str) -> Result<Vec<Expr>, BuildError> {
+    parser::parse(source).map_err(BuildError::Parse)
+}
+
 /// Parse + expand + lower (first-class builtins for C path).
 pub fn front_end_to_ir(source: &str) -> Result<Vec<Ir>, BuildError> {
-    let exprs = parser::parse(source).map_err(BuildError::Parse)?;
-    let exprs = MacroExpander::new()
-        .process(&exprs)
-        .map_err(BuildError::Macro)?;
+    let exprs = parse_source(source)?;
+    let exprs = expand_macros(&exprs)?;
     lower::lower_program_with_first_class_builtins(&exprs).map_err(BuildError::Lower)
 }
 
@@ -170,6 +187,9 @@ pub fn compile_and_run(source: &str) -> Result<Observation, BuildError> {
                 return Ok(Observation::Unsupported(msg));
             }
             return Ok(Observation::Error(format!("Lower: {msg}")));
+        }
+        Err(BuildError::Macro(e)) => {
+            return Ok(Observation::Error(format!("Macro: {e}")));
         }
         Err(BuildError::Parse(e)) => return Ok(Observation::Error(format!("{e}"))),
         Err(e) => return Err(e),
