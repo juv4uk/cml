@@ -1,0 +1,25 @@
+; CML-local recommendations derived from CROSS-REPO-TASK-RECOMMENDATIONS-2026-09-10.
+; These are advisory next actions for cml agents — parallel to compiler-tasks.my.
+
+((kind . cml-cyberpunk-recommendations)
+ (version . 1)
+ (tasks .
+  (("CP-DISPATCH-CORPUS" .
+    ((priority . 9.0)
+     (done . nil)
+     (capabilities . (compiler testing cyberpunk))
+     (description . "Add Ukrainian host-dispatch fixtures to compiled-C conformance matrix.")
+     (acceptance . "At least teleport/give-weapon style programs compile; unknown event -> named value; no silent skip.")))
+   ("CP-STRINGS-C-PATH" .
+    ((priority . 8.8)
+     (done . nil)
+     (depends-on . ("COMPILER-03-CORE-VALUES"))
+     (description . "Complete string values on C path aligned with my-lisp non-interning strings / TAG_BOXED when contract allows.")))
+   ("CP-EXPORT-HARD-PIN" .
+    ((priority . 8.5)
+     (done . nil)
+     (description . "Hard-pin mylisp-cml-export.wsm FNV digest once my-lisp checks in producer output.")))
+   ("CP-NO-WSM-EVAL-STRING" .
+    ((priority . 9.5)
+     (done . nil)
+     (description . "Standing non-goal: never implement runtime reader/eval_string in cml backends."))))))
