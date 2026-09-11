@@ -134,7 +134,7 @@ fn fixture_supported_by_fpga_lisp(line: &str) -> Result<(), UnsupportedReason> {
         "builtin-shadowing",
         "higher-order-builtin-argument",
         "rational",
-        "string",
+        "strings",
         "lambda-variadic",
         "lambda-bare-symbol-params",
         "typed-buffer-f32",
@@ -167,12 +167,17 @@ fn fixture_supported_by_fpga_lisp(line: &str) -> Result<(), UnsupportedReason> {
         }
     }
 
-    // Check for inexact numbers (fpga-lisp has TAG_FIXNUM only)
-    if line.contains("3.0")
-        || line.contains("1.0")
-        || line.contains("0.5")
-        || line.contains(".5")
-        || line.contains("e-")
+    // Check the expression text only. Looking through the whole fixture line
+    // misclassified notes such as "carriage-return" because they contain `e-`.
+    let expr = parse_conformance_line(line)
+        .map(|(expr, _)| expr)
+        .or_else(|| parse_error_line(line).map(|(expr, _)| expr))
+        .unwrap_or_default();
+    if expr.contains("3.0")
+        || expr.contains("1.0")
+        || expr.contains("0.5")
+        || expr.contains(".5")
+        || expr.contains("e-")
     {
         return Err(UnsupportedReason::InexactNumbers);
     }
