@@ -7,8 +7,8 @@ fn lower_one(source: &str) -> cml::ir::Ir {
     lower::lower_program(&expressions).unwrap().remove(0)
 }
 
-// F32 source is globally rejected today, but the lower-level IR/emitter still
-// has useful fail-closed behavior worth testing independently.
+// F32 source зараз глобально відхиляється, але нижчий IR/emitter має корисну
+// fail-closed поведінку, яку варто перевіряти незалежно від source admission.
 fn lower_internal_one(source: &str) -> cml::ir::Ir {
     let expressions = parser::parse(source).unwrap();
     lower::lower_expr(&expressions[0]).unwrap()
