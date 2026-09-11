@@ -1,10 +1,26 @@
 use cml::compute::AdmissionBlocker;
 use cml::gpu_wgsl::{WgslError, emit_map_shader};
+use cml::ir::{BufferLiteral, Ir, Params, PrimOp};
 use cml::{lower, parser};
 
-fn lower_one(source: &str) -> cml::ir::Ir {
+fn lower_one(source: &str) -> Ir {
     let expressions = parser::parse(source).unwrap();
     lower::lower_program(&expressions).unwrap().remove(0)
+}
+
+fn f32_map_ir(values: &[f32], body: Ir) -> Ir {
+    Ir::App {
+        func: Box::new(Ir::Builtin("NUMERIC-BUFFER-MAP".to_string())),
+        args: vec![
+            Ir::Lambda {
+                params: Params::Fixed(vec!["X".to_string()]),
+                body: Box::new(body),
+            },
+            Ir::Buffer(BufferLiteral::F32(
+                values.iter().map(|value| value.to_bits()).collect(),
+            )),
+        ],
+    }
 }
 
 #[test]
@@ -20,9 +36,21 @@ fn emits_portable_i32_map_shader_from_admitted_ir() {
 }
 
 #[test]
-fn affine_f32_is_flattened_to_one_binary32_add() {
-    let shader = emit_map_shader(&lower_one(
-        "(numeric-buffer-map (lambda (x) (+ (+ x 10) -3)) #f32(1.0 2.0))",
+fn dormant_affine_f32_ir_is_flattened_to_one_binary32_add() {
+    // Source admission для F32 лишається закритим; emitter тут отримує IR
+    // напряму, щоб окремо зберегти доказ своєї внутрішньої арифметики.
+    let shader = emit_map_shader(&f32_map_ir(
+        &[1.0, 2.0],
+        Ir::Prim {
+            op: PrimOp::Add,
+            args: vec![
+                Ir::Prim {
+                    op: PrimOp::Add,
+                    args: vec![Ir::Var("X".to_string()), Ir::Int(10)],
+                },
+                Ir::Int(-3),
+            ],
+        },
     ))
     .unwrap();
     assert!(shader.contains("array<f32>"));
@@ -31,9 +59,13 @@ fn affine_f32_is_flattened_to_one_binary32_add() {
 }
 
 #[test]
-fn emitter_cannot_bypass_semantic_admission() {
-    let error = emit_map_shader(&lower_one(
-        "(numeric-buffer-map (lambda (x) (+ x x)) #f32(1.0))",
+fn emitter_rejects_non_affine_f32_ir() {
+    let error = emit_map_shader(&f32_map_ir(
+        &[1.0],
+        Ir::Prim {
+            op: PrimOp::Add,
+            args: vec![Ir::Var("X".to_string()), Ir::Var("X".to_string())],
+        },
     ))
     .unwrap_err();
     assert!(matches!(

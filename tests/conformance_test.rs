@@ -30,8 +30,6 @@ enum UnsupportedReason {
         required: (u32, u32),
         supported: (u32, u32),
     },
-    /// Fixture uses inexact numbers (fpga-lisp has TAG_FIXNUM only).
-    InexactNumbers,
 }
 
 /// Stage where an unexpected failure occurred.
@@ -134,7 +132,7 @@ fn fixture_supported_by_fpga_lisp(line: &str) -> Result<(), UnsupportedReason> {
         "builtin-shadowing",
         "higher-order-builtin-argument",
         "rational",
-        "string",
+        "strings",
         "lambda-variadic",
         "lambda-bare-symbol-params",
         "typed-buffer-f32",
@@ -144,9 +142,6 @@ fn fixture_supported_by_fpga_lisp(line: &str) -> Result<(), UnsupportedReason> {
         "error-kind-parse",
         "typed-buffer-i32",
         "numeric-buffer-map-i32",
-        "first-class-builtins",
-        "builtin-shadowing",
-        "higher-order-builtin-argument",
     ];
 
     for cap in &requires {
@@ -167,14 +162,18 @@ fn fixture_supported_by_fpga_lisp(line: &str) -> Result<(), UnsupportedReason> {
         }
     }
 
-    // Check for inexact numbers (fpga-lisp has TAG_FIXNUM only)
-    if line.contains("3.0")
-        || line.contains("1.0")
-        || line.contains("0.5")
-        || line.contains(".5")
-        || line.contains("e-")
-    {
-        return Err(UnsupportedReason::InexactNumbers);
+    // Decimal syntax is exact in the current my-lisp contract: `3.0` is the
+    // exact integer 3 when it reduces integrally. Do not classify source text
+    // as "inexact" by spelling alone. The fpga backend still lacks numeric `=`;
+    // capability-matrix.my is fail-closed on capabilities not explicitly listed.
+    let expr = parse_conformance_line(line)
+        .map(|(expr, _)| expr)
+        .or_else(|| parse_error_line(line).map(|(expr, _)| expr))
+        .unwrap_or_default();
+    if expr.trim_start().starts_with("(= ") {
+        return Err(UnsupportedReason::CapabilityUnsupported {
+            capability: "numeric-equality".to_string(),
+        });
     }
 
     Ok(())

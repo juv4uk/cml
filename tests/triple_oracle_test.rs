@@ -31,7 +31,7 @@ fn cases() -> Vec<Case> {
         Case {
             name: "quote-car",
             source: "(car (quote (a b c)))",
-            expected: Observation::Value("a".into()),
+            expected: Observation::Value("A".into()),
         },
         Case {
             name: "self-recursive-count",
@@ -51,7 +51,7 @@ fn cases() -> Vec<Case> {
         Case {
             name: "unknown-symbol",
             source: "no-such-binding",
-            expected: Observation::Error("UnknownSymbol: no-such-binding".into()),
+            expected: Observation::Error("UnknownSymbol: NO-SUCH-BINDING".into()),
         },
         Case {
             name: "decimal-comma-rational",

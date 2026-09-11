@@ -49,7 +49,7 @@ fn capability_matrix_every_supported_capability_has_evidence() {
     let evidence_map: BTreeMap<&str, &str> = [
         ("integer", "tier-1-conformance"),
         ("rational", "c_backend_conformance_test.rs"),
-        ("string", ""),
+        ("string", "string_values_test.rs"),
         ("nil", "tier-1-conformance"),
         ("true", "tier-1-conformance"),
         ("quote", "tier-1-conformance"),
@@ -199,6 +199,11 @@ fn capability_matrix_c_backend_2_1_slice_explicitly_labelled() {
     assert!(
         caps.contains_key("rational"),
         "C-backend 2.1 slice must include rational"
+    );
+    assert_eq!(
+        caps.get("string"),
+        Some(&"supported".to_string()),
+        "C-backend string capability must match the executable string witnesses"
     );
 
     // Verify the claim reconciliation section exists
@@ -374,7 +379,6 @@ fn extract_backend_capabilities(text: &str, backend: &str) -> BTreeMap<String, S
 
 fn extract_supported_capabilities(text: &str) -> Vec<String> {
     let mut caps = Vec::new();
-    let mut pos = 0;
 
     // Only search within backend capability sections
     for backend in ["fpga-lisp", "c-backend", "x86-freestanding"] {
@@ -384,7 +388,6 @@ fn extract_supported_capabilities(text: &str) -> Vec<String> {
         };
         let backend_section = &text[backend_start + backend_marker.len()..];
 
-        let cap_marker = "(capabilities";
         let Some(cap_start) = backend_section.find("(capabilities") else {
             continue;
         };

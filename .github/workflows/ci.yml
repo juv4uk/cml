@@ -29,6 +29,21 @@ jobs:
           ref: 80e2fc170650b391f128353985445291da493957
           path: fpga-lisp
 
+      - name: Checkout wsm-my-lisp (provides x86 asm nucleus witness)
+        uses: actions/checkout@v4
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: 155acd56b1e55e54f2529f85ad145fb889a6f464
+          path: wsm-my-lisp
+
+      # Legacy x86 witness still names the owner's historical sibling path.
+      # Keep CI evidence executable with the exact pinned nucleus while the
+      # witness path is migrated to a repository-relative contract boundary.
+      - name: Expose pinned asm nucleus at legacy witness path
+        run: |
+          sudo mkdir -p /home/agents/GitHub
+          sudo ln -s "$GITHUB_WORKSPACE/wsm-my-lisp" /home/agents/GitHub/wsm-my-lisp
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 

@@ -44,7 +44,7 @@ fn pure_but_unsupported_kernel_shape_stays_fail_closed() {
 
 #[test]
 fn captured_values_are_not_mistaken_for_kernel_parameters() {
-    let analysis = analyze(&lower_one("(map (lambda (x) (+ x offset)) #f32(1.0 2.0))"));
+    let analysis = analyze(&lower_one("(map (lambda (x) (+ x offset)) #i32(1 2))"));
     assert!(
         analysis
             .gpu_blockers

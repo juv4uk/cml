@@ -1,8 +1,8 @@
 //! COMPILER-03 — core value representation via compiled C path.
 //!
 //! Closes admitted surface for: (), symbols, proper/dotted pairs, exact
-//! integers, exact rationals. Strings remain Unsupported (no Ir::String path).
-//! Inexact floats remain Unsupported.
+//! integers, exact rationals, and strings. CML's C path canonicalizes symbol
+//! spellings to uppercase while string contents remain unchanged.
 
 use cml::build::{Observation, compile_and_run};
 
@@ -10,15 +10,6 @@ fn value(source: &str) -> String {
     match compile_and_run(source).expect("compile_and_run") {
         Observation::Value(v) => v,
         other => panic!("expected Value, got {other:?} for {source:?}"),
-    }
-}
-
-fn unsupported(source: &str) {
-    match compile_and_run(source).expect("compile_and_run") {
-        Observation::Unsupported(_) => {}
-        Observation::Error(e)
-            if e.contains("Unsupported") || e.contains("String") || e.contains("Float") => {}
-        other => panic!("expected Unsupported, got {other:?} for {source:?}"),
     }
 }
 
@@ -53,21 +44,23 @@ fn exact_rationals() {
 
 #[test]
 fn symbols_and_truth() {
-    assert_eq!(value("(quote foo)"), "foo");
-    assert_eq!(value("(quote t)"), "t");
-    let atom = value("(atom (quote x))");
-    assert!(atom == "T" || atom == "t" || atom == "()", "atom => {atom}");
+    assert_eq!(value("(quote foo)"), "FOO");
+    assert_eq!(value("(quote t)"), "T");
+    assert_eq!(value("(atom (quote x))"), "T");
 }
 
 #[test]
 fn proper_and_dotted_pairs() {
     assert_eq!(value("(cons 1 2)"), "(1 . 2)");
-    assert_eq!(value("(car (quote (a b c)))"), "a");
-    assert_eq!(value("(car (cdr (quote (a b c))))"), "b");
+    assert_eq!(value("(car (quote (a b c)))"), "A");
+    assert_eq!(value("(car (cdr (quote (a b c))))"), "B");
     assert_eq!(value("(cons 1 (cons 2 ()))"), "(1 2)");
 }
 
 #[test]
-fn strings_and_floats_unsupported() {
-    unsupported("\"hello\"");
+fn strings_are_distinct_values() {
+    assert_eq!(value("\"hello\""), "hello");
+    assert_eq!(value("(quote \"hi\")"), "hi");
+    assert_eq!(value("(eq \"a\" \"a\")"), "T");
+    assert_eq!(value("(car (cons \"x\" 1))"), "x");
 }

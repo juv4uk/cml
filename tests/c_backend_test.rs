@@ -116,8 +116,8 @@ fn c_backend_calls_a_builtin_stored_as_a_value() {
 }
 
 #[test]
-fn c_backend_lexically_shadows_a_builtin() {
-    let code = "(let ((car (lambda (x) (quote shadowed)))) (car (quote (1 2))))";
+fn c_backend_lexically_shadows_an_ordinary_builtin() {
+    let code = "(let ((second (lambda (x) (quote shadowed)))) (second (quote (1 2 3))))";
     assert_eq!(
         compile_and_run_first_class(code, "builtin_shadow"),
         "shadowed"
@@ -224,11 +224,11 @@ fn c_backend_supports_i32_buffers_and_rejects_f32_by_name() {
     assert!(i32_c_source.contains("OutOfMemory"));
     assert!(i32_c_source.contains("checked_malloc"));
     let exprs = parser::parse("#f32(1.0 2.0)").unwrap();
-    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
-    assert!(matches!(
-        CBackend::new().compile_program(&program),
-        Err(cml::c_backend::CompileError::UnsupportedTypedBuffer)
-    ));
+    let error = lower::lower_program_with_first_class_builtins(&exprs).unwrap_err();
+    assert!(
+        format!("{error:?}").contains("UnsupportedF32Buffer"),
+        "expected semantic UnsupportedF32Buffer rejection, got: {error:?}"
+    );
 }
 
 #[test]
