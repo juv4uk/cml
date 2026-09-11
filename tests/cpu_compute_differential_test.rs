@@ -75,7 +75,11 @@ fn admitted_i32_cpu_compute_matches_the_live_canonical_evaluator() {
         "(numeric-buffer-map (lambda (x) (+ x 1)) #i32())",
         "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(2147483647))",
     ] {
-        assert_eq!(execute(&lower_one(source)), oracle(source), "source: {source}");
+        assert_eq!(
+            execute(&lower_one(source)),
+            oracle(source),
+            "source: {source}"
+        );
     }
 }
 
