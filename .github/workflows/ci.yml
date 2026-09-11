@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: juv4uk/wsm-my-lisp
-          ref: 155acd56b1e55e54f2529f85ad145fb889a6f464
+          ref: ed7f43fa42c58f4cb3131379694e2842775d2bf5
           path: wsm-my-lisp
 
       # Legacy x86 witness still names the owner's historical sibling path.

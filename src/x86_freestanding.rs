@@ -133,7 +133,8 @@ impl X86FreestandingBackend {
         let mut symbol_names = BTreeSet::new();
         // Declaration pass: every top-level fixed-arity definition is known
         // before body validation. This admits a later definition as a named
-        // call target while still rejecting a bare function value.
+        // call target while still rejecting a bare function value unless the
+        // Stage2 first-class unary-closure gate below explicitly admits it.
         let mut def_arities = BTreeMap::new();
         for expression in program {
             if let Ir::Def { name, value } = expression {
@@ -146,6 +147,8 @@ impl X86FreestandingBackend {
                 }
             }
         }
+        let first_class_named_functions =
+            collect_first_class_named_functions(program, &def_arities)?;
         let mut slots = 0_usize;
         for expression in program {
             preflight(expression, &mut symbol_names, &mut def_arities, &mut slots)?;
@@ -170,11 +173,12 @@ impl X86FreestandingBackend {
             next_slot: 0,
             next_label: 0,
             closure_labels: Vec::new(),
+            named_closure_definitions: BTreeMap::new(),
             functions: BTreeMap::new(),
             function_arities: def_arities.clone(),
         };
         // A top-level definition is executable code, not an expression to
-        // fall through while `wsm_entry` is running.  Reserve every entry
+        // fall through while `wsm_entry` is running. Reserve every entry
         // label before emitting the entry body, so calls are source-order
         // independent and bodies can live after `wsm_entry`'s `ret`.
         for expression in program {
@@ -183,6 +187,21 @@ impl X86FreestandingBackend {
                 emitter.functions.insert(name.clone(), label);
             }
         }
+        // Stage2: only top-level unary defs that are actually read as values
+        // receive a closure identity. Direct calls stay direct `.Lfn_N` calls.
+        // One descriptor is allocated at wsm_entry startup and re-read from a
+        // generated word slot, so two reads of the same binding preserve `eq`
+        // identity. This is the exact machine property meta-eval's provenance
+        // tokens require; allocating a fresh descriptor per Var read would be
+        // semantically wrong even if definition/environment payloads matched.
+        for name in first_class_named_functions {
+            let definition_id = emitter.allocate_label() + 1;
+            emitter.closure_labels.push(definition_id);
+            emitter
+                .named_closure_definitions
+                .insert(name, definition_id);
+        }
+
         emitter.line(".text");
         emitter.line(".globl wsm_entry");
         emitter.line(".type wsm_entry, @function");
@@ -192,6 +211,20 @@ impl X86FreestandingBackend {
             emitter.line(&format!("    subq ${frame_bytes}, %rsp"));
         }
         emitter.line("    movq %rdi, %r12");
+        let named_closure_ids: Vec<usize> = emitter
+            .named_closure_definitions
+            .values()
+            .copied()
+            .collect();
+        for definition_id in &named_closure_ids {
+            emitter.line("    movq %r12, %rdi");
+            emitter.line(&format!("    movl ${definition_id}, %esi"));
+            emitter.line(&format!("    movabsq ${}, %rdx", wsm_os_target::NIL));
+            emitter.line("    call wsm_closure_new");
+            emitter.line(&format!(
+                "    movq %rax, .Lnamed_closure_word_{definition_id}(%rip)"
+            ));
+        }
         let mut has_entry_expression = false;
         for expression in program {
             if !matches!(expression, Ir::Def { .. }) {
@@ -214,7 +247,30 @@ impl X86FreestandingBackend {
                 emitter.emit_ir(expression)?;
             }
         }
+        // A first-class named unary function reuses its ordinary named body.
+        // The closure dispatcher supplies argument in %rsi and environment in
+        // %rdx; top-level named closures have NIL environment and need only
+        // restore the context register before entering the regular `.Lfn_N`.
+        let named_closure_wrappers: Vec<(usize, usize)> = emitter
+            .named_closure_definitions
+            .iter()
+            .map(|(name, definition_id)| (*definition_id, emitter.functions[name]))
+            .collect();
+        for (definition_id, function_label) in named_closure_wrappers {
+            emitter.line(&format!(".Lclosure_{definition_id}:"));
+            emitter.line("    movq %r12, %rdi");
+            emitter.line(&format!("    call .Lfn_{function_label}"));
+            emitter.line("    ret");
+        }
         emitter.line(".size wsm_entry, .-wsm_entry");
+        if !named_closure_ids.is_empty() {
+            emitter.line(".section .bss");
+            emitter.line(".align 8");
+            for definition_id in named_closure_ids {
+                emitter.line(&format!(".Lnamed_closure_word_{definition_id}:"));
+                emitter.line("    .quad 0");
+            }
+        }
         emitter.line(".section .note.GNU-stack,\"\",@progbits");
         Ok(emitter.output)
     }
@@ -280,6 +336,7 @@ impl X86FreestandingBackend {
             next_slot: param_count,
             next_label: 0,
             closure_labels: Vec::new(),
+            named_closure_definitions: BTreeMap::new(),
             functions: BTreeMap::new(),
             function_arities: BTreeMap::new(),
         };
@@ -333,6 +390,87 @@ fn contains_tail_self_call(ir: &Ir) -> bool {
         }
         _ => false,
     }
+}
+
+/// Find top-level unary definitions that are read as values rather than used
+/// only in direct call position. This keeps closure allocation demand tied to
+/// an actual first-class use instead of allocating descriptors for every def.
+fn collect_first_class_named_functions(
+    program: &[Ir],
+    def_arities: &BTreeMap<String, usize>,
+) -> Result<BTreeSet<String>, CompileError> {
+    let mut out = BTreeSet::new();
+    let bound = BTreeSet::new();
+    for expression in program {
+        collect_first_class_named_refs(expression, def_arities, &bound, false, &mut out)?;
+    }
+    Ok(out)
+}
+
+fn collect_first_class_named_refs(
+    ir: &Ir,
+    def_arities: &BTreeMap<String, usize>,
+    bound: &BTreeSet<String>,
+    callee_position: bool,
+    out: &mut BTreeSet<String>,
+) -> Result<(), CompileError> {
+    match ir {
+        Ir::Var(name) if !callee_position && !bound.contains(name) => {
+            if let Some(&arity) = def_arities.get(name) {
+                if arity == 1 {
+                    out.insert(name.clone());
+                } else {
+                    return Err(CompileError::UnsupportedVariant(
+                        "first-class named function (arity != 1)",
+                    ));
+                }
+            }
+        }
+        Ir::Lambda { params, body } => {
+            let mut nested = bound.clone();
+            match params {
+                Params::Fixed(names) => nested.extend(names.iter().cloned()),
+                Params::Variadic { fixed, rest } => {
+                    nested.extend(fixed.iter().cloned());
+                    nested.insert(rest.clone());
+                }
+                Params::AllRest(rest) => {
+                    nested.insert(rest.clone());
+                }
+            }
+            collect_first_class_named_refs(body, def_arities, &nested, false, out)?;
+        }
+        Ir::App { func, args } => {
+            collect_first_class_named_refs(func, def_arities, bound, true, out)?;
+            for arg in args {
+                collect_first_class_named_refs(arg, def_arities, bound, false, out)?;
+            }
+        }
+        Ir::Cond { branches } => {
+            for (test, body) in branches {
+                collect_first_class_named_refs(test, def_arities, bound, false, out)?;
+                collect_first_class_named_refs(body, def_arities, bound, false, out)?;
+            }
+        }
+        Ir::Let { bindings, body } => {
+            for (_, value) in bindings {
+                collect_first_class_named_refs(value, def_arities, bound, false, out)?;
+            }
+            let mut nested = bound.clone();
+            nested.extend(bindings.iter().map(|(name, _)| name.clone()));
+            collect_first_class_named_refs(body, def_arities, &nested, false, out)?;
+        }
+        Ir::Def { value, .. } => {
+            collect_first_class_named_refs(value, def_arities, bound, false, out)?;
+        }
+        Ir::Prim { args, .. } | Ir::TailSelfCall { args } => {
+            for arg in args {
+                collect_first_class_named_refs(arg, def_arities, bound, false, out)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn preflight(
@@ -426,21 +564,14 @@ fn preflight(
         }
         Ir::Let { .. } => return Err(CompileError::UnsupportedVariant("let")),
         Ir::Def { name, value } => {
-            // Admit a single self-tail-recursive named function with no free variables.
-            // Shape: Def { name, Lambda { params: Fixed(params), body } }
-            // where body only uses params and uses TailSelfCall for recursion.
             if let Ir::Lambda {
                 params: Params::Fixed(param_names),
                 body,
             } = value.as_ref()
             {
                 let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
-                // The function name is callable inside its own body.  It is
-                // deliberately registered only as a call target, not a first-
-                // class value: `(f ...)` is admitted, bare `f` remains not.
                 def_arities.insert(name.clone(), param_names.len());
                 preflight_def_body(body, &bindings, symbols, def_arities, slots)?;
-                // Record the function name as a known symbol (for call dispatch).
                 symbols.insert(name.clone());
                 return Ok(());
             } else {
@@ -578,7 +709,80 @@ fn preflight_def_body(
     *slots += 1;
     match ir {
         Ir::Var(name) if bindings.contains(name) => Ok(()),
-        Ir::Var(_) => Err(CompileError::UnsupportedVariant("unbound variable")),
+        Ir::Var(name) => match def_arities.get(name) {
+            Some(1) => Ok(()),
+            Some(_) => Err(CompileError::UnsupportedVariant(
+                "first-class named function (arity != 1)",
+            )),
+            None => Err(CompileError::UnsupportedVariant("unbound variable")),
+        },
+        Ir::Int(value) => {
+            wsm_os_target::encode_fixnum(*value).ok_or(CompileError::FixnumOutOfRange(*value))?;
+            Ok(())
+        }
+        Ir::Nil | Ir::True => Ok(()),
+        Ir::Quote(value) => preflight_quoted(value, symbols, slots),
+        Ir::Prim { op, args } => {
+            let (name, expected) = primitive_contract(*op)?;
+            if args.len() != expected {
+                return Err(CompileError::InvalidArity {
+                    operation: name,
+                    expected,
+                    actual: args.len(),
+                });
+            }
+            for argument in args {
+                preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+            }
+            Ok(())
+        }
+        Ir::App { func, args } => {
+            if let Some((operation, expected, _)) = platform_call_contract(func) {
+                if !matches!(func.as_ref(), Ir::Var(name) if bindings.contains(name)) {
+                    if args.len() != expected {
+                        return Err(CompileError::InvalidArity {
+                            operation,
+                            expected,
+                            actual: args.len(),
+                        });
+                    }
+                    for argument in args {
+                        preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+                    }
+                    return Ok(());
+                }
+            }
+            if let Ir::Var(name) = func.as_ref() {
+                if !bindings.contains(name) {
+                    if let Some(&arity) = def_arities.get(name) {
+                        if args.len() != arity {
+                            return Err(CompileError::DefArityMismatch {
+                                name: name.clone(),
+                                expected: arity,
+                                actual: args.len(),
+                            });
+                        }
+                        for argument in args {
+                            preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+                        }
+                        return Ok(());
+                    }
+                }
+            }
+            if args.len() != 1 {
+                return Err(CompileError::UnsupportedVariant("application"));
+            }
+            preflight_def_body(func, bindings, symbols, def_arities, slots)?;
+            preflight_def_body(&args[0], bindings, symbols, def_arities, slots)
+        }
+        Ir::Lambda {
+            params: Params::Fixed(params),
+            body,
+        } if params.len() == 1 => {
+            let mut nested_bindings = bindings.clone();
+            nested_bindings.insert(params[0].clone());
+            preflight_def_body(body, &nested_bindings, symbols, def_arities, slots)
+        }
         Ir::TailSelfCall { args } => {
             for arg in args {
                 preflight_def_body(arg, bindings, symbols, def_arities, slots)?;
@@ -603,7 +807,7 @@ fn preflight_def_body(
             }
             preflight_def_body(body, &new_bindings, symbols, def_arities, slots)
         }
-        other => preflight(other, symbols, def_arities, slots),
+        _ => Err(CompileError::UnsupportedVariant("def body")),
     }
 }
 
@@ -621,7 +825,7 @@ fn preflight_quoted(
             symbols.insert(name.to_uppercase());
         }
         // The wsm-os target ABI has image-local symbols but no string
-        // representation.  Do not silently collapse a persistent WSM FS
+        // representation. Do not silently collapse a persistent WSM FS
         // string (for example a binding name) into a symbol.
         Quoted::Str(_) => {
             return Err(CompileError::UnsupportedVariant(
@@ -683,6 +887,7 @@ struct Emitter {
     next_slot: usize,
     next_label: usize,
     closure_labels: Vec<usize>,
+    named_closure_definitions: BTreeMap<String, usize>,
     functions: BTreeMap<String, usize>,
     function_arities: BTreeMap<String, usize>,
 }
@@ -732,6 +937,11 @@ impl Emitter {
             Ir::Var(name) => {
                 if let Some(&slot) = self.env.get(name) {
                     self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(slot)));
+                    Ok(())
+                } else if let Some(&definition_id) = self.named_closure_definitions.get(name) {
+                    self.line(&format!(
+                        "    movq .Lnamed_closure_word_{definition_id}(%rip), %rax"
+                    ));
                     Ok(())
                 } else {
                     Err(CompileError::UnsupportedVariant("Var (unbound)"))
@@ -785,10 +995,8 @@ impl Emitter {
                                 "App (too many args for named function)",
                             ));
                         }
-                        // Evaluate args in reverse order (right to left) for stack allocation
-                        // For SysV AMD64: arg1=%rdi, arg2=%rsi, arg3=%rdx, arg4=%rcx, arg5=%r8, arg6=%r9
-                        // But we keep %rdi as context, so user args start at %rsi
-                        // For simplicity, evaluate all args to stack slots then load into registers
+                        // Evaluate all args to stack slots then load them into
+                        // the target argument registers. `%rdi` stays context.
                         let arg_slots: Vec<usize> = args
                             .iter()
                             .map(|arg| {
@@ -801,8 +1009,7 @@ impl Emitter {
                                 Ok(slot)
                             })
                             .collect::<Result<_, CompileError>>()?;
-                        // Load args into registers (context in %rdi, user args in %rsi, %rdx, %rcx, %r8, %r9)
-                        self.line("    movq %r12, %rdi"); // context
+                        self.line("    movq %r12, %rdi");
                         let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
                         for (i, slot) in arg_slots.iter().enumerate() {
                             if i < regs.len() {
@@ -813,15 +1020,9 @@ impl Emitter {
                                 ));
                             }
                         }
-                        // `.Lfn_N` is the native-call entry: it allocates the
-                        // function frame and receives arguments in registers.
-                        // `.Ltcloop_N` is deliberately *after* that prologue,
-                        // so TailSelfCall may jump there without allocating a
-                        // second frame on every recursive iteration.
                         self.line(&format!("    call .Lfn_{label}"));
                         Ok(())
                     } else {
-                        // Fall through to closure call
                         self.emit_single_argument_closure_call(func, &args[0])
                     }
                 } else {
@@ -843,8 +1044,6 @@ impl Emitter {
 
                     // Named functions own an aligned native frame. `%rdi` is
                     // the runtime context; user arguments begin in `%rsi`.
-                    // Slots 0..arity store parameters; later slots are body
-                    // spills bounded by the same preflight discipline.
                     let mut ignored_symbols = BTreeSet::new();
                     let mut ignored_arities = self.function_arities.clone();
                     let mut body_slots = 0_usize;
@@ -857,19 +1056,10 @@ impl Emitter {
                         &mut body_slots,
                     )?;
                     let required_slots = param_names.len() + body_slots;
-                    // A SysV callee begins at RSP = 8 (mod 16); an odd number
-                    // of eight-byte slots restores alignment before a call.
                     let frame_slots = required_slots.max(1) | 1;
                     let frame_bytes = frame_slots * 8;
-                    // Keep the native-call entry distinct from the tail-loop
-                    // target.  A native call must allocate the frame exactly
-                    // once; a TailSelfCall jumps below the prologue and only
-                    // reloads parameter slots in that existing frame.
                     self.line(&format!(".Lfn_{label}:"));
                     self.line(&format!("    subq ${frame_bytes}, %rsp"));
-                    // Params arrive in user registers: %rsi=arg1, %rdx=arg2, %rcx=arg3, %r8=arg4, %r9=arg5
-                    // (%rdi holds the runtime context, matching the caller convention).
-                    // Save params to stack slots for body access
                     let mut param_env = BTreeMap::new();
                     let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
                     for (i, param) in param_names.iter().enumerate() {
@@ -885,16 +1075,12 @@ impl Emitter {
                         param_env.insert(param.clone(), i);
                     }
                     self.line(&format!(".Ltcloop_{label}:"));
-                    // Save current env and use param_env for body
                     let old_env = std::mem::replace(&mut self.env, param_env);
                     let old_next_slot = self.next_slot;
                     self.next_slot = param_names.len();
-                    // Emit body in tail-call context (allows TailSelfCall)
                     self.emit_tail_body(body, label, param_names.len())?;
-                    // Restore env
                     self.env = old_env;
                     self.next_slot = old_next_slot;
-                    // Function epilogue (reached only from non-recursive branches)
                     self.line(&format!("    addq ${frame_bytes}, %rsp"));
                     self.line("    ret");
                     Ok(())
@@ -1091,13 +1277,7 @@ impl Emitter {
     /// through to `wsm_fail(AbiViolation)` on no match -- correct and
     /// honestly fail-closed, but O(n) machine instructions executed per call
     /// site, where n = total closures compiled into the unit, not just ones
-    /// reachable from this call site. Fine at current bounded-fixture scale
-    /// (CML-CONSTITUTION-* fixtures); not yet a proven problem at larger n.
-    /// Named explicitly here (CML-X86-CLOSURE-DISPATCH-SCALABILITY) so a
-    /// future reader doesn't assume O(1) dispatch; see
-    /// tests/x86_closure_dispatch_scale_test.rs for a benchmark that makes
-    /// the linear cost measurable before any dispatch redesign (jump table,
-    /// hash, sorted binary search) is considered.
+    /// reachable from this call site. Fine at current bounded-fixture scale.
     fn emit_single_argument_closure_call(
         &mut self,
         function: &Ir,
@@ -1288,20 +1468,9 @@ impl Emitter {
     }
 
     /// Inline checked fixnum addition or subtraction.
-    ///
-    /// Both arguments are tagged fixnums: `(value << 3) | TAG_FIXNUM`.
-    /// Strategy:
-    ///   1. Decode both (arithmetic-right-shift by TAG_BITS=3 → signed i61).
-    ///   2. Perform the 64-bit signed add/sub — `jo` fires on i64 overflow.
-    ///   3. The i61 overflow boundary is tighter: check explicitly against
-    ///      FIXNUM_MIN/MAX; if out of range call wsm_fail(ErrorCode::Type=2).
-    ///   4. Re-encode: `shlq $3, result; orq $3, result`.
-    ///
-    /// Uses %rcx and %rdx as scratch; does NOT clobber %r12 (context ptr).
     fn emit_arithmetic(&mut self, operation: PrimOp, args: &[Ir]) -> Result<(), CompileError> {
         let ok_label = self.allocate_label();
 
-        // Evaluate first arg → %rax, save to stack slot.
         self.emit_ir(&args[0])?;
         let slot0 = self.allocate_slot();
         self.line(&format!(
@@ -1309,7 +1478,6 @@ impl Emitter {
             Self::slot_offset(slot0)
         ));
 
-        // Evaluate second arg → %rax, save to stack slot.
         self.emit_ir(&args[1])?;
         let slot1 = self.allocate_slot();
         self.line(&format!(
@@ -1317,8 +1485,6 @@ impl Emitter {
             Self::slot_offset(slot1)
         ));
 
-        // Load and decode both operands.
-        // %rcx = a (decoded i64), %rdx = b (decoded i64).
         self.line(&format!(
             "    movq {}(%rsp), %rcx",
             Self::slot_offset(slot0)
@@ -1330,41 +1496,32 @@ impl Emitter {
         ));
         self.line("    sarq $3, %rdx");
 
-        // Perform the operation; check 64-bit overflow first.
         let overflow_label = self.allocate_label();
         match operation {
-            PrimOp::Add => {
-                self.line("    addq %rdx, %rcx");
-            }
-            PrimOp::Sub => {
-                self.line("    subq %rdx, %rcx");
-            }
+            PrimOp::Add => self.line("    addq %rdx, %rcx"),
+            PrimOp::Sub => self.line("    subq %rdx, %rcx"),
             _ => unreachable!(),
         }
-        // 64-bit signed overflow → Type error.
-        self.line(&format!("    jo .Larith_overflow_{}", overflow_label));
+        self.line(&format!("    jo .Larith_overflow_{overflow_label}"));
 
-        // Check 61-bit fixnum range.
         let min = wsm_os_target::FIXNUM_MIN;
         let max = wsm_os_target::FIXNUM_MAX;
         self.line(&format!("    movabsq ${min}, %rax"));
         self.line("    cmpq %rax, %rcx");
-        self.line(&format!("    jl .Larith_overflow_{}", overflow_label));
+        self.line(&format!("    jl .Larith_overflow_{overflow_label}"));
         self.line(&format!("    movabsq ${max}, %rax"));
         self.line("    cmpq %rax, %rcx");
-        self.line(&format!("    jg .Larith_overflow_{}", overflow_label));
+        self.line(&format!("    jg .Larith_overflow_{overflow_label}"));
 
-        // Encode result back as fixnum.
         self.line("    shlq $3, %rcx");
         self.line(&format!(
             "    orq ${}, %rcx",
             wsm_os_target::Tag::Fixnum as u64
         ));
         self.line("    movq %rcx, %rax");
-        self.line(&format!("    jmp .Larith_ok_{}", ok_label));
+        self.line(&format!("    jmp .Larith_ok_{ok_label}"));
 
-        // Overflow path — call wsm_fail(context, ErrorCode::Type=2, offending=0, source=0).
-        self.line(&format!(".Larith_overflow_{}:", overflow_label));
+        self.line(&format!(".Larith_overflow_{overflow_label}:"));
         self.line("    movq %r12, %rdi");
         self.line(&format!(
             "    movl ${}, %esi",
@@ -1374,18 +1531,12 @@ impl Emitter {
         self.line("    xorl %ecx, %ecx");
         self.line("    call wsm_fail");
 
-        self.line(&format!(".Larith_ok_{}:", ok_label));
+        self.line(&format!(".Larith_ok_{ok_label}:"));
         Ok(())
     }
 
     /// Emit IR in a tail-call context where `TailSelfCall` is lowered to a
     /// register reload and `jmp` to the loop entry label.
-    ///
-    /// `loop_label` is the `.Ltcloop_N` label at the top of the function body.
-    /// `param_count` is the number of parameter slots (0..param_count).
-    ///
-    /// Any IR node other than `TailSelfCall`/`Cond`/`Let` is handed to the
-    /// ordinary `emit_ir` path; the result lands in `%rax` as usual.
     fn emit_tail_body(
         &mut self,
         ir: &Ir,
@@ -1394,9 +1545,6 @@ impl Emitter {
     ) -> Result<(), CompileError> {
         match ir {
             Ir::TailSelfCall { args } => {
-                // Evaluate new arguments and store them in temporary spill
-                // slots BEFORE writing to the param slots, to avoid clobbering
-                // a param that is still needed as input to another arg expression.
                 let tmp_slots: Vec<usize> = args
                     .iter()
                     .map(|arg| {
@@ -1407,7 +1555,6 @@ impl Emitter {
                     })
                     .collect::<Result<_, CompileError>>()?;
 
-                // Copy tmp slots into param slots.
                 for (param_idx, &tmp) in tmp_slots.iter().enumerate().take(param_count) {
                     self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(tmp)));
                     self.line(&format!(
@@ -1416,8 +1563,7 @@ impl Emitter {
                     ));
                 }
 
-                // Jump to the loop entry — no call, no new frame.
-                self.line(&format!("    jmp .Ltcloop_{}", loop_label));
+                self.line(&format!("    jmp .Ltcloop_{loop_label}"));
                 Ok(())
             }
             Ir::Cond { branches } => self.emit_cond_tail(branches, loop_label, param_count),
@@ -1440,7 +1586,6 @@ impl Emitter {
                 self.env = saved_env;
                 result
             }
-            // Non-tail-call node: ordinary emit, result in %rax, epilogue follows.
             other => self.emit_ir(other),
         }
     }
@@ -1457,24 +1602,23 @@ impl Emitter {
         let mut next_branch_label = self.allocate_label();
 
         for (test, expr) in branches {
-            self.line(&format!(".Lcond_branch_{}:", next_branch_label));
+            self.line(&format!(".Lcond_branch_{next_branch_label}:"));
             self.emit_ir(test)?;
 
             next_branch_label = self.allocate_label();
 
             self.line(&format!("    movabsq ${}, %rcx", wsm_os_target::NIL));
             self.line("    cmpq %rcx, %rax");
-            self.line(&format!("    je .Lcond_branch_{}", next_branch_label));
+            self.line(&format!("    je .Lcond_branch_{next_branch_label}"));
 
-            // Body is in tail position — use emit_tail_body.
             self.emit_tail_body(expr, loop_label, param_count)?;
-            self.line(&format!("    jmp .Lcond_end_{}", end_label));
+            self.line(&format!("    jmp .Lcond_end_{end_label}"));
         }
 
-        self.line(&format!(".Lcond_branch_{}:", next_branch_label));
+        self.line(&format!(".Lcond_branch_{next_branch_label}:"));
         self.emit_immediate(wsm_os_target::NIL);
 
-        self.line(&format!(".Lcond_end_{}:", end_label));
+        self.line(&format!(".Lcond_end_{end_label}:"));
         Ok(())
     }
 }
