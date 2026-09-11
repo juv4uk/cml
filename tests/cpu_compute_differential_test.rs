@@ -14,6 +14,11 @@ fn lower_one(source: &str) -> Ir {
     lower::lower_program(&expressions).unwrap().remove(0)
 }
 
+fn lower_internal_one(source: &str) -> Ir {
+    let expressions = parser::parse(source).unwrap();
+    lower::lower_expr(&expressions[0]).unwrap()
+}
+
 fn oracle(source: &str) -> Observable {
     match eval_program(source, &mut Session::default()) {
         Ok(result) => Observable::Value(result.value.to_string()),
@@ -49,8 +54,8 @@ fn render_buffer(buffer: BufferLiteral) -> String {
     }
 }
 
-fn compiled(source: &str) -> Observable {
-    match CpuComputeBackend.execute(&lower_one(source)) {
+fn execute(ir: &Ir) -> Observable {
+    match CpuComputeBackend.execute(ir) {
         Ok(buffer) => Observable::Value(render_buffer(buffer)),
         Err(ComputeExecutionError::NotEligible(blockers))
             if blockers.contains(&AdmissionBlocker::IntegerOverflowNotProven) =>
@@ -62,16 +67,30 @@ fn compiled(source: &str) -> Observable {
 }
 
 #[test]
-fn cpu_compute_matches_the_live_canonical_evaluator() {
+fn admitted_i32_cpu_compute_matches_the_live_canonical_evaluator() {
     for source in [
         "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3))",
         "(numeric-buffer-map (lambda (x) (+ x -2)) #i32(-3 4))",
         "(numeric-buffer-map (lambda (x) (+ (+ x 10) -3)) #i32(0 7 -9))",
         "(numeric-buffer-map (lambda (x) (+ x 1)) #i32())",
         "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(2147483647))",
+    ] {
+        assert_eq!(execute(&lower_one(source)), oracle(source), "source: {source}");
+    }
+}
+
+#[test]
+fn internal_f32_cpu_compute_matches_oracle_below_source_admission_gate() {
+    // CML source admission зараз fail-closed для #f32(...), тому цей тест
+    // перевіряє лише вже наявний нижчий IR/CPU механізм, не заявляючи підтримку source path.
+    for source in [
         "(numeric-buffer-map (lambda (x) (+ x 1)) #f32(1.0 -2.5 0.1))",
         "(numeric-buffer-map (lambda (x) (+ (+ x 10) -3)) #f32(1.0 -2.5 0.1))",
     ] {
-        assert_eq!(compiled(source), oracle(source), "source: {source}");
+        assert_eq!(
+            execute(&lower_internal_one(source)),
+            oracle(source),
+            "source: {source}"
+        );
     }
 }
