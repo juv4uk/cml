@@ -67,55 +67,48 @@ fn all_ir() -> Vec<Ir> {
     irs
 }
 
-/// Result of classifying an IR variant by a backend.
-#[derive(Debug, PartialEq, Eq)]
-enum Classified {
-    /// Successfully emitted code.
+#[derive(Debug)]
+enum Classified<E> {
     Emitted,
-    /// Rejected with a typed CompileError (not a panic).
-    RejectedTypedError(String),
+    Rejected(E),
 }
 
-/// Classify an IR variant using the FPGA backend.
-fn classify_fpga(ir: &Ir) -> Classified {
+fn classify_fpga(ir: &Ir) -> Classified<FpgaCompileError> {
     let result = panic::catch_unwind(|| {
         let mut compiler = Compiler::new();
         compiler.compile(&[ir.clone()])
     });
     match result {
         Ok(Ok(_)) => Classified::Emitted,
-        Ok(Err(e)) => Classified::RejectedTypedError(e.to_string()),
-        Err(_) => panic!("FPGA backend panicked on IR: {:?}", ir),
+        Ok(Err(error)) => Classified::Rejected(error),
+        Err(_) => panic!("FPGA backend panicked on IR: {ir:?}"),
     }
 }
 
-/// Classify an IR variant using the C backend.
-fn classify_c(ir: &Ir) -> Classified {
+fn classify_c(ir: &Ir) -> Classified<CCompileError> {
     let result = panic::catch_unwind(|| {
         let mut backend = CBackend::new();
         backend.compile_program(&[ir.clone()])
     });
     match result {
         Ok(Ok(_)) => Classified::Emitted,
-        Ok(Err(e)) => Classified::RejectedTypedError(e.to_string()),
-        Err(_) => panic!("C backend panicked on IR: {:?}", ir),
+        Ok(Err(error)) => Classified::Rejected(error),
+        Err(_) => panic!("C backend panicked on IR: {ir:?}"),
     }
 }
 
-/// Classify an IR variant using the x86 freestanding backend.
-fn classify_x86(ir: &Ir) -> Classified {
+fn classify_x86(ir: &Ir) -> Classified<X86CompileError> {
     let result = panic::catch_unwind(|| {
         let backend = X86FreestandingBackend::new();
         backend.compile_program(&[ir.clone()])
     });
     match result {
         Ok(Ok(_)) => Classified::Emitted,
-        Ok(Err(e)) => Classified::RejectedTypedError(e.to_string()),
-        Err(_) => panic!("x86_freestanding backend panicked on IR: {:?}", ir),
+        Ok(Err(error)) => Classified::Rejected(error),
+        Err(_) => panic!("x86_freestanding backend panicked on IR: {ir:?}"),
     }
 }
 
-/// Legacy test: just verify no panic (kept for backward compatibility).
 #[test]
 fn fpga_backend_exhaustively_classifies_all_ir_without_panicking() {
     for ir in all_ir() {
@@ -123,7 +116,7 @@ fn fpga_backend_exhaustively_classifies_all_ir_without_panicking() {
             let mut compiler = Compiler::new();
             let _ = compiler.compile(&[ir.clone()]);
         });
-        assert!(result.is_ok(), "FPGA backend panicked on IR: {:?}", ir);
+        assert!(result.is_ok(), "FPGA backend panicked on IR: {ir:?}");
     }
 }
 
@@ -134,7 +127,7 @@ fn c_backend_exhaustively_classifies_all_ir_without_panicking() {
             let mut backend = CBackend::new();
             let _ = backend.compile_program(&[ir.clone()]);
         });
-        assert!(result.is_ok(), "C backend panicked on IR: {:?}", ir);
+        assert!(result.is_ok(), "C backend panicked on IR: {ir:?}");
     }
 }
 
@@ -147,41 +140,33 @@ fn x86_freestanding_backend_exhaustively_classifies_all_ir_without_panicking() {
         });
         assert!(
             result.is_ok(),
-            "x86_freestanding backend panicked on IR: {:?}",
-            ir
+            "x86_freestanding backend panicked on IR: {ir:?}"
         );
     }
 }
 
-/// Explicit classification tests: every IR variant must be either
-/// Emitted or RejectedTypedError — no panics, no wildcard paths.
 #[test]
 fn fpga_backend_explicitly_classifies_every_ir_variant() {
     let mut emitted = 0;
     let mut rejected = 0;
 
     for ir in all_ir() {
-        let classified = classify_fpga(&ir);
-        match classified {
+        match classify_fpga(&ir) {
             Classified::Emitted => emitted += 1,
-            Classified::RejectedTypedError(err) => {
-                // Verify it's a typed FpgaCompileError, not a generic string
-                assert!(
-                    err.contains("UnsupportedVariant")
-                        || err.contains("UnsupportedNumericBuffer")
-                        || err.contains("TooManyArguments")
-                        || err.contains("IntegerOutOfRange")
-                        || err.contains("SymbolTableOverflow")
-                        || err.contains("unsupported IR variant for FPGA target")
-                        || err.contains("unsupported typed numeric buffer for FPGA target"),
-                    "FPGA error must be a typed CompileError variant, got: {}",
-                    err
-                );
+            Classified::Rejected(error) => {
+                // Тип є доказом: не прив'язуємо контракт тесту до тексту Display.
+                match error {
+                    FpgaCompileError::TooManyArguments { .. }
+                    | FpgaCompileError::IntegerOutOfRange { .. }
+                    | FpgaCompileError::UnsupportedNumericBuffer
+                    | FpgaCompileError::SymbolTableOverflow
+                    | FpgaCompileError::UnsupportedVariant(_) => {}
+                }
                 rejected += 1;
             }
         }
     }
-    println!("FPGA: emitted={}, rejected={}", emitted, rejected);
+    println!("FPGA: emitted={emitted}, rejected={rejected}");
     assert!(
         emitted > 0 && rejected > 0,
         "FPGA must both emit and reject some variants"
@@ -194,24 +179,19 @@ fn c_backend_explicitly_classifies_every_ir_variant() {
     let mut rejected = 0;
 
     for ir in all_ir() {
-        let classified = classify_c(&ir);
-        match classified {
+        match classify_c(&ir) {
             Classified::Emitted => emitted += 1,
-            Classified::RejectedTypedError(err) => {
-                assert!(
-                    err.contains("UnsupportedVariant")
-                        || err.contains("UnsupportedTypedBuffer")
-                        || err.contains("NestedDef")
-                        || err.contains("unsupported IR variant in C backend")
-                        || err.contains("unsupported typed numeric buffer in C backend"),
-                    "C error must be a typed CompileError variant, got: {}",
-                    err
-                );
+            Classified::Rejected(error) => {
+                match error {
+                    CCompileError::NestedDef
+                    | CCompileError::UnsupportedTypedBuffer
+                    | CCompileError::UnsupportedVariant(_) => {}
+                }
                 rejected += 1;
             }
         }
     }
-    println!("C backend: emitted={}, rejected={}", emitted, rejected);
+    println!("C backend: emitted={emitted}, rejected={rejected}");
     assert!(
         emitted > 0 && rejected > 0,
         "C backend must both emit and reject some variants"
@@ -224,27 +204,22 @@ fn x86_freestanding_explicitly_classifies_every_ir_variant() {
     let mut rejected = 0;
 
     for ir in all_ir() {
-        let classified = classify_x86(&ir);
-        match classified {
+        match classify_x86(&ir) {
             Classified::Emitted => emitted += 1,
-            Classified::RejectedTypedError(err) => {
-                assert!(
-                    err.contains("UnsupportedVariant")
-                        || err.contains("InvalidArity")
-                        || err.contains("FixnumOutOfRange")
-                        || err.contains("TooManySymbols")
-                        || err.contains("unsupported IR in x86_64-freestanding backend"),
-                    "x86 error must be a typed CompileError variant, got: {}",
-                    err
-                );
+            Classified::Rejected(error) => {
+                match error {
+                    X86CompileError::EmptyProgram
+                    | X86CompileError::UnsupportedVariant(_)
+                    | X86CompileError::InvalidArity { .. }
+                    | X86CompileError::DefArityMismatch { .. }
+                    | X86CompileError::FixnumOutOfRange(_)
+                    | X86CompileError::TooManySymbols => {}
+                }
                 rejected += 1;
             }
         }
     }
-    println!(
-        "x86 freestanding: emitted={}, rejected={}",
-        emitted, rejected
-    );
+    println!("x86 freestanding: emitted={emitted}, rejected={rejected}");
     assert!(
         emitted > 0 && rejected > 0,
         "x86 must both emit and reject some variants"
