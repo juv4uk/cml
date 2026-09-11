@@ -126,7 +126,7 @@ fn internal_non_affine_f32_ir_stays_blocked() {
 fn fpga_rejects_buffers_while_c_backend_accepts_i32_buffers() {
     let program = vec![lower_one("#i32(1 2 3)")];
     let fpga_error = Compiler::new().compile(&program).unwrap_err().to_string();
-    assert!(fpga_error.contains("unsupported typed numeric buffer for FPGA target"));
+    assert!(fpga_error.contains("Unsupported: typed numeric buffer for FPGA target"));
 
     let c_source = CBackend::new().compile_program(&program).unwrap();
     assert!(c_source.contains("TAG_I32_BUFFER"));
