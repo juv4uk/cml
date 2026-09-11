@@ -1422,15 +1422,19 @@ impl Emitter {
             }
             Ir::Cond { branches } => self.emit_cond_tail(branches, loop_label, param_count),
             Ir::Let { bindings, body } => {
-                // Evaluate each binding in the enclosing environment, then
-                // expose its slot only to the body. This is lexical `let`,
-                // not an assignment into the caller's frame.
+                // Lisp `let` is parallel: every value form observes the same
+                // enclosing lexical environment. Store all values first and
+                // install the new name -> slot bindings only for the body.
                 let saved_env = self.env.clone();
+                let mut body_bindings = Vec::with_capacity(bindings.len());
                 for (name, val) in bindings {
                     self.emit_ir(val)?;
                     let slot = self.allocate_slot();
                     self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
-                    self.env.insert(name.clone(), slot);
+                    body_bindings.push((name.clone(), slot));
+                }
+                for (name, slot) in body_bindings {
+                    self.env.insert(name, slot);
                 }
                 let result = self.emit_tail_body(body, loop_label, param_count);
                 self.env = saved_env;
