@@ -79,6 +79,19 @@ impl fmt::Display for CompileError {
 
 impl std::error::Error for CompileError {}
 
+/// cml#12: ordinary image-local symbols are assigned `index + 1`; canonical
+/// `t` is reserved as `Symbol(SYMBOL_ID_MAX)` alone. A table of exactly
+/// `SYMBOL_ID_MAX` ordinary symbols would give the last one that same
+/// identity, so the last admissible ordinary count is `SYMBOL_ID_MAX - 1` --
+/// reject at `>=`, not `>`. Shared by both the flat and tail-call symbol-
+/// admission paths so the invariant cannot drift between them.
+fn check_symbol_capacity(count: u64) -> Result<(), CompileError> {
+    if count >= wsm_os_target::SYMBOL_ID_MAX {
+        return Err(CompileError::TooManySymbols);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Default)]
 pub struct X86FreestandingBackend;
 
@@ -158,9 +171,7 @@ impl X86FreestandingBackend {
         for expression in program {
             preflight(expression, &mut symbol_names, &mut def_arities, &mut slots)?;
         }
-        if symbol_names.len() as u64 > wsm_os_target::SYMBOL_ID_MAX {
-            return Err(CompileError::TooManySymbols);
-        }
+        check_symbol_capacity(symbol_names.len() as u64)?;
         let symbols: BTreeMap<String, u64> = symbol_names
             .into_iter()
             .enumerate()
@@ -349,9 +360,7 @@ impl X86FreestandingBackend {
         for arg in initial_args {
             preflight(arg, &mut symbol_names, &mut def_arities, &mut slots)?;
         }
-        if symbol_names.len() as u64 > wsm_os_target::SYMBOL_ID_MAX {
-            return Err(CompileError::TooManySymbols);
-        }
+        check_symbol_capacity(symbol_names.len() as u64)?;
         let symbols: BTreeMap<String, u64> = symbol_names
             .into_iter()
             .enumerate()
@@ -1714,5 +1723,40 @@ impl Emitter {
 
         self.line(&format!(".Lcond_end_{end_label}:"));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod symbol_capacity_tests {
+    // cml#12: the boundary is real (SYMBOL_ID_MAX - 1 ordinary symbols is
+    // the maximum), but SYMBOL_ID_MAX itself is 2^61 - 1 -- far too large
+    // to prove by actually constructing that many distinct program symbols.
+    // check_symbol_capacity is the single shared choke point both the flat
+    // and tail-call paths call, so testing it directly at its exact integer
+    // boundary proves the invariant without needing a real huge program.
+    use super::{CompileError, check_symbol_capacity};
+
+    #[test]
+    fn max_minus_one_ordinary_symbols_is_admitted() {
+        assert_eq!(
+            check_symbol_capacity(wsm_os_target::SYMBOL_ID_MAX - 1),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn exactly_symbol_id_max_ordinary_symbols_collides_with_canonical_t() {
+        assert_eq!(
+            check_symbol_capacity(wsm_os_target::SYMBOL_ID_MAX),
+            Err(CompileError::TooManySymbols)
+        );
+    }
+
+    #[test]
+    fn more_than_symbol_id_max_is_also_rejected() {
+        assert_eq!(
+            check_symbol_capacity(wsm_os_target::SYMBOL_ID_MAX + 1),
+            Err(CompileError::TooManySymbols)
+        );
     }
 }
