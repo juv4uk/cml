@@ -7,6 +7,13 @@ fn lower_one(source: &str) -> cml::ir::Ir {
     lower::lower_program(&expressions).unwrap().remove(0)
 }
 
+// F32 source is globally rejected today, but the lower-level IR/emitter still
+// has useful fail-closed behavior worth testing independently.
+fn lower_internal_one(source: &str) -> cml::ir::Ir {
+    let expressions = parser::parse(source).unwrap();
+    lower::lower_expr(&expressions[0]).unwrap()
+}
+
 #[test]
 fn emits_portable_i32_map_shader_from_admitted_ir() {
     let shader = emit_map_shader(&lower_one(
@@ -20,8 +27,8 @@ fn emits_portable_i32_map_shader_from_admitted_ir() {
 }
 
 #[test]
-fn affine_f32_is_flattened_to_one_binary32_add() {
-    let shader = emit_map_shader(&lower_one(
+fn internal_affine_f32_ir_is_flattened_to_one_binary32_add() {
+    let shader = emit_map_shader(&lower_internal_one(
         "(numeric-buffer-map (lambda (x) (+ (+ x 10) -3)) #f32(1.0 2.0))",
     ))
     .unwrap();
@@ -31,8 +38,8 @@ fn affine_f32_is_flattened_to_one_binary32_add() {
 }
 
 #[test]
-fn emitter_cannot_bypass_semantic_admission() {
-    let error = emit_map_shader(&lower_one(
+fn emitter_rejects_non_affine_f32_ir() {
+    let error = emit_map_shader(&lower_internal_one(
         "(numeric-buffer-map (lambda (x) (+ x x)) #f32(1.0))",
     ))
     .unwrap_err();
