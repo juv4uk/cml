@@ -1,7 +1,8 @@
+use cml::ast::{Expr, NumericBufferLiteral};
 use cml::compute::{
     ComputeKernel, EffectClass, ExecutionShape, NumericDomain, ScalarExpr, StorageClass, analyze,
 };
-use cml::ir::{BufferLiteral, Ir};
+use cml::ir::{BufferLiteral, Ir, Params, PrimOp};
 use cml::{c_backend::CBackend, compiler::Compiler, lower, parser};
 
 fn lower_one(source: &str) -> Ir {
@@ -9,12 +10,19 @@ fn lower_one(source: &str) -> Ir {
     lower::lower_program(&expressions).unwrap().remove(0)
 }
 
-// Внутрішній IR-шлях без глобального semantic gate. Він потрібен лише для
-// перевірки вже наявних F32 представлення й аналізатора; source-програма з
-// #f32(...) лишається fail-closed у lower_program.
-fn lower_internal_one(source: &str) -> Ir {
-    let expressions = parser::parse(source).unwrap();
-    lower::lower_expr(&expressions[0]).unwrap()
+fn f32_map_ir(values: &[f32], body: Ir) -> Ir {
+    Ir::App {
+        func: Box::new(Ir::Builtin("NUMERIC-BUFFER-MAP".to_string())),
+        args: vec![
+            Ir::Lambda {
+                params: Params::Fixed(vec!["X".to_string()]),
+                body: Box::new(body),
+            },
+            Ir::Buffer(BufferLiteral::F32(
+                values.iter().map(|value| value.to_bits()).collect(),
+            )),
+        ],
+    }
 }
 
 #[test]
@@ -26,14 +34,14 @@ fn canonical_i32_buffer_lowers_without_losing_width_or_order() {
 }
 
 #[test]
-fn internal_f32_ir_preserves_binary32_bits() {
+fn parser_preserves_f32_bits_below_the_fail_closed_semantic_gate() {
     assert_eq!(
-        lower_internal_one("#f32(-0.0 0.1 3.0)"),
-        Ir::Buffer(BufferLiteral::F32(vec![
+        parser::parse("#f32(-0.0 0.1 3.0)").unwrap(),
+        vec![Expr::NumericBuffer(NumericBufferLiteral::F32(vec![
             (-0.0_f32).to_bits(),
             0.1_f32.to_bits(),
             3.0_f32.to_bits(),
-        ]))
+        ]))]
     );
 }
 
@@ -87,16 +95,24 @@ fn intermediate_i32_overflow_is_not_hidden_by_later_cancellation() {
 
 #[test]
 fn internal_affine_f32_ir_has_a_single_rounding_proof() {
-    let analysis = analyze(&lower_internal_one(
-        "(numeric-buffer-map (lambda (x) (+ x 0)) #f32(1.0 2.0))",
+    let analysis = analyze(&f32_map_ir(
+        &[1.0, 2.0],
+        Ir::Prim {
+            op: PrimOp::Add,
+            args: vec![Ir::Var("X".to_string()), Ir::Int(0)],
+        },
     ));
     assert!(analysis.gpu_eligible());
 }
 
 #[test]
 fn internal_non_affine_f32_ir_stays_blocked() {
-    let analysis = analyze(&lower_internal_one(
-        "(numeric-buffer-map (lambda (x) (+ x x)) #f32(1.0 2.0))",
+    let analysis = analyze(&f32_map_ir(
+        &[1.0, 2.0],
+        Ir::Prim {
+            op: PrimOp::Add,
+            args: vec![Ir::Var("X".to_string()), Ir::Var("X".to_string())],
+        },
     ));
     assert!(
         analysis
