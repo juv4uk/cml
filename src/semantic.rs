@@ -39,60 +39,21 @@ impl fmt::Display for SemanticError {
 
 impl std::error::Error for SemanticError {}
 
+// Generated CANON_UPPER_SURFACES / CANON_EXACT_SURFACES constants -- see
+// build.rs (cml#9): read from the real, vendored my-lisp
+// lib/surface/semantic-registry.wsm at build time, not hand-transcribed.
+include!(concat!(env!("OUT_DIR"), "/canon_spellings.rs"));
+
 /// Finite reserved Canon 0+7 surface spellings (EN / UK / SA / symbolic).
-/// Matching is case-insensitive for Latin identifiers; Ukrainian and Sanskrit
-/// surfaces are matched exactly as written (Unicode).
-///
-/// Source of truth: my-lisp Contract 6.0 + lib/surface/semantic-registry.wsm.
-/// Empty list `()` is a ground value, not a binder name, so it is absent.
+/// Matching is case-insensitive for Latin identifiers (`CANON_UPPER_SURFACES`,
+/// matching CML IR's own target-symbol uppercasing convention); Ukrainian and
+/// Sanskrit surfaces (`CANON_EXACT_SURFACES`) are matched exactly as written
+/// (Unicode) -- these scripts have no meaningful case-folding relationship to
+/// that convention. Empty list `()` is a ground value, not a binder name, so
+/// it is absent.
 fn is_reserved_canon_surface(name: &str) -> bool {
-    // Fast path: uppercase Latin historical + symbolic forms used by CML IR.
     let upper = name.to_uppercase();
-    matches!(
-        upper.as_str(),
-        "QUOTE"
-            | "ATOM"
-            | "EQ"
-            | "CONS"
-            | "CAR"
-            | "CDR"
-            | "COND"
-            // Symbolic keyboard surfaces (Ukrainian layout)
-            | "'"
-            | ".?"
-            | "=?"
-            | ":"
-            | ":П"
-            | ":Р"
-            | "?:"
-    ) || matches!(
-        name,
-        // Ukrainian surfaces
-        "як-є"
-            | "атом?"
-            | "тотожне?"
-            | "сполучити"
-            | "перше"
-            | "решта"
-            | "за-умовою"
-            // Sanskrit surfaces (IAST)
-            | "svarūpa"
-            | "aṇu"
-            | "abheda"
-            | "saṃyuj"
-            | "ādi"
-            | "śeṣa"
-            | "anukrama"
-            // Lowercase Latin already covered by uppercase path; keep explicit
-            // for documentation parity with my-lisp tests.
-            | "quote"
-            | "atom"
-            | "eq"
-            | "cons"
-            | "car"
-            | "cdr"
-            | "cond"
-    )
+    CANON_UPPER_SURFACES.contains(&upper.as_str()) || CANON_EXACT_SURFACES.contains(&name)
 }
 
 fn reject_if_reserved(name: &str) -> Result<(), SemanticError> {
