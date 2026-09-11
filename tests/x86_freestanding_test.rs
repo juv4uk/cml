@@ -576,11 +576,12 @@ fn out_of_line_named_self_tail_recursion_reuses_its_native_frame() {
     let executable = base.with_extension("bin");
     let canonical_t = wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX)
         .expect("the target must encode its canonical t symbol");
+    let nil = wsm_os_target::NIL;
     fs::write(&source, assembly).unwrap();
     fs::write(
         &harness,
         format!(
-            "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) {{ (void)ctx; return a == b ? 2 : 1; }}\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) {{ (void)ctx; (void)code; (void)a; (void)b; abort(); }}\nint main(void) {{ return wsm_entry(0) == {canonical_t}ULL ? 0 : 1; }}\n"
+            "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) {{ (void)ctx; return a == b ? {canonical_t}ULL : {nil}ULL; }}\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) {{ (void)ctx; (void)code; (void)a; (void)b; abort(); }}\nint main(void) {{ return wsm_entry(0) == {canonical_t}ULL ? 0 : 1; }}\n"
         ),
     )
     .unwrap();
@@ -697,10 +698,15 @@ fn ordinary_self_recursion_uses_real_calls_and_returns_its_value() {
     let source = base.with_extension("s");
     let harness = base.with_extension("c");
     let executable = base.with_extension("bin");
+    let canonical_t = wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX)
+        .expect("the target must encode its canonical t symbol");
+    let nil = wsm_os_target::NIL;
     fs::write(&source, assembly).unwrap();
     fs::write(
         &harness,
-        "#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) { (void)ctx; return a == b ? 2 : 1; }\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) { (void)ctx; (void)code; (void)a; (void)b; abort(); }\nint main(void) { uint64_t result = wsm_entry(0); printf(\"%llu\\n\", (unsigned long long)result); return result == 35 ? 0 : 1; }\n",
+        format!(
+            "#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) {{ (void)ctx; return a == b ? {canonical_t}ULL : {nil}ULL; }}\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) {{ (void)ctx; (void)code; (void)a; (void)b; abort(); }}\nint main(void) {{ uint64_t result = wsm_entry(0); printf(\"%llu\\n\", (unsigned long long)result); return result == 35 ? 0 : 1; }}\n"
+        ),
     )
     .unwrap();
     let linked = Command::new("cc")
@@ -766,10 +772,15 @@ fn mutual_recursion_runs_through_two_out_of_line_named_definitions() {
     let source = base.with_extension("s");
     let harness = base.with_extension("c");
     let executable = base.with_extension("bin");
+    let canonical_t = wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX)
+        .expect("the target must encode its canonical t symbol");
+    let nil = wsm_os_target::NIL;
     fs::write(&source, assembly).unwrap();
     fs::write(
         &harness,
-        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) { (void)ctx; return a == b ? 2 : 1; }\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) { (void)ctx; (void)code; (void)a; (void)b; abort(); }\nint main(void) { return wsm_entry(0) == 11 ? 0 : 1; }\n",
+        format!(
+            "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) {{ (void)ctx; return a == b ? {canonical_t}ULL : {nil}ULL; }}\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) {{ (void)ctx; (void)code; (void)a; (void)b; abort(); }}\nint main(void) {{ return wsm_entry(0) == 11 ? 0 : 1; }}\n"
+        ),
     )
     .unwrap();
     let linked = Command::new("cc")
@@ -871,10 +882,15 @@ fn four_function_named_cluster_calls_by_static_name() {
     let source = base.with_extension("s");
     let harness = base.with_extension("c");
     let executable = base.with_extension("bin");
+    let canonical_t = wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX)
+        .expect("the target must encode its canonical t symbol");
+    let nil = wsm_os_target::NIL;
     fs::write(&source, assembly).unwrap();
     fs::write(
         &harness,
-        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) { (void)ctx; return a == b ? 2 : 1; }\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) { (void)ctx; (void)code; (void)a; (void)b; abort(); }\nint main(void) { return wsm_entry(0) == 2403 ? 0 : 1; }\n",
+        format!(
+            "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) {{ (void)ctx; return a == b ? {canonical_t}ULL : {nil}ULL; }}\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) {{ (void)ctx; (void)code; (void)a; (void)b; abort(); }}\nint main(void) {{ return wsm_entry(0) == 2403 ? 0 : 1; }}\n"
+        ),
     )
     .unwrap();
     let linked = Command::new("cc")
