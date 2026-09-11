@@ -899,6 +899,59 @@ fn four_function_named_cluster_calls_by_static_name() {
 }
 
 #[test]
+fn top_level_data_only_def_is_evaluated_once_and_reread() {
+    // cml#8: `(def my-constant 41)` -- a top-level def whose value is not a
+    // lambda at all -- used to be unconditionally rejected
+    // ("def (non-fixed-arity lambda)", a misleading message since this
+    // isn't a lambda of any arity). Fixed by giving it the same evaluate-
+    // once-into-a-slot shape PR #7's closure descriptors already use: the
+    // value is computed once at wsm_entry startup into a dedicated
+    // .Ldata_word_N slot, and every Var read of the name reloads that slot.
+    let expressions = parser::parse(
+        "(def my-constant 41)\n         (def f (lambda (x) (+ x my-constant)))\n         (f 1)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("a top-level data-only def should compile");
+    assert!(assembly.contains(".Ldata_word_"));
+    assert!(assembly.contains("movabsq $331, %rax")); // 41 * 8 + 3, encoded once
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base =
+        std::env::temp_dir().join(format!("cml-data-only-def-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) { (void)ctx; (void)code; (void)a; (void)b; abort(); }\nint main(void) { return wsm_entry(0) == 339 ? 0 : 1; }\n",
+    )
+    .unwrap();
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(linked.status.success(), "data-only-def witness must link");
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(
+        run.status.success(),
+        "compiled (f 1) reading my-constant must return fixnum 42"
+    );
+}
+
+#[test]
 fn named_definition_uses_a_lexical_let_binding() {
     let expressions = parser::parse(
         "(def twice-plus-two (lambda (x)\n           (let ((once (+ x 1))) (+ once 1))))\n         (twice-plus-two 40)",

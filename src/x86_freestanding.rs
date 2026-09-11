@@ -143,7 +143,12 @@ impl X86FreestandingBackend {
                     ..
                 } = value.as_ref()
                 {
-                    def_arities.insert(name.clone(), params.len());
+                    def_arities.insert(name.clone(), Some(params.len()));
+                } else if !matches!(value.as_ref(), Ir::Lambda { .. }) {
+                    // cml#8: a data-only def is a known name (Var reads of it
+                    // are fine) but not callable (None, distinct from an
+                    // unknown name which is simply absent from the map).
+                    def_arities.insert(name.clone(), None);
                 }
             }
         }
@@ -176,16 +181,38 @@ impl X86FreestandingBackend {
             named_closure_definitions: BTreeMap::new(),
             functions: BTreeMap::new(),
             function_arities: def_arities.clone(),
+            data_defs: BTreeMap::new(),
         };
         // A top-level definition is executable code, not an expression to
         // fall through while `wsm_entry` is running. Reserve every entry
         // label before emitting the entry body, so calls are source-order
         // independent and bodies can live after `wsm_entry`'s `ret`.
         for expression in program {
-            if let Ir::Def { name, .. } = expression {
-                let label = emitter.allocate_label();
-                emitter.functions.insert(name.clone(), label);
+            if let Ir::Def { name, value } = expression {
+                if matches!(value.as_ref(), Ir::Lambda { .. }) {
+                    let label = emitter.allocate_label();
+                    emitter.functions.insert(name.clone(), label);
+                }
             }
+        }
+        // cml#8: a top-level def whose value is not a lambda at all gets a
+        // dedicated word slot instead of a `.Lfn_N` label -- it has no body
+        // to call, only a value to evaluate once and re-read. Initializers
+        // run in program order at startup, right after closure descriptors
+        // below, so a data def may reference an earlier data def or an
+        // already-registered function but not a later data def.
+        let data_def_exprs: Vec<(String, Ir)> = program
+            .iter()
+            .filter_map(|expression| match expression {
+                Ir::Def { name, value } if !matches!(value.as_ref(), Ir::Lambda { .. }) => {
+                    Some((name.clone(), value.as_ref().clone()))
+                }
+                _ => None,
+            })
+            .collect();
+        for (name, _) in &data_def_exprs {
+            let definition_id = emitter.allocate_label();
+            emitter.data_defs.insert(name.clone(), definition_id);
         }
         // Stage2: only top-level unary defs that are actually read as values
         // receive a closure identity. Direct calls stay direct `.Lfn_N` calls.
@@ -225,6 +252,11 @@ impl X86FreestandingBackend {
                 "    movq %rax, .Lnamed_closure_word_{definition_id}(%rip)"
             ));
         }
+        for (name, value) in &data_def_exprs {
+            emitter.emit_ir(value)?;
+            let definition_id = emitter.data_defs[name];
+            emitter.line(&format!("    movq %rax, .Ldata_word_{definition_id}(%rip)"));
+        }
         let mut has_entry_expression = false;
         for expression in program {
             if !matches!(expression, Ir::Def { .. }) {
@@ -242,9 +274,13 @@ impl X86FreestandingBackend {
         emitter.line("    ret");
         // Definition bodies are emitted out of line: reaching one requires
         // an explicit named call, never accidental entry-point fall-through.
+        // Data-only defs (cml#8) have no body here -- already fully handled
+        // by the startup initializer loop above.
         for expression in program {
-            if matches!(expression, Ir::Def { .. }) {
-                emitter.emit_ir(expression)?;
+            if let Ir::Def { value, .. } = expression {
+                if matches!(value.as_ref(), Ir::Lambda { .. }) {
+                    emitter.emit_ir(expression)?;
+                }
             }
         }
         // A first-class named unary function reuses its ordinary named body.
@@ -263,11 +299,16 @@ impl X86FreestandingBackend {
             emitter.line("    ret");
         }
         emitter.line(".size wsm_entry, .-wsm_entry");
-        if !named_closure_ids.is_empty() {
+        let data_def_ids: Vec<usize> = emitter.data_defs.values().copied().collect();
+        if !named_closure_ids.is_empty() || !data_def_ids.is_empty() {
             emitter.line(".section .bss");
             emitter.line(".align 8");
             for definition_id in named_closure_ids {
                 emitter.line(&format!(".Lnamed_closure_word_{definition_id}:"));
+                emitter.line("    .quad 0");
+            }
+            for definition_id in data_def_ids {
+                emitter.line(&format!(".Ldata_word_{definition_id}:"));
                 emitter.line("    .quad 0");
             }
         }
@@ -339,6 +380,7 @@ impl X86FreestandingBackend {
             named_closure_definitions: BTreeMap::new(),
             functions: BTreeMap::new(),
             function_arities: BTreeMap::new(),
+            data_defs: BTreeMap::new(),
         };
 
         emitter.line(".text");
@@ -397,7 +439,7 @@ fn contains_tail_self_call(ir: &Ir) -> bool {
 /// an actual first-class use instead of allocating descriptors for every def.
 fn collect_first_class_named_functions(
     program: &[Ir],
-    def_arities: &BTreeMap<String, usize>,
+    def_arities: &BTreeMap<String, Option<usize>>,
 ) -> Result<BTreeSet<String>, CompileError> {
     let mut out = BTreeSet::new();
     let bound = BTreeSet::new();
@@ -409,15 +451,18 @@ fn collect_first_class_named_functions(
 
 fn collect_first_class_named_refs(
     ir: &Ir,
-    def_arities: &BTreeMap<String, usize>,
+    def_arities: &BTreeMap<String, Option<usize>>,
     bound: &BTreeSet<String>,
     callee_position: bool,
     out: &mut BTreeSet<String>,
 ) -> Result<(), CompileError> {
     match ir {
         Ir::Var(name) if !callee_position && !bound.contains(name) => {
-            if let Some(&arity) = def_arities.get(name) {
-                if arity == 1 {
+            // cml#8: a data-only def (None) is an ordinary value read, not a
+            // first-class-function-value attempt -- only a real function
+            // entry (Some(arity)) is subject to the arity-1 gate below.
+            if let Some(Some(arity)) = def_arities.get(name) {
+                if *arity == 1 {
                     out.insert(name.clone());
                 } else {
                     return Err(CompileError::UnsupportedVariant(
@@ -476,7 +521,7 @@ fn collect_first_class_named_refs(
 fn preflight(
     ir: &Ir,
     symbols: &mut BTreeSet<String>,
-    def_arities: &mut BTreeMap<String, usize>,
+    def_arities: &mut BTreeMap<String, Option<usize>>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
     *slots += 1;
@@ -536,18 +581,28 @@ fn preflight(
                 }
             }
             if let Ir::Var(name) = func.as_ref() {
-                if let Some(&arity) = def_arities.get(name) {
-                    if args.len() != arity {
-                        return Err(CompileError::DefArityMismatch {
-                            name: name.clone(),
-                            expected: arity,
-                            actual: args.len(),
-                        });
+                match def_arities.get(name) {
+                    Some(Some(arity)) => {
+                        let arity = *arity;
+                        if args.len() != arity {
+                            return Err(CompileError::DefArityMismatch {
+                                name: name.clone(),
+                                expected: arity,
+                                actual: args.len(),
+                            });
+                        }
+                        for argument in args {
+                            preflight(argument, symbols, def_arities, slots)?;
+                        }
+                        return Ok(());
                     }
-                    for argument in args {
-                        preflight(argument, symbols, def_arities, slots)?;
+                    Some(None) => {
+                        // cml#8: name is a known data-only def, not callable.
+                        return Err(CompileError::UnsupportedVariant(
+                            "application of a data-only def",
+                        ));
                     }
-                    return Ok(());
+                    None => {}
                 }
             }
             if args.len() != 1 {
@@ -570,14 +625,28 @@ fn preflight(
             } = value.as_ref()
             {
                 let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
-                def_arities.insert(name.clone(), param_names.len());
+                def_arities.insert(name.clone(), Some(param_names.len()));
                 preflight_def_body(body, &bindings, symbols, def_arities, slots)?;
                 symbols.insert(name.clone());
                 return Ok(());
-            } else {
+            } else if matches!(value.as_ref(), Ir::Lambda { .. }) {
                 return Err(CompileError::UnsupportedVariant(
                     "def (non-fixed-arity lambda)",
                 ));
+            } else {
+                // A top-level def whose value is not a lambda at all -- an
+                // ordinary data binding (cml#8). Evaluated once at wsm_entry
+                // startup into a dedicated word slot, the same evaluate-once-
+                // into-a-slot shape PR #7's closure descriptors already use,
+                // not a callable and not admitted as one. The value
+                // expression itself still goes through ordinary preflight
+                // (it may be a quoted literal, a primitive call, another
+                // Var, etc.) -- only forward references to a *later* data
+                // def are not handled by this first slice, since data-def
+                // initializers run in program order at startup.
+                preflight(value, symbols, def_arities, slots)?;
+                symbols.insert(name.clone());
+                return Ok(());
             }
         }
         Ir::TailSelfCall { .. } => {
@@ -670,7 +739,7 @@ fn preflight_lambda_body(
 fn preflight_tail_body(
     ir: &Ir,
     symbols: &mut BTreeSet<String>,
-    def_arities: &mut BTreeMap<String, usize>,
+    def_arities: &mut BTreeMap<String, Option<usize>>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
     *slots += 1;
@@ -703,17 +772,19 @@ fn preflight_def_body(
     ir: &Ir,
     bindings: &BTreeSet<String>,
     symbols: &mut BTreeSet<String>,
-    def_arities: &mut BTreeMap<String, usize>,
+    def_arities: &mut BTreeMap<String, Option<usize>>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
     *slots += 1;
     match ir {
         Ir::Var(name) if bindings.contains(name) => Ok(()),
         Ir::Var(name) => match def_arities.get(name) {
-            Some(1) => Ok(()),
-            Some(_) => Err(CompileError::UnsupportedVariant(
+            Some(Some(1)) => Ok(()),
+            Some(Some(_)) => Err(CompileError::UnsupportedVariant(
                 "first-class named function (arity != 1)",
             )),
+            // cml#8: a data-only def is an ordinary value read.
+            Some(None) => Ok(()),
             None => Err(CompileError::UnsupportedVariant("unbound variable")),
         },
         Ir::Int(value) => {
@@ -754,18 +825,33 @@ fn preflight_def_body(
             }
             if let Ir::Var(name) = func.as_ref() {
                 if !bindings.contains(name) {
-                    if let Some(&arity) = def_arities.get(name) {
-                        if args.len() != arity {
-                            return Err(CompileError::DefArityMismatch {
-                                name: name.clone(),
-                                expected: arity,
-                                actual: args.len(),
-                            });
+                    match def_arities.get(name) {
+                        Some(Some(arity)) => {
+                            let arity = *arity;
+                            if args.len() != arity {
+                                return Err(CompileError::DefArityMismatch {
+                                    name: name.clone(),
+                                    expected: arity,
+                                    actual: args.len(),
+                                });
+                            }
+                            for argument in args {
+                                preflight_def_body(
+                                    argument,
+                                    bindings,
+                                    symbols,
+                                    def_arities,
+                                    slots,
+                                )?;
+                            }
+                            return Ok(());
                         }
-                        for argument in args {
-                            preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+                        Some(None) => {
+                            return Err(CompileError::UnsupportedVariant(
+                                "application of a data-only def",
+                            ));
                         }
-                        return Ok(());
+                        None => {}
                     }
                 }
             }
@@ -889,7 +975,12 @@ struct Emitter {
     closure_labels: Vec<usize>,
     named_closure_definitions: BTreeMap<String, usize>,
     functions: BTreeMap<String, usize>,
-    function_arities: BTreeMap<String, usize>,
+    function_arities: BTreeMap<String, Option<usize>>,
+    /// Top-level data-only defs (cml#8): name -> word-slot id, evaluated
+    /// once at wsm_entry startup, mirroring named_closure_definitions'
+    /// evaluate-once-into-a-slot shape but for ordinary values instead of
+    /// closure descriptors.
+    data_defs: BTreeMap<String, usize>,
 }
 
 impl Emitter {
@@ -942,6 +1033,9 @@ impl Emitter {
                     self.line(&format!(
                         "    movq .Lnamed_closure_word_{definition_id}(%rip), %rax"
                     ));
+                    Ok(())
+                } else if let Some(&definition_id) = self.data_defs.get(name) {
+                    self.line(&format!("    movq .Ldata_word_{definition_id}(%rip), %rax"));
                     Ok(())
                 } else {
                     Err(CompileError::UnsupportedVariant("Var (unbound)"))
