@@ -49,10 +49,8 @@ fn cpu_reference_refuses_unproven_overflow_and_semantics_refuse_f32() {
 
     // F32 зараз відсікається раніше за compute backend: це глобальна
     // fail-closed межа семантичного lowering, а не локальна політика CPU.
-    let expressions = parser::parse(
-        "(numeric-buffer-map (lambda (x) (+ x x)) #f32(1.0))",
-    )
-    .unwrap();
+    let expressions =
+        parser::parse("(numeric-buffer-map (lambda (x) (+ x x)) #f32(1.0))").unwrap();
     let float = lower::lower_program(&expressions)
         .expect_err("F32 buffer must be rejected before compute-backend admission");
     assert!(
