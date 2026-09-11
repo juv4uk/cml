@@ -837,6 +837,68 @@ fn two_argument_named_definition_uses_the_target_argument_registers() {
 }
 
 #[test]
+fn four_function_named_cluster_calls_by_static_name() {
+    // Proves the mutual-recursion mechanism already covered by
+    // mutual_recursion_runs_through_two_out_of_line_named_definitions
+    // generalizes past a pair: a 4-function cluster where each stage calls
+    // the next purely by static top-level name (self.functions is a real
+    // BTreeMap<String, usize>, not a hardcoded pair). This is the same
+    // "case 1" shape wsm-my-lisp's meta-eval.my chain (my-eval-cond ->
+    // my-eval -> my-eval-body -> my-apply) actually uses end to end --
+    // every branch resolves to a statically named call, never a generic
+    // indirect apply of a dynamically computed machine value.
+    let expressions = parser::parse(
+        "(def stage-a (lambda (n) (cond ((eq n 0) 100) (t (stage-b (- n 1))))))\n         (def stage-b (lambda (n) (cond ((eq n 0) 200) (t (stage-c (- n 1))))))\n         (def stage-c (lambda (n) (cond ((eq n 0) 300) (t (stage-d (- n 1))))))\n         (def stage-d (lambda (n) (cond ((eq n 0) 400) (t (stage-a (- n 1))))))\n         (stage-a 10)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("a 4-function named-call cluster should compile");
+    assert!(assembly.contains("call .Lfn_0"));
+    assert!(assembly.contains("call .Lfn_1"));
+    assert!(assembly.contains("call .Lfn_2"));
+    assert!(assembly.contains("call .Lfn_3"));
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!(
+        "cml-four-function-cluster-{}-{nonce}",
+        std::process::id()
+    ));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) { (void)ctx; return a == b ? 2 : 1; }\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) { (void)ctx; (void)code; (void)a; (void)b; abort(); }\nint main(void) { return wsm_entry(0) == 2403 ? 0 : 1; }\n",
+    )
+    .unwrap();
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "four-function-cluster witness must link"
+    );
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(
+        run.status.success(),
+        "compiled (stage-a 10) must cycle a->b->c->d->a->b->c->d->a->b->c and return fixnum 300"
+    );
+}
+
+#[test]
 fn named_definition_uses_a_lexical_let_binding() {
     let expressions = parser::parse(
         "(def twice-plus-two (lambda (x)\n           (let ((once (+ x 1))) (+ once 1))))\n         (twice-plus-two 40)",
