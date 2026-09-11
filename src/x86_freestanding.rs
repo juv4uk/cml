@@ -147,7 +147,8 @@ impl X86FreestandingBackend {
                 }
             }
         }
-        let first_class_named_functions = collect_first_class_named_functions(program, &def_arities)?;
+        let first_class_named_functions =
+            collect_first_class_named_functions(program, &def_arities)?;
         let mut slots = 0_usize;
         for expression in program {
             preflight(expression, &mut symbol_names, &mut def_arities, &mut slots)?;
@@ -746,13 +747,7 @@ fn preflight_def_body(
                         });
                     }
                     for argument in args {
-                        preflight_def_body(
-                            argument,
-                            bindings,
-                            symbols,
-                            def_arities,
-                            slots,
-                        )?;
+                        preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
                     }
                     return Ok(());
                 }
@@ -768,13 +763,7 @@ fn preflight_def_body(
                             });
                         }
                         for argument in args {
-                            preflight_def_body(
-                                argument,
-                                bindings,
-                                symbols,
-                                def_arities,
-                                slots,
-                            )?;
+                            preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
                         }
                         return Ok(());
                     }
