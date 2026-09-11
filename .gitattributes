@@ -8,3 +8,10 @@
 *.wsm linguist-language=Common-Lisp linguist-detectable=true -linguist-vendored -linguist-generated -linguist-documentation
 *.my linguist-language=Common-Lisp linguist-detectable=true -linguist-vendored -linguist-generated -linguist-documentation
 *.lisp linguist-language=Common-Lisp linguist-detectable=true -linguist-vendored -linguist-generated -linguist-documentation
+
+# Cyrillic-spelled equivalent extensions (owner decision 2026-09-10, cml#4):
+# file/surface spelling only, same Common-Lisp source, same parser/contract
+# path -- .wsm<->.всм, .my<->.мій, .lisp<->.лісп are equal, not translated.
+*.всм linguist-language=Common-Lisp linguist-detectable=true -linguist-vendored -linguist-generated -linguist-documentation
+*.мій linguist-language=Common-Lisp linguist-detectable=true -linguist-vendored -linguist-generated -linguist-documentation
+*.лісп linguist-language=Common-Lisp linguist-detectable=true -linguist-vendored -linguist-generated -linguist-documentation
