@@ -35,7 +35,7 @@ fn cpu_reference_preserves_empty_and_negative_buffers() {
 }
 
 #[test]
-fn cpu_reference_refuses_unproven_overflow_and_non_affine_f32_rounding() {
+fn cpu_reference_refuses_unproven_overflow_and_semantics_refuse_f32() {
     let overflow = CpuComputeBackend
         .execute(&lower_one(
             "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(2147483647))",
@@ -47,14 +47,16 @@ fn cpu_reference_refuses_unproven_overflow_and_non_affine_f32_rounding() {
             if blockers.contains(&AdmissionBlocker::IntegerOverflowNotProven)
     ));
 
-    let float = CpuComputeBackend
-        .execute(&lower_one(
-            "(numeric-buffer-map (lambda (x) (+ x x)) #f32(1.0))",
-        ))
-        .unwrap_err();
-    assert!(matches!(
-        float,
-        ComputeExecutionError::NotEligible(blockers)
-            if blockers.contains(&AdmissionBlocker::FloatRoundingNotDefined)
-    ));
+    // F32 зараз відсікається раніше за compute backend: це глобальна
+    // fail-closed межа семантичного lowering, а не локальна політика CPU.
+    let expressions = parser::parse(
+        "(numeric-buffer-map (lambda (x) (+ x x)) #f32(1.0))",
+    )
+    .unwrap();
+    let float = lower::lower_program(&expressions)
+        .expect_err("F32 buffer must be rejected before compute-backend admission");
+    assert!(
+        float.to_string().contains("UnsupportedF32Buffer"),
+        "unexpected F32 rejection: {float}"
+    );
 }
