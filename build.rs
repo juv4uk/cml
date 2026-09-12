@@ -23,6 +23,24 @@ use std::path::PathBuf;
 /// registry's own numbering, not any semantic ranking.
 const TARGET_IDS: &[&str] = &["0001", "0002", "0003", "0004", "0005", "0006", "0007"];
 
+/// cml#9 Finding 1: `lower.rs`'s special-form dispatch (quote/cond/lambda/
+/// define/defmacro) used to match only the hardcoded English spelling, so a
+/// source written with the Ukrainian or Sanskrit Canon surface for these
+/// forms was never recognized as a special form at all -- it fell through to
+/// a generic call against an unknown symbol. Each entry here is one dispatch
+/// form: a Rust constant-name prefix, plus the registry IDs whose surfaces
+/// all mean that one form. `define` merges two registry IDs on purpose: 0011
+/// is the canonical `define` spelling and 1000 is the explicitly
+/// compatibility-only `def` spelling cml has accepted from the start --
+/// both must keep dispatching to the same lowering path.
+const DISPATCH_FORMS: &[(&str, &[&str])] = &[
+    ("QUOTE", &["0001"]),
+    ("COND", &["0007"]),
+    ("LAMBDA", &["0010"]),
+    ("DEFINE", &["0011", "1000"]),
+    ("DEFMACRO", &["0012"]),
+];
+
 #[derive(Debug, Clone)]
 enum Sexp {
     Atom(String),
@@ -111,6 +129,63 @@ fn list(sexp: &Sexp) -> &[Sexp] {
     }
 }
 
+/// Read every non-placeholder surface for the given registry IDs, split by
+/// case-fold policy: `en`/`sym` surfaces are matched case-insensitively
+/// (uppercase-folded, same convention as ordinary symbol identifiers), `uk`/
+/// `sa` surfaces are matched by exact spelling. Panics (fails the build
+/// closed) if the registry has no entry for an ID, or an ID ends up with
+/// zero real surfaces across every language -- a silently empty dispatch
+/// set would make that Canon form permanently unrecognizable rather than a
+/// loud build failure.
+fn collect_surfaces(root: &[Sexp], ids: &[&str]) -> (Vec<String>, Vec<String>) {
+    let mut upper_surfaces: Vec<String> = Vec::new();
+    let mut exact_surfaces: Vec<String> = Vec::new();
+
+    for id in ids {
+        let entry = root
+            .iter()
+            .find(|form| matches!(form, Sexp::List(items) if !items.is_empty() && atom(&items[0]) == *id))
+            .unwrap_or_else(|| panic!("cml#9: semantic-registry.wsm has no entry for Canon id {id}"));
+        let fields = &list(entry)[1..];
+        let mut found_any = false;
+        for field in fields {
+            let parts = list(field);
+            if parts.len() < 2 {
+                continue;
+            }
+            let lang = atom(&parts[0]);
+            let word = atom(&parts[1]);
+            if word == "—" {
+                continue; // explicit "missing" placeholder, not a real surface.
+            }
+            match lang {
+                "en" | "sym" => {
+                    found_any = true;
+                    upper_surfaces.push(word.to_uppercase());
+                }
+                "uk" | "sa" => {
+                    found_any = true;
+                    exact_surfaces.push(word.to_string());
+                }
+                // Non-language annotations (e.g. `(compat defmacro-derived
+                // compatibility-only)` on 0012) describe provenance, not a
+                // spellable surface -- skip without counting or rejecting.
+                "compat" => {}
+                other => panic!("cml#9: unknown surface language {other:?} for id {id}"),
+            }
+        }
+        if !found_any {
+            panic!("cml#9: Canon id {id} has zero real surfaces in semantic-registry.wsm");
+        }
+    }
+
+    upper_surfaces.sort();
+    upper_surfaces.dedup();
+    exact_surfaces.sort();
+    exact_surfaces.dedup();
+    (upper_surfaces, exact_surfaces)
+}
+
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set");
     let registry_path = PathBuf::from(&manifest_dir)
@@ -145,42 +220,7 @@ fn main() {
             panic!("cml#9: no top-level (sr/1 ...) form found in semantic-registry.wsm")
         });
 
-    let mut upper_surfaces: Vec<String> = Vec::new();
-    let mut exact_surfaces: Vec<String> = Vec::new();
-
-    for id in TARGET_IDS {
-        let entry = root
-            .iter()
-            .find(|form| matches!(form, Sexp::List(items) if !items.is_empty() && atom(&items[0]) == *id))
-            .unwrap_or_else(|| panic!("cml#9: semantic-registry.wsm has no entry for Canon id {id}"));
-        let fields = &list(entry)[1..];
-        let mut found_any = false;
-        for field in fields {
-            let parts = list(field);
-            if parts.len() < 2 {
-                continue;
-            }
-            let lang = atom(&parts[0]);
-            let word = atom(&parts[1]);
-            if word == "—" {
-                continue; // explicit "missing" placeholder, not a real surface.
-            }
-            found_any = true;
-            match lang {
-                "en" | "sym" => upper_surfaces.push(word.to_uppercase()),
-                "uk" | "sa" => exact_surfaces.push(word.to_string()),
-                other => panic!("cml#9: unknown surface language {other:?} for id {id}"),
-            }
-        }
-        if !found_any {
-            panic!("cml#9: Canon id {id} has zero real surfaces in semantic-registry.wsm");
-        }
-    }
-
-    upper_surfaces.sort();
-    upper_surfaces.dedup();
-    exact_surfaces.sort();
-    exact_surfaces.dedup();
+    let (upper_surfaces, exact_surfaces) = collect_surfaces(root, TARGET_IDS);
 
     let mut generated = String::new();
     generated.push_str("// @generated by build.rs from my-lisp/lib/surface/semantic-registry.wsm (cml#9). Do not edit by hand.\n");
@@ -194,6 +234,23 @@ fn main() {
         generated.push_str(&format!("    {surface:?},\n"));
     }
     generated.push_str("];\n");
+
+    // cml#9 Finding 1: one upper/exact surface pair per Canon dispatch form,
+    // so lower.rs can recognize quote/cond/lambda/define/defmacro written in
+    // any Canon-registered language, not only English.
+    for (name, ids) in DISPATCH_FORMS {
+        let (upper, exact) = collect_surfaces(root, ids);
+        generated.push_str(&format!("pub const CANON_{name}_UPPER: &[&str] = &[\n"));
+        for surface in &upper {
+            generated.push_str(&format!("    {surface:?},\n"));
+        }
+        generated.push_str("];\n");
+        generated.push_str(&format!("pub const CANON_{name}_EXACT: &[&str] = &[\n"));
+        for surface in &exact {
+            generated.push_str(&format!("    {surface:?},\n"));
+        }
+        generated.push_str("];\n");
+    }
 
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR must be set");
     let out_path = PathBuf::from(out_dir).join("canon_spellings.rs");

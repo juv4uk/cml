@@ -237,20 +237,38 @@ fn lower_expr_admitted(expr: &Expr, env: &Env) -> Result<Ir, LowerError> {
     }
 }
 
+/// cml#9 Finding 1: true if `s` is a special-form spelling in ANY
+/// Canon-registered language (quote/cond/lambda/define/defmacro), not only
+/// the hardcoded English one. `let` has no Canon registry entry -- it is a
+/// cml-only construct -- so it stays English-only on purpose.
+fn is_special_form_symbol(s: &str, upper: &str) -> bool {
+    use crate::canon::{
+        CANON_COND_EXACT, CANON_COND_UPPER, CANON_DEFINE_EXACT, CANON_DEFINE_UPPER,
+        CANON_DEFMACRO_EXACT, CANON_DEFMACRO_UPPER, CANON_LAMBDA_EXACT, CANON_LAMBDA_UPPER,
+        CANON_QUOTE_EXACT, CANON_QUOTE_UPPER, is_canon_form,
+    };
+    upper == "LET"
+        || is_canon_form(s, CANON_QUOTE_UPPER, CANON_QUOTE_EXACT)
+        || is_canon_form(s, CANON_COND_UPPER, CANON_COND_EXACT)
+        || is_canon_form(s, CANON_LAMBDA_UPPER, CANON_LAMBDA_EXACT)
+        || is_canon_form(s, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT)
+        || is_canon_form(s, CANON_DEFMACRO_UPPER, CANON_DEFMACRO_EXACT)
+}
+
 fn lower_symbol(s: &str, env: &Env) -> Result<Ir, LowerError> {
     let upper = s.to_uppercase();
+    if is_special_form_symbol(s, &upper) {
+        return if env.is_bound(&upper) {
+            Ok(Ir::Var(upper))
+        } else {
+            Err(LowerError::invalid_form(
+                "special forms are not callable values",
+            ))
+        };
+    }
     match upper.as_str() {
         "T" => Ok(Ir::True),
         "NIL" => Ok(Ir::Nil),
-        "QUOTE" | "COND" | "LAMBDA" | "LET" | "DEF" | "DEFMACRO" => {
-            if env.is_bound(&upper) {
-                Ok(Ir::Var(upper))
-            } else {
-                Err(LowerError::invalid_form(
-                    "special forms are not callable values",
-                ))
-            }
-        }
         "CONS" | "CAR" | "CDR" | "EQ" | "ATOM" | "EQUAL?" | "+" | "-" | "NUMERIC-BUFFER-MAP" => {
             if env.is_bound(&upper) {
                 Ok(Ir::Var(upper))
@@ -274,14 +292,30 @@ fn lower_list(list: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 }
 
 fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
-    match func {
-        "quote" if args.len() == 1 => return Ok(Ir::Quote(lower_quoted(&args[0])?)),
-        "quote" => return Err(LowerError::arity("quote expects exactly one argument")),
-        "cond" => return lower_cond(args, env),
-        "lambda" if args.len() >= 2 => return lower_lambda(args, env),
-        "let" if args.len() == 2 => return lower_let(args, env),
-        "def" if args.len() == 2 => return lower_def(args, env),
-        _ => {}
+    use crate::canon::{
+        CANON_COND_EXACT, CANON_COND_UPPER, CANON_DEFINE_EXACT, CANON_DEFINE_UPPER,
+        CANON_LAMBDA_EXACT, CANON_LAMBDA_UPPER, CANON_QUOTE_EXACT, CANON_QUOTE_UPPER,
+        is_canon_form,
+    };
+    // cml#9 Finding 1: dispatch on the Canon identity of `func` (any
+    // registered language), not only its English spelling.
+    if is_canon_form(func, CANON_QUOTE_UPPER, CANON_QUOTE_EXACT) {
+        return match args {
+            [single] => Ok(Ir::Quote(lower_quoted(single)?)),
+            _ => Err(LowerError::arity("quote expects exactly one argument")),
+        };
+    }
+    if is_canon_form(func, CANON_COND_UPPER, CANON_COND_EXACT) {
+        return lower_cond(args, env);
+    }
+    if is_canon_form(func, CANON_LAMBDA_UPPER, CANON_LAMBDA_EXACT) && args.len() >= 2 {
+        return lower_lambda(args, env);
+    }
+    if func == "let" && args.len() == 2 {
+        return lower_let(args, env);
+    }
+    if is_canon_form(func, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT) && args.len() == 2 {
+        return lower_def(args, env);
     }
 
     let upper = func.to_uppercase();
