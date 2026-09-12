@@ -267,7 +267,16 @@ fn lower_symbol(s: &str, env: &Env) -> Result<Ir, LowerError> {
         };
     }
     match upper.as_str() {
+        // `t`/`nil` are not in the Canon 0+7 reserved set (semantic.rs) --
+        // my-lisp treats them as ordinary lexical bindings, shadowable the
+        // same way `car`/`cons`/etc already are below. A lexical binding
+        // named `t` or `nil` (e.g. a lambda parameter) must resolve to that
+        // binding, not silently collapse into the literal, or a real
+        // program using `t`/`nil` as an ordinary name would observe wrong
+        // values with no error at all.
+        "T" if env.is_bound(&upper) => Ok(Ir::Var(upper)),
         "T" => Ok(Ir::True),
+        "NIL" if env.is_bound(&upper) => Ok(Ir::Var(upper)),
         "NIL" => Ok(Ir::Nil),
         "CONS" | "CAR" | "CDR" | "EQ" | "ATOM" | "EQUAL?" | "+" | "-" | "NUMERIC-BUFFER-MAP" => {
             if env.is_bound(&upper) {

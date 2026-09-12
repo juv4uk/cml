@@ -75,6 +75,49 @@ fn special_form_as_value_still_rejected() {
 }
 
 #[test]
+fn lambda_parameter_named_t_shadows_the_literal_true() {
+    // Raised by my-lisp while reviewing a cml x86 witness: `t` is not in
+    // the Canon 0+7 reserved set (unlike `car`/`cons`/etc), so my-lisp
+    // treats it as an ordinary shadowable lexical binding, not a reserved
+    // literal. Before this fix, lower_symbol hardcoded `T` -> Ir::True
+    // unconditionally, so `(lambda (t) t)` silently ignored its own
+    // parameter and always returned the literal true -- a real semantic
+    // divergence from my-lisp with no error at all.
+    let source = "(def f (lambda (t) t)) (f (quote hi))";
+    let expressions = parser::parse(source).unwrap();
+    let program = lower_expr(&expressions[0]).unwrap();
+    match program {
+        Ir::Def { value, .. } => match *value {
+            Ir::Lambda { body, .. } => {
+                assert_eq!(*body, Ir::Var("T".to_string()));
+            }
+            other => panic!("expected Lambda, got {other:?}"),
+        },
+        other => panic!("expected Def, got {other:?}"),
+    }
+}
+
+#[test]
+fn lambda_parameter_named_nil_shadows_the_literal_nil() {
+    let source = "(lambda (nil) nil)";
+    let expressions = parser::parse(source).unwrap();
+    let ir = lower_expr(&expressions[0]).unwrap();
+    match ir {
+        Ir::Lambda { body, .. } => assert_eq!(*body, Ir::Var("NIL".to_string())),
+        other => panic!("expected Lambda, got {other:?}"),
+    }
+}
+
+#[test]
+fn unbound_t_and_nil_still_lower_to_the_literal() {
+    // The fix must not break the ordinary, unshadowed case.
+    let source = "(quote ()) t nil";
+    let expressions = parser::parse(source).unwrap();
+    assert_eq!(lower_expr(&expressions[1]).unwrap(), Ir::True);
+    assert_eq!(lower_expr(&expressions[2]).unwrap(), Ir::Nil);
+}
+
+#[test]
 fn non_canon_builtin_remains_shadowable() {
     // + is not Canon 0+7
     let source = "(let ((+ 99)) +)";
