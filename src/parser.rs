@@ -31,8 +31,16 @@ fn tokenize(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut in_string = false;
+    let mut in_comment = false;
 
     for c in input.chars() {
+        if in_comment {
+            if c == '\n' {
+                in_comment = false;
+            }
+            continue;
+        }
+
         if in_string {
             current.push(c);
             if c == '"' {
@@ -44,6 +52,13 @@ fn tokenize(input: &str) -> Vec<String> {
         }
 
         match c {
+            ';' => {
+                if !current.is_empty() {
+                    tokens.push(current.clone());
+                    current.clear();
+                }
+                in_comment = true;
+            }
             '(' | ')' => {
                 if !current.is_empty() {
                     tokens.push(current.clone());
@@ -309,4 +324,62 @@ fn parse_list(
         list.push(parse_expr(tokens)?);
     }
     Err(ParseError::UnexpectedEOF)
+}
+
+#[cfg(test)]
+mod comment_tests {
+    use super::*;
+
+    // Real cml bug found while binary-searching why the whole of my-lisp's
+    // lib/meta-eval.my failed to compile ("special forms are not callable
+    // values" on a bare Symbol("lambda")): the tokenizer had no `;`
+    // line-comment handling at all, so ordinary prose in doc comments (e.g.
+    // "... variadic/dotted lambda parameter binding ...") was tokenized as
+    // source code. Every ordinary word became its own top-level Symbol
+    // expression, and any comment word that happened to match a special-form
+    // name (lambda/cond/def/...) was then rejected by lower_symbol as an
+    // unbound special-form value. The file was never wrong.
+    #[test]
+    fn trailing_line_comment_after_an_expression_is_ignored() {
+        let exprs = parse("(quote a) ; this is a comment\n(quote b)").unwrap();
+        assert_eq!(
+            exprs,
+            vec![
+                Expr::List(vec![Expr::Symbol("quote".into()), Expr::Symbol("a".into())]),
+                Expr::List(vec![Expr::Symbol("quote".into()), Expr::Symbol("b".into())]),
+            ]
+        );
+    }
+
+    #[test]
+    fn comment_containing_a_special_form_name_is_not_parsed_as_code() {
+        // Before the fix this produced a bare `Symbol("lambda")` top-level
+        // expression from the comment text alone.
+        let exprs = parse("; variadic/dotted lambda parameter binding\n(quote ok)").unwrap();
+        assert_eq!(
+            exprs,
+            vec![Expr::List(vec![
+                Expr::Symbol("quote".into()),
+                Expr::Symbol("ok".into())
+            ])]
+        );
+    }
+
+    #[test]
+    fn semicolon_inside_a_string_literal_is_not_a_comment() {
+        let exprs = parse("(quote \"a;b\")").unwrap();
+        assert_eq!(
+            exprs,
+            vec![Expr::List(vec![
+                Expr::Symbol("quote".into()),
+                Expr::String("a;b".into())
+            ])]
+        );
+    }
+
+    #[test]
+    fn a_file_consisting_only_of_comments_parses_as_empty() {
+        let exprs = parse("; just a comment\n; another one").unwrap();
+        assert!(exprs.is_empty());
+    }
 }
