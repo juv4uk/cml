@@ -1063,6 +1063,75 @@ fn named_definition_allocates_a_list_through_the_asm_nucleus() {
 }
 
 #[test]
+fn standalone_cond_true_false_branch_selection_witness() {
+    // Requested by wsm-my-lisp for their Stage2 my-eval-cond parity work
+    // (wsm-my-lisp#6/#15). IMPORTANT SCOPE NOTE, agreed with wsm-my-lisp:
+    // this is a hand-written, STANDALONE fixture for the shape
+    // `(cond (() (quote wrong)) (t (quote right)))` -- it is NOT compiled
+    // from a call into the real my-lisp lib/meta-eval.my evaluator (my-eval
+    // / my-eval-cond / my-apply). That whole real call graph currently
+    // fails to compile through this backend with "unsupported IR in
+    // x86_64-freestanding backend: application", because my-apply /
+    // my-eval-application-result dispatch through a first-class function
+    // *value* passed at runtime (via result-tuples), which this backend's
+    // preflight does not admit yet -- only fixed-arity named calls and
+    // self-tail recursion are. That gap is real, larger, separate work
+    // (general first-class application support), not something this test
+    // resolves. Treat this witness as "related, not confirmed" evidence
+    // for the Cond half of my-eval-cond's shape, per wsm-my-lisp's own
+    // compiler-oracle-corpus-parity labeling convention -- not a closure
+    // of the Stage2 my-eval-cond gate itself.
+    let expressions = parser::parse("(cond (() (quote wrong)) (t (quote right)))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("a two-branch literal cond should compile");
+
+    let right_word = wsm_os_target::encode_symbol(1).expect("first interned symbol encodes");
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!(
+        "cml-standalone-cond-witness-{}-{nonce}",
+        std::process::id()
+    ));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, &assembly).unwrap();
+    fs::write(
+        &harness,
+        format!(
+            "#include <stdint.h>\nextern uint64_t wsm_entry(void *);\nint main(void) {{ return wsm_entry(0) == {right_word}ULL ? 0 : 1; }}\n"
+        ),
+    )
+    .unwrap();
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "standalone cond witness must link: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(
+        run.status.success(),
+        "compiled (cond (() (quote wrong)) (t (quote right))) must select \
+         the `t` branch and return the `right` symbol, not `wrong`"
+    );
+}
+
+#[test]
 fn quoted_symbols_differing_only_by_case_are_not_eq() {
     // cml#13: before this fix, lower.rs's lower_quoted uppercased every
     // quoted symbol's text before it ever reached a backend, so `radio` and
