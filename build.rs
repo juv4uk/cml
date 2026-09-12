@@ -23,6 +23,12 @@ use std::path::PathBuf;
 /// registry's own numbering, not any semantic ranking.
 const TARGET_IDS: &[&str] = &["0001", "0002", "0003", "0004", "0005", "0006", "0007"];
 
+/// Callable McCarthy primitives whose semantic identity must survive surface
+/// spelling changes. The generated output keeps the numeric ID attached to
+/// every admitted surface so lowering can dispatch surface -> semantic ID ->
+/// compiler mechanism instead of spelling -> compiler mechanism.
+const CALLABLE_IDS: &[&str] = &["0002", "0003", "0004", "0005", "0006"];
+
 /// cml#9 Finding 1: `lower.rs`'s special-form dispatch (quote/cond/lambda/
 /// define/defmacro) used to match only the hardcoded English spelling, so a
 /// source written with the Ukrainian or Sanskrit Canon surface for these
@@ -232,6 +238,27 @@ fn main() {
     generated.push_str("pub const CANON_EXACT_SURFACES: &[&str] = &[\n");
     for surface in &exact_surfaces {
         generated.push_str(&format!("    {surface:?},\n"));
+    }
+    generated.push_str("];\n");
+
+    // Preserve the semantic ID alongside each callable surface. This keeps
+    // human spelling out of lowering's mechanism dispatch and makes registry
+    // drift visible at build time instead of silently creating new meaning.
+    generated.push_str("pub const CANON_CALLABLE_UPPER: &[(&str, &str)] = &[\n");
+    let mut callable_exact = Vec::new();
+    for id in CALLABLE_IDS {
+        let (upper, exact) = collect_surfaces(root, &[*id]);
+        for surface in upper {
+            generated.push_str(&format!("    ({surface:?}, {id:?}),\n"));
+        }
+        for surface in exact {
+            callable_exact.push((surface, *id));
+        }
+    }
+    generated.push_str("];\n");
+    generated.push_str("pub const CANON_CALLABLE_EXACT: &[(&str, &str)] = &[\n");
+    for (surface, id) in callable_exact {
+        generated.push_str(&format!("    ({surface:?}, {id:?}),\n"));
     }
     generated.push_str("];\n");
 
