@@ -165,8 +165,11 @@ fn collect_backend_symbol_names(ir: &Ir, out: &mut BTreeSet<String>) {
 
 fn collect_quoted_symbol_names(quoted: &Quoted, out: &mut BTreeSet<String>) {
     match quoted {
-        Quoted::Sym(name) => {
-            out.insert(name.to_uppercase());
+        // cml#13: exact original spelling, matching the preflight/emission
+        // symbol-table key in x86_freestanding.rs -- not the uppercased
+        // target-identifier convention other backends use.
+        Quoted::Sym { original, .. } => {
+            out.insert(original.clone());
         }
         Quoted::List(values) => {
             for value in values {
@@ -194,7 +197,10 @@ mod tests {
     #[test]
     fn ordinary_quoted_symbol_has_stable_compiler_owned_mapping() {
         let backend = X86FreestandingBackend::new();
-        let program = [Ir::Quote(Quoted::Sym("radio".to_string()))];
+        let program = [Ir::Quote(Quoted::Sym {
+            uppercased: "RADIO".to_string(),
+            original: "radio".to_string(),
+        })];
 
         let first = backend.compile_program_with_metadata(&program).unwrap();
         let second = backend.compile_program_with_metadata(&program).unwrap();
@@ -202,15 +208,16 @@ mod tests {
         assert!(first.validate_symbol_metadata());
 
         let expected_word = wsm_os_target::encode_symbol(1).unwrap();
+        // cml#13: exact my-lisp spelling, not an uppercase reconstruction.
         assert_eq!(
             first.symbols,
             vec![X86SymbolMetadata {
-                name: "RADIO".to_string(),
+                name: "radio".to_string(),
                 id: 1,
                 encoded_word: expected_word,
             }]
         );
-        assert_eq!(first.symbol_name_for_word(expected_word), Some("RADIO"));
+        assert_eq!(first.symbol_name_for_word(expected_word), Some("radio"));
         assert!(first.assembly.contains(&expected_word.to_string()));
     }
 
@@ -218,12 +225,18 @@ mod tests {
     fn metadata_mutation_is_detectable_and_canonical_t_cannot_be_an_ordinary_symbol() {
         let backend = X86FreestandingBackend::new();
         let program = [Ir::Quote(Quoted::List(vec![
-            Quoted::Sym("zeta".to_string()),
-            Quoted::Sym("alpha".to_string()),
+            Quoted::Sym {
+                uppercased: "ZETA".to_string(),
+                original: "zeta".to_string(),
+            },
+            Quoted::Sym {
+                uppercased: "ALPHA".to_string(),
+                original: "alpha".to_string(),
+            },
         ]))];
         let compiled = backend.compile_program_with_metadata(&program).unwrap();
-        assert_eq!(compiled.symbols[0].name, "ALPHA");
-        assert_eq!(compiled.symbols[1].name, "ZETA");
+        assert_eq!(compiled.symbols[0].name, "alpha");
+        assert_eq!(compiled.symbols[1].name, "zeta");
         assert!(compiled.validate_symbol_metadata());
 
         let mut mutated = compiled.clone();

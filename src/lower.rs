@@ -453,7 +453,10 @@ fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
         // unquoted Expr::String -> Ir::String arm above, which already
         // preserves case), and must never touch string content.
         Expr::String(s) => Ok(Quoted::Str(s.clone())),
-        Expr::Symbol(s) => Ok(Quoted::Sym(s.to_uppercase())),
+        Expr::Symbol(s) => Ok(Quoted::Sym {
+            uppercased: s.to_uppercase(),
+            original: s.clone(),
+        }),
         Expr::List(list) => {
             if list.is_empty() {
                 Ok(Quoted::Nil)

@@ -916,8 +916,11 @@ fn preflight_quoted(
         Quoted::Int(value) => {
             wsm_os_target::encode_fixnum(*value).ok_or(CompileError::FixnumOutOfRange(*value))?;
         }
-        Quoted::Sym(name) => {
-            symbols.insert(name.to_uppercase());
+        // cml#13: preserve my-lisp's exact quoted-symbol data identity --
+        // `original`, not the uppercased target-identifier convention other
+        // backends key on. `radio` and `RADIO` must stay distinct symbols.
+        Quoted::Sym { original, .. } => {
+            symbols.insert(original.clone());
         }
         // The wsm-os target ABI has image-local symbols but no string
         // representation. Do not silently collapse a persistent WSM FS
@@ -1451,7 +1454,10 @@ impl Emitter {
     }
 
     fn emit_symbol(&mut self, name: &str) {
-        let id = self.symbols[&name.to_uppercase()];
+        // cml#13: `self.symbols` is now keyed by exact original spelling
+        // (see the preflight Quoted::Sym arm) -- must not re-uppercase here,
+        // that would look up the wrong (and possibly absent) key.
+        let id = self.symbols[name];
         let word = wsm_os_target::encode_symbol(id).expect("preflight assigned valid symbol id");
         self.emit_immediate(word);
     }
@@ -1488,7 +1494,7 @@ impl Emitter {
                     .ok_or(CompileError::FixnumOutOfRange(*value))?;
                 self.emit_immediate(word);
             }
-            Quoted::Sym(name) => self.emit_symbol(name),
+            Quoted::Sym { original, .. } => self.emit_symbol(original),
             Quoted::Str(_) => {
                 return Err(CompileError::UnsupportedVariant(
                     "quoted string (target ABI has no string representation)",

@@ -19,7 +19,18 @@ pub enum Quoted {
     Int(i64),
     Float(f64),
     Rational(i64, u64),
-    Sym(String),
+    /// cml#13: a quoted symbol carries both forms without picking one at
+    /// lowering time. `uppercased` is cml's historical target-identifier
+    /// convention (fpga-lisp/C backends key their symbol tables on it,
+    /// unchanged); `original` is the exact spelling `my-lisp` admitted as
+    /// data identity (e.g. `radio` vs `RADIO` stay distinct). A backend
+    /// that needs `eq`-correct quoted-symbol data identity (x86
+    /// freestanding) reads `original`; a backend that has always keyed on
+    /// the uppercased form keeps doing exactly that, unaffected.
+    Sym {
+        uppercased: String,
+        original: String,
+    },
     Str(String),
     Nil,
     List(Vec<Quoted>),

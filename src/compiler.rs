@@ -116,7 +116,7 @@ fn validate_quoted(q: &Quoted) -> Result<(), CompileError> {
             items.iter().try_for_each(validate_quoted)?;
             validate_quoted(tail)
         }
-        Quoted::Str(_) | Quoted::Sym(_) | Quoted::Nil => Ok(()),
+        Quoted::Str(_) | Quoted::Sym { .. } | Quoted::Nil => Ok(()),
         Quoted::Float(_) => Err(CompileError::UnsupportedVariant("Quoted::Float")),
         Quoted::Rational(_, _) => Err(CompileError::UnsupportedVariant("Quoted::Rational")),
     }
@@ -471,7 +471,12 @@ impl Compiler {
         match q {
             Quoted::Int(n) => self.emit_integer_literal(*n, target_reg),
             Quoted::Str(s) => self.emit(&format!("LOADSYM {} {}", target_reg, s)),
-            Quoted::Sym(s) => self.emit(&format!("LOADSYM {} {}", target_reg, s)),
+            // fpga-lisp keys its symbol/label table on the uppercased form,
+            // exactly as before cml#13 -- unaffected by that fix, which is
+            // scoped to backends that need my-lisp's own exact spelling.
+            Quoted::Sym { uppercased, .. } => {
+                self.emit(&format!("LOADSYM {} {}", target_reg, uppercased))
+            }
             Quoted::Nil => {
                 self.emit("LOADI R13 0");
                 self.emit("LOADI R12 1");

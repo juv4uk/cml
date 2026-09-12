@@ -110,8 +110,14 @@ fn primitive_slice_uses_only_ratified_runtime_imports() {
 fn symbols_are_image_local_and_ordered_independently_of_traversal() {
     let assembly = X86FreestandingBackend::new()
         .compile_program(&[
-            Ir::Quote(Quoted::Sym("Z".to_string())),
-            Ir::Quote(Quoted::Sym("A".to_string())),
+            Ir::Quote(Quoted::Sym {
+                uppercased: "Z".to_string(),
+                original: "Z".to_string(),
+            }),
+            Ir::Quote(Quoted::Sym {
+                uppercased: "A".to_string(),
+                original: "A".to_string(),
+            }),
         ])
         .unwrap();
     let a = wsm_os_target::encode_symbol(1).unwrap();
@@ -1053,5 +1059,76 @@ fn named_definition_allocates_a_list_through_the_asm_nucleus() {
     assert!(
         run.status.success(),
         "singleton must preserve its car through asm nucleus"
+    );
+}
+
+#[test]
+fn quoted_symbols_differing_only_by_case_are_not_eq() {
+    // cml#13: before this fix, lower.rs's lower_quoted uppercased every
+    // quoted symbol's text before it ever reached a backend, so `radio` and
+    // `RADIO` collided into the single string "RADIO" -- (eq (quote radio)
+    // (quote RADIO)) compiled to comparing a word against itself and always
+    // returned t. my-lisp's own reader/eval treats quoted symbols as
+    // ordinary case-sensitive data (verified directly against the oracle:
+    // symbol identity is exact-string, not case-folded), so cml's x86
+    // backend must preserve that: `radio` and `RADIO` are two distinct
+    // image-local symbols, and comparing them via the real `eq` primitive
+    // must yield NIL, not the manufactured `t`.
+    //
+    // This is deliberately an executable, real compile+link+run witness
+    // (not only an assembly-shape assertion), because the bug was in
+    // *value* identity, observable only by actually running the eq
+    // primitive against the compiled words -- matching cml#13's own
+    // acceptance criterion.
+    let expressions = parser::parse("(eq (quote radio) (quote RADIO))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("eq over two case-distinct quoted symbols should compile");
+
+    let canonical_t = wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX)
+        .expect("the target must encode its canonical t symbol");
+    let nil = wsm_os_target::NIL;
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!(
+        "cml-symbol-case-identity-{}-{nonce}",
+        std::process::id()
+    ));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        format!(
+            "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) {{ (void)ctx; return a == b ? {canonical_t}ULL : {nil}ULL; }}\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) {{ (void)ctx; (void)code; (void)a; (void)b; abort(); }}\nint main(void) {{ return wsm_entry(0) == {nil}ULL ? 0 : 1; }}\n"
+        ),
+    )
+    .unwrap();
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "symbol-case-identity witness must link: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(
+        run.status.success(),
+        "compiled (eq (quote radio) (quote RADIO)) must return NIL: \
+         `radio` and `RADIO` are distinct quoted-symbol data, not the same \
+         identifier merged by case-folding"
     );
 }

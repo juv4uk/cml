@@ -648,7 +648,11 @@ impl CBackend {
             Quoted::Int(n) => Ok(format!("mk_int({n})")),
             Quoted::Float(_) => Err(CompileError::UnsupportedVariant("Quoted::Float")),
             Quoted::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
-            Quoted::Sym(s) | Quoted::Str(s) => Ok(format!("mk_sym(\"{s}\")")),
+            // c_backend.rs keys its symbol representation on the uppercased
+            // form, exactly as before cml#13 -- unaffected by that fix,
+            // which is scoped to the x86 freestanding backend.
+            Quoted::Sym { uppercased, .. } => Ok(format!("mk_sym(\"{uppercased}\")")),
+            Quoted::Str(s) => Ok(format!("mk_sym(\"{s}\")")),
             Quoted::Nil => Ok("(&NIL_V)".to_string()),
             Quoted::List(items) => {
                 let mut acc = "(&NIL_V)".to_string();

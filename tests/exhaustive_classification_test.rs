@@ -9,7 +9,10 @@ fn all_quoted() -> Vec<Quoted> {
         Quoted::Int(42),
         Quoted::Float(3.14),
         Quoted::Rational(1, 2),
-        Quoted::Sym("foo".to_string()),
+        Quoted::Sym {
+            uppercased: "FOO".to_string(),
+            original: "foo".to_string(),
+        },
         Quoted::Str("bar".to_string()),
         Quoted::Nil,
         Quoted::List(vec![Quoted::Int(1)]),
