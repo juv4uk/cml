@@ -24,18 +24,8 @@ fn every_admitted_canon_callable_surface_lowers_to_one_semantic_operation() {
             "1 (quote ())",
             &["сполучити", "saṃyuj", ":"],
         ),
-        (
-            "0005",
-            "car",
-            "(quote (1 2))",
-            &["перше", "ādi", ":п"],
-        ),
-        (
-            "0006",
-            "cdr",
-            "(quote (1 2))",
-            &["решта", "śeṣa", ":р"],
-        ),
+        ("0005", "car", "(quote (1 2))", &["перше", "ādi", ":п"]),
+        ("0006", "cdr", "(quote (1 2))", &["решта", "śeṣa", ":р"]),
     ];
 
     for (semantic_id, english, args, peers) in cases {
