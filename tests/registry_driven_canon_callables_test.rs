@@ -39,3 +39,28 @@ fn every_admitted_canon_callable_surface_lowers_to_one_semantic_operation() {
         }
     }
 }
+
+#[test]
+fn every_admitted_canon_callable_surface_is_the_same_first_class_value() {
+    // Call-position identity is not enough: Canon callables are first-class.
+    // A peer surface used as a value must therefore lower to the same builtin
+    // identity as its English peer instead of becoming a spelling-named Var.
+    let cases: &[(&str, &str, &[&str])] = &[
+        ("0002", "atom", &["атом?", "aṇu", ".?"]),
+        ("0003", "eq", &["тотожне?", "abheda", "=?"]),
+        ("0004", "cons", &["сполучити", "saṃyuj", ":"]),
+        ("0005", "car", &["перше", "ādi", ":п"]),
+        ("0006", "cdr", &["решта", "śeṣa", ":р"]),
+    ];
+
+    for (semantic_id, english, peers) in cases {
+        let baseline = lower_one(english);
+        for peer in *peers {
+            let actual = lower_one(peer);
+            assert_eq!(
+                actual, baseline,
+                "first-class surface {peer:?} must denote semantic identity {semantic_id}, not a spelling-specific variable"
+            );
+        }
+    }
+}
