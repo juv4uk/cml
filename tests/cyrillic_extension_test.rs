@@ -53,3 +53,12 @@ fn dot_lisp_extension_compiles_and_runs_like_dot_lisp_latin() {
         Observation::Value("42".into())
     );
 }
+
+#[test]
+fn dot_lisp_canonical_latin_compiles_and_matches_cyrillic_fixture() {
+    // tests/fixtures/example.lisp: (car (cons 42 (quote ())))
+    assert_eq!(
+        run_fixture("tests/fixtures/example.lisp"),
+        run_fixture("tests/fixtures/програма.лісп")
+    );
+}
