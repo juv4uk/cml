@@ -4,16 +4,26 @@
 //! representable so the graph contract does not need to change later, but
 //! they fail closed until a live executor is registered.
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::sync::Mutex;
 
 use crate::compute::{ComputeBackend, ComputeExecutionError, CpuComputeBackend};
-use crate::execution_scheduler::GraphScheduler;
+pub use crate::execution_scheduler::GraphScheduler;
 use crate::execution_store::GraphValueStore;
 use crate::fpga_transport::{
     FpgaJobExecutor, FpgaJobV1, FpgaTransport, encode_i32_buffer_as_register_inputs,
 };
 use crate::ir::{BufferLiteral, Ir};
+
+/// Execution mode controlling physical concurrency of ready nodes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExecutionMode {
+    /// Execute independent ready nodes concurrently up to executor concurrency limits.
+    #[default]
+    Concurrent,
+    /// Execute nodes strictly one at a time in deterministic topological ready order.
+    Sequential,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub u32);
@@ -202,7 +212,7 @@ impl ConcurrencyProfile {
     }
 }
 
-pub trait NodeExecutor {
+pub trait NodeExecutor: Send + Sync {
     fn execute_map(&self, ir: &Ir) -> Result<BufferLiteral, String>;
 
     /// Mechanism concurrency profile. Defaults to single-inflight Serial if not overridden.
@@ -211,7 +221,7 @@ pub trait NodeExecutor {
     }
 }
 
-pub trait FpgaProgramNodeExecutor {
+pub trait FpgaProgramNodeExecutor: Send + Sync {
     fn execute_program(&self, job: &FpgaJobV1) -> Result<u32, String>;
 
     /// Mechanism concurrency profile. Defaults to single-inflight Serial for hardware safety.
@@ -224,6 +234,7 @@ pub trait FpgaProgramNodeExecutor {
 pub struct HeterogeneousGraphExecutor {
     gpu: HashMap<String, Box<dyn NodeExecutor>>,
     fpga: HashMap<String, Box<dyn FpgaProgramNodeExecutor>>,
+    max_workers: Option<usize>,
 }
 
 impl HeterogeneousGraphExecutor {
@@ -268,6 +279,19 @@ impl HeterogeneousGraphExecutor {
         scheduler.ready_set(graph)
     }
 
+    pub fn with_max_workers(mut self, max_workers: usize) -> Self {
+        self.max_workers = Some(max_workers);
+        self
+    }
+
+    pub fn set_max_workers(&mut self, max_workers: usize) {
+        self.max_workers = Some(max_workers);
+    }
+
+    pub fn max_workers(&self) -> Option<usize> {
+        self.max_workers
+    }
+
     /// Partition a list of ready nodes into concurrent batches where each batch
     /// respects the concurrency profile and max_inflight limit of each physical resource.
     pub fn schedule_batches<'a>(&self, ready: &[&'a PlanNode]) -> Vec<Vec<&'a PlanNode>> {
@@ -276,8 +300,11 @@ impl HeterogeneousGraphExecutor {
         let mut batches = Vec::new();
 
         while !remaining.is_empty() {
-            let batch = scheduler
-                .schedule_concurrent_batch(&remaining, |target| self.concurrency_profile(target));
+            let batch = scheduler.schedule_concurrent_batch_bounded(
+                &remaining,
+                self.max_workers,
+                |target| self.concurrency_profile(target),
+            );
             if batch.is_empty() {
                 // Fallback to avoid infinite loop if no node could be scheduled
                 batches.push(vec![remaining.remove(0)]);
@@ -293,117 +320,200 @@ impl HeterogeneousGraphExecutor {
     }
 
     pub fn execute(&self, graph: &ExecutionGraph) -> Result<ExecutionResult, GraphExecutionError> {
+        self.execute_mode(graph, ExecutionMode::Concurrent)
+    }
+
+    pub fn execute_sequential(
+        &self,
+        graph: &ExecutionGraph,
+    ) -> Result<ExecutionResult, GraphExecutionError> {
+        self.execute_mode(graph, ExecutionMode::Sequential)
+    }
+
+    pub fn execute_mode(
+        &self,
+        graph: &ExecutionGraph,
+        mode: ExecutionMode,
+    ) -> Result<ExecutionResult, GraphExecutionError> {
         validate_graph(graph)?;
         let mut values = GraphValueStore::from_inputs(&graph.inputs);
         let mut scheduler = GraphScheduler::default();
 
         while !scheduler.is_finished(graph) {
-            let Some(node) = scheduler.next_ready(graph) else {
-                return Err(scheduler.cycle_error());
-            };
-
-            let output = match &node.operation {
-                ExecutionOperation::NumericBufferMap { function, input } => {
-                    let input_value =
-                        values.get(input).ok_or(GraphExecutionError::MissingInput {
-                            node: node.id,
-                            buffer: *input,
-                        })?;
-                    let GraphValue::Buffer(buffer) = input_value else {
-                        return Err(GraphExecutionError::InputKindMismatch {
-                            node: node.id,
-                            value: *input,
-                        });
+            match mode {
+                ExecutionMode::Sequential => {
+                    let Some(node) = scheduler.next_ready(graph) else {
+                        return Err(scheduler.cycle_error());
                     };
-                    let ir = Ir::App {
-                        func: Box::new(Ir::Var("NUMERIC-BUFFER-MAP".into())),
-                        args: vec![function.clone(), Ir::Buffer(buffer.clone())],
-                    };
-                    GraphValue::Buffer(self.execute_map(node, &ir)?)
+                    let output = self.execute_node(node, &values)?;
+                    values.publish(node.output, output);
+                    scheduler.complete(node.id);
                 }
-                ExecutionOperation::FpgaProgram { job } => {
-                    let ExecutionTarget::Fpga { device } = &node.target else {
-                        return Err(GraphExecutionError::Backend {
-                            node: node.id,
-                            target: node.target.clone(),
-                            message: "FpgaProgram requires an FPGA target".into(),
-                        });
+                ExecutionMode::Concurrent => {
+                    let ready = scheduler.ready_set(graph);
+                    if ready.is_empty() {
+                        return Err(scheduler.cycle_error());
+                    }
+
+                    let batch = scheduler.schedule_concurrent_batch_bounded(
+                        &ready,
+                        self.max_workers,
+                        |target| self.concurrency_profile(target),
+                    );
+                    let batch = if batch.is_empty() {
+                        vec![ready[0]]
+                    } else {
+                        batch
                     };
-                    let executor = self.fpga.get(device).ok_or_else(|| {
-                        GraphExecutionError::TargetUnavailable {
-                            node: node.id,
-                            target: node.target.clone(),
+
+                    if batch.len() == 1 {
+                        let node = batch[0];
+                        let output = self.execute_node(node, &values)?;
+                        values.publish(node.output, output);
+                        scheduler.complete(node.id);
+                    } else {
+                        let values_ref = &values;
+                        let results: Vec<
+                            Result<(NodeId, BufferId, GraphValue), GraphExecutionError>,
+                        > = std::thread::scope(|s| {
+                            let mut handles = Vec::with_capacity(batch.len());
+                            for &node in &batch {
+                                let handle = s.spawn(move || {
+                                    let output = self.execute_node(node, values_ref)?;
+                                    Ok((node.id, node.output, output))
+                                });
+                                handles.push(handle);
+                            }
+                            handles
+                                .into_iter()
+                                .map(|h| h.join().expect("graph worker thread panicked"))
+                                .collect()
+                        });
+
+                        // Named deterministic failure policy:
+                        // Scan results in deterministic batch order. The first failure in batch order is returned.
+                        for res in &results {
+                            if let Err(err) = res {
+                                return Err(err.clone());
+                            }
                         }
-                    })?;
-                    GraphValue::LispWord(executor.execute_program(job).map_err(|message| {
+
+                        // Atomic value publication and completion in deterministic batch order.
+                        for res in results {
+                            let (node_id, output_id, output_val) = res.unwrap();
+                            values.publish(output_id, output_val);
+                            scheduler.complete(node_id);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(values.into_result(scheduler.finish()))
+    }
+
+    fn execute_node(
+        &self,
+        node: &PlanNode,
+        values: &GraphValueStore,
+    ) -> Result<GraphValue, GraphExecutionError> {
+        match &node.operation {
+            ExecutionOperation::NumericBufferMap { function, input } => {
+                let input_value = values.get(input).ok_or(GraphExecutionError::MissingInput {
+                    node: node.id,
+                    buffer: *input,
+                })?;
+                let GraphValue::Buffer(buffer) = input_value else {
+                    return Err(GraphExecutionError::InputKindMismatch {
+                        node: node.id,
+                        value: *input,
+                    });
+                };
+                let ir = Ir::App {
+                    func: Box::new(Ir::Var("NUMERIC-BUFFER-MAP".into())),
+                    args: vec![function.clone(), Ir::Buffer(buffer.clone())],
+                };
+                Ok(GraphValue::Buffer(self.execute_map(node, &ir)?))
+            }
+            ExecutionOperation::FpgaProgram { job } => {
+                let ExecutionTarget::Fpga { device } = &node.target else {
+                    return Err(GraphExecutionError::Backend {
+                        node: node.id,
+                        target: node.target.clone(),
+                        message: "FpgaProgram requires an FPGA target".into(),
+                    });
+                };
+                let executor = self.fpga.get(device).ok_or_else(|| {
+                    GraphExecutionError::TargetUnavailable {
+                        node: node.id,
+                        target: node.target.clone(),
+                    }
+                })?;
+                Ok(GraphValue::LispWord(
+                    executor.execute_program(job).map_err(|message| {
                         GraphExecutionError::Backend {
                             node: node.id,
                             target: node.target.clone(),
                             message,
                         }
-                    })?)
+                    })?,
+                ))
+            }
+            ExecutionOperation::FpgaProgramWithBufferInput {
+                job,
+                input,
+                first_register,
+            } => {
+                let ExecutionTarget::Fpga { device } = &node.target else {
+                    return Err(GraphExecutionError::Backend {
+                        node: node.id,
+                        target: node.target.clone(),
+                        message: "FpgaProgramWithBufferInput requires an FPGA target".into(),
+                    });
+                };
+                let input_value = values.get(input).ok_or(GraphExecutionError::MissingInput {
+                    node: node.id,
+                    buffer: *input,
+                })?;
+                let GraphValue::Buffer(buffer) = input_value else {
+                    return Err(GraphExecutionError::InputKindMismatch {
+                        node: node.id,
+                        value: *input,
+                    });
+                };
+                if !job.register_inputs.is_empty() {
+                    return Err(GraphExecutionError::Backend {
+                        node: node.id,
+                        target: node.target.clone(),
+                        message: "typed FPGA input job must not prepopulate register inputs".into(),
+                    });
                 }
-                ExecutionOperation::FpgaProgramWithBufferInput {
-                    job,
-                    input,
-                    first_register,
-                } => {
-                    let ExecutionTarget::Fpga { device } = &node.target else {
-                        return Err(GraphExecutionError::Backend {
+                let mut staged_job = job.clone();
+                staged_job.register_inputs =
+                    encode_i32_buffer_as_register_inputs(buffer, *first_register).map_err(
+                        |error| GraphExecutionError::Backend {
                             node: node.id,
                             target: node.target.clone(),
-                            message: "FpgaProgramWithBufferInput requires an FPGA target".into(),
-                        });
-                    };
-                    let input_value =
-                        values.get(input).ok_or(GraphExecutionError::MissingInput {
-                            node: node.id,
-                            buffer: *input,
-                        })?;
-                    let GraphValue::Buffer(buffer) = input_value else {
-                        return Err(GraphExecutionError::InputKindMismatch {
-                            node: node.id,
-                            value: *input,
-                        });
-                    };
-                    if !job.register_inputs.is_empty() {
-                        return Err(GraphExecutionError::Backend {
-                            node: node.id,
-                            target: node.target.clone(),
-                            message: "typed FPGA input job must not prepopulate register inputs"
-                                .into(),
-                        });
+                            message: format!("typed FPGA input rejected: {error:?}"),
+                        },
+                    )?;
+                let executor = self.fpga.get(device).ok_or_else(|| {
+                    GraphExecutionError::TargetUnavailable {
+                        node: node.id,
+                        target: node.target.clone(),
                     }
-                    let mut staged_job = job.clone();
-                    staged_job.register_inputs =
-                        encode_i32_buffer_as_register_inputs(buffer, *first_register).map_err(
-                            |error| GraphExecutionError::Backend {
-                                node: node.id,
-                                target: node.target.clone(),
-                                message: format!("typed FPGA input rejected: {error:?}"),
-                            },
-                        )?;
-                    let executor = self.fpga.get(device).ok_or_else(|| {
-                        GraphExecutionError::TargetUnavailable {
-                            node: node.id,
-                            target: node.target.clone(),
-                        }
-                    })?;
-                    GraphValue::LispWord(executor.execute_program(&staged_job).map_err(
-                        |message| GraphExecutionError::Backend {
+                })?;
+                Ok(GraphValue::LispWord(
+                    executor.execute_program(&staged_job).map_err(|message| {
+                        GraphExecutionError::Backend {
                             node: node.id,
                             target: node.target.clone(),
                             message,
-                        },
-                    )?)
-                }
-            };
-
-            values.publish(node.output, output);
-            scheduler.complete(node.id);
+                        }
+                    })?,
+                ))
+            }
         }
-
-        Ok(values.into_result(scheduler.finish()))
     }
 
     fn execute_map(&self, node: &PlanNode, ir: &Ir) -> Result<BufferLiteral, GraphExecutionError> {
@@ -447,10 +557,25 @@ impl CpuGraphExecutor {
     pub fn execute(&self, graph: &ExecutionGraph) -> Result<ExecutionResult, GraphExecutionError> {
         HeterogeneousGraphExecutor::default().execute(graph)
     }
+
+    pub fn execute_sequential(
+        &self,
+        graph: &ExecutionGraph,
+    ) -> Result<ExecutionResult, GraphExecutionError> {
+        HeterogeneousGraphExecutor::default().execute_sequential(graph)
+    }
+
+    pub fn execute_mode(
+        &self,
+        graph: &ExecutionGraph,
+        mode: ExecutionMode,
+    ) -> Result<ExecutionResult, GraphExecutionError> {
+        HeterogeneousGraphExecutor::default().execute_mode(graph, mode)
+    }
 }
 
 pub struct FpgaTransportNodeExecutor<T> {
-    executor: RefCell<FpgaJobExecutor<T>>,
+    executor: Mutex<FpgaJobExecutor<T>>,
 }
 
 impl<T> FpgaTransportNodeExecutor<T>
@@ -459,7 +584,7 @@ where
 {
     pub fn new(transport: T) -> Self {
         Self {
-            executor: RefCell::new(FpgaJobExecutor::new(transport)),
+            executor: Mutex::new(FpgaJobExecutor::new(transport)),
         }
     }
 }
@@ -470,7 +595,8 @@ where
 {
     fn execute_program(&self, job: &FpgaJobV1) -> Result<u32, String> {
         self.executor
-            .borrow_mut()
+            .lock()
+            .map_err(|e| format!("mutex poisoned: {e}"))?
             .execute_word(job)
             .map_err(|error| format!("{error:?}"))
     }

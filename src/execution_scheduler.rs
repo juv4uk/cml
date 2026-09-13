@@ -7,14 +7,18 @@ use crate::execution::{
     NodeId, PlanNode,
 };
 
-#[derive(Debug, Default)]
-pub(crate) struct GraphScheduler {
+#[derive(Debug, Default, Clone)]
+pub struct GraphScheduler {
     completed: HashSet<NodeId>,
     execution_order: Vec<NodeId>,
 }
 
 impl GraphScheduler {
-    pub(crate) fn next_ready<'a>(&self, graph: &'a ExecutionGraph) -> Option<&'a PlanNode> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn next_ready<'a>(&self, graph: &'a ExecutionGraph) -> Option<&'a PlanNode> {
         graph.nodes.iter().find(|node| {
             !self.completed.contains(&node.id)
                 && node
@@ -25,7 +29,7 @@ impl GraphScheduler {
     }
 
     /// Return all nodes whose data dependencies are satisfied and which have not yet completed.
-    pub(crate) fn ready_set<'a>(&self, graph: &'a ExecutionGraph) -> Vec<&'a PlanNode> {
+    pub fn ready_set<'a>(&self, graph: &'a ExecutionGraph) -> Vec<&'a PlanNode> {
         graph
             .nodes
             .iter()
@@ -43,9 +47,23 @@ impl GraphScheduler {
     /// for a target, select a maximal subset of nodes that can be executed concurrently
     /// without violating any physical resource inflight limits.
     /// If an executor or profile is missing, defaults fail-closed to Serial (max 1 inflight).
-    pub(crate) fn schedule_concurrent_batch<'a, F>(
+    pub fn schedule_concurrent_batch<'a, F>(
         &self,
         ready: &[&'a PlanNode],
+        get_profile: F,
+    ) -> Vec<&'a PlanNode>
+    where
+        F: FnMut(&ExecutionTarget) -> Option<ConcurrencyProfile>,
+    {
+        self.schedule_concurrent_batch_bounded(ready, None, get_profile)
+    }
+
+    /// Select a concurrent batch of ready nodes respecting physical resource limits and
+    /// an optional maximum batch size limit (e.g. bounded worker pool).
+    pub fn schedule_concurrent_batch_bounded<'a, F>(
+        &self,
+        ready: &[&'a PlanNode],
+        max_batch: Option<usize>,
         mut get_profile: F,
     ) -> Vec<&'a PlanNode>
     where
@@ -55,6 +73,11 @@ impl GraphScheduler {
         let mut inflight_by_resource: HashMap<String, usize> = HashMap::new();
 
         for &node in ready {
+            if let Some(limit) = max_batch {
+                if batch.len() >= limit {
+                    break;
+                }
+            }
             let profile = get_profile(&node.target).unwrap_or_else(|| {
                 // Fail-closed default: serialize all unknown/unregistered targets under a shared serial resource
                 match &node.target {
@@ -100,20 +123,24 @@ impl GraphScheduler {
         batch
     }
 
-    pub(crate) fn complete(&mut self, node: NodeId) {
+    pub fn complete(&mut self, node: NodeId) {
         self.completed.insert(node);
         self.execution_order.push(node);
     }
 
-    pub(crate) fn is_finished(&self, graph: &ExecutionGraph) -> bool {
+    pub fn is_finished(&self, graph: &ExecutionGraph) -> bool {
         self.completed.len() == graph.nodes.len()
     }
 
-    pub(crate) fn finish(self) -> Vec<NodeId> {
+    pub fn execution_order(&self) -> &[NodeId] {
+        &self.execution_order
+    }
+
+    pub fn finish(self) -> Vec<NodeId> {
         self.execution_order
     }
 
-    pub(crate) fn cycle_error(&self) -> GraphExecutionError {
+    pub fn cycle_error(&self) -> GraphExecutionError {
         GraphExecutionError::DependencyCycle
     }
 }
