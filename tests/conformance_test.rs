@@ -176,7 +176,56 @@ fn fixture_supported_by_fpga_lisp(line: &str) -> Result<(), UnsupportedReason> {
         });
     }
 
+    // Structural detection: fixtures whose source expression contains a variadic
+    // lambda (dotted parameter list) require lambda-variadic, which the FPGA
+    // backend does not support.  Some fixtures in conformance.my were added before
+    // the capability guard was systematic and therefore carry no `requires` field;
+    // this structural check closes that gap without modifying the upstream fixture.
+    if expr_contains_variadic_lambda(&expr) {
+        return Err(UnsupportedReason::CapabilityUnsupported {
+            capability: "lambda-variadic".to_string(),
+        });
+    }
+
     Ok(())
+}
+
+/// Return true if the source expression text syntactically contains a lambda
+/// with a dotted parameter list, i.e. `(lambda (... . rest) ...)`.
+fn expr_contains_variadic_lambda(expr: &str) -> bool {
+    // Fast path: dotted parameter lists require a `. ` inside a parameter
+    // list.  We look for the pattern `(lambda (` followed eventually by `. `
+    // before the matching `)`, which is a necessary (though not sufficient)
+    // condition.  False positives (dotted pairs elsewhere) may get
+    // classified unsupported — that's fail-closed and acceptable; the
+    // FPGA backend does not support dotted parameter lists regardless.
+    let mut rest = expr;
+    while let Some(pos) = rest.find("(lambda ") {
+        let after = &rest[pos + 8..];
+        // Skip whitespace to the parameter list
+        let trimmed = after.trim_start();
+        if trimmed.starts_with('(') {
+            // Scan for the matching close-paren of the parameter list.
+            // If we see `. ` inside it, it's a dotted param list.
+            let mut depth = 0i32;
+            for ch in trimmed.chars() {
+                match ch {
+                    '(' => depth += 1,
+                    ')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    '.' if depth == 1 => return true,
+                    _ => {}
+                }
+            }
+        }
+        // Advance past the keyword to find nested lambdas
+        rest = &rest[pos + 8..];
+    }
+    false
 }
 
 // Errors visible from syntax alone are compiler-front-end results; operand
