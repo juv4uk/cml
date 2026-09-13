@@ -626,7 +626,16 @@ fn preflight(
                 preflight(expr, symbols, def_arities, slots)?;
             }
         }
-        Ir::Let { .. } => return Err(CompileError::UnsupportedVariant("let")),
+        Ir::Let { bindings, body } => {
+            // Top-level `let` admits the same parallel-binding shape already
+            // handled inside named-definition bodies: every value form is
+            // preflight-checked in the enclosing environment, then the body.
+            // Binding names are lexical, so a Var read of one is valid.
+            for (_, value) in bindings {
+                preflight(value, symbols, def_arities, slots)?;
+            }
+            preflight(body, symbols, def_arities, slots)?;
+        }
         Ir::Def { name, value } => {
             if let Ir::Lambda {
                 params: Params::Fixed(param_names),
@@ -1136,7 +1145,32 @@ impl Emitter {
                 }
             }
             Ir::Cond { branches } => self.emit_cond(branches),
-            Ir::Let { .. } => Err(CompileError::UnsupportedVariant("Let")),
+            Ir::Let { bindings, body } => {
+                // Top-level `let` binds in parallel: evaluate every value in
+                // the enclosing environment, then install the name->slot
+                // bindings for the body only. Restore the environment
+                // afterwards so later top-level forms do not observe
+                // lexical bindings.
+                let saved_env = self.env.clone();
+                let body_bindings: Vec<(String, usize)> = bindings
+                    .iter()
+                    .map(|(name, value)| {
+                        self.emit_ir(value)?;
+                        let slot = self.allocate_slot();
+                        self.line(&format!(
+                            "    movq %rax, {}(%rsp)",
+                            Self::slot_offset(slot)
+                        ));
+                        Ok((name.clone(), slot))
+                    })
+                    .collect::<Result<_, CompileError>>()?;
+                for (name, slot) in &body_bindings {
+                    self.env.insert(name.clone(), *slot);
+                }
+                let result = self.emit_ir(body);
+                self.env = saved_env;
+                result
+            }
             Ir::Def { name, value } => {
                 if let Ir::Lambda {
                     params: Params::Fixed(param_names),
