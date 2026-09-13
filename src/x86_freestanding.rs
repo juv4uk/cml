@@ -665,7 +665,10 @@ fn preflight_env(
                 preflight_env(expr, bindings, symbols, def_arities, slots)?;
             }
         }
-        Ir::Let { bindings: let_bindings, body } => {
+        Ir::Let {
+            bindings: let_bindings,
+            body,
+        } => {
             // Top-level `let` admits the same parallel-binding shape already
             // handled inside named-definition bodies: every value form is
             // preflight-checked in the enclosing environment, then the body.
@@ -972,7 +975,13 @@ fn preflight_def_body(
                         }
                         let mut nested_bindings = bindings.clone();
                         nested_bindings.extend(params.iter().cloned());
-                        return preflight_def_body(body, &nested_bindings, symbols, def_arities, slots);
+                        return preflight_def_body(
+                            body,
+                            &nested_bindings,
+                            symbols,
+                            def_arities,
+                            slots,
+                        );
                     }
                     Params::Variadic { fixed, rest } if fixed.len() + 1 <= 5 => {
                         if args.len() < fixed.len() {
@@ -989,7 +998,13 @@ fn preflight_def_body(
                         let mut nested_bindings = bindings.clone();
                         nested_bindings.extend(fixed.iter().cloned());
                         nested_bindings.insert(rest.clone());
-                        return preflight_def_body(body, &nested_bindings, symbols, def_arities, slots);
+                        return preflight_def_body(
+                            body,
+                            &nested_bindings,
+                            symbols,
+                            def_arities,
+                            slots,
+                        );
                     }
                     Params::AllRest(rest) => {
                         for arg in args {
@@ -998,7 +1013,13 @@ fn preflight_def_body(
                         *slots += args.len() * 2 + 2;
                         let mut nested_bindings = bindings.clone();
                         nested_bindings.insert(rest.clone());
-                        return preflight_def_body(body, &nested_bindings, symbols, def_arities, slots);
+                        return preflight_def_body(
+                            body,
+                            &nested_bindings,
+                            symbols,
+                            def_arities,
+                            slots,
+                        );
                     }
                     _ => {}
                 }
@@ -1221,7 +1242,9 @@ impl Emitter {
                     self.emit_platform_call(func, args)
                 } else if let Ir::Lambda { params, body } = func.as_ref() {
                     match params {
-                        Params::Fixed(params) if params.len() == args.len() && params.len() <= 5 => {
+                        Params::Fixed(params)
+                            if params.len() == args.len() && params.len() <= 5 =>
+                        {
                             self.emit_direct_lambda_call(params, body, args)
                         }
                         Params::Variadic { fixed, rest }
@@ -1292,10 +1315,7 @@ impl Emitter {
                     .map(|(name, value)| {
                         self.emit_ir(value)?;
                         let slot = self.allocate_slot();
-                        self.line(&format!(
-                            "    movq %rax, {}(%rsp)",
-                            Self::slot_offset(slot)
-                        ));
+                        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
                         Ok((name.clone(), slot))
                     })
                     .collect::<Result<_, CompileError>>()?;
@@ -1998,6 +2018,52 @@ impl Emitter {
         self.line(&format!(".Lcond_end_{end_label}:"));
         Ok(())
     }
+}
+
+/// Resolve the path to the asm nucleus (`nucleus.s`), used for freestanding x86 linking and witnesses.
+///
+/// Discovery order:
+/// 1. `WSM_NUCLEUS_ASM` environment variable (if set and points to an existing file).
+/// 2. Sibling directory relative to `CARGO_MANIFEST_DIR` runtime environment variable.
+/// 3. Sibling directory relative to crate manifest directory at compile-time.
+/// 4. Relative to current working directory (`../wsm-my-lisp/asm/nucleus.s` or `wsm-my-lisp/asm/nucleus.s`).
+///
+/// Fails closed if the artifact cannot be located.
+pub fn resolve_nucleus_asm_path() -> Result<std::path::PathBuf, String> {
+    if let Ok(path_str) = std::env::var("WSM_NUCLEUS_ASM") {
+        let path = std::path::PathBuf::from(path_str);
+        if path.is_file() {
+            return Ok(path);
+        }
+    }
+
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let candidate = std::path::Path::new(&manifest_dir).join("../wsm-my-lisp/asm/nucleus.s");
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+
+    let compile_time_candidate =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../wsm-my-lisp/asm/nucleus.s");
+    if compile_time_candidate.is_file() {
+        return Ok(compile_time_candidate);
+    }
+
+    let candidate_sibling = std::path::Path::new("../wsm-my-lisp/asm/nucleus.s");
+    if candidate_sibling.is_file() {
+        return Ok(candidate_sibling.to_path_buf());
+    }
+
+    let candidate_local = std::path::Path::new("wsm-my-lisp/asm/nucleus.s");
+    if candidate_local.is_file() {
+        return Ok(candidate_local.to_path_buf());
+    }
+
+    Err(
+        "x86 freestanding nucleus artifact not found: ensure wsm-my-lisp is a sibling repository or set WSM_NUCLEUS_ASM=/path/to/nucleus.s"
+            .to_string(),
+    )
 }
 
 #[cfg(test)]

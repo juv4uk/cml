@@ -6,11 +6,7 @@ use std::{
 
 use cml::{lower, parser, x86_freestanding::X86FreestandingBackend};
 
-fn run_witness(
-    source: &str,
-    expected: u64,
-    link_nucleus: bool,
-) -> (bool, String, String) {
+fn run_witness(source: &str, expected: u64, link_nucleus: bool) -> (bool, String, String) {
     let expressions = parser::parse(source).expect("fixture must parse");
     let program = lower::lower_program(&expressions).expect("fixture must lower");
     let assembly = X86FreestandingBackend::new()
@@ -40,16 +36,24 @@ fn run_witness(
 
     let mut cmd = Command::new("cc");
     cmd.arg(&c_path).arg(&asm_path);
-    if let Some(runtime) = std::option_env!("WSM_NUCLEUS_ASM") {
-        cmd.arg(runtime);
-    } else if link_nucleus {
-        cmd.arg("/home/agents/GitHub/wsm-my-lisp/asm/nucleus.s");
+    if link_nucleus {
+        let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+            .expect("portable x86 asm nucleus must resolve for witness harness");
+        cmd.arg(nucleus_path);
     }
-    let linked = cmd.arg("-o").arg(&exe_path).output().expect("cc must be available");
+    let linked = cmd
+        .arg("-o")
+        .arg(&exe_path)
+        .output()
+        .expect("cc must be available");
 
     let linked_ok = linked.status.success();
     if !linked_ok {
-        return (false, String::new(), format!("link failed: {}", String::from_utf8_lossy(&linked.stderr)));
+        return (
+            false,
+            String::new(),
+            format!("link failed: {}", String::from_utf8_lossy(&linked.stderr)),
+        );
     }
 
     let run = Command::new(&exe_path)
@@ -95,14 +99,20 @@ fn top_level_let_closure_value_can_be_applied_within_its_body() {
 fn direct_nullary_lambda_witness() {
     let expected = wsm_os_target::encode_fixnum(42).expect("42 is a target fixnum");
     let (ok, out, err) = run_witness("((lambda () 42))", expected, true);
-    assert!(ok, "direct nullary lambda must execute; stdout={out} stderr={err}");
+    assert!(
+        ok,
+        "direct nullary lambda must execute; stdout={out} stderr={err}"
+    );
 }
 
 #[test]
 fn direct_binary_lambda_witness() {
     let expected = wsm_os_target::encode_fixnum(42).expect("42 is a target fixnum");
     let (ok, out, err) = run_witness("((lambda (x y) (+ x y)) 12 30)", expected, true);
-    assert!(ok, "direct binary lambda must execute; stdout={out} stderr={err}");
+    assert!(
+        ok,
+        "direct binary lambda must execute; stdout={out} stderr={err}"
+    );
 }
 
 #[test]
@@ -113,7 +123,10 @@ fn direct_five_argument_lambda_witness() {
         expected,
         true,
     );
-    assert!(ok, "direct 5-arg lambda must execute; stdout={out} stderr={err}");
+    assert!(
+        ok,
+        "direct 5-arg lambda must execute; stdout={out} stderr={err}"
+    );
 }
 
 #[test]
@@ -124,7 +137,10 @@ fn direct_lambda_with_lexical_capture_witness() {
         expected,
         true,
     );
-    assert!(ok, "direct lambda with capture must execute; stdout={out} stderr={err}");
+    assert!(
+        ok,
+        "direct lambda with capture must execute; stdout={out} stderr={err}"
+    );
 }
 
 #[test]
@@ -135,7 +151,10 @@ fn direct_variadic_lambda_witness() {
         expected,
         true,
     );
-    assert!(ok, "direct variadic lambda must execute; stdout={out} stderr={err}");
+    assert!(
+        ok,
+        "direct variadic lambda must execute; stdout={out} stderr={err}"
+    );
 }
 
 #[test]
@@ -146,7 +165,10 @@ fn direct_all_rest_lambda_witness() {
         expected,
         true,
     );
-    assert!(ok, "direct all-rest lambda must execute; stdout={out} stderr={err}");
+    assert!(
+        ok,
+        "direct all-rest lambda must execute; stdout={out} stderr={err}"
+    );
 }
 
 #[test]
@@ -157,13 +179,13 @@ fn direct_variadic_empty_rest_witness() {
         expected,
         true,
     );
-    assert!(ok, "direct variadic lambda with empty rest must execute; stdout={out} stderr={err}");
+    assert!(
+        ok,
+        "direct variadic lambda with empty rest must execute; stdout={out} stderr={err}"
+    );
 }
 
-fn run_list_witness(
-    source: &str,
-    expected_fixnums: &[i64],
-) -> (bool, String, String) {
+fn run_list_witness(source: &str, expected_fixnums: &[i64]) -> (bool, String, String) {
     let expressions = parser::parse(source).expect("fixture must parse");
     let program = lower::lower_program(&expressions).expect("fixture must lower");
     let assembly = X86FreestandingBackend::new()
@@ -201,15 +223,21 @@ fn run_list_witness(
 
     let mut cmd = Command::new("cc");
     cmd.arg(&c_path).arg(&asm_path);
-    if let Some(runtime) = std::option_env!("WSM_NUCLEUS_ASM") {
-        cmd.arg(runtime);
-    } else {
-        cmd.arg("/home/agents/GitHub/wsm-my-lisp/asm/nucleus.s");
-    }
-    let linked = cmd.arg("-o").arg(&exe_path).output().expect("cc must be available");
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("portable x86 asm nucleus must resolve for witness harness");
+    cmd.arg(nucleus_path);
+    let linked = cmd
+        .arg("-o")
+        .arg(&exe_path)
+        .output()
+        .expect("cc must be available");
 
     if !linked.status.success() {
-        return (false, String::new(), format!("link failed: {}", String::from_utf8_lossy(&linked.stderr)));
+        return (
+            false,
+            String::new(),
+            format!("link failed: {}", String::from_utf8_lossy(&linked.stderr)),
+        );
     }
 
     let run = Command::new(&exe_path)
@@ -223,16 +251,17 @@ fn run_list_witness(
     (
         run.status.success(),
         String::from_utf8_lossy(&run.stdout).into_owned(),
-        format!("code={:?} err={}", run.status.code(), String::from_utf8_lossy(&run.stderr)),
+        format!(
+            "code={:?} err={}",
+            run.status.code(),
+            String::from_utf8_lossy(&run.stderr)
+        ),
     )
 }
 
 #[test]
 fn row12_corpus_fixture_exact_witness() {
-    let (ok, out, err) = run_list_witness(
-        "((lambda (a b . rest) rest) 1 2 3 4 5)",
-        &[3, 4, 5],
-    );
+    let (ok, out, err) = run_list_witness("((lambda (a b . rest) rest) 1 2 3 4 5)", &[3, 4, 5]);
     assert!(
         ok,
         "row 12 exact fixture ((lambda (a b . rest) rest) 1 2 3 4 5) -> (3 4 5) must execute; stdout={out} stderr={err}"
@@ -241,10 +270,7 @@ fn row12_corpus_fixture_exact_witness() {
 
 #[test]
 fn row13_corpus_fixture_exact_witness() {
-    let (ok, out, err) = run_list_witness(
-        "((lambda args args) 1 2 3)",
-        &[1, 2, 3],
-    );
+    let (ok, out, err) = run_list_witness("((lambda args args) 1 2 3)", &[1, 2, 3]);
     assert!(
         ok,
         "row 13 exact fixture ((lambda args args) 1 2 3) -> (1 2 3) must execute; stdout={out} stderr={err}"

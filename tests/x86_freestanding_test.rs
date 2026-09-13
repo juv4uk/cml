@@ -328,10 +328,9 @@ fn multi_argument_lambda_application_passes_registers() {
 
 #[test]
 fn ternary_lambda_application_with_captures() {
-    let expressions = parser::parse(
-        "((lambda (base) ((lambda (a b c) (+ base (+ a (+ b c)))) 1 2 3)) 100)",
-    )
-    .unwrap();
+    let expressions =
+        parser::parse("((lambda (base) ((lambda (a b c) (+ base (+ a (+ b c)))) 1 2 3)) 100)")
+            .unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
@@ -1124,10 +1123,12 @@ fn named_definition_allocates_a_list_through_the_asm_nucleus() {
         "#include <stdint.h>\nextern uint64_t wsm_entry(void *);\nextern uint64_t wsm_car(void *, uint64_t);\nint main(void) { uint64_t pair = wsm_entry(0); return wsm_car(0, pair) == 339 ? 0 : 1; }\n",
     )
     .unwrap();
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("resolve nucleus.s for freestanding list witness");
     let linked = Command::new("cc")
         .arg(&harness)
         .arg(&source)
-        .arg("/home/agents/GitHub/wsm-my-lisp/asm/nucleus.s")
+        .arg(&nucleus_path)
         .arg("-o")
         .arg(&executable)
         .output()
