@@ -19,9 +19,19 @@ use std::fs;
 use std::path::Path;
 
 fn run_fixture(relative_path: &str) -> Observation {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path);
-    let source = fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
+    let base = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let direct = base.join(relative_path);
+    let resolved = if direct.exists() {
+        direct
+    } else {
+        let lisp_rel = relative_path
+            .replace(".мій", ".lisp")
+            .replace(".всм", ".lisp")
+            .replace(".лісп", ".lisp");
+        base.join(lisp_rel)
+    };
+    let source = fs::read_to_string(&resolved)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", resolved.display()));
     compile_and_run(&source).unwrap_or_else(|e| panic!("compile_and_run({relative_path}): {e}"))
 }
 
