@@ -20,6 +20,7 @@ pub mod ir;
 pub mod lower;
 pub mod macros;
 pub mod parser;
+pub mod placement;
 pub mod pratyahara;
 pub mod runtime_abi;
 pub mod semantic;
