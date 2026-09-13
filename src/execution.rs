@@ -150,12 +150,74 @@ pub enum GraphExecutionError {
 /// One physical executor for one graph target. The graph owns semantic
 /// admission and logical buffers; implementations own device transfer,
 /// dispatch, and readback.
+
+/// Explicit concurrency model declared by a backend mechanism.
+/// Concurrency is a property of mechanism/provenance and physical device constraints,
+/// never inferred from language semantics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConcurrencyModel {
+    /// Strict single-owner serialization (e.g. physical serial/COM transport).
+    Serial,
+    /// Bounded concurrency up to `max_inflight` parallel executions.
+    Bounded(usize),
+    /// Reentrant / unconstrained concurrency.
+    Reentrant,
+}
+
+/// A machine-readable concurrency profile describing an executor's physical concurrency
+/// properties and physical resource ownership.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConcurrencyProfile {
+    pub model: ConcurrencyModel,
+    pub max_inflight: usize,
+    /// Identifier for the physical device/resource (e.g. "cpu", "cuda:0", "fpga:com4").
+    /// Backends sharing the same physical resource key share inflight accounting.
+    pub resource_key: String,
+}
+
+impl ConcurrencyProfile {
+    pub fn serial(resource_key: impl Into<String>) -> Self {
+        Self {
+            model: ConcurrencyModel::Serial,
+            max_inflight: 1,
+            resource_key: resource_key.into(),
+        }
+    }
+
+    pub fn bounded(max_inflight: usize, resource_key: impl Into<String>) -> Self {
+        let max_inflight = max_inflight.max(1);
+        Self {
+            model: ConcurrencyModel::Bounded(max_inflight),
+            max_inflight,
+            resource_key: resource_key.into(),
+        }
+    }
+
+    pub fn reentrant(resource_key: impl Into<String>) -> Self {
+        Self {
+            model: ConcurrencyModel::Reentrant,
+            max_inflight: usize::MAX,
+            resource_key: resource_key.into(),
+        }
+    }
+}
+
 pub trait NodeExecutor {
     fn execute_map(&self, ir: &Ir) -> Result<BufferLiteral, String>;
+
+    /// Mechanism concurrency profile. Defaults to single-inflight Serial if not overridden.
+    fn concurrency_profile(&self) -> ConcurrencyProfile {
+        ConcurrencyProfile::serial("unspecified-node-executor")
+    }
 }
 
 pub trait FpgaProgramNodeExecutor {
     fn execute_program(&self, job: &FpgaJobV1) -> Result<u32, String>;
+
+    /// Mechanism concurrency profile. Defaults to single-inflight Serial for hardware safety.
+    fn concurrency_profile(&self) -> ConcurrencyProfile {
+        ConcurrencyProfile::serial("unspecified-fpga-executor")
+    }
 }
 
 #[derive(Default)]
@@ -179,6 +241,55 @@ impl HeterogeneousGraphExecutor {
         executor: impl FpgaProgramNodeExecutor + 'static,
     ) {
         self.fpga.insert(device.into(), Box::new(executor));
+    }
+
+    pub fn concurrency_profile(&self, target: &ExecutionTarget) -> Option<ConcurrencyProfile> {
+        match target {
+            ExecutionTarget::Cpu => Some(ConcurrencyProfile::reentrant("cpu")),
+            ExecutionTarget::Gpu { backend } => {
+                self.gpu.get(backend).map(|e| e.concurrency_profile())
+            }
+            ExecutionTarget::Fpga { device } => {
+                self.fpga.get(device).map(|e| e.concurrency_profile())
+            }
+        }
+    }
+
+    /// Return all nodes currently ready to execute in the given graph state.
+    pub fn ready_set<'a>(
+        &self,
+        graph: &'a ExecutionGraph,
+        completed: &std::collections::HashSet<NodeId>,
+    ) -> Vec<&'a PlanNode> {
+        let mut scheduler = GraphScheduler::default();
+        for id in completed {
+            scheduler.complete(*id);
+        }
+        scheduler.ready_set(graph)
+    }
+
+    /// Partition a list of ready nodes into concurrent batches where each batch
+    /// respects the concurrency profile and max_inflight limit of each physical resource.
+    pub fn schedule_batches<'a>(&self, ready: &[&'a PlanNode]) -> Vec<Vec<&'a PlanNode>> {
+        let scheduler = GraphScheduler::default();
+        let mut remaining: Vec<&'a PlanNode> = ready.to_vec();
+        let mut batches = Vec::new();
+
+        while !remaining.is_empty() {
+            let batch = scheduler
+                .schedule_concurrent_batch(&remaining, |target| self.concurrency_profile(target));
+            if batch.is_empty() {
+                // Fallback to avoid infinite loop if no node could be scheduled
+                batches.push(vec![remaining.remove(0)]);
+            } else {
+                let batch_ids: std::collections::HashSet<NodeId> =
+                    batch.iter().map(|n| n.id).collect();
+                remaining.retain(|n| !batch_ids.contains(&n.id));
+                batches.push(batch);
+            }
+        }
+
+        batches
     }
 
     pub fn execute(&self, graph: &ExecutionGraph) -> Result<ExecutionResult, GraphExecutionError> {
@@ -363,6 +474,10 @@ where
             .execute_word(job)
             .map_err(|error| format!("{error:?}"))
     }
+
+    fn concurrency_profile(&self) -> ConcurrencyProfile {
+        ConcurrencyProfile::serial("fpga-transport")
+    }
 }
 
 #[cfg(feature = "gpu-cuda")]
@@ -378,6 +493,10 @@ impl NodeExecutor for CudaNodeExecutor {
             .map(|execution| execution.output)
             .map_err(|error| format!("{error:?}"))
     }
+
+    fn concurrency_profile(&self) -> ConcurrencyProfile {
+        ConcurrencyProfile::bounded(1, format!("cuda:{}", self.device_ordinal))
+    }
 }
 
 #[cfg(feature = "gpu-wgpu")]
@@ -392,6 +511,10 @@ impl NodeExecutor for WgpuNodeExecutor {
         crate::gpu_wgpu_runtime::execute_map_blocking_with_policy(ir, self.policy)
             .map(|execution| execution.output)
             .map_err(|error| format!("{error:?}"))
+    }
+
+    fn concurrency_profile(&self) -> ConcurrencyProfile {
+        ConcurrencyProfile::bounded(1, "wgpu-device")
     }
 }
 

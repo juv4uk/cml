@@ -162,3 +162,195 @@ fn registered_backend_executes_without_vendor_logic_in_the_graph() {
         Some(&BufferLiteral::I32(vec![5, 6]))
     );
 }
+
+use cml::execution::{ConcurrencyModel, ConcurrencyProfile};
+
+struct BoundedDummyExecutor {
+    profile: ConcurrencyProfile,
+}
+
+impl NodeExecutor for BoundedDummyExecutor {
+    fn execute_map(&self, _ir: &Ir) -> Result<BufferLiteral, String> {
+        Ok(BufferLiteral::I32(vec![0]))
+    }
+
+    fn concurrency_profile(&self) -> ConcurrencyProfile {
+        self.profile.clone()
+    }
+}
+
+#[test]
+fn concurrency_profile_defaults_and_explicit_descriptors() {
+    let mut executor = HeterogeneousGraphExecutor::default();
+    executor.register_gpu(
+        "gpu-serial",
+        BoundedDummyExecutor {
+            profile: ConcurrencyProfile::serial("shared-gpu-resource"),
+        },
+    );
+    executor.register_gpu(
+        "gpu-bounded-2",
+        BoundedDummyExecutor {
+            profile: ConcurrencyProfile::bounded(2, "shared-gpu-resource"),
+        },
+    );
+
+    let cpu_profile = executor
+        .concurrency_profile(&ExecutionTarget::Cpu)
+        .expect("cpu profile must exist");
+    assert_eq!(cpu_profile.model, ConcurrencyModel::Reentrant);
+    assert_eq!(cpu_profile.resource_key, "cpu");
+
+    let serial_profile = executor
+        .concurrency_profile(&ExecutionTarget::Gpu {
+            backend: "gpu-serial".into(),
+        })
+        .expect("gpu-serial profile must exist");
+    assert_eq!(serial_profile.model, ConcurrencyModel::Serial);
+    assert_eq!(serial_profile.max_inflight, 1);
+    assert_eq!(serial_profile.resource_key, "shared-gpu-resource");
+
+    let bounded_profile = executor
+        .concurrency_profile(&ExecutionTarget::Gpu {
+            backend: "gpu-bounded-2".into(),
+        })
+        .expect("gpu-bounded profile must exist");
+    assert_eq!(bounded_profile.model, ConcurrencyModel::Bounded(2));
+    assert_eq!(bounded_profile.max_inflight, 2);
+    assert_eq!(bounded_profile.resource_key, "shared-gpu-resource");
+}
+
+#[test]
+fn cpu_executor_with_bound_greater_than_one_overlaps_independent_ready_nodes() {
+    let mut executor = HeterogeneousGraphExecutor::default();
+    executor.register_gpu(
+        "cpu-pool-3",
+        BoundedDummyExecutor {
+            profile: ConcurrencyProfile::bounded(3, "cpu-pool"),
+        },
+    );
+
+    let mut n1 = map_node(1, 0, 1, &[], 1);
+    n1.target = ExecutionTarget::Gpu {
+        backend: "cpu-pool-3".into(),
+    };
+    let mut n2 = map_node(2, 0, 2, &[], 2);
+    n2.target = ExecutionTarget::Gpu {
+        backend: "cpu-pool-3".into(),
+    };
+    let mut n3 = map_node(3, 0, 3, &[], 3);
+    n3.target = ExecutionTarget::Gpu {
+        backend: "cpu-pool-3".into(),
+    };
+
+    let ready = vec![&n1, &n2, &n3];
+    let batches = executor.schedule_batches(&ready);
+
+    assert_eq!(
+        batches.len(),
+        1,
+        "all 3 nodes should overlap in a single batch"
+    );
+    assert_eq!(batches[0].len(), 3);
+}
+
+#[test]
+fn explicitly_serial_executor_never_overlaps_multiple_ready_nodes() {
+    let mut executor = HeterogeneousGraphExecutor::default();
+    executor.register_gpu(
+        "com-fpga",
+        BoundedDummyExecutor {
+            profile: ConcurrencyProfile::serial("com4-bus"),
+        },
+    );
+
+    let mut n1 = map_node(1, 0, 1, &[], 1);
+    n1.target = ExecutionTarget::Gpu {
+        backend: "com-fpga".into(),
+    };
+    let mut n2 = map_node(2, 0, 2, &[], 2);
+    n2.target = ExecutionTarget::Gpu {
+        backend: "com-fpga".into(),
+    };
+    let mut n3 = map_node(3, 0, 3, &[], 3);
+    n3.target = ExecutionTarget::Gpu {
+        backend: "com-fpga".into(),
+    };
+
+    let ready = vec![&n1, &n2, &n3];
+    let batches = executor.schedule_batches(&ready);
+
+    assert_eq!(
+        batches.len(),
+        3,
+        "serial executor must serialize each node into its own batch"
+    );
+    for batch in &batches {
+        assert_eq!(batch.len(), 1);
+    }
+}
+
+#[test]
+fn two_logical_backend_names_sharing_one_physical_resource_cannot_exceed_bound() {
+    let mut executor = HeterogeneousGraphExecutor::default();
+    // Two distinct logical backend names pointing to the same physical device ("gpu-0") with max_inflight = 1
+    executor.register_gpu(
+        "compute-queue-a",
+        BoundedDummyExecutor {
+            profile: ConcurrencyProfile::bounded(1, "physical-gpu-0"),
+        },
+    );
+    executor.register_gpu(
+        "compute-queue-b",
+        BoundedDummyExecutor {
+            profile: ConcurrencyProfile::bounded(1, "physical-gpu-0"),
+        },
+    );
+
+    let mut n1 = map_node(1, 0, 1, &[], 1);
+    n1.target = ExecutionTarget::Gpu {
+        backend: "compute-queue-a".into(),
+    };
+    let mut n2 = map_node(2, 0, 2, &[], 2);
+    n2.target = ExecutionTarget::Gpu {
+        backend: "compute-queue-b".into(),
+    };
+
+    let ready = vec![&n1, &n2];
+    let batches = executor.schedule_batches(&ready);
+
+    assert_eq!(
+        batches.len(),
+        2,
+        "shared physical resource must prevent overlap even across distinct logical backend names"
+    );
+    assert_eq!(batches[0].len(), 1);
+    assert_eq!(batches[1].len(), 1);
+}
+
+#[test]
+fn unregistered_or_missing_concurrency_declaration_fails_closed_to_serial() {
+    let executor = HeterogeneousGraphExecutor::default();
+    // Target is unregistered; profile should be None
+    assert_eq!(
+        executor.concurrency_profile(&ExecutionTarget::Gpu {
+            backend: "unregistered".into()
+        }),
+        None
+    );
+
+    let mut n1 = map_node(1, 0, 1, &[], 1);
+    n1.target = ExecutionTarget::Gpu {
+        backend: "unregistered".into(),
+    };
+    let mut n2 = map_node(2, 0, 2, &[], 2);
+    n2.target = ExecutionTarget::Gpu {
+        backend: "unregistered".into(),
+    };
+
+    let ready = vec![&n1, &n2];
+    let batches = executor.schedule_batches(&ready);
+
+    // Fail-closed behavior: each unregistered target is serialized safely, never given unlimited concurrency
+    assert_eq!(batches.len(), 2);
+}
