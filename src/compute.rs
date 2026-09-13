@@ -79,6 +79,36 @@ pub struct ComputeRegion {
     pub kernel: Option<ComputeKernel>,
 }
 
+/// Machine-readable algebraic grouping law for reduction operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupingLaw {
+    /// Operation is strictly associative with optional identity: (a op b) op c == a op (b op c).
+    Associative { identity: Option<i64> },
+    /// Non-associative or grouping-sensitive operation.
+    NonAssociative,
+}
+
+/// Machine-readable proof determining whether a reduction may be parallelized
+/// without any observable departure from sequential reference semantics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReductionEligibilityProof {
+    pub grouping_law: GroupingLaw,
+    pub overflow_invariant: bool,
+    pub contiguous_storage: bool,
+    pub pure_kernel: bool,
+    pub numeric_domain: NumericDomain,
+}
+
+impl ReductionEligibilityProof {
+    pub fn is_parallel_eligible(&self) -> bool {
+        matches!(self.grouping_law, GroupingLaw::Associative { .. })
+            && self.overflow_invariant
+            && self.contiguous_storage
+            && self.pure_kernel
+            && self.numeric_domain == NumericDomain::FixedWidthInteger
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComputeAnalysis {
     pub shape: ExecutionShape,
@@ -87,6 +117,7 @@ pub struct ComputeAnalysis {
     pub numeric_domain: NumericDomain,
     pub region: Option<ComputeRegion>,
     pub gpu_blockers: Vec<AdmissionBlocker>,
+    pub reduction_proof: Option<ReductionEligibilityProof>,
 }
 
 impl ComputeAnalysis {
@@ -150,6 +181,13 @@ pub fn analyze(ir: &Ir) -> ComputeAnalysis {
         _ => {}
     }
 
+    let reduction_proof = match (shape, region.as_ref()) {
+        (ExecutionShape::Reduction, Some(region)) => {
+            prove_reduction_eligibility(region, effect, storage, numeric_domain)
+        }
+        _ => None,
+    };
+
     ComputeAnalysis {
         shape,
         effect,
@@ -157,6 +195,7 @@ pub fn analyze(ir: &Ir) -> ComputeAnalysis {
         numeric_domain,
         region,
         gpu_blockers,
+        reduction_proof,
     }
 }
 
@@ -177,7 +216,7 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
             initial: None,
             kernel: lower_kernel(function, 1),
         }),
-        ("REDUCE", [function, initial, input]) => Some(ComputeRegion {
+        ("REDUCE" | "NUMERIC-BUFFER-REDUCE", [function, initial, input]) => Some(ComputeRegion {
             operation: BulkOperation::Reduce,
             function: function.clone(),
             input: input.clone(),
@@ -188,15 +227,108 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
     }
 }
 
+fn prove_reduction_eligibility(
+    region: &ComputeRegion,
+    effect: EffectClass,
+    storage: StorageClass,
+    numeric_domain: NumericDomain,
+) -> Option<ReductionEligibilityProof> {
+    let Some(kernel) = &region.kernel else {
+        return Some(ReductionEligibilityProof {
+            grouping_law: GroupingLaw::NonAssociative,
+            overflow_invariant: false,
+            contiguous_storage: storage == StorageClass::ContiguousBuffer,
+            pure_kernel: effect == EffectClass::Pure,
+            numeric_domain,
+        });
+    };
+    if kernel.parameter_count != 2 {
+        return Some(ReductionEligibilityProof {
+            grouping_law: GroupingLaw::NonAssociative,
+            overflow_invariant: false,
+            contiguous_storage: storage == StorageClass::ContiguousBuffer,
+            pure_kernel: effect == EffectClass::Pure,
+            numeric_domain,
+        });
+    }
+
+    let is_associative_add = match &kernel.body {
+        ScalarExpr::CheckedAdd(left, right) => match (&**left, &**right) {
+            (ScalarExpr::Parameter(0), ScalarExpr::Parameter(1))
+            | (ScalarExpr::Parameter(1), ScalarExpr::Parameter(0)) => true,
+            _ => false,
+        },
+        _ => false,
+    };
+
+    let grouping_law = if is_associative_add {
+        GroupingLaw::Associative { identity: Some(0) }
+    } else {
+        GroupingLaw::NonAssociative
+    };
+
+    let mut overflow_invariant = false;
+    if is_associative_add && numeric_domain == NumericDomain::FixedWidthInteger {
+        if let (Ir::Buffer(BufferLiteral::I32(input)), Some(Ir::Int(init))) =
+            (&region.input, &region.initial)
+        {
+            let mut sum_abs: i64 = init.abs();
+            let mut safe = true;
+            for &x in input {
+                if let Some(next) = sum_abs.checked_add((x as i64).abs()) {
+                    sum_abs = next;
+                    if sum_abs > i32::MAX as i64 {
+                        safe = false;
+                        break;
+                    }
+                } else {
+                    safe = false;
+                    break;
+                }
+            }
+            overflow_invariant = safe;
+        }
+    }
+
+    Some(ReductionEligibilityProof {
+        grouping_law,
+        overflow_invariant,
+        contiguous_storage: storage == StorageClass::ContiguousBuffer,
+        pure_kernel: effect == EffectClass::Pure,
+        numeric_domain,
+    })
+}
+
 fn i32_range_proven(region: &ComputeRegion) -> bool {
     let (Some(kernel), Ir::Buffer(BufferLiteral::I32(input))) = (&region.kernel, &region.input)
     else {
         return false;
     };
-    input.iter().all(|element| {
-        eval_i32_range(&kernel.body, &[i64::from(*element)])
-            .is_some_and(|value| i32::try_from(value).is_ok())
-    })
+    match region.operation {
+        BulkOperation::Map => input.iter().all(|element| {
+            eval_i32_range(&kernel.body, &[i64::from(*element)])
+                .is_some_and(|value| i32::try_from(value).is_ok())
+        }),
+        BulkOperation::Reduce => {
+            let Some(Ir::Int(init)) = &region.initial else {
+                return false;
+            };
+            let mut acc = *init;
+            if i32::try_from(acc).is_err() {
+                return false;
+            }
+            for &element in input {
+                let Some(next) = eval_i32_range(&kernel.body, &[acc, i64::from(element)]) else {
+                    return false;
+                };
+                if i32::try_from(next).is_err() {
+                    return false;
+                }
+                acc = next;
+            }
+            true
+        }
+    }
 }
 
 fn eval_i32_range(expression: &ScalarExpr, parameters: &[i64]) -> Option<i64> {
@@ -274,6 +406,17 @@ pub(crate) fn f32_affine_offset(expression: &ScalarExpr) -> Option<i64> {
 }
 
 fn lower_kernel(function: &Ir, expected_parameters: usize) -> Option<ComputeKernel> {
+    if expected_parameters == 2 {
+        if matches!(function, Ir::Var(name) | Ir::Builtin(name) if name == "+") {
+            return Some(ComputeKernel {
+                parameter_count: 2,
+                body: ScalarExpr::CheckedAdd(
+                    Box::new(ScalarExpr::Parameter(0)),
+                    Box::new(ScalarExpr::Parameter(1)),
+                ),
+            });
+        }
+    }
     let Ir::Lambda {
         params: Params::Fixed(parameters),
         body,
@@ -486,37 +629,58 @@ impl ComputeBackend for CpuComputeBackend {
         let region = analysis
             .region
             .ok_or(ComputeExecutionError::UnsupportedOperation)?;
-        if region.operation != BulkOperation::Map {
-            return Err(ComputeExecutionError::UnsupportedOperation);
-        }
         let kernel = region
             .kernel
             .ok_or(ComputeExecutionError::InternalInvariant)?;
-        match region.input {
-            Ir::Buffer(BufferLiteral::I32(input)) => {
-                let mut output = Vec::with_capacity(input.len());
-                for element in input {
-                    let value = eval_i32_range(&kernel.body, &[i64::from(element)])
-                        .ok_or(ComputeExecutionError::InternalInvariant)?;
-                    output.push(
-                        i32::try_from(value)
-                            .map_err(|_| ComputeExecutionError::InternalInvariant)?,
-                    );
+
+        match region.operation {
+            BulkOperation::Map => match region.input {
+                Ir::Buffer(BufferLiteral::I32(input)) => {
+                    let mut output = Vec::with_capacity(input.len());
+                    for element in input {
+                        let value = eval_i32_range(&kernel.body, &[i64::from(element)])
+                            .ok_or(ComputeExecutionError::InternalInvariant)?;
+                        output.push(
+                            i32::try_from(value)
+                                .map_err(|_| ComputeExecutionError::InternalInvariant)?,
+                        );
+                    }
+                    Ok(BufferLiteral::I32(output))
                 }
-                Ok(BufferLiteral::I32(output))
+                Ir::Buffer(BufferLiteral::F32(input)) => {
+                    let offset = f32_affine_offset(&kernel.body)
+                        .ok_or(ComputeExecutionError::InternalInvariant)?
+                        as f32;
+                    Ok(BufferLiteral::F32(
+                        input
+                            .into_iter()
+                            .map(|bits| (f32::from_bits(bits) + offset).to_bits())
+                            .collect(),
+                    ))
+                }
+                _ => Err(ComputeExecutionError::UnsupportedOperation),
+            },
+            BulkOperation::Reduce => {
+                let initial = region
+                    .initial
+                    .as_ref()
+                    .ok_or(ComputeExecutionError::UnsupportedOperation)?;
+                match (&region.input, initial) {
+                    (Ir::Buffer(BufferLiteral::I32(input)), Ir::Int(initial_val)) => {
+                        let mut acc = *initial_val;
+                        let _ = i32::try_from(acc)
+                            .map_err(|_| ComputeExecutionError::InternalInvariant)?;
+                        for &element in input {
+                            acc = eval_i32_range(&kernel.body, &[acc, i64::from(element)])
+                                .ok_or(ComputeExecutionError::InternalInvariant)?;
+                        }
+                        let result = i32::try_from(acc)
+                            .map_err(|_| ComputeExecutionError::InternalInvariant)?;
+                        Ok(BufferLiteral::I32(vec![result]))
+                    }
+                    _ => Err(ComputeExecutionError::UnsupportedOperation),
+                }
             }
-            Ir::Buffer(BufferLiteral::F32(input)) => {
-                let offset = f32_affine_offset(&kernel.body)
-                    .ok_or(ComputeExecutionError::InternalInvariant)?
-                    as f32;
-                Ok(BufferLiteral::F32(
-                    input
-                        .into_iter()
-                        .map(|bits| (f32::from_bits(bits) + offset).to_bits())
-                        .collect(),
-                ))
-            }
-            _ => Err(ComputeExecutionError::UnsupportedOperation),
         }
     }
 }
@@ -595,53 +759,51 @@ impl ParallelCpuComputeBackend {
         let region = analysis
             .region
             .ok_or(ComputeExecutionError::UnsupportedOperation)?;
-        if region.operation != BulkOperation::Map {
-            return Err(ComputeExecutionError::UnsupportedOperation);
-        }
         let kernel = region
             .kernel
             .ok_or(ComputeExecutionError::InternalInvariant)?;
 
-        match region.input {
-            Ir::Buffer(BufferLiteral::I32(input)) => {
-                if input.is_empty() {
-                    return Ok(ParallelExecutionReport {
-                        output: BufferLiteral::I32(Vec::new()),
-                        workers_configured: self.workers,
-                        workers_used: 0,
-                        unique_threads: 0,
-                    });
-                }
-                if self.workers <= 1 || input.len() == 1 {
-                    let mut output = Vec::with_capacity(input.len());
-                    for element in input {
-                        let value = eval_i32_range(&kernel.body, &[i64::from(element)])
-                            .ok_or(ComputeExecutionError::InternalInvariant)?;
-                        output.push(
-                            i32::try_from(value)
-                                .map_err(|_| ComputeExecutionError::InternalInvariant)?,
-                        );
+        match region.operation {
+            BulkOperation::Map => match region.input {
+                Ir::Buffer(BufferLiteral::I32(input)) => {
+                    if input.is_empty() {
+                        return Ok(ParallelExecutionReport {
+                            output: BufferLiteral::I32(Vec::new()),
+                            workers_configured: self.workers,
+                            workers_used: 0,
+                            unique_threads: 0,
+                        });
                     }
-                    return Ok(ParallelExecutionReport {
-                        output: BufferLiteral::I32(output),
-                        workers_configured: self.workers,
-                        workers_used: 1,
-                        unique_threads: 1,
-                    });
-                }
+                    if self.workers <= 1 || input.len() == 1 {
+                        let mut output = Vec::with_capacity(input.len());
+                        for element in input {
+                            let value = eval_i32_range(&kernel.body, &[i64::from(element)])
+                                .ok_or(ComputeExecutionError::InternalInvariant)?;
+                            output.push(
+                                i32::try_from(value)
+                                    .map_err(|_| ComputeExecutionError::InternalInvariant)?,
+                            );
+                        }
+                        return Ok(ParallelExecutionReport {
+                            output: BufferLiteral::I32(output),
+                            workers_configured: self.workers,
+                            workers_used: 1,
+                            unique_threads: 1,
+                        });
+                    }
 
-                let ranges = Self::partition_ranges(input.len(), self.workers);
-                let workers_used = ranges.len();
-                let kernel_body = &kernel.body;
-                let input_slice = input.as_slice();
+                    let ranges = Self::partition_ranges(input.len(), self.workers);
+                    let workers_used = ranges.len();
+                    let kernel_body = &kernel.body;
+                    let input_slice = input.as_slice();
 
-                let chunk_results: Vec<
-                    Result<(Vec<i32>, std::thread::ThreadId), ComputeExecutionError>,
-                > = std::thread::scope(|s| {
-                    let mut handles = Vec::with_capacity(ranges.len());
-                    for (start, end) in ranges {
-                        let chunk = &input_slice[start..end];
-                        let handle = s.spawn(
+                    let chunk_results: Vec<
+                        Result<(Vec<i32>, std::thread::ThreadId), ComputeExecutionError>,
+                    > = std::thread::scope(|s| {
+                        let mut handles = Vec::with_capacity(ranges.len());
+                        for (start, end) in ranges {
+                            let chunk = &input_slice[start..end];
+                            let handle = s.spawn(
                             move || -> Result<(Vec<i32>, std::thread::ThreadId), ComputeExecutionError> {
                                 let mut out = Vec::with_capacity(chunk.len());
                                 for &element in chunk {
@@ -655,72 +817,6 @@ impl ParallelCpuComputeBackend {
                                 Ok((out, std::thread::current().id()))
                             },
                         );
-                        handles.push(handle);
-                    }
-                    handles
-                        .into_iter()
-                        .map(|h| h.join().expect("parallel cpu worker thread panicked"))
-                        .collect()
-                });
-
-                let mut thread_ids = std::collections::HashSet::new();
-                let mut output = Vec::with_capacity(input.len());
-                for chunk_res in chunk_results {
-                    let (chunk_out, tid) = chunk_res?;
-                    thread_ids.insert(tid);
-                    output.extend(chunk_out);
-                }
-
-                Ok(ParallelExecutionReport {
-                    output: BufferLiteral::I32(output),
-                    workers_configured: self.workers,
-                    workers_used,
-                    unique_threads: thread_ids.len(),
-                })
-            }
-            Ir::Buffer(BufferLiteral::F32(input)) => {
-                if input.is_empty() {
-                    return Ok(ParallelExecutionReport {
-                        output: BufferLiteral::F32(Vec::new()),
-                        workers_configured: self.workers,
-                        workers_used: 0,
-                        unique_threads: 0,
-                    });
-                }
-                let offset = f32_affine_offset(&kernel.body)
-                    .ok_or(ComputeExecutionError::InternalInvariant)?
-                    as f32;
-
-                if self.workers <= 1 || input.len() == 1 {
-                    return Ok(ParallelExecutionReport {
-                        output: BufferLiteral::F32(
-                            input
-                                .into_iter()
-                                .map(|bits| (f32::from_bits(bits) + offset).to_bits())
-                                .collect(),
-                        ),
-                        workers_configured: self.workers,
-                        workers_used: 1,
-                        unique_threads: 1,
-                    });
-                }
-
-                let ranges = Self::partition_ranges(input.len(), self.workers);
-                let workers_used = ranges.len();
-                let input_slice = input.as_slice();
-
-                let chunk_results: Vec<(Vec<u32>, std::thread::ThreadId)> =
-                    std::thread::scope(|s| {
-                        let mut handles = Vec::with_capacity(ranges.len());
-                        for (start, end) in ranges {
-                            let chunk = &input_slice[start..end];
-                            let handle = s.spawn(move || -> (Vec<u32>, std::thread::ThreadId) {
-                                let out: Vec<u32> = chunk
-                                    .iter()
-                                    .map(|&bits| (f32::from_bits(bits) + offset).to_bits())
-                                    .collect();
-                                (out, std::thread::current().id())
-                            });
                             handles.push(handle);
                         }
                         handles
@@ -729,21 +825,180 @@ impl ParallelCpuComputeBackend {
                             .collect()
                     });
 
-                let mut thread_ids = std::collections::HashSet::new();
-                let mut output = Vec::with_capacity(input.len());
-                for (chunk_out, tid) in chunk_results {
-                    thread_ids.insert(tid);
-                    output.extend(chunk_out);
+                    let mut thread_ids = std::collections::HashSet::new();
+                    let mut output = Vec::with_capacity(input.len());
+                    for chunk_res in chunk_results {
+                        let (chunk_out, tid) = chunk_res?;
+                        thread_ids.insert(tid);
+                        output.extend(chunk_out);
+                    }
+
+                    Ok(ParallelExecutionReport {
+                        output: BufferLiteral::I32(output),
+                        workers_configured: self.workers,
+                        workers_used,
+                        unique_threads: thread_ids.len(),
+                    })
+                }
+                Ir::Buffer(BufferLiteral::F32(input)) => {
+                    if input.is_empty() {
+                        return Ok(ParallelExecutionReport {
+                            output: BufferLiteral::F32(Vec::new()),
+                            workers_configured: self.workers,
+                            workers_used: 0,
+                            unique_threads: 0,
+                        });
+                    }
+                    let offset = f32_affine_offset(&kernel.body)
+                        .ok_or(ComputeExecutionError::InternalInvariant)?
+                        as f32;
+
+                    if self.workers <= 1 || input.len() == 1 {
+                        return Ok(ParallelExecutionReport {
+                            output: BufferLiteral::F32(
+                                input
+                                    .into_iter()
+                                    .map(|bits| (f32::from_bits(bits) + offset).to_bits())
+                                    .collect(),
+                            ),
+                            workers_configured: self.workers,
+                            workers_used: 1,
+                            unique_threads: 1,
+                        });
+                    }
+
+                    let ranges = Self::partition_ranges(input.len(), self.workers);
+                    let workers_used = ranges.len();
+                    let input_slice = input.as_slice();
+
+                    let chunk_results: Vec<(Vec<u32>, std::thread::ThreadId)> =
+                        std::thread::scope(|s| {
+                            let mut handles = Vec::with_capacity(ranges.len());
+                            for (start, end) in ranges {
+                                let chunk = &input_slice[start..end];
+                                let handle =
+                                    s.spawn(move || -> (Vec<u32>, std::thread::ThreadId) {
+                                        let out: Vec<u32> = chunk
+                                            .iter()
+                                            .map(|&bits| (f32::from_bits(bits) + offset).to_bits())
+                                            .collect();
+                                        (out, std::thread::current().id())
+                                    });
+                                handles.push(handle);
+                            }
+                            handles
+                                .into_iter()
+                                .map(|h| h.join().expect("parallel cpu worker thread panicked"))
+                                .collect()
+                        });
+
+                    let mut thread_ids = std::collections::HashSet::new();
+                    let mut output = Vec::with_capacity(input.len());
+                    for (chunk_out, tid) in chunk_results {
+                        thread_ids.insert(tid);
+                        output.extend(chunk_out);
+                    }
+
+                    Ok(ParallelExecutionReport {
+                        output: BufferLiteral::F32(output),
+                        workers_configured: self.workers,
+                        workers_used,
+                        unique_threads: thread_ids.len(),
+                    })
+                }
+                _ => Err(ComputeExecutionError::UnsupportedOperation),
+            },
+            BulkOperation::Reduce => {
+                let initial = region
+                    .initial
+                    .as_ref()
+                    .ok_or(ComputeExecutionError::UnsupportedOperation)?;
+                let (Ir::Buffer(BufferLiteral::I32(input)), Ir::Int(initial_val)) =
+                    (&region.input, initial)
+                else {
+                    return Err(ComputeExecutionError::UnsupportedOperation);
+                };
+
+                let is_parallel = analysis
+                    .reduction_proof
+                    .as_ref()
+                    .is_some_and(|p| p.is_parallel_eligible())
+                    && self.workers > 1
+                    && input.len() > 1;
+
+                if !is_parallel {
+                    // Explicit fallback to sequential reference fold!
+                    let mut acc = *initial_val;
+                    let _ =
+                        i32::try_from(acc).map_err(|_| ComputeExecutionError::InternalInvariant)?;
+                    for &element in input {
+                        acc = eval_i32_range(&kernel.body, &[acc, i64::from(element)])
+                            .ok_or(ComputeExecutionError::InternalInvariant)?;
+                    }
+                    let result =
+                        i32::try_from(acc).map_err(|_| ComputeExecutionError::InternalInvariant)?;
+                    return Ok(ParallelExecutionReport {
+                        output: BufferLiteral::I32(vec![result]),
+                        workers_configured: self.workers,
+                        workers_used: if input.is_empty() { 0 } else { 1 },
+                        unique_threads: if input.is_empty() { 0 } else { 1 },
+                    });
                 }
 
+                let ranges = Self::partition_ranges(input.len(), self.workers);
+                let workers_used = ranges.len();
+                let kernel_body = &kernel.body;
+                let input_slice = input.as_slice();
+
+                let chunk_results: Vec<
+                    Result<(i32, std::thread::ThreadId), ComputeExecutionError>,
+                > = std::thread::scope(|s| {
+                    let mut handles = Vec::with_capacity(ranges.len());
+                    for (idx, (start, end)) in ranges.into_iter().enumerate() {
+                        let chunk = &input_slice[start..end];
+                        let handle = s.spawn(
+                            move || -> Result<(i32, std::thread::ThreadId), ComputeExecutionError> {
+                                let init_for_worker = if idx == 0 { *initial_val } else { 0 };
+                                let mut acc = init_for_worker;
+                                for &element in chunk {
+                                    acc = eval_i32_range(kernel_body, &[acc, i64::from(element)])
+                                        .ok_or(ComputeExecutionError::InternalInvariant)?;
+                                }
+                                let res = i32::try_from(acc)
+                                    .map_err(|_| ComputeExecutionError::InternalInvariant)?;
+                                Ok((res, std::thread::current().id()))
+                            },
+                        );
+                        handles.push(handle);
+                    }
+                    handles
+                        .into_iter()
+                        .map(|h| h.join().expect("parallel reduction worker thread panicked"))
+                        .collect()
+                });
+
+                let mut thread_ids = std::collections::HashSet::new();
+                let mut total_acc: i64 = 0;
+                for (idx, chunk_res) in chunk_results.into_iter().enumerate() {
+                    let (chunk_sum, tid) = chunk_res?;
+                    thread_ids.insert(tid);
+                    if idx == 0 {
+                        total_acc = chunk_sum as i64;
+                    } else {
+                        total_acc = eval_i32_range(&kernel.body, &[total_acc, chunk_sum as i64])
+                            .ok_or(ComputeExecutionError::InternalInvariant)?;
+                    }
+                }
+                let final_result = i32::try_from(total_acc)
+                    .map_err(|_| ComputeExecutionError::InternalInvariant)?;
+
                 Ok(ParallelExecutionReport {
-                    output: BufferLiteral::F32(output),
+                    output: BufferLiteral::I32(vec![final_result]),
                     workers_configured: self.workers,
                     workers_used,
                     unique_threads: thread_ids.len(),
                 })
             }
-            _ => Err(ComputeExecutionError::UnsupportedOperation),
         }
     }
 }
