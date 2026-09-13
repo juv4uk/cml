@@ -55,7 +55,7 @@ Freestanding x86_64 зріз окремо описаний у
 
 ```bash
 cargo build
-cargo run -- path/to/source.my
+cargo run -- path/to/source.lisp
 ```
 
 ## English
@@ -107,7 +107,7 @@ this is not a claim of full language or boot parity.
 
 ```bash
 cargo build
-cargo run -- path/to/source.my
+cargo run -- path/to/source.lisp
 ```
 
 ## Deutsch
@@ -150,7 +150,7 @@ dies ist kein Anspruch auf vollständige Sprach-oder Boot-Parität.
 
 ```bash
 cargo build
-cargo run -- path/to/source.my
+cargo run -- path/to/source.lisp
 ```
 
 ## Ліцензія

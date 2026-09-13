@@ -5,7 +5,7 @@
 //!
 //! COMPILER-06: macro expansion is an explicit front-end stage
 //! (`expand_macros`) before lowering. The Rust `MacroExpander` is the
-//! live authority in-process; `macros.my` is the parallel Lisp
+//! live authority in-process; `macros.lisp` is the parallel Lisp
 //! implementation (differential evidence only until a host embedding
 //! decision wires it).
 

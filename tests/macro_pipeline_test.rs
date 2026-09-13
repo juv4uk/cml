@@ -1,9 +1,9 @@
 //! COMPILER-06 — macro expansion as an explicit compiler stage.
 //!
 //! Proves `defmacro` is collected and expanded before IR lowering and C
-//! emission, using the same fixtures documented against `macros.my`
+//! emission, using the same fixtures documented against `macros.lisp`
 //! (my-list / my-if). The live in-process authority is Rust
-//! `MacroExpander`; `macros.my` remains the parallel Lisp implementation.
+//! `MacroExpander`; `macros.lisp` remains the parallel Lisp implementation.
 
 use cml::ast::Expr;
 use cml::build::{Observation, compile_and_run, expand_macros, parse_source};
@@ -33,7 +33,7 @@ fn expand_macros_is_explicit_stage() {
 
 #[test]
 fn defmacro_my_list_through_c_backend() {
-    // compatibility.my / macros.my witness: (my-list 1 2 3) → (quote (1 2 3))
+    // compatibility.my / macros.lisp witness: (my-list 1 2 3) → (quote (1 2 3))
     // Evaluating quoted list via car of the expanded form is out of scope;
     // the expanded program is the quoted list itself as a value.
     let src = r#"(defmacro my-list items (cons (quote quote) (cons items (quote ()))))
