@@ -43,6 +43,14 @@ pub enum CompileError {
     TooManySymbols,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefArity {
+    Fixed(usize),
+    Variadic { fixed: usize },
+    AllRest,
+    Data,
+}
+
 impl fmt::Display for CompileError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -151,17 +159,31 @@ impl X86FreestandingBackend {
         let mut def_arities = BTreeMap::new();
         for expression in program {
             if let Ir::Def { name, value } = expression {
-                if let Ir::Lambda {
-                    params: Params::Fixed(params),
-                    ..
-                } = value.as_ref()
-                {
-                    def_arities.insert(name.clone(), Some(params.len()));
-                } else if !matches!(value.as_ref(), Ir::Lambda { .. }) {
-                    // cml#8: a data-only def is a known name (Var reads of it
-                    // are fine) but not callable (None, distinct from an
-                    // unknown name which is simply absent from the map).
-                    def_arities.insert(name.clone(), None);
+                match value.as_ref() {
+                    Ir::Lambda {
+                        params: Params::Fixed(params),
+                        ..
+                    } => {
+                        def_arities.insert(name.clone(), DefArity::Fixed(params.len()));
+                    }
+                    Ir::Lambda {
+                        params: Params::Variadic { fixed, .. },
+                        ..
+                    } => {
+                        def_arities.insert(name.clone(), DefArity::Variadic { fixed: fixed.len() });
+                    }
+                    Ir::Lambda {
+                        params: Params::AllRest(_),
+                        ..
+                    } => {
+                        def_arities.insert(name.clone(), DefArity::AllRest);
+                    }
+                    _ => {
+                        // cml#8: a data-only def is a known name (Var reads of it
+                        // are fine) but not callable (Data, distinct from an
+                        // unknown name which is simply absent from the map).
+                        def_arities.insert(name.clone(), DefArity::Data);
+                    }
                 }
             }
         }
@@ -411,7 +433,7 @@ impl X86FreestandingBackend {
         emitter.line(&format!(".Ltcloop_{}:", loop_label));
 
         // Emit the body with tail-call context.
-        emitter.emit_tail_body(body, loop_label, param_count)?;
+        emitter.emit_tail_body(body, loop_label, param_count, None)?;
 
         // Epilogue (reached only from non-recursive branches).
         emitter.line(&format!("    addq ${frame_bytes}, %rsp"));
@@ -448,7 +470,7 @@ fn contains_tail_self_call(ir: &Ir) -> bool {
 /// an actual first-class use instead of allocating descriptors for every def.
 fn collect_first_class_named_functions(
     program: &[Ir],
-    def_arities: &BTreeMap<String, Option<usize>>,
+    def_arities: &BTreeMap<String, DefArity>,
 ) -> Result<BTreeSet<String>, CompileError> {
     let mut out = BTreeSet::new();
     let bound = BTreeSet::new();
@@ -460,24 +482,31 @@ fn collect_first_class_named_functions(
 
 fn collect_first_class_named_refs(
     ir: &Ir,
-    def_arities: &BTreeMap<String, Option<usize>>,
+    def_arities: &BTreeMap<String, DefArity>,
     bound: &BTreeSet<String>,
     callee_position: bool,
     out: &mut BTreeSet<String>,
 ) -> Result<(), CompileError> {
     match ir {
         Ir::Var(name) if !callee_position && !bound.contains(name) => {
-            // cml#8: a data-only def (None) is an ordinary value read, not a
+            // cml#8: a data-only def (Data) is an ordinary value read, not a
             // first-class-function-value attempt -- only a real function
-            // entry (Some(arity)) is subject to the arity-1 gate below.
-            if let Some(Some(arity)) = def_arities.get(name) {
-                if *arity == 1 {
+            // entry is subject to the arity-1 gate below.
+            match def_arities.get(name) {
+                Some(DefArity::Fixed(1)) => {
                     out.insert(name.clone());
-                } else {
+                }
+                Some(DefArity::Fixed(_)) => {
                     return Err(CompileError::UnsupportedVariant(
                         "first-class named function (arity != 1)",
                     ));
                 }
+                Some(DefArity::Variadic { .. }) | Some(DefArity::AllRest) => {
+                    return Err(CompileError::UnsupportedVariant(
+                        "first-class named function (variadic)",
+                    ));
+                }
+                Some(DefArity::Data) | None => {}
             }
         }
         Ir::Lambda { params, body } => {
@@ -530,7 +559,7 @@ fn collect_first_class_named_refs(
 fn preflight(
     ir: &Ir,
     symbols: &mut BTreeSet<String>,
-    def_arities: &mut BTreeMap<String, Option<usize>>,
+    def_arities: &mut BTreeMap<String, DefArity>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
     preflight_env(ir, &BTreeSet::new(), symbols, def_arities, slots)
@@ -540,7 +569,7 @@ fn preflight_env(
     ir: &Ir,
     bindings: &BTreeSet<String>,
     symbols: &mut BTreeSet<String>,
-    def_arities: &mut BTreeMap<String, Option<usize>>,
+    def_arities: &mut BTreeMap<String, DefArity>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
     *slots += 1;
@@ -630,7 +659,7 @@ fn preflight_env(
             }
             if let Ir::Var(name) = func.as_ref() {
                 match def_arities.get(name) {
-                    Some(Some(arity)) => {
+                    Some(DefArity::Fixed(arity)) => {
                         let arity = *arity;
                         if args.len() != arity {
                             return Err(CompileError::DefArityMismatch {
@@ -644,7 +673,34 @@ fn preflight_env(
                         }
                         return Ok(());
                     }
-                    Some(None) => {
+                    Some(DefArity::Variadic { fixed }) => {
+                        let fixed = *fixed;
+                        if args.len() < fixed {
+                            return Err(CompileError::InvalidArity {
+                                operation: "variadic function",
+                                expected: fixed,
+                                actual: args.len(),
+                            });
+                        }
+                        if fixed + 1 > 5 {
+                            return Err(CompileError::UnsupportedVariant(
+                                "Def (too many params for variadic function)",
+                            ));
+                        }
+                        for argument in args {
+                            preflight_env(argument, bindings, symbols, def_arities, slots)?;
+                        }
+                        *slots += (args.len() - fixed) * 2 + 2;
+                        return Ok(());
+                    }
+                    Some(DefArity::AllRest) => {
+                        for argument in args {
+                            preflight_env(argument, bindings, symbols, def_arities, slots)?;
+                        }
+                        *slots += args.len() * 2 + 2;
+                        return Ok(());
+                    }
+                    Some(DefArity::Data) => {
                         // cml#8: name is a known data-only def, not callable.
                         return Err(CompileError::UnsupportedVariant(
                             "application of a data-only def",
@@ -681,34 +737,59 @@ fn preflight_env(
             preflight_env(body, &new_bindings, symbols, def_arities, slots)?;
         }
         Ir::Def { name, value } => {
-            if let Ir::Lambda {
-                params: Params::Fixed(param_names),
-                body,
-            } = value.as_ref()
-            {
-                let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
-                def_arities.insert(name.clone(), Some(param_names.len()));
-                preflight_def_body(body, &bindings, symbols, def_arities, slots)?;
-                symbols.insert(name.clone());
-                return Ok(());
-            } else if matches!(value.as_ref(), Ir::Lambda { .. }) {
-                return Err(CompileError::UnsupportedVariant(
-                    "def (non-fixed-arity lambda)",
-                ));
-            } else {
-                // A top-level def whose value is not a lambda at all -- an
-                // ordinary data binding (cml#8). Evaluated once at wsm_entry
-                // startup into a dedicated word slot, the same evaluate-once-
-                // into-a-slot shape PR #7's closure descriptors already use,
-                // not a callable and not admitted as one. The value
-                // expression itself still goes through ordinary preflight
-                // (it may be a quoted literal, a primitive call, another
-                // Var, etc.) -- only forward references to a *later* data
-                // def are not handled by this first slice, since data-def
-                // initializers run in program order at startup.
-                preflight(value, symbols, def_arities, slots)?;
-                symbols.insert(name.clone());
-                return Ok(());
+            match value.as_ref() {
+                Ir::Lambda {
+                    params: Params::Fixed(param_names),
+                    body,
+                } => {
+                    let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
+                    def_arities.insert(name.clone(), DefArity::Fixed(param_names.len()));
+                    preflight_def_body(body, &bindings, symbols, def_arities, slots)?;
+                    symbols.insert(name.clone());
+                    return Ok(());
+                }
+                Ir::Lambda {
+                    params: Params::Variadic { fixed, rest },
+                    body,
+                } => {
+                    if fixed.len() + 1 > 5 {
+                        return Err(CompileError::UnsupportedVariant(
+                            "Def (too many params for variadic function)",
+                        ));
+                    }
+                    let mut bindings: BTreeSet<String> = fixed.iter().cloned().collect();
+                    bindings.insert(rest.clone());
+                    def_arities.insert(name.clone(), DefArity::Variadic { fixed: fixed.len() });
+                    preflight_def_body(body, &bindings, symbols, def_arities, slots)?;
+                    symbols.insert(name.clone());
+                    return Ok(());
+                }
+                Ir::Lambda {
+                    params: Params::AllRest(rest),
+                    body,
+                } => {
+                    let mut bindings = BTreeSet::new();
+                    bindings.insert(rest.clone());
+                    def_arities.insert(name.clone(), DefArity::AllRest);
+                    preflight_def_body(body, &bindings, symbols, def_arities, slots)?;
+                    symbols.insert(name.clone());
+                    return Ok(());
+                }
+                _ => {
+                    // A top-level def whose value is not a lambda at all -- an
+                    // ordinary data binding (cml#8). Evaluated once at wsm_entry
+                    // startup into a dedicated word slot, the same evaluate-once-
+                    // into-a-slot shape PR #7's closure descriptors already use,
+                    // not a callable and not admitted as one. The value
+                    // expression itself still goes through ordinary preflight
+                    // (it may be a quoted literal, a primitive call, another
+                    // Var, etc.) -- only forward references to a *later* data
+                    // def are not handled by this first slice, since data-def
+                    // initializers run in program order at startup.
+                    preflight(value, symbols, def_arities, slots)?;
+                    symbols.insert(name.clone());
+                    return Ok(());
+                }
             }
         }
         Ir::TailSelfCall { .. } => {
@@ -851,7 +932,7 @@ fn preflight_lambda_body(
 fn preflight_tail_body(
     ir: &Ir,
     symbols: &mut BTreeSet<String>,
-    def_arities: &mut BTreeMap<String, Option<usize>>,
+    def_arities: &mut BTreeMap<String, DefArity>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
     *slots += 1;
@@ -884,19 +965,24 @@ fn preflight_def_body(
     ir: &Ir,
     bindings: &BTreeSet<String>,
     symbols: &mut BTreeSet<String>,
-    def_arities: &mut BTreeMap<String, Option<usize>>,
+    def_arities: &mut BTreeMap<String, DefArity>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
     *slots += 1;
     match ir {
         Ir::Var(name) if bindings.contains(name) => Ok(()),
         Ir::Var(name) => match def_arities.get(name) {
-            Some(Some(1)) => Ok(()),
-            Some(Some(_)) => Err(CompileError::UnsupportedVariant(
+            Some(DefArity::Fixed(1)) => Ok(()),
+            Some(DefArity::Fixed(_)) => Err(CompileError::UnsupportedVariant(
                 "first-class named function (arity != 1)",
             )),
+            Some(DefArity::Variadic { .. }) | Some(DefArity::AllRest) => {
+                Err(CompileError::UnsupportedVariant(
+                    "first-class named function (variadic)",
+                ))
+            }
             // cml#8: a data-only def is an ordinary value read.
-            Some(None) => Ok(()),
+            Some(DefArity::Data) => Ok(()),
             None => Err(CompileError::UnsupportedVariant("unbound variable")),
         },
         Ir::Int(value) => {
@@ -938,7 +1024,7 @@ fn preflight_def_body(
             if let Ir::Var(name) = func.as_ref() {
                 if !bindings.contains(name) {
                     match def_arities.get(name) {
-                        Some(Some(arity)) => {
+                        Some(DefArity::Fixed(arity)) => {
                             let arity = *arity;
                             if args.len() != arity {
                                 return Err(CompileError::DefArityMismatch {
@@ -958,7 +1044,46 @@ fn preflight_def_body(
                             }
                             return Ok(());
                         }
-                        Some(None) => {
+                        Some(DefArity::Variadic { fixed }) => {
+                            let fixed = *fixed;
+                            if args.len() < fixed {
+                                return Err(CompileError::InvalidArity {
+                                    operation: "variadic function",
+                                    expected: fixed,
+                                    actual: args.len(),
+                                });
+                            }
+                            if fixed + 1 > 5 {
+                                return Err(CompileError::UnsupportedVariant(
+                                    "Def (too many params for variadic function)",
+                                ));
+                            }
+                            for argument in args {
+                                preflight_def_body(
+                                    argument,
+                                    bindings,
+                                    symbols,
+                                    def_arities,
+                                    slots,
+                                )?;
+                            }
+                            *slots += (args.len() - fixed) * 2 + 2;
+                            return Ok(());
+                        }
+                        Some(DefArity::AllRest) => {
+                            for argument in args {
+                                preflight_def_body(
+                                    argument,
+                                    bindings,
+                                    symbols,
+                                    def_arities,
+                                    slots,
+                                )?;
+                            }
+                            *slots += args.len() * 2 + 2;
+                            return Ok(());
+                        }
+                        Some(DefArity::Data) => {
                             return Err(CompileError::UnsupportedVariant(
                                 "application of a data-only def",
                             ));
@@ -1147,7 +1272,7 @@ struct Emitter {
     closure_labels: Vec<usize>,
     named_closure_definitions: BTreeMap<String, usize>,
     functions: BTreeMap<String, usize>,
-    function_arities: BTreeMap<String, Option<usize>>,
+    function_arities: BTreeMap<String, DefArity>,
     /// Top-level data-only defs (cml#8): name -> word-slot id, evaluated
     /// once at wsm_entry startup, mirroring named_closure_definitions'
     /// evaluate-once-into-a-slot shape but for ordinary values instead of
@@ -1262,39 +1387,109 @@ impl Emitter {
                 } else if let Ir::Var(name) = func.as_ref() {
                     // Call a named function (admitted via Def)
                     if let Some(&label) = self.functions.get(name) {
-                        // Evaluate arguments into registers/stack per SysV AMD64
-                        if args.len() > 5 {
-                            return Err(CompileError::UnsupportedVariant(
-                                "App (too many args for named function)",
-                            ));
-                        }
-                        // Evaluate all args to stack slots then load them into
-                        // the target argument registers. `%rdi` stays context.
-                        let arg_slots: Vec<usize> = args
-                            .iter()
-                            .map(|arg| {
-                                self.emit_ir(arg)?;
-                                let slot = self.allocate_slot();
-                                self.line(&format!(
-                                    "    movq %rax, {}(%rsp)",
-                                    Self::slot_offset(slot)
-                                ));
-                                Ok(slot)
-                            })
-                            .collect::<Result<_, CompileError>>()?;
-                        self.line("    movq %r12, %rdi");
-                        let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
-                        for (i, slot) in arg_slots.iter().enumerate() {
-                            if i < regs.len() {
-                                self.line(&format!(
-                                    "    movq {}(%rsp), {}",
-                                    Self::slot_offset(*slot),
-                                    regs[i]
-                                ));
+                        match self.function_arities.get(name) {
+                            Some(DefArity::Fixed(arity)) => {
+                                let arity = *arity;
+                                if args.len() != arity || arity > 5 {
+                                    return Err(CompileError::UnsupportedVariant(
+                                        "App (too many args for named function)",
+                                    ));
+                                }
+                                let arg_slots: Vec<usize> = args
+                                    .iter()
+                                    .map(|arg| {
+                                        self.emit_ir(arg)?;
+                                        let slot = self.allocate_slot();
+                                        self.line(&format!(
+                                            "    movq %rax, {}(%rsp)",
+                                            Self::slot_offset(slot)
+                                        ));
+                                        Ok(slot)
+                                    })
+                                    .collect::<Result<_, CompileError>>()?;
+                                self.line("    movq %r12, %rdi");
+                                let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+                                for (i, slot) in arg_slots.iter().enumerate() {
+                                    self.line(&format!(
+                                        "    movq {}(%rsp), {}",
+                                        Self::slot_offset(*slot),
+                                        regs[i]
+                                    ));
+                                }
+                                self.line(&format!("    call .Lfn_{label}"));
+                                Ok(())
                             }
+                            Some(DefArity::Variadic { fixed }) => {
+                                let fixed = *fixed;
+                                if args.len() < fixed || fixed + 1 > 5 {
+                                    return Err(CompileError::UnsupportedVariant(
+                                        "App (variadic args out of bounds)",
+                                    ));
+                                }
+                                let fixed_args = &args[..fixed];
+                                let rest_args = &args[fixed..];
+
+                                let mut arg_slots = Vec::with_capacity(fixed + 1);
+                                for arg in fixed_args {
+                                    self.emit_ir(arg)?;
+                                    let slot = self.allocate_slot();
+                                    self.line(&format!(
+                                        "    movq %rax, {}(%rsp)",
+                                        Self::slot_offset(slot)
+                                    ));
+                                    arg_slots.push(slot);
+                                }
+
+                                let mut rest_slots = Vec::with_capacity(rest_args.len());
+                                for arg in rest_args {
+                                    self.emit_ir(arg)?;
+                                    let slot = self.allocate_slot();
+                                    self.line(&format!(
+                                        "    movq %rax, {}(%rsp)",
+                                        Self::slot_offset(slot)
+                                    ));
+                                    rest_slots.push(slot);
+                                }
+
+                                let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
+                                arg_slots.push(rest_slot);
+
+                                self.line("    movq %r12, %rdi");
+                                let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+                                for (i, slot) in arg_slots.iter().enumerate() {
+                                    self.line(&format!(
+                                        "    movq {}(%rsp), {}",
+                                        Self::slot_offset(*slot),
+                                        regs[i]
+                                    ));
+                                }
+                                self.line(&format!("    call .Lfn_{label}"));
+                                Ok(())
+                            }
+                            Some(DefArity::AllRest) => {
+                                let mut rest_slots = Vec::with_capacity(args.len());
+                                for arg in args {
+                                    self.emit_ir(arg)?;
+                                    let slot = self.allocate_slot();
+                                    self.line(&format!(
+                                        "    movq %rax, {}(%rsp)",
+                                        Self::slot_offset(slot)
+                                    ));
+                                    rest_slots.push(slot);
+                                }
+
+                                let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
+
+                                self.line("    movq %r12, %rdi");
+                                self.line(&format!(
+                                    "    movq {}(%rsp), %rsi",
+                                    Self::slot_offset(rest_slot)
+                                ));
+                                self.line(&format!("    call .Lfn_{label}"));
+                                Ok(())
+                            }
+                            _ => self.emit_single_argument_closure_call(func, &args[0]),
                         }
-                        self.line(&format!("    call .Lfn_{label}"));
-                        Ok(())
                     } else {
                         self.emit_single_argument_closure_call(func, &args[0])
                     }
@@ -1327,62 +1522,153 @@ impl Emitter {
                 result
             }
             Ir::Def { name, value } => {
-                if let Ir::Lambda {
-                    params: Params::Fixed(param_names),
-                    body,
-                } = value.as_ref()
-                {
-                    let label = *self
-                        .functions
-                        .get(name)
-                        .ok_or(CompileError::UnsupportedVariant("Def (not top-level)"))?;
-
-                    // Named functions own an aligned native frame. `%rdi` is
-                    // the runtime context; user arguments begin in `%rsi`.
-                    let mut ignored_symbols = BTreeSet::new();
-                    let mut ignored_arities = self.function_arities.clone();
-                    let mut body_slots = 0_usize;
-                    let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
-                    preflight_def_body(
+                match value.as_ref() {
+                    Ir::Lambda {
+                        params: Params::Fixed(param_names),
                         body,
-                        &bindings,
-                        &mut ignored_symbols,
-                        &mut ignored_arities,
-                        &mut body_slots,
-                    )?;
-                    let required_slots = param_names.len() + body_slots;
-                    let frame_slots = required_slots.max(1) | 1;
-                    let frame_bytes = frame_slots * 8;
-                    self.line(&format!(".Lfn_{label}:"));
-                    self.line(&format!("    subq ${frame_bytes}, %rsp"));
-                    let mut param_env = BTreeMap::new();
-                    let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
-                    for (i, param) in param_names.iter().enumerate() {
-                        if i < regs.len() {
+                    } => {
+                        let label = *self
+                            .functions
+                            .get(name)
+                            .ok_or(CompileError::UnsupportedVariant("Def (not top-level)"))?;
+
+                        // Named functions own an aligned native frame. `%rdi` is
+                        // the runtime context; user arguments begin in `%rsi`.
+                        let mut ignored_symbols = BTreeSet::new();
+                        let mut ignored_arities = self.function_arities.clone();
+                        let mut body_slots = 0_usize;
+                        let bindings: BTreeSet<String> = param_names.iter().cloned().collect();
+                        preflight_def_body(
+                            body,
+                            &bindings,
+                            &mut ignored_symbols,
+                            &mut ignored_arities,
+                            &mut body_slots,
+                        )?;
+                        let required_slots = param_names.len() + body_slots;
+                        let frame_slots = required_slots.max(1) | 1;
+                        let frame_bytes = frame_slots * 8;
+                        self.line(&format!(".Lfn_{label}:"));
+                        self.line(&format!("    subq ${frame_bytes}, %rsp"));
+                        let mut param_env = BTreeMap::new();
+                        let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+                        for (i, param) in param_names.iter().enumerate() {
+                            if i < regs.len() {
+                                self.line(&format!(
+                                    "    movq {}, {}(%rsp)",
+                                    regs[i],
+                                    Self::slot_offset(i)
+                                ));
+                            } else {
+                                return Err(CompileError::UnsupportedVariant("Def (too many params)"));
+                            }
+                            param_env.insert(param.clone(), i);
+                        }
+                        self.line(&format!(".Ltcloop_{label}:"));
+                        let old_env = std::mem::replace(&mut self.env, param_env);
+                        let old_next_slot = self.next_slot;
+                        self.next_slot = param_names.len();
+                        self.emit_tail_body(body, label, param_names.len(), None)?;
+                        self.env = old_env;
+                        self.next_slot = old_next_slot;
+                        self.line(&format!("    addq ${frame_bytes}, %rsp"));
+                        self.line("    ret");
+                        Ok(())
+                    }
+                    Ir::Lambda {
+                        params: Params::Variadic { fixed, rest },
+                        body,
+                    } => {
+                        let label = *self
+                            .functions
+                            .get(name)
+                            .ok_or(CompileError::UnsupportedVariant("Def (not top-level)"))?;
+                        let mut all_params = fixed.clone();
+                        all_params.push(rest.clone());
+                        if all_params.len() > 5 {
+                            return Err(CompileError::UnsupportedVariant("Def (too many params)"));
+                        }
+
+                        let mut ignored_symbols = BTreeSet::new();
+                        let mut ignored_arities = self.function_arities.clone();
+                        let mut body_slots = 0_usize;
+                        let bindings: BTreeSet<String> = all_params.iter().cloned().collect();
+                        preflight_def_body(
+                            body,
+                            &bindings,
+                            &mut ignored_symbols,
+                            &mut ignored_arities,
+                            &mut body_slots,
+                        )?;
+                        let required_slots = all_params.len() + body_slots;
+                        let frame_slots = required_slots.max(1) | 1;
+                        let frame_bytes = frame_slots * 8;
+                        self.line(&format!(".Lfn_{label}:"));
+                        self.line(&format!("    subq ${frame_bytes}, %rsp"));
+                        let mut param_env = BTreeMap::new();
+                        let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+                        for (i, param) in all_params.iter().enumerate() {
                             self.line(&format!(
                                 "    movq {}, {}(%rsp)",
                                 regs[i],
                                 Self::slot_offset(i)
                             ));
-                        } else {
-                            return Err(CompileError::UnsupportedVariant("Def (too many params)"));
+                            param_env.insert(param.clone(), i);
                         }
-                        param_env.insert(param.clone(), i);
+                        self.line(&format!(".Ltcloop_{label}:"));
+                        let old_env = std::mem::replace(&mut self.env, param_env);
+                        let old_next_slot = self.next_slot;
+                        self.next_slot = all_params.len();
+                        self.emit_tail_body(body, label, all_params.len(), Some(fixed.len()))?;
+                        self.env = old_env;
+                        self.next_slot = old_next_slot;
+                        self.line(&format!("    addq ${frame_bytes}, %rsp"));
+                        self.line("    ret");
+                        Ok(())
                     }
-                    self.line(&format!(".Ltcloop_{label}:"));
-                    let old_env = std::mem::replace(&mut self.env, param_env);
-                    let old_next_slot = self.next_slot;
-                    self.next_slot = param_names.len();
-                    self.emit_tail_body(body, label, param_names.len())?;
-                    self.env = old_env;
-                    self.next_slot = old_next_slot;
-                    self.line(&format!("    addq ${frame_bytes}, %rsp"));
-                    self.line("    ret");
-                    Ok(())
-                } else {
-                    Err(CompileError::UnsupportedVariant(
-                        "def (non-fixed-arity lambda)",
-                    ))
+                    Ir::Lambda {
+                        params: Params::AllRest(rest),
+                        body,
+                    } => {
+                        let label = *self
+                            .functions
+                            .get(name)
+                            .ok_or(CompileError::UnsupportedVariant("Def (not top-level)"))?;
+
+                        let mut ignored_symbols = BTreeSet::new();
+                        let mut ignored_arities = self.function_arities.clone();
+                        let mut body_slots = 0_usize;
+                        let bindings: BTreeSet<String> = BTreeSet::from([rest.clone()]);
+                        preflight_def_body(
+                            body,
+                            &bindings,
+                            &mut ignored_symbols,
+                            &mut ignored_arities,
+                            &mut body_slots,
+                        )?;
+                        let required_slots = 1 + body_slots;
+                        let frame_slots = required_slots.max(1) | 1;
+                        let frame_bytes = frame_slots * 8;
+                        self.line(&format!(".Lfn_{label}:"));
+                        self.line(&format!("    subq ${frame_bytes}, %rsp"));
+                        self.line(&format!(
+                            "    movq %rsi, {}(%rsp)",
+                            Self::slot_offset(0)
+                        ));
+                        let mut param_env = BTreeMap::new();
+                        param_env.insert(rest.clone(), 0);
+                        self.line(&format!(".Ltcloop_{label}:"));
+                        let old_env = std::mem::replace(&mut self.env, param_env);
+                        let old_next_slot = self.next_slot;
+                        self.next_slot = 1;
+                        self.emit_tail_body(body, label, 1, Some(0))?;
+                        self.env = old_env;
+                        self.next_slot = old_next_slot;
+                        self.line(&format!("    addq ${frame_bytes}, %rsp"));
+                        self.line("    ret");
+                        Ok(())
+                    }
+                    _ => Ok(()),
                 }
             }
             Ir::Prim { op, args } => self.emit_primitive(*op, args),
@@ -1443,6 +1729,34 @@ impl Emitter {
         self.emit_direct_lambda_call_with_slots(params, body, &arg_slots)
     }
 
+    fn emit_pack_rest_list(&mut self, rest_slots: &[usize]) -> Result<usize, CompileError> {
+        let mut current_cdr_slot = self.allocate_slot();
+        self.emit_immediate(wsm_os_target::NIL);
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(current_cdr_slot)
+        ));
+
+        for &car_slot in rest_slots.iter().rev() {
+            self.line("    movq %r12, %rdi");
+            self.line(&format!(
+                "    movq {}(%rsp), %rsi",
+                Self::slot_offset(car_slot)
+            ));
+            self.line(&format!(
+                "    movq {}(%rsp), %rdx",
+                Self::slot_offset(current_cdr_slot)
+            ));
+            self.line("    call wsm_cons");
+            current_cdr_slot = self.allocate_slot();
+            self.line(&format!(
+                "    movq %rax, {}(%rsp)",
+                Self::slot_offset(current_cdr_slot)
+            ));
+        }
+        Ok(current_cdr_slot)
+    }
+
     /// Emit a variadic lambda application. Fixed arguments are evaluated first,
     /// then excess arguments are evaluated and packed right-to-left into a WSM list
     /// using `wsm_cons`, passing the result as the `(fixed.len() + 1)`-th argument.
@@ -1473,30 +1787,7 @@ impl Emitter {
             rest_slots.push(slot);
         }
 
-        let mut current_cdr_slot = self.allocate_slot();
-        self.emit_immediate(wsm_os_target::NIL);
-        self.line(&format!(
-            "    movq %rax, {}(%rsp)",
-            Self::slot_offset(current_cdr_slot)
-        ));
-
-        for &car_slot in rest_slots.iter().rev() {
-            self.line("    movq %r12, %rdi");
-            self.line(&format!(
-                "    movq {}(%rsp), %rsi",
-                Self::slot_offset(car_slot)
-            ));
-            self.line(&format!(
-                "    movq {}(%rsp), %rdx",
-                Self::slot_offset(current_cdr_slot)
-            ));
-            self.line("    call wsm_cons");
-            current_cdr_slot = self.allocate_slot();
-            self.line(&format!(
-                "    movq %rax, {}(%rsp)",
-                Self::slot_offset(current_cdr_slot)
-            ));
-        }
+        let current_cdr_slot = self.emit_pack_rest_list(&rest_slots)?;
         arg_slots.push(current_cdr_slot);
 
         let mut effective_params = fixed.to_vec();
@@ -1939,31 +2230,78 @@ impl Emitter {
         ir: &Ir,
         loop_label: usize,
         param_count: usize,
+        variadic_fixed: Option<usize>,
     ) -> Result<(), CompileError> {
         match ir {
             Ir::TailSelfCall { args } => {
-                let tmp_slots: Vec<usize> = args
-                    .iter()
-                    .map(|arg| {
+                if let Some(fixed) = variadic_fixed {
+                    if args.len() < fixed {
+                        return Err(CompileError::InvalidArity {
+                            operation: "variadic tail self-call",
+                            expected: fixed,
+                            actual: args.len(),
+                        });
+                    }
+                    let fixed_args = &args[..fixed];
+                    let rest_args = &args[fixed..];
+
+                    let mut fixed_slots = Vec::with_capacity(fixed);
+                    for arg in fixed_args {
                         self.emit_ir(arg)?;
                         let slot = self.allocate_slot();
                         self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
-                        Ok(slot)
-                    })
-                    .collect::<Result<_, CompileError>>()?;
+                        fixed_slots.push(slot);
+                    }
 
-                for (param_idx, &tmp) in tmp_slots.iter().enumerate().take(param_count) {
-                    self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(tmp)));
+                    let mut rest_slots = Vec::with_capacity(rest_args.len());
+                    for arg in rest_args {
+                        self.emit_ir(arg)?;
+                        let slot = self.allocate_slot();
+                        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                        rest_slots.push(slot);
+                    }
+
+                    let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
+
+                    for (param_idx, &tmp) in fixed_slots.iter().enumerate() {
+                        self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(tmp)));
+                        self.line(&format!(
+                            "    movq %rax, {}(%rsp)",
+                            Self::slot_offset(param_idx)
+                        ));
+                    }
+                    // Place packed rest into the rest param slot (at index `fixed`)
+                    self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(rest_slot)));
                     self.line(&format!(
                         "    movq %rax, {}(%rsp)",
-                        Self::slot_offset(param_idx)
+                        Self::slot_offset(fixed)
                     ));
+                } else {
+                    let tmp_slots: Vec<usize> = args
+                        .iter()
+                        .map(|arg| {
+                            self.emit_ir(arg)?;
+                            let slot = self.allocate_slot();
+                            self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                            Ok(slot)
+                        })
+                        .collect::<Result<_, CompileError>>()?;
+
+                    for (param_idx, &tmp) in tmp_slots.iter().enumerate().take(param_count) {
+                        self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(tmp)));
+                        self.line(&format!(
+                            "    movq %rax, {}(%rsp)",
+                            Self::slot_offset(param_idx)
+                        ));
+                    }
                 }
 
                 self.line(&format!("    jmp .Ltcloop_{loop_label}"));
                 Ok(())
             }
-            Ir::Cond { branches } => self.emit_cond_tail(branches, loop_label, param_count),
+            Ir::Cond { branches } => {
+                self.emit_cond_tail(branches, loop_label, param_count, variadic_fixed)
+            }
             Ir::Let { bindings, body } => {
                 // Lisp `let` is parallel: every value form observes the same
                 // enclosing lexical environment. Store all values first and
@@ -1979,7 +2317,7 @@ impl Emitter {
                 for (name, slot) in body_bindings {
                     self.env.insert(name, slot);
                 }
-                let result = self.emit_tail_body(body, loop_label, param_count);
+                let result = self.emit_tail_body(body, loop_label, param_count, variadic_fixed);
                 self.env = saved_env;
                 result
             }
@@ -1994,6 +2332,7 @@ impl Emitter {
         branches: &[(Ir, Ir)],
         loop_label: usize,
         param_count: usize,
+        variadic_fixed: Option<usize>,
     ) -> Result<(), CompileError> {
         let end_label = self.allocate_label();
         let mut next_branch_label = self.allocate_label();
@@ -2008,7 +2347,7 @@ impl Emitter {
             self.line("    cmpq %rcx, %rax");
             self.line(&format!("    je .Lcond_branch_{next_branch_label}"));
 
-            self.emit_tail_body(expr, loop_label, param_count)?;
+            self.emit_tail_body(expr, loop_label, param_count, variadic_fixed)?;
             self.line(&format!("    jmp .Lcond_end_{end_label}"));
         }
 

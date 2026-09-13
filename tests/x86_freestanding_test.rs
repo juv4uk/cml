@@ -1286,3 +1286,188 @@ fn quoted_symbols_differing_only_by_case_are_not_eq() {
          identifier merged by case-folding"
     );
 }
+
+#[test]
+fn named_all_rest_def_list_assembles_and_runs() {
+    let expressions = parser::parse(
+        "(def list (lambda args args))\n         (list 1 2 3)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("named list def should compile");
+
+    assert!(assembly.contains("call wsm_cons"));
+    assert!(assembly.contains(".Lfn_"));
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-allrest-def-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, &assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nextern uint64_t wsm_car(void *, uint64_t);\nextern uint64_t wsm_cdr(void *, uint64_t);\nint main(void) {\n    uint64_t l = wsm_entry(0);\n    if (wsm_car(0, l) != 11) return 1;\n    l = wsm_cdr(0, l);\n    if (wsm_car(0, l) != 19) return 2;\n    l = wsm_cdr(0, l);\n    if (wsm_car(0, l) != 27) return 3;\n    l = wsm_cdr(0, l);\n    if (l != 1) return 4;\n    return 0;\n}\n",
+    )
+    .unwrap();
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("resolve nucleus.s for freestanding list witness");
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg(&nucleus_path)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "asm-nucleus list witness must link: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(
+        run.status.success(),
+        "named list definition must construct (1 2 3)"
+    );
+}
+
+#[test]
+fn named_all_rest_def_empty_call_returns_nil() {
+    let expressions = parser::parse(
+        "(def list (lambda args args))\n         (list)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("named empty list call should compile");
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-allrest-empty-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, &assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { return wsm_entry(0) == 1 ? 0 : 1; }\n",
+    )
+    .unwrap();
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("resolve nucleus.s for freestanding list witness");
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg(&nucleus_path)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(linked.status.success(), "cc must succeed: {}", String::from_utf8_lossy(&linked.stderr));
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(run.status.success(), "named (list) must return NIL");
+}
+
+#[test]
+fn named_variadic_def_with_fixed_and_rest_params() {
+    let expressions = parser::parse(
+        "(def pick-rest (lambda (a b . rest) rest))\n         (pick-rest 10 20 30 40)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("named variadic def should compile");
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-variadic-def-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nextern uint64_t wsm_car(void *, uint64_t);\nextern uint64_t wsm_cdr(void *, uint64_t);\nint main(void) {\n    uint64_t rest = wsm_entry(0);\n    if (wsm_car(0, rest) != ((30 << 3) | 3)) return 1;\n    rest = wsm_cdr(0, rest);\n    if (wsm_car(0, rest) != ((40 << 3) | 3)) return 2;\n    if (wsm_cdr(0, rest) != 1) return 3;\n    return 0;\n}\n",
+    )
+    .unwrap();
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("resolve nucleus.s for freestanding list witness");
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg(&nucleus_path)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(linked.status.success(), "variadic def witness must link");
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(run.status.success(), "pick-rest must return (30 40)");
+}
+
+#[test]
+fn named_variadic_def_self_tail_recursion_packs_rest() {
+    let expressions = parser::parse(
+        "(def drop-first (lambda (n . rest)\n           (cond ((eq n 0) rest)\n                 (t (drop-first (- n 1) 99)))))\n         (drop-first 1 42)",
+    )
+    .unwrap();
+    let program = lower::lower_program_with_tail_calls(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("variadic self-tail-recursive def should compile");
+
+    assert!(assembly.contains("jmp .Ltcloop_"));
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-variadic-tc-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, &assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nextern uint64_t wsm_car(void *, uint64_t);\nextern uint64_t wsm_cdr(void *, uint64_t);\nint main(void) {\n    uint64_t l = wsm_entry(0);\n    if (wsm_car(0, l) != ((99 << 3) | 3)) return 1;\n    if (wsm_cdr(0, l) != 1) return 2;\n    return 0;\n}\n",
+    )
+    .unwrap();
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("resolve nucleus.s for freestanding list witness");
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg(&nucleus_path)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(linked.status.success(), "variadic tail-call witness must link");
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(run.status.success(), "variadic tail-recursion must succeed");
+}
+
