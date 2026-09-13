@@ -90,3 +90,39 @@ fn top_level_let_closure_value_can_be_applied_within_its_body() {
         "closure value introduced by top-level let must dispatch through the closure ABI; stdout={out} stderr={err}"
     );
 }
+
+#[test]
+fn direct_nullary_lambda_witness() {
+    let expected = wsm_os_target::encode_fixnum(42).expect("42 is a target fixnum");
+    let (ok, out, err) = run_witness("((lambda () 42))", expected, true);
+    assert!(ok, "direct nullary lambda must execute; stdout={out} stderr={err}");
+}
+
+#[test]
+fn direct_binary_lambda_witness() {
+    let expected = wsm_os_target::encode_fixnum(42).expect("42 is a target fixnum");
+    let (ok, out, err) = run_witness("((lambda (x y) (+ x y)) 12 30)", expected, true);
+    assert!(ok, "direct binary lambda must execute; stdout={out} stderr={err}");
+}
+
+#[test]
+fn direct_five_argument_lambda_witness() {
+    let expected = wsm_os_target::encode_fixnum(15).expect("15 is a target fixnum");
+    let (ok, out, err) = run_witness(
+        "((lambda (a b c d e) (+ a (+ b (+ c (+ d e))))) 1 2 3 4 5)",
+        expected,
+        true,
+    );
+    assert!(ok, "direct 5-arg lambda must execute; stdout={out} stderr={err}");
+}
+
+#[test]
+fn direct_lambda_with_lexical_capture_witness() {
+    let expected = wsm_os_target::encode_fixnum(123).expect("123 is a target fixnum");
+    let (ok, out, err) = run_witness(
+        "(let ((x 100)) ((lambda (a b) (+ x (+ a b))) 20 3))",
+        expected,
+        true,
+    );
+    assert!(ok, "direct lambda with capture must execute; stdout={out} stderr={err}");
+}

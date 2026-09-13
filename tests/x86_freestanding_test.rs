@@ -298,8 +298,49 @@ fn nested_lambda_copies_a_captured_outer_binding() {
         .compile_program(&program)
         .expect("nested lambda should closure-convert the bounded outer binding");
     assert_eq!(assembly.matches("call .Llambda_").count(), 2);
-    assert!(assembly.contains("movq %rsp, %rdx"));
-    assert!(assembly.contains("movq 0(%rdx), %rax"));
+    assert!(assembly.contains("movq %rsp, %r10"));
+    assert!(assembly.contains("movq 0(%r10), %rax"));
+}
+
+#[test]
+fn nullary_lambda_application_evaluates_body() {
+    let expressions = parser::parse("((lambda () 42))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("nullary lambda application should compile");
+    assert!(assembly.contains("call .Llambda_"));
+    let encoded = wsm_os_target::encode_fixnum(42).unwrap();
+    assert!(assembly.contains(&format!("movabsq ${encoded}, %rax")));
+}
+
+#[test]
+fn multi_argument_lambda_application_passes_registers() {
+    let expressions = parser::parse("((lambda (x y) (+ x y)) 10 20)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("binary lambda application should compile");
+    assert!(assembly.contains("call .Llambda_"));
+    assert!(assembly.contains("movq %rsi, 0(%rsp)"));
+    assert!(assembly.contains("movq %rdx, 8(%rsp)"));
+}
+
+#[test]
+fn ternary_lambda_application_with_captures() {
+    let expressions = parser::parse(
+        "((lambda (base) ((lambda (a b c) (+ base (+ a (+ b c)))) 1 2 3)) 100)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("ternary lambda with capture should compile");
+    assert_eq!(assembly.matches("call .Llambda_").count(), 2);
+    assert!(assembly.contains("movq %rsp, %r10"));
+    assert!(assembly.contains("movq %rsi, 0(%rsp)"));
+    assert!(assembly.contains("movq %rdx, 8(%rsp)"));
+    assert!(assembly.contains("movq %rcx, 16(%rsp)"));
 }
 
 #[test]

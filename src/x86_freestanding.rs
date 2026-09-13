@@ -533,6 +533,16 @@ fn preflight(
     def_arities: &mut BTreeMap<String, Option<usize>>,
     slots: &mut usize,
 ) -> Result<(), CompileError> {
+    preflight_env(ir, &BTreeSet::new(), symbols, def_arities, slots)
+}
+
+fn preflight_env(
+    ir: &Ir,
+    bindings: &BTreeSet<String>,
+    symbols: &mut BTreeSet<String>,
+    def_arities: &mut BTreeMap<String, Option<usize>>,
+    slots: &mut usize,
+) -> Result<(), CompileError> {
     *slots += 1;
     match ir {
         Ir::Int(value) => {
@@ -550,7 +560,7 @@ fn preflight(
                 });
             }
             for argument in args {
-                preflight(argument, symbols, def_arities, slots)?;
+                preflight_env(argument, bindings, symbols, def_arities, slots)?;
             }
             return Ok(());
         }
@@ -560,8 +570,9 @@ fn preflight(
             params: Params::Fixed(params),
             body,
         } if params.len() == 1 => {
-            let bindings = BTreeSet::from([params[0].clone()]);
-            preflight_lambda_body(body, &bindings, symbols, slots)?;
+            let mut nested_bindings = bindings.clone();
+            nested_bindings.extend(params.iter().cloned());
+            preflight_lambda_body(body, &nested_bindings, symbols, slots)?;
         }
         Ir::Lambda { .. } => return Err(CompileError::UnsupportedVariant("lambda")),
         Ir::App { func, args } => {
@@ -574,7 +585,7 @@ fn preflight(
                     });
                 }
                 for argument in args {
-                    preflight(argument, symbols, def_arities, slots)?;
+                    preflight_env(argument, bindings, symbols, def_arities, slots)?;
                 }
                 return Ok(());
             }
@@ -583,10 +594,13 @@ fn preflight(
                 body,
             } = func.as_ref()
             {
-                if params.len() == 1 && args.len() == 1 {
-                    preflight(&args[0], symbols, def_arities, slots)?;
-                    let bindings = BTreeSet::from([params[0].clone()]);
-                    return preflight_lambda_body(body, &bindings, symbols, slots);
+                if params.len() == args.len() && params.len() <= 5 {
+                    for arg in args {
+                        preflight_env(arg, bindings, symbols, def_arities, slots)?;
+                    }
+                    let mut nested_bindings = bindings.clone();
+                    nested_bindings.extend(params.iter().cloned());
+                    return preflight_lambda_body(body, &nested_bindings, symbols, slots);
                 }
             }
             if let Ir::Var(name) = func.as_ref() {
@@ -601,7 +615,7 @@ fn preflight(
                             });
                         }
                         for argument in args {
-                            preflight(argument, symbols, def_arities, slots)?;
+                            preflight_env(argument, bindings, symbols, def_arities, slots)?;
                         }
                         return Ok(());
                     }
@@ -617,24 +631,26 @@ fn preflight(
             if args.len() != 1 {
                 return Err(CompileError::UnsupportedVariant("application"));
             }
-            preflight(func, symbols, def_arities, slots)?;
-            preflight(&args[0], symbols, def_arities, slots)?;
+            preflight_env(func, bindings, symbols, def_arities, slots)?;
+            preflight_env(&args[0], bindings, symbols, def_arities, slots)?;
         }
         Ir::Cond { branches } => {
             for (test, expr) in branches {
-                preflight(test, symbols, def_arities, slots)?;
-                preflight(expr, symbols, def_arities, slots)?;
+                preflight_env(test, bindings, symbols, def_arities, slots)?;
+                preflight_env(expr, bindings, symbols, def_arities, slots)?;
             }
         }
-        Ir::Let { bindings, body } => {
+        Ir::Let { bindings: let_bindings, body } => {
             // Top-level `let` admits the same parallel-binding shape already
             // handled inside named-definition bodies: every value form is
             // preflight-checked in the enclosing environment, then the body.
             // Binding names are lexical, so a Var read of one is valid.
-            for (_, value) in bindings {
-                preflight(value, symbols, def_arities, slots)?;
+            for (_, value) in let_bindings {
+                preflight_env(value, bindings, symbols, def_arities, slots)?;
             }
-            preflight(body, symbols, def_arities, slots)?;
+            let mut new_bindings = bindings.clone();
+            new_bindings.extend(let_bindings.iter().map(|(name, _)| name.clone()));
+            preflight_env(body, &new_bindings, symbols, def_arities, slots)?;
         }
         Ir::Def { name, value } => {
             if let Ir::Lambda {
@@ -734,6 +750,20 @@ fn preflight_lambda_body(
                     return Ok(());
                 }
             }
+            if let Ir::Lambda {
+                params: Params::Fixed(params),
+                body,
+            } = func.as_ref()
+            {
+                if params.len() == args.len() && params.len() <= 5 {
+                    for arg in args {
+                        preflight_lambda_body(arg, bindings, symbols, slots)?;
+                    }
+                    let mut nested_bindings = bindings.clone();
+                    nested_bindings.extend(params.iter().cloned());
+                    return preflight_lambda_body(body, &nested_bindings, symbols, slots);
+                }
+            }
             if args.len() != 1 {
                 return Err(CompileError::UnsupportedVariant("application"));
             }
@@ -747,6 +777,17 @@ fn preflight_lambda_body(
             let mut nested_bindings = bindings.clone();
             nested_bindings.insert(params[0].clone());
             preflight_lambda_body(body, &nested_bindings, symbols, slots)
+        }
+        Ir::Let {
+            bindings: let_bindings,
+            body,
+        } => {
+            let mut new_bindings = bindings.clone();
+            for (name, val) in let_bindings {
+                preflight_lambda_body(val, bindings, symbols, slots)?;
+                new_bindings.insert(name.clone());
+            }
+            preflight_lambda_body(body, &new_bindings, symbols, slots)
         }
         _ => Err(CompileError::UnsupportedVariant("lambda body")),
     }
@@ -871,6 +912,20 @@ fn preflight_def_body(
                         }
                         None => {}
                     }
+                }
+            }
+            if let Ir::Lambda {
+                params: Params::Fixed(params),
+                body,
+            } = func.as_ref()
+            {
+                if params.len() == args.len() && params.len() <= 5 {
+                    for arg in args {
+                        preflight_def_body(arg, bindings, symbols, def_arities, slots)?;
+                    }
+                    let mut nested_bindings = bindings.clone();
+                    nested_bindings.extend(params.iter().cloned());
+                    return preflight_def_body(body, &nested_bindings, symbols, def_arities, slots);
                 }
             }
             if args.len() != 1 {
@@ -1094,8 +1149,8 @@ impl Emitter {
                     body,
                 } = func.as_ref()
                 {
-                    if params.len() == 1 && args.len() == 1 {
-                        self.emit_single_argument_lambda_call(&params[0], body, &args[0])
+                    if params.len() == args.len() && params.len() <= 5 {
+                        self.emit_direct_lambda_call(params, body, args)
                     } else {
                         Err(CompileError::UnsupportedVariant(
                             "App (multi-arg or non-lambda)",
@@ -1263,21 +1318,43 @@ impl Emitter {
         Ok(())
     }
 
-    /// Emit a bounded, immediately-applied, one-argument lambda as a real
-    /// machine call with its own lexical frame. `%rdi` remains the runtime
+    /// Emit a bounded, immediately-applied lambda with 0 to 5 parameters as a
+    /// real machine call with its own lexical frame. `%rdi` remains the runtime
     /// context register. Existing lexical bindings are closure-converted by
-    /// passing the parent frame pointer and copying bounded captures into the
-    /// callee frame. First-class closure values remain rejected by preflight.
-    fn emit_single_argument_lambda_call(
+    /// passing the parent frame pointer in `%r10` and copying bounded captures
+    /// into the callee frame. First-class closure values remain handled by
+    /// `emit_single_argument_closure_value`.
+    fn emit_direct_lambda_call(
         &mut self,
-        parameter: &str,
+        params: &[String],
         body: &Ir,
-        argument: &Ir,
+        args: &[Ir],
     ) -> Result<(), CompileError> {
-        let captures = self.env.clone();
-        self.emit_ir(argument)?;
-        self.line("    movq %rax, %rsi");
-        self.line("    movq %rsp, %rdx");
+        let mut captures = self.env.clone();
+        for param in params {
+            captures.remove(param);
+        }
+
+        let arg_slots: Vec<usize> = args
+            .iter()
+            .map(|argument| {
+                self.emit_ir(argument)?;
+                let slot = self.allocate_slot();
+                self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                Ok(slot)
+            })
+            .collect::<Result<_, CompileError>>()?;
+
+        self.line("    movq %r12, %rdi");
+        let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+        for (slot, register) in arg_slots.iter().zip(regs.iter()) {
+            self.line(&format!(
+                "    movq {}(%rsp), {register}",
+                Self::slot_offset(*slot)
+            ));
+        }
+        self.line("    movq %rsp, %r10");
+
         let lambda_label = self.allocate_label();
         let continuation_label = self.allocate_label();
         self.line(&format!("    call .Llambda_{lambda_label}"));
@@ -1286,28 +1363,33 @@ impl Emitter {
 
         let mut ignored_symbols = BTreeSet::new();
         let mut body_slots = 0;
-        let mut bindings = BTreeSet::from([parameter.to_string()]);
+        let mut bindings: BTreeSet<String> = params.iter().cloned().collect();
         bindings.extend(captures.keys().cloned());
         preflight_lambda_body(body, &bindings, &mut ignored_symbols, &mut body_slots)?;
-        let required_slots = 1 + captures.len() + body_slots;
-        let frame_slots = if required_slots % 2 == 1 {
-            required_slots
-        } else {
-            required_slots + 1
-        };
+        let required_slots = params.len() + captures.len() + body_slots;
+        let frame_slots = required_slots.max(1) | 1;
         let frame_bytes = frame_slots * 8;
         self.line(&format!("    subq ${frame_bytes}, %rsp"));
-        self.line("    movq %rsi, 0(%rsp)");
+
+        for (i, register) in regs[..params.len()].iter().enumerate() {
+            self.line(&format!(
+                "    movq {register}, {}(%rsp)",
+                Self::slot_offset(i)
+            ));
+        }
 
         let saved_env = core::mem::take(&mut self.env);
         let saved_next_slot = self.next_slot;
-        self.env.insert(parameter.to_string(), 0);
-        self.next_slot = 1;
+        for (i, param) in params.iter().enumerate() {
+            self.env.insert(param.clone(), i);
+        }
+        self.next_slot = params.len();
+
         for (name, parent_slot) in &captures {
             let local_slot = self.next_slot;
             self.next_slot += 1;
             self.line(&format!(
-                "    movq {}(%rdx), %rax",
+                "    movq {}(%r10), %rax",
                 Self::slot_offset(*parent_slot)
             ));
             self.line(&format!(
@@ -1316,6 +1398,7 @@ impl Emitter {
             ));
             self.env.insert(name.clone(), local_slot);
         }
+
         self.emit_ir(body)?;
         self.env = saved_env;
         self.next_slot = saved_next_slot;
