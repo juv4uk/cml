@@ -304,7 +304,7 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     use crate::canon::{
         CANON_COND_EXACT, CANON_COND_UPPER, CANON_DEFINE_EXACT, CANON_DEFINE_UPPER,
         CANON_LAMBDA_EXACT, CANON_LAMBDA_UPPER, CANON_QUOTE_EXACT, CANON_QUOTE_UPPER,
-        is_canon_form,
+        callable_semantic_id, is_canon_form,
     };
     // cml#9 Finding 1: dispatch on the Canon identity of `func` (any
     // registered language), not only its English spelling.
@@ -329,6 +329,20 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 
     let upper = func.to_uppercase();
     if !env.is_bound(&upper) {
+        // Canon callable identity comes from my-lisp's registry. The match
+        // below is only the compiler's finite mechanism projection from an
+        // opaque semantic ID to the IR operation it can implement.
+        if let Some(semantic_id) = callable_semantic_id(func) {
+            match (semantic_id, args.len()) {
+                ("0002", 1) => return lower_prim(PrimOp::Atom, args, env),
+                ("0003", 2) => return lower_prim(PrimOp::Eq, args, env),
+                ("0004", 2) => return lower_prim(PrimOp::Cons, args, env),
+                ("0005", 1) => return lower_prim(PrimOp::Car, args, env),
+                ("0006", 1) => return lower_prim(PrimOp::Cdr, args, env),
+                _ => {}
+            }
+        }
+
         match func {
             "numeric-buffer-map" if args.len() == 2 => {
                 return lower_generic_call(
@@ -342,11 +356,6 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
                     "numeric-buffer-map expects exactly two arguments",
                 ));
             }
-            "cons" if args.len() == 2 => return lower_prim(PrimOp::Cons, args, env),
-            "car" if args.len() == 1 => return lower_prim(PrimOp::Car, args, env),
-            "cdr" if args.len() == 1 => return lower_prim(PrimOp::Cdr, args, env),
-            "eq" if args.len() == 2 => return lower_prim(PrimOp::Eq, args, env),
-            "atom" if args.len() == 1 => return lower_prim(PrimOp::Atom, args, env),
             "equal?" if args.len() == 2 => return lower_prim(PrimOp::EqualP, args, env),
             "+" if args.len() == 2 => return lower_prim(PrimOp::Add, args, env),
             "-" if args.len() == 2 => return lower_prim(PrimOp::Sub, args, env),

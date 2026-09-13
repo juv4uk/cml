@@ -16,3 +16,19 @@ include!(concat!(env!("OUT_DIR"), "/canon_spellings.rs"));
 pub fn is_canon_form(name: &str, upper: &[&str], exact: &[&str]) -> bool {
     upper.contains(&name.to_uppercase().as_str()) || exact.contains(&name)
 }
+
+/// Resolve an admitted Canon callable spelling to the opaque semantic ID
+/// generated from my-lisp's authoritative registry. The compiler may choose
+/// a mechanism for a known ID, but it does not get to invent identity from a
+/// human-facing spelling.
+pub fn callable_semantic_id(name: &str) -> Option<&'static str> {
+    let folded = name.to_uppercase();
+    CANON_CALLABLE_UPPER
+        .iter()
+        .find_map(|(surface, id)| (*surface == folded).then_some(*id))
+        .or_else(|| {
+            CANON_CALLABLE_EXACT
+                .iter()
+                .find_map(|(surface, id)| (*surface == name).then_some(*id))
+        })
+}
