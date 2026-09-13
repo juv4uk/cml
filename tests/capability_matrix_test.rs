@@ -272,6 +272,36 @@ fn capability_matrix_x86_freestanding_stays_at_2_0() {
         caps.get("def-self-tail-recursive") == Some(&"supported".to_string()),
         "x86-freestanding must support self-tail-recursive def (CML-X86-DEF-BOUNDED-SELF-TAIL-RECURSIVE-FUNCTION)"
     );
+    assert_eq!(
+        caps.get("cons"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark cons as supported"
+    );
+    assert_eq!(
+        caps.get("car"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark car as supported"
+    );
+    assert_eq!(
+        caps.get("cdr"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark cdr as supported"
+    );
+    assert_eq!(
+        caps.get("let"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark let as supported"
+    );
+    assert_eq!(
+        caps.get("lambda-variadic"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark lambda-variadic as supported"
+    );
+    assert_eq!(
+        caps.get("lambda-bare-symbol-params"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark lambda-bare-symbol-params as supported"
+    );
 }
 
 #[test]
