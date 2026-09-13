@@ -266,6 +266,26 @@ fn lower_symbol(s: &str, env: &Env) -> Result<Ir, LowerError> {
             ))
         };
     }
+
+    // Canon callable meaning comes from the semantic registry even when the
+    // function appears as a first-class value rather than in call position.
+    // Rust only projects the opaque semantic ID onto the compiler mechanism.
+    if !env.is_bound(&upper) {
+        if let Some(semantic_id) = crate::canon::callable_semantic_id(s) {
+            let builtin_name = match semantic_id {
+                "0002" => Some("ATOM"),
+                "0003" => Some("EQ"),
+                "0004" => Some("CONS"),
+                "0005" => Some("CAR"),
+                "0006" => Some("CDR"),
+                _ => None,
+            };
+            if let Some(name) = builtin_name {
+                return Ok(Ir::Builtin(name.to_string()));
+            }
+        }
+    }
+
     match upper.as_str() {
         // `t`/`nil` are not in the Canon 0+7 reserved set (semantic.rs) --
         // my-lisp treats them as ordinary lexical bindings, shadowable the
