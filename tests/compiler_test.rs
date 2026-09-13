@@ -282,6 +282,8 @@ fn test_end_to_end_execution() {
         .arg("fpga/rtl/lisp_data_unit.sv")
         .arg("fpga/rtl/registers.sv")
         .arg("fpga/rtl/instruction_decoder.sv")
+        .arg("fpga/rtl/upc8_unit.sv")
+        .arg("fpga/rtl/sandhi_engine.sv")
         .arg("fpga/rtl/control.sv")
         .arg("fpga/rtl/uart.sv")
         .arg("fpga/rtl/bootloader.sv")
