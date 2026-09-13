@@ -574,6 +574,44 @@ impl CpuGraphExecutor {
     }
 }
 
+/// Node executor backed by ParallelCpuComputeBackend with explicit worker count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParallelCpuNodeExecutor {
+    backend: crate::compute::ParallelCpuComputeBackend,
+}
+
+impl ParallelCpuNodeExecutor {
+    pub fn new(workers: usize) -> Self {
+        Self {
+            backend: crate::compute::ParallelCpuComputeBackend::new(workers),
+        }
+    }
+
+    pub fn workers(&self) -> usize {
+        self.backend.workers()
+    }
+}
+
+impl Default for ParallelCpuNodeExecutor {
+    fn default() -> Self {
+        Self {
+            backend: crate::compute::ParallelCpuComputeBackend::default(),
+        }
+    }
+}
+
+impl NodeExecutor for ParallelCpuNodeExecutor {
+    fn execute_map(&self, ir: &Ir) -> Result<BufferLiteral, String> {
+        self.backend
+            .execute(ir)
+            .map_err(|error| format!("{error:?}"))
+    }
+
+    fn concurrency_profile(&self) -> ConcurrencyProfile {
+        ConcurrencyProfile::bounded(self.backend.workers(), "cpu-multicore")
+    }
+}
+
 pub struct FpgaTransportNodeExecutor<T> {
     executor: Mutex<FpgaJobExecutor<T>>,
 }

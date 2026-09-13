@@ -520,3 +520,236 @@ impl ComputeBackend for CpuComputeBackend {
         }
     }
 }
+
+/// Diagnostic report detailing worker thread usage and output buffer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParallelExecutionReport {
+    pub output: BufferLiteral,
+    pub workers_configured: usize,
+    pub workers_used: usize,
+    pub unique_threads: usize,
+}
+
+/// Bounded multicore CPU compute backend for pure element-wise contiguous buffers.
+///
+/// Divides admitted contiguous buffers into balanced deterministic partitions, executes
+/// the scalar kernel across bounded OS worker threads without touching the Lisp heap,
+/// and reassembles chunks in canonical input order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParallelCpuComputeBackend {
+    workers: usize,
+}
+
+impl Default for ParallelCpuComputeBackend {
+    fn default() -> Self {
+        Self {
+            workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4),
+        }
+    }
+}
+
+impl ParallelCpuComputeBackend {
+    pub fn new(workers: usize) -> Self {
+        Self {
+            workers: workers.max(1),
+        }
+    }
+
+    pub fn workers(&self) -> usize {
+        self.workers
+    }
+
+    /// Deterministically partition a contiguous buffer of `len` elements across `workers`.
+    ///
+    /// Balances chunks such that the first `len % k` workers receive `base + 1` elements
+    /// and the rest receive `base` elements.
+    pub fn partition_ranges(len: usize, workers: usize) -> Vec<(usize, usize)> {
+        if len == 0 || workers == 0 {
+            return Vec::new();
+        }
+        let k = workers.min(len);
+        let base = len / k;
+        let rem = len % k;
+        let mut ranges = Vec::with_capacity(k);
+        let mut start = 0;
+        for i in 0..k {
+            let size = base + if i < rem { 1 } else { 0 };
+            let end = start + size;
+            ranges.push((start, end));
+            start = end;
+        }
+        ranges
+    }
+
+    /// Execute the element-wise operation and report diagnostic thread usage metrics.
+    pub fn execute_diagnostic(
+        &self,
+        ir: &Ir,
+    ) -> Result<ParallelExecutionReport, ComputeExecutionError> {
+        let analysis = analyze(ir);
+        if !analysis.gpu_eligible() {
+            return Err(ComputeExecutionError::NotEligible(analysis.gpu_blockers));
+        }
+        let region = analysis
+            .region
+            .ok_or(ComputeExecutionError::UnsupportedOperation)?;
+        if region.operation != BulkOperation::Map {
+            return Err(ComputeExecutionError::UnsupportedOperation);
+        }
+        let kernel = region
+            .kernel
+            .ok_or(ComputeExecutionError::InternalInvariant)?;
+
+        match region.input {
+            Ir::Buffer(BufferLiteral::I32(input)) => {
+                if input.is_empty() {
+                    return Ok(ParallelExecutionReport {
+                        output: BufferLiteral::I32(Vec::new()),
+                        workers_configured: self.workers,
+                        workers_used: 0,
+                        unique_threads: 0,
+                    });
+                }
+                if self.workers <= 1 || input.len() == 1 {
+                    let mut output = Vec::with_capacity(input.len());
+                    for element in input {
+                        let value = eval_i32_range(&kernel.body, &[i64::from(element)])
+                            .ok_or(ComputeExecutionError::InternalInvariant)?;
+                        output.push(
+                            i32::try_from(value)
+                                .map_err(|_| ComputeExecutionError::InternalInvariant)?,
+                        );
+                    }
+                    return Ok(ParallelExecutionReport {
+                        output: BufferLiteral::I32(output),
+                        workers_configured: self.workers,
+                        workers_used: 1,
+                        unique_threads: 1,
+                    });
+                }
+
+                let ranges = Self::partition_ranges(input.len(), self.workers);
+                let workers_used = ranges.len();
+                let kernel_body = &kernel.body;
+                let input_slice = input.as_slice();
+
+                let chunk_results: Vec<
+                    Result<(Vec<i32>, std::thread::ThreadId), ComputeExecutionError>,
+                > = std::thread::scope(|s| {
+                    let mut handles = Vec::with_capacity(ranges.len());
+                    for (start, end) in ranges {
+                        let chunk = &input_slice[start..end];
+                        let handle = s.spawn(
+                            move || -> Result<(Vec<i32>, std::thread::ThreadId), ComputeExecutionError> {
+                                let mut out = Vec::with_capacity(chunk.len());
+                                for &element in chunk {
+                                    let value = eval_i32_range(kernel_body, &[i64::from(element)])
+                                        .ok_or(ComputeExecutionError::InternalInvariant)?;
+                                    out.push(
+                                        i32::try_from(value)
+                                            .map_err(|_| ComputeExecutionError::InternalInvariant)?,
+                                    );
+                                }
+                                Ok((out, std::thread::current().id()))
+                            },
+                        );
+                        handles.push(handle);
+                    }
+                    handles
+                        .into_iter()
+                        .map(|h| h.join().expect("parallel cpu worker thread panicked"))
+                        .collect()
+                });
+
+                let mut thread_ids = std::collections::HashSet::new();
+                let mut output = Vec::with_capacity(input.len());
+                for chunk_res in chunk_results {
+                    let (chunk_out, tid) = chunk_res?;
+                    thread_ids.insert(tid);
+                    output.extend(chunk_out);
+                }
+
+                Ok(ParallelExecutionReport {
+                    output: BufferLiteral::I32(output),
+                    workers_configured: self.workers,
+                    workers_used,
+                    unique_threads: thread_ids.len(),
+                })
+            }
+            Ir::Buffer(BufferLiteral::F32(input)) => {
+                if input.is_empty() {
+                    return Ok(ParallelExecutionReport {
+                        output: BufferLiteral::F32(Vec::new()),
+                        workers_configured: self.workers,
+                        workers_used: 0,
+                        unique_threads: 0,
+                    });
+                }
+                let offset = f32_affine_offset(&kernel.body)
+                    .ok_or(ComputeExecutionError::InternalInvariant)?
+                    as f32;
+
+                if self.workers <= 1 || input.len() == 1 {
+                    return Ok(ParallelExecutionReport {
+                        output: BufferLiteral::F32(
+                            input
+                                .into_iter()
+                                .map(|bits| (f32::from_bits(bits) + offset).to_bits())
+                                .collect(),
+                        ),
+                        workers_configured: self.workers,
+                        workers_used: 1,
+                        unique_threads: 1,
+                    });
+                }
+
+                let ranges = Self::partition_ranges(input.len(), self.workers);
+                let workers_used = ranges.len();
+                let input_slice = input.as_slice();
+
+                let chunk_results: Vec<(Vec<u32>, std::thread::ThreadId)> =
+                    std::thread::scope(|s| {
+                        let mut handles = Vec::with_capacity(ranges.len());
+                        for (start, end) in ranges {
+                            let chunk = &input_slice[start..end];
+                            let handle = s.spawn(move || -> (Vec<u32>, std::thread::ThreadId) {
+                                let out: Vec<u32> = chunk
+                                    .iter()
+                                    .map(|&bits| (f32::from_bits(bits) + offset).to_bits())
+                                    .collect();
+                                (out, std::thread::current().id())
+                            });
+                            handles.push(handle);
+                        }
+                        handles
+                            .into_iter()
+                            .map(|h| h.join().expect("parallel cpu worker thread panicked"))
+                            .collect()
+                    });
+
+                let mut thread_ids = std::collections::HashSet::new();
+                let mut output = Vec::with_capacity(input.len());
+                for (chunk_out, tid) in chunk_results {
+                    thread_ids.insert(tid);
+                    output.extend(chunk_out);
+                }
+
+                Ok(ParallelExecutionReport {
+                    output: BufferLiteral::F32(output),
+                    workers_configured: self.workers,
+                    workers_used,
+                    unique_threads: thread_ids.len(),
+                })
+            }
+            _ => Err(ComputeExecutionError::UnsupportedOperation),
+        }
+    }
+}
+
+impl ComputeBackend for ParallelCpuComputeBackend {
+    fn execute(&self, ir: &Ir) -> Result<BufferLiteral, ComputeExecutionError> {
+        self.execute_diagnostic(ir).map(|report| report.output)
+    }
+}
