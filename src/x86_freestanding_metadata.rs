@@ -6,6 +6,7 @@
 //! authority over admission or language semantics: `compile_program` still
 //! runs first and remains the only admission/emission path.
 
+use crate::canon::{CanonOperation, collect_program_operations, find_operation_by_id};
 use crate::ir::{Ir, Quoted};
 use crate::x86_freestanding::{CompileError, X86FreestandingBackend};
 use std::collections::BTreeSet;
@@ -21,11 +22,12 @@ pub struct X86SymbolMetadata {
     pub encoded_word: wsm_os_target::Word,
 }
 
-/// Assembly plus the deterministic symbol projection that belongs to it.
+/// Assembly plus the deterministic symbol and Canon operation projections that belong to it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct X86CompiledProgram {
     pub assembly: String,
     pub symbols: Vec<X86SymbolMetadata>,
+    pub operations: Vec<&'static CanonOperation>,
 }
 
 impl X86CompiledProgram {
@@ -64,11 +66,22 @@ impl X86CompiledProgram {
         }
         true
     }
+
+    /// Fail-closed validation that all operations in metadata match the authoritative
+    /// Canon operations table.
+    pub fn validate_operation_metadata(&self) -> bool {
+        for op in &self.operations {
+            if find_operation_by_id(op.semantic_id) != Some(op) {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 impl X86FreestandingBackend {
     /// Compile through the existing backend, then expose the deterministic
-    /// target symbol assignment as provenance metadata.
+    /// target symbol assignment and canonical operation provenance as metadata.
     ///
     /// Metadata never admits an IR node that `compile_program` rejects and is
     /// never fed back into code generation. It is a read-only projection for
@@ -107,8 +120,13 @@ impl X86FreestandingBackend {
             })
             .collect::<Result<Vec<_>, CompileError>>()?;
 
-        let output = X86CompiledProgram { assembly, symbols };
-        if !output.validate_symbol_metadata() {
+        let operations = collect_program_operations(program);
+        let output = X86CompiledProgram {
+            assembly,
+            symbols,
+            operations,
+        };
+        if !output.validate_symbol_metadata() || !output.validate_operation_metadata() {
             return Err(CompileError::TooManySymbols);
         }
         Ok(output)
@@ -244,5 +262,33 @@ mod tests {
             wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX).unwrap();
         assert!(!mutated.validate_symbol_metadata());
         assert_ne!(compiled, mutated);
+    }
+
+    #[test]
+    fn operations_metadata_records_canonical_identity_and_provenance() {
+        use crate::ir::PrimOp;
+        let backend = X86FreestandingBackend::new();
+        let program = [
+            Ir::Quote(Quoted::Int(42)),
+            Ir::Prim {
+                op: PrimOp::Add,
+                args: vec![Ir::Int(1), Ir::Int(2)],
+            },
+            Ir::Prim {
+                op: PrimOp::Cons,
+                args: vec![Ir::Int(1), Ir::Nil],
+            },
+        ];
+        let compiled = backend.compile_program_with_metadata(&program).unwrap();
+        assert!(compiled.validate_operation_metadata());
+        let op_ids: Vec<&str> = compiled
+            .operations
+            .iter()
+            .map(|op| op.semantic_id)
+            .collect();
+        assert_eq!(op_ids, vec!["0001", "0004", "0104"]);
+        assert_eq!(compiled.operations[0].canonical_name, "quote");
+        assert_eq!(compiled.operations[1].canonical_name, "cons");
+        assert_eq!(compiled.operations[2].canonical_name, "+");
     }
 }

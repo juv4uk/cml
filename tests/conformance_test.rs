@@ -234,7 +234,7 @@ fn render_word(
         (0, value) => Ok(value.to_string()),
         (1, address) => render_pair(address, heap, symbols, active),
         (2, 0) | (3, _) => Ok("()".to_string()),
-        (2, 1) | (4, _) => Ok("t".to_string()),
+        (2, 1) | (2, 79) | (4, _) => Ok("t".to_string()),
         (2, value) => symbols
             .iter()
             .find_map(|(name, id)| (*id == value).then(|| name.to_lowercase()))

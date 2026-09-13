@@ -272,15 +272,7 @@ fn lower_symbol(s: &str, env: &Env) -> Result<Ir, LowerError> {
     // Rust only projects the opaque semantic ID onto the compiler mechanism.
     if !env.is_bound(&upper) {
         if let Some(semantic_id) = crate::canon::callable_semantic_id(s) {
-            let builtin_name = match semantic_id {
-                "0002" => Some("ATOM"),
-                "0003" => Some("EQ"),
-                "0004" => Some("CONS"),
-                "0005" => Some("CAR"),
-                "0006" => Some("CDR"),
-                _ => None,
-            };
-            if let Some(name) = builtin_name {
+            if let Some(name) = crate::canon::canonical_builtin_name(semantic_id) {
                 return Ok(Ir::Builtin(name.to_string()));
             }
         }
@@ -298,13 +290,6 @@ fn lower_symbol(s: &str, env: &Env) -> Result<Ir, LowerError> {
         "T" => Ok(Ir::True),
         "NIL" if env.is_bound(&upper) => Ok(Ir::Var(upper)),
         "NIL" => Ok(Ir::Nil),
-        "CONS" | "CAR" | "CDR" | "EQ" | "ATOM" | "EQUAL?" | "+" | "-" | "NUMERIC-BUFFER-MAP" => {
-            if env.is_bound(&upper) {
-                Ok(Ir::Var(upper))
-            } else {
-                Ok(Ir::Builtin(upper))
-            }
-        }
         _ => Ok(Ir::Var(upper)),
     }
 }
@@ -359,27 +344,23 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
                 ("0004", 2) => return lower_prim(PrimOp::Cons, args, env),
                 ("0005", 1) => return lower_prim(PrimOp::Car, args, env),
                 ("0006", 1) => return lower_prim(PrimOp::Cdr, args, env),
+                ("0104", 2) => return lower_prim(PrimOp::Add, args, env),
+                ("1001", 2) => return lower_prim(PrimOp::Sub, args, env),
+                ("1022", 2) => return lower_prim(PrimOp::EqualP, args, env),
+                ("1074", 2) => {
+                    return lower_generic_call(
+                        &Expr::Symbol("NUMERIC-BUFFER-MAP".to_string()),
+                        args,
+                        env,
+                    );
+                }
+                ("1074", _) => {
+                    return Err(LowerError::arity(
+                        "numeric-buffer-map expects exactly two arguments",
+                    ));
+                }
                 _ => {}
             }
-        }
-
-        match func {
-            "numeric-buffer-map" if args.len() == 2 => {
-                return lower_generic_call(
-                    &Expr::Symbol("NUMERIC-BUFFER-MAP".to_string()),
-                    args,
-                    env,
-                );
-            }
-            "numeric-buffer-map" => {
-                return Err(LowerError::arity(
-                    "numeric-buffer-map expects exactly two arguments",
-                ));
-            }
-            "equal?" if args.len() == 2 => return lower_prim(PrimOp::EqualP, args, env),
-            "+" if args.len() == 2 => return lower_prim(PrimOp::Add, args, env),
-            "-" if args.len() == 2 => return lower_prim(PrimOp::Sub, args, env),
-            _ => {}
         }
     }
 

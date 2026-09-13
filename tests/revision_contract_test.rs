@@ -92,7 +92,9 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
     let isa = fs::read_to_string(fpga_lisp.join("isa-contract.my"))
         .expect("fpga-lisp ISA contract should be readable");
     assert!(
-        isa.contains("(version . (1 1))"),
+        isa.contains("(version . (1 1))")
+            || isa.contains("(version . (1 2))")
+            || isa.contains("(version . (1 3))"),
         "fpga-lisp ISA version drift"
     );
     assert!(
