@@ -402,17 +402,25 @@ fn collect_surfaces(root: &[Sexp], ids: &[&str]) -> (Vec<String>, Vec<String>) {
 
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set");
-    let registry_path = PathBuf::from(&manifest_dir)
+    let mut registry_path = PathBuf::from(&manifest_dir)
         .join("..")
         .join("my-lisp")
         .join("lib")
         .join("surface")
-        .join("semantic-registry.wsm");
+        .join("semantic-registry.lisp");
+    if !registry_path.exists() {
+        registry_path = PathBuf::from(&manifest_dir)
+            .join("..")
+            .join("my-lisp")
+            .join("lib")
+            .join("surface")
+            .join("semantic-registry.wsm");
+    }
     println!("cargo:rerun-if-changed={}", registry_path.display());
 
     let source = fs::read_to_string(&registry_path).unwrap_or_else(|e| {
         panic!(
-            "cml#14: could not read the real semantic-registry.wsm at {} ({e}). \
+            "cml#14: could not read the real semantic-registry at {} ({e}). \
              This build depends on a sibling my-lisp checkout, same convention \
              as compatibility.my's own sibling-repo pin.",
             registry_path.display()
@@ -570,12 +578,12 @@ fn main() {
     fs::write(&out_path, generated)
         .unwrap_or_else(|e| panic!("cml#14: could not write {}: {e}", out_path.display()));
 
-    // Generate machine-readable table: contracts/cml-operations.my
+    // Generate machine-readable table: contracts/cml-operations.lisp
     let mut s_expr = String::new();
     s_expr.push_str(
-        "; cml-operations.my — machine-readable table of CML operations and Canon projections\n",
+        "; cml-operations.lisp — machine-readable table of CML operations and Canon projections\n",
     );
-    s_expr.push_str("; Generated at build time from my-lisp/lib/surface/semantic-registry.wsm. DO NOT EDIT BY HAND.\n\n");
+    s_expr.push_str("; Generated at build time from my-lisp/lib/surface/semantic-registry.lisp. DO NOT EDIT BY HAND.\n\n");
     s_expr.push_str("((kind . cml-operations-table)\n");
     s_expr.push_str(" (version . (1 0))\n");
     s_expr.push_str(" (authority . ((language . juv4uk/my-lisp)\n");
@@ -623,7 +631,7 @@ fn main() {
 
     let operations_path = PathBuf::from(&manifest_dir)
         .join("contracts")
-        .join("cml-operations.my");
+        .join("cml-operations.lisp");
     fs::write(&operations_path, s_expr)
         .unwrap_or_else(|e| panic!("cml#14: could not write {}: {e}", operations_path.display()));
 }

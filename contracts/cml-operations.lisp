@@ -1,5 +1,5 @@
-; cml-operations.my — machine-readable table of CML operations and Canon projections
-; Generated at build time from my-lisp/lib/surface/semantic-registry.wsm. DO NOT EDIT BY HAND.
+; cml-operations.lisp — machine-readable table of CML operations and Canon projections
+; Generated at build time from my-lisp/lib/surface/semantic-registry.lisp. DO NOT EDIT BY HAND.
 
 ((kind . cml-operations-table)
  (version . (1 0))
