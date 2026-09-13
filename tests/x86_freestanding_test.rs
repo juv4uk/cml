@@ -344,6 +344,49 @@ fn ternary_lambda_application_with_captures() {
 }
 
 #[test]
+fn variadic_lambda_application_packs_cons_list() {
+    let expressions = parser::parse("((lambda (a b . rest) rest) 1 2 3 4 5)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("variadic lambda application should compile");
+    assert!(assembly.contains("call .Llambda_"));
+    assert!(assembly.contains("call wsm_cons"));
+    assert!(assembly.contains("movq %rsi, 0(%rsp)"));
+    assert!(assembly.contains("movq %rdx, 8(%rsp)"));
+    assert!(assembly.contains("movq %rcx, 16(%rsp)"));
+}
+
+#[test]
+fn all_rest_lambda_application_packs_cons_list() {
+    let expressions = parser::parse("((lambda args args) 1 2 3)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("all-rest lambda application should compile");
+    assert!(assembly.contains("call .Llambda_"));
+    assert!(assembly.contains("call wsm_cons"));
+    assert!(assembly.contains("movq %rsi, 0(%rsp)"));
+}
+
+#[test]
+fn variadic_lambda_under_arity_is_rejected() {
+    let expressions = parser::parse("((lambda (a b . rest) a) 1)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let error = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect_err("under-arity variadic lambda application must fail");
+    assert_eq!(
+        error,
+        CompileError::InvalidArity {
+            operation: "variadic lambda",
+            expected: 2,
+            actual: 1,
+        }
+    );
+}
+
+#[test]
 fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
     let backend = X86FreestandingBackend::new();
     assert_eq!(

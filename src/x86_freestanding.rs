@@ -589,18 +589,43 @@ fn preflight_env(
                 }
                 return Ok(());
             }
-            if let Ir::Lambda {
-                params: Params::Fixed(params),
-                body,
-            } = func.as_ref()
-            {
-                if params.len() == args.len() && params.len() <= 5 {
-                    for arg in args {
-                        preflight_env(arg, bindings, symbols, def_arities, slots)?;
+            if let Ir::Lambda { params, body } = func.as_ref() {
+                match params {
+                    Params::Fixed(params) if params.len() == args.len() && params.len() <= 5 => {
+                        for arg in args {
+                            preflight_env(arg, bindings, symbols, def_arities, slots)?;
+                        }
+                        let mut nested_bindings = bindings.clone();
+                        nested_bindings.extend(params.iter().cloned());
+                        return preflight_lambda_body(body, &nested_bindings, symbols, slots);
                     }
-                    let mut nested_bindings = bindings.clone();
-                    nested_bindings.extend(params.iter().cloned());
-                    return preflight_lambda_body(body, &nested_bindings, symbols, slots);
+                    Params::Variadic { fixed, rest } if fixed.len() + 1 <= 5 => {
+                        if args.len() < fixed.len() {
+                            return Err(CompileError::InvalidArity {
+                                operation: "variadic lambda",
+                                expected: fixed.len(),
+                                actual: args.len(),
+                            });
+                        }
+                        for arg in args {
+                            preflight_env(arg, bindings, symbols, def_arities, slots)?;
+                        }
+                        *slots += (args.len() - fixed.len()) * 2 + 2;
+                        let mut nested_bindings = bindings.clone();
+                        nested_bindings.extend(fixed.iter().cloned());
+                        nested_bindings.insert(rest.clone());
+                        return preflight_lambda_body(body, &nested_bindings, symbols, slots);
+                    }
+                    Params::AllRest(rest) => {
+                        for arg in args {
+                            preflight_env(arg, bindings, symbols, def_arities, slots)?;
+                        }
+                        *slots += args.len() * 2 + 2;
+                        let mut nested_bindings = bindings.clone();
+                        nested_bindings.insert(rest.clone());
+                        return preflight_lambda_body(body, &nested_bindings, symbols, slots);
+                    }
+                    _ => {}
                 }
             }
             if let Ir::Var(name) = func.as_ref() {
@@ -750,18 +775,43 @@ fn preflight_lambda_body(
                     return Ok(());
                 }
             }
-            if let Ir::Lambda {
-                params: Params::Fixed(params),
-                body,
-            } = func.as_ref()
-            {
-                if params.len() == args.len() && params.len() <= 5 {
-                    for arg in args {
-                        preflight_lambda_body(arg, bindings, symbols, slots)?;
+            if let Ir::Lambda { params, body } = func.as_ref() {
+                match params {
+                    Params::Fixed(params) if params.len() == args.len() && params.len() <= 5 => {
+                        for arg in args {
+                            preflight_lambda_body(arg, bindings, symbols, slots)?;
+                        }
+                        let mut nested_bindings = bindings.clone();
+                        nested_bindings.extend(params.iter().cloned());
+                        return preflight_lambda_body(body, &nested_bindings, symbols, slots);
                     }
-                    let mut nested_bindings = bindings.clone();
-                    nested_bindings.extend(params.iter().cloned());
-                    return preflight_lambda_body(body, &nested_bindings, symbols, slots);
+                    Params::Variadic { fixed, rest } if fixed.len() + 1 <= 5 => {
+                        if args.len() < fixed.len() {
+                            return Err(CompileError::InvalidArity {
+                                operation: "variadic lambda",
+                                expected: fixed.len(),
+                                actual: args.len(),
+                            });
+                        }
+                        for arg in args {
+                            preflight_lambda_body(arg, bindings, symbols, slots)?;
+                        }
+                        *slots += (args.len() - fixed.len()) * 2 + 2;
+                        let mut nested_bindings = bindings.clone();
+                        nested_bindings.extend(fixed.iter().cloned());
+                        nested_bindings.insert(rest.clone());
+                        return preflight_lambda_body(body, &nested_bindings, symbols, slots);
+                    }
+                    Params::AllRest(rest) => {
+                        for arg in args {
+                            preflight_lambda_body(arg, bindings, symbols, slots)?;
+                        }
+                        *slots += args.len() * 2 + 2;
+                        let mut nested_bindings = bindings.clone();
+                        nested_bindings.insert(rest.clone());
+                        return preflight_lambda_body(body, &nested_bindings, symbols, slots);
+                    }
+                    _ => {}
                 }
             }
             if args.len() != 1 {
@@ -914,18 +964,43 @@ fn preflight_def_body(
                     }
                 }
             }
-            if let Ir::Lambda {
-                params: Params::Fixed(params),
-                body,
-            } = func.as_ref()
-            {
-                if params.len() == args.len() && params.len() <= 5 {
-                    for arg in args {
-                        preflight_def_body(arg, bindings, symbols, def_arities, slots)?;
+            if let Ir::Lambda { params, body } = func.as_ref() {
+                match params {
+                    Params::Fixed(params) if params.len() == args.len() && params.len() <= 5 => {
+                        for arg in args {
+                            preflight_def_body(arg, bindings, symbols, def_arities, slots)?;
+                        }
+                        let mut nested_bindings = bindings.clone();
+                        nested_bindings.extend(params.iter().cloned());
+                        return preflight_def_body(body, &nested_bindings, symbols, def_arities, slots);
                     }
-                    let mut nested_bindings = bindings.clone();
-                    nested_bindings.extend(params.iter().cloned());
-                    return preflight_def_body(body, &nested_bindings, symbols, def_arities, slots);
+                    Params::Variadic { fixed, rest } if fixed.len() + 1 <= 5 => {
+                        if args.len() < fixed.len() {
+                            return Err(CompileError::InvalidArity {
+                                operation: "variadic lambda",
+                                expected: fixed.len(),
+                                actual: args.len(),
+                            });
+                        }
+                        for arg in args {
+                            preflight_def_body(arg, bindings, symbols, def_arities, slots)?;
+                        }
+                        *slots += (args.len() - fixed.len()) * 2 + 2;
+                        let mut nested_bindings = bindings.clone();
+                        nested_bindings.extend(fixed.iter().cloned());
+                        nested_bindings.insert(rest.clone());
+                        return preflight_def_body(body, &nested_bindings, symbols, def_arities, slots);
+                    }
+                    Params::AllRest(rest) => {
+                        for arg in args {
+                            preflight_def_body(arg, bindings, symbols, def_arities, slots)?;
+                        }
+                        *slots += args.len() * 2 + 2;
+                        let mut nested_bindings = bindings.clone();
+                        nested_bindings.insert(rest.clone());
+                        return preflight_def_body(body, &nested_bindings, symbols, def_arities, slots);
+                    }
+                    _ => {}
                 }
             }
             if args.len() != 1 {
@@ -1144,17 +1219,22 @@ impl Emitter {
                     && !matches!(func.as_ref(), Ir::Var(name) if self.env.contains_key(name))
                 {
                     self.emit_platform_call(func, args)
-                } else if let Ir::Lambda {
-                    params: Params::Fixed(params),
-                    body,
-                } = func.as_ref()
-                {
-                    if params.len() == args.len() && params.len() <= 5 {
-                        self.emit_direct_lambda_call(params, body, args)
-                    } else {
-                        Err(CompileError::UnsupportedVariant(
+                } else if let Ir::Lambda { params, body } = func.as_ref() {
+                    match params {
+                        Params::Fixed(params) if params.len() == args.len() && params.len() <= 5 => {
+                            self.emit_direct_lambda_call(params, body, args)
+                        }
+                        Params::Variadic { fixed, rest }
+                            if args.len() >= fixed.len() && fixed.len() + 1 <= 5 =>
+                        {
+                            self.emit_direct_variadic_lambda_call(fixed, rest, body, args)
+                        }
+                        Params::AllRest(rest) => {
+                            self.emit_direct_variadic_lambda_call(&[], rest, body, args)
+                        }
+                        _ => Err(CompileError::UnsupportedVariant(
                             "App (multi-arg or non-lambda)",
-                        ))
+                        )),
                     }
                 } else if let Ir::Var(name) = func.as_ref() {
                     // Call a named function (admitted via Def)
@@ -1330,11 +1410,6 @@ impl Emitter {
         body: &Ir,
         args: &[Ir],
     ) -> Result<(), CompileError> {
-        let mut captures = self.env.clone();
-        for param in params {
-            captures.remove(param);
-        }
-
         let arg_slots: Vec<usize> = args
             .iter()
             .map(|argument| {
@@ -1344,6 +1419,82 @@ impl Emitter {
                 Ok(slot)
             })
             .collect::<Result<_, CompileError>>()?;
+
+        self.emit_direct_lambda_call_with_slots(params, body, &arg_slots)
+    }
+
+    /// Emit a variadic lambda application. Fixed arguments are evaluated first,
+    /// then excess arguments are evaluated and packed right-to-left into a WSM list
+    /// using `wsm_cons`, passing the result as the `(fixed.len() + 1)`-th argument.
+    fn emit_direct_variadic_lambda_call(
+        &mut self,
+        fixed: &[String],
+        rest: &str,
+        body: &Ir,
+        args: &[Ir],
+    ) -> Result<(), CompileError> {
+        let fixed_count = fixed.len();
+        let fixed_args = &args[..fixed_count];
+        let rest_args = &args[fixed_count..];
+
+        let mut arg_slots = Vec::with_capacity(fixed_count + 1);
+        for arg in fixed_args {
+            self.emit_ir(arg)?;
+            let slot = self.allocate_slot();
+            self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+            arg_slots.push(slot);
+        }
+
+        let mut rest_slots = Vec::with_capacity(rest_args.len());
+        for arg in rest_args {
+            self.emit_ir(arg)?;
+            let slot = self.allocate_slot();
+            self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+            rest_slots.push(slot);
+        }
+
+        let mut current_cdr_slot = self.allocate_slot();
+        self.emit_immediate(wsm_os_target::NIL);
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(current_cdr_slot)
+        ));
+
+        for &car_slot in rest_slots.iter().rev() {
+            self.line("    movq %r12, %rdi");
+            self.line(&format!(
+                "    movq {}(%rsp), %rsi",
+                Self::slot_offset(car_slot)
+            ));
+            self.line(&format!(
+                "    movq {}(%rsp), %rdx",
+                Self::slot_offset(current_cdr_slot)
+            ));
+            self.line("    call wsm_cons");
+            current_cdr_slot = self.allocate_slot();
+            self.line(&format!(
+                "    movq %rax, {}(%rsp)",
+                Self::slot_offset(current_cdr_slot)
+            ));
+        }
+        arg_slots.push(current_cdr_slot);
+
+        let mut effective_params = fixed.to_vec();
+        effective_params.push(rest.to_string());
+
+        self.emit_direct_lambda_call_with_slots(&effective_params, body, &arg_slots)
+    }
+
+    fn emit_direct_lambda_call_with_slots(
+        &mut self,
+        params: &[String],
+        body: &Ir,
+        arg_slots: &[usize],
+    ) -> Result<(), CompileError> {
+        let mut captures = self.env.clone();
+        for param in params {
+            captures.remove(param);
+        }
 
         self.line("    movq %r12, %rdi");
         let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
