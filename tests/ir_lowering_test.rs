@@ -25,8 +25,12 @@ fn parse_error_line(line: &str) -> bool {
 
 #[test]
 fn lowers_every_tier1_conformance_fixture() {
-    let fixture_path = "../my-lisp/tests/fixtures/conformance.my";
-    let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read conformance.my");
+    let fixture_path = if std::path::Path::new("../my-lisp/tests/fixtures/conformance.lisp").exists() {
+        "../my-lisp/tests/fixtures/conformance.lisp"
+    } else {
+        "../my-lisp/tests/fixtures/conformance.my"
+    };
+    let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read conformance fixture");
 
     let mut checked = 0;
     let mut failures = Vec::new();

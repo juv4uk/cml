@@ -155,8 +155,13 @@ fn backend_lowering_parity_across_backends_for_ukrainian_surfaces() {
 
 #[test]
 fn operations_table_file_matches_compiled_canon_table() {
-    let file_content = std::fs::read_to_string("contracts/cml-operations.my")
-        .expect("contracts/cml-operations.my must exist");
+    let ops_path = if std::path::Path::new("contracts/cml-operations.lisp").exists() {
+        "contracts/cml-operations.lisp"
+    } else {
+        "contracts/cml-operations.my"
+    };
+    let file_content = std::fs::read_to_string(ops_path)
+        .expect("contracts/cml-operations contract must exist");
     assert!(file_content.contains("((kind . cml-operations-table)"));
     assert!(file_content.contains("(version . (1 0))"));
 

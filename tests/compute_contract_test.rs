@@ -2,7 +2,12 @@ use std::fs;
 
 #[test]
 fn machine_readable_compute_contract_matches_implementation() {
-    let contract = fs::read_to_string("compute-contract.my").unwrap();
+    let contract_path = if std::path::Path::new("compute-contract.lisp").exists() {
+        "compute-contract.lisp"
+    } else {
+        "compute-contract.my"
+    };
+    let contract = fs::read_to_string(contract_path).unwrap();
     for required in [
         "(version . (0 28))",
         "(status . experimental-runtime)",
@@ -75,7 +80,12 @@ fn machine_readable_compute_contract_matches_implementation() {
         );
     }
 
-    let compatibility = fs::read_to_string("compatibility.my").unwrap();
+    let compat_path = if std::path::Path::new("compatibility.lisp").exists() {
+        "compatibility.lisp"
+    } else {
+        "compatibility.my"
+    };
+    let compatibility = fs::read_to_string(compat_path).unwrap();
     assert!(
         compatibility.contains("(compute-analysis . ((contract . (0 28))"),
         "compatibility.my compute contract version drifted from compute-contract.my"

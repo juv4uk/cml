@@ -31,9 +31,14 @@ fn run_assembler(asm_code: &str, test_name: &str) {
     let output = if std::path::Path::new(&configured).is_file() {
         // Prefer the self-hosted my-lisp assembler. Run from fpga-lisp so its
         // canonical core.my load resolves; keep Python as explicit fallback.
+        let asm_script = if std::path::Path::new("../fpga-lisp/assembler.lisp").exists() {
+            "assembler.lisp"
+        } else {
+            "assembler.my"
+        };
         Command::new(configured)
             .current_dir("../fpga-lisp")
-            .args(["assembler.my", asm_abs.to_str().unwrap()])
+            .args([asm_script, asm_abs.to_str().unwrap()])
             .arg(&bin_abs)
             .output()
     } else {
@@ -127,9 +132,14 @@ fn test_compile_with_symbols_matches_self_hosted_my_lisp_assembler() {
         let _ = fs::remove_file(&python_bin);
         return;
     }
+    let asm_script = if std::path::Path::new("../fpga-lisp/assembler.lisp").exists() {
+        "assembler.lisp"
+    } else {
+        "assembler.my"
+    };
     let self_hosted = Command::new(my_lisp)
         .current_dir("../fpga-lisp")
-        .args(["assembler.my", asm_path.to_str().unwrap()])
+        .args([asm_script, asm_path.to_str().unwrap()])
         .arg(&my_lisp_bin)
         .output()
         .expect("my-lisp assembler should start");

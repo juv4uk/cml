@@ -221,7 +221,7 @@ pub fn check_digest(export: &SemanticExport, expected: &str) -> Result<(), Expor
 mod tests {
     use super::*;
 
-    const VENDORED: &str = include_str!("../contracts/mylisp-cml-export.wsm");
+    const VENDORED: &str = include_str!("../contracts/mylisp-cml-export.lisp");
 
     #[test]
     fn parses_vendored_export() {

@@ -62,15 +62,20 @@ fn head(path: &Path) -> String {
 // non-noisy check, unchanged.
 #[test]
 fn checked_out_dependencies_match_the_compatibility_contract() {
+    let compat_path = if std::path::Path::new("compatibility.lisp").exists() {
+        "compatibility.lisp"
+    } else {
+        "compatibility.my"
+    };
     let compatibility =
-        fs::read_to_string("compatibility.my").expect("compatibility.my should be readable");
+        fs::read_to_string(compat_path).expect("compatibility contract should be readable");
     assert!(
         compatibility.contains(&format!("(tested-sha . \"{MY_LISP_SHA}\")")),
-        "this file's MY_LISP_SHA constant doesn't match compatibility.my -- update one or the other"
+        "this file's MY_LISP_SHA constant doesn't match compatibility contract -- update one or the other"
     );
     assert!(
         compatibility.contains(&format!("(tested-sha . \"{FPGA_LISP_SHA}\")")),
-        "this file's FPGA_LISP_SHA constant doesn't match compatibility.my -- update one or the other"
+        "this file's FPGA_LISP_SHA constant doesn't match compatibility contract -- update one or the other"
     );
     assert!(compatibility.contains("(isa . (1 1))"));
 
@@ -78,18 +83,24 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
     let fpga_lisp = sibling("fpga-lisp");
     let my_lisp_head = head(&my_lisp);
     let fpga_lisp_head = head(&fpga_lisp);
+
     if my_lisp_head != MY_LISP_SHA {
         eprintln!(
-            "note: my-lisp has moved since compatibility.my was last verified/pinned (pinned {MY_LISP_SHA}, checked out {my_lisp_head}) -- routine in this ecosystem, not a failure; re-verify+bump the pin when convenient, don't chase it every run"
+            "note: my-lisp has moved since compatibility contract was last verified/pinned (pinned {MY_LISP_SHA}, checked out {my_lisp_head}) -- routine in this ecosystem, not a failure; re-verify+bump the pin when convenient, don't chase it every run"
         );
     }
     if fpga_lisp_head != FPGA_LISP_SHA {
         eprintln!(
-            "note: fpga-lisp has moved since compatibility.my was last verified/pinned (pinned {FPGA_LISP_SHA}, checked out {fpga_lisp_head}) -- routine in this ecosystem, not a failure; re-verify+bump the pin when convenient, don't chase it every run"
+            "note: fpga-lisp has moved since compatibility contract was last verified/pinned (pinned {FPGA_LISP_SHA}, checked out {fpga_lisp_head}) -- routine in this ecosystem, not a failure; re-verify+bump the pin when convenient, don't chase it every run"
         );
     }
 
-    let isa = fs::read_to_string(fpga_lisp.join("isa-contract.my"))
+    let isa_file = if fpga_lisp.join("isa-contract.lisp").exists() {
+        fpga_lisp.join("isa-contract.lisp")
+    } else {
+        fpga_lisp.join("isa-contract.my")
+    };
+    let isa = fs::read_to_string(isa_file)
         .expect("fpga-lisp ISA contract should be readable");
     assert!(
         isa.contains("(version . (1 1))")
@@ -115,20 +126,30 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
 #[test]
 fn compatibility_my_contract_version_matches_language_contract_my() {
     let my_lisp = sibling("my-lisp");
-    let language_contract = fs::read_to_string(my_lisp.join("language-contract.my"))
-        .expect("my-lisp's language-contract.my should be readable");
+    let lang_file = if my_lisp.join("language-contract.lisp").exists() {
+        my_lisp.join("language-contract.lisp")
+    } else {
+        my_lisp.join("language-contract.my")
+    };
+    let language_contract = fs::read_to_string(lang_file)
+        .expect("my-lisp's language contract should be readable");
 
     let major = extract_field(&language_contract, "major")
-        .expect("language-contract.my should have a (major . N) field");
+        .expect("language contract should have a (major . N) field");
     let minor = extract_field(&language_contract, "minor")
-        .expect("language-contract.my should have a (minor . N) field");
+        .expect("language contract should have a (minor . N) field");
 
+    let compat_path = if std::path::Path::new("compatibility.lisp").exists() {
+        "compatibility.lisp"
+    } else {
+        "compatibility.my"
+    };
     let compatibility =
-        fs::read_to_string("compatibility.my").expect("compatibility.my should be readable");
+        fs::read_to_string(compat_path).expect("compatibility contract should be readable");
     let observed = format!("(observed-upstream-contract . ({major} {minor}))");
     assert!(
         compatibility.contains(&observed),
-        "compatibility.my's observed upstream contract doesn't match my-lisp's actual language-contract.my \
+        "compatibility's observed upstream contract doesn't match my-lisp's actual language contract \
          (major . {major}) (minor . {minor}). Update `observed-upstream-contract`; do not change the supported \
          `(contract . ...)` field until CML has implemented and verified the new semantics."
     );
