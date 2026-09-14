@@ -1,0 +1,147 @@
+{
+  "format_version": 1,
+  "target_cpu_profile": "Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz",
+  "cml_commit": "052efac98cd03f39516dc7c1d53a8cf304bfc1be",
+  "mylisp_pin": "d4ad7e7c7717a610599875ffb90123b713ac05c7",
+  "optimization_configuration": "opt=off (unoptimized-baseline)",
+  "workloads": [
+    {
+      "id": "scalar-add",
+      "description": "Scalar 64-bit integer addition witness (+ 10 32) -> 42",
+      "lisp_source": "(+ 10 32)",
+      "admitted": true,
+      "correctness_verdict": "PASS",
+      "expected_outcome": "42",
+      "structural_metrics": {
+        "code_bytes": 24,
+        "instruction_count": 4,
+        "load_count": 0,
+        "store_count": 0,
+        "branch_count": 0,
+        "call_count": 0,
+        "spill_count": 0
+      },
+      "lanes": [
+        {
+          "lane_name": "cml-native-unoptimized",
+          "status": "OK",
+          "outcome": "42",
+          "runtime": {
+            "warmup_iterations": 25000,
+            "measured_iterations": 100000,
+            "median_ns": 12,
+            "min_ns": 12,
+            "max_ns": 6124
+          }
+        },
+        {
+          "lane_name": "c-gcc-O3-reference",
+          "status": "OK",
+          "outcome": "42",
+          "runtime": {
+            "warmup_iterations": 25000,
+            "measured_iterations": 100000,
+            "median_ns": 11,
+            "min_ns": 11,
+            "max_ns": 53651
+          }
+        }
+      ]
+    },
+    {
+      "id": "counted-loop-sum-1000",
+      "description": "Counted numeric loop 1000 down to 0 accumulating sum -> 500500",
+      "lisp_source": "(def sum (lambda (n acc) (cond ((eq n 0) acc) (t (sum (- n 1) (+ acc n)))))) (sum 1000 0)",
+      "admitted": true,
+      "correctness_verdict": "PASS",
+      "expected_outcome": "500500",
+      "structural_metrics": {
+        "code_bytes": 34,
+        "instruction_count": 6,
+        "load_count": 0,
+        "store_count": 0,
+        "branch_count": 1,
+        "call_count": 0,
+        "spill_count": 0
+      },
+      "lanes": [
+        {
+          "lane_name": "cml-native-unoptimized",
+          "status": "OK",
+          "outcome": "500500",
+          "runtime": {
+            "warmup_iterations": 2000,
+            "measured_iterations": 10000,
+            "median_ns": 658,
+            "min_ns": 643,
+            "max_ns": 190021
+          }
+        },
+        {
+          "lane_name": "c-gcc-O3-reference",
+          "status": "OK",
+          "outcome": "500500",
+          "runtime": {
+            "warmup_iterations": 2000,
+            "measured_iterations": 10000,
+            "median_ns": 3889,
+            "min_ns": 3684,
+            "max_ns": 188957
+          }
+        }
+      ]
+    },
+    {
+      "id": "buffer-map-i32",
+      "description": "Contiguous i32 buffer map (+ x 1) from Compute IR",
+      "lisp_source": "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3 4 5))",
+      "admitted": true,
+      "correctness_verdict": "PASS",
+      "expected_outcome": "#i32(2 3 4 5 6)",
+      "structural_metrics": null,
+      "lanes": [
+        {
+          "lane_name": "cml-compute-cpu",
+          "status": "OK",
+          "outcome": "#i32(2 3 4 5 6)",
+          "runtime": {
+            "warmup_iterations": 25000,
+            "measured_iterations": 100000,
+            "median_ns": 55,
+            "min_ns": 54,
+            "max_ns": 3438
+          }
+        },
+        {
+          "lane_name": "c-gcc-O3-reference",
+          "status": "OK",
+          "outcome": "#i32(2 3 4 5 6)",
+          "runtime": {
+            "warmup_iterations": 25000,
+            "measured_iterations": 100000,
+            "median_ns": 55,
+            "min_ns": 54,
+            "max_ns": 3438
+          }
+        }
+      ]
+    },
+    {
+      "id": "unsupported-dynamic-fail-closed",
+      "description": "Deliberately unadmitted dynamic operation proving fail-closed compiler policy",
+      "lisp_source": "(unsupported-non-admitted-operation 42)",
+      "admitted": false,
+      "correctness_verdict": "PASS",
+      "expected_outcome": "REJECTED_AS_EXPECTED",
+      "structural_metrics": null,
+      "lanes": [
+        {
+          "lane_name": "cml-native-unoptimized",
+          "status": "REJECTED",
+          "outcome": "BridgeError::UnsupportedInstruction (fail-closed)",
+          "runtime": null
+        }
+      ]
+    }
+  ]
+}
