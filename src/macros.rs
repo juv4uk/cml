@@ -239,6 +239,13 @@ fn eval_macro_body(expr: &Expr, env: &HashMap<String, Expr>) -> Result<Expr, Mac
                     }
                     Ok(nil())
                 }
+                "list" => {
+                    let mut items = Vec::with_capacity(list.len().saturating_sub(1));
+                    for item in &list[1..] {
+                        items.push(eval_macro_body(item, env)?);
+                    }
+                    Ok(Expr::List(items))
+                }
                 other => Err(MacroError::UnsupportedForm(other.to_string())),
             }
         }

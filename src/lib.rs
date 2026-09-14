@@ -21,6 +21,7 @@ pub mod ir;
 pub mod lower;
 pub mod machine_boundary;
 pub mod machine_inst;
+pub mod machine_substrate;
 pub mod macros;
 pub mod parser;
 pub mod placement;

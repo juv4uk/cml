@@ -95,6 +95,53 @@ impl X86Reg {
             Self::R15 => "%r15",
         }
     }
+
+    /// Register name without '%' prefix suitable for S-expression data.
+    #[inline]
+    pub const fn raw_name(self) -> &'static str {
+        match self {
+            Self::Rax => "rax",
+            Self::Rcx => "rcx",
+            Self::Rdx => "rdx",
+            Self::Rbx => "rbx",
+            Self::Rsp => "rsp",
+            Self::Rbp => "rbp",
+            Self::Rsi => "rsi",
+            Self::Rdi => "rdi",
+            Self::R8 => "r8",
+            Self::R9 => "r9",
+            Self::R10 => "r10",
+            Self::R11 => "r11",
+            Self::R12 => "r12",
+            Self::R13 => "r13",
+            Self::R14 => "r14",
+            Self::R15 => "r15",
+        }
+    }
+
+    /// Parse register from name string (with or without '%' prefix).
+    pub fn from_name(name: &str) -> Option<Self> {
+        let clean = name.strip_prefix('%').unwrap_or(name);
+        match clean {
+            "rax" => Some(Self::Rax),
+            "rcx" => Some(Self::Rcx),
+            "rdx" => Some(Self::Rdx),
+            "rbx" => Some(Self::Rbx),
+            "rsp" => Some(Self::Rsp),
+            "rbp" => Some(Self::Rbp),
+            "rsi" => Some(Self::Rsi),
+            "rdi" => Some(Self::Rdi),
+            "r8" => Some(Self::R8),
+            "r9" => Some(Self::R9),
+            "r10" => Some(Self::R10),
+            "r11" => Some(Self::R11),
+            "r12" => Some(Self::R12),
+            "r13" => Some(Self::R13),
+            "r14" => Some(Self::R14),
+            "r15" => Some(Self::R15),
+            _ => None,
+        }
+    }
 }
 
 /// Standard x86-64 symmetric 64-bit arithmetic and logic operations.
@@ -135,6 +182,36 @@ impl AluOp {
             Self::Sub => "subq",
             Self::Xor => "xorq",
             Self::Cmp => "cmpq",
+        }
+    }
+
+    /// Base mnemonic symbol without size suffix for S-expression data.
+    #[inline]
+    pub const fn raw_name(self) -> &'static str {
+        match self {
+            Self::Add => "add",
+            Self::Or => "or",
+            Self::Adc => "adc",
+            Self::Sbb => "sbb",
+            Self::And => "and",
+            Self::Sub => "sub",
+            Self::Xor => "xor",
+            Self::Cmp => "cmp",
+        }
+    }
+
+    /// Parse ALU operation from mnemonic string.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "add" | "addq" => Some(Self::Add),
+            "or" | "orq" => Some(Self::Or),
+            "adc" | "adcq" => Some(Self::Adc),
+            "sbb" | "sbbq" => Some(Self::Sbb),
+            "and" | "andq" => Some(Self::And),
+            "sub" | "subq" => Some(Self::Sub),
+            "xor" | "xorq" => Some(Self::Xor),
+            "cmp" | "cmpq" => Some(Self::Cmp),
+            _ => None,
         }
     }
 }
@@ -180,6 +257,52 @@ impl CondCode {
             Self::GreaterEqual => "ge",
             Self::LessEqual => "le",
             Self::Greater => "g",
+        }
+    }
+
+    /// Canonical name for S-expression representation.
+    #[inline]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Overflow => "overflow",
+            Self::NotOverflow => "not-overflow",
+            Self::Below => "below",
+            Self::AboveEqual => "above-equal",
+            Self::Equal => "equal",
+            Self::NotEqual => "not-equal",
+            Self::BelowEqual => "below-equal",
+            Self::Above => "above",
+            Self::Sign => "sign",
+            Self::NotSign => "not-sign",
+            Self::Parity => "parity",
+            Self::NotParity => "not-parity",
+            Self::Less => "less",
+            Self::GreaterEqual => "greater-equal",
+            Self::LessEqual => "less-equal",
+            Self::Greater => "greater",
+        }
+    }
+
+    /// Parse condition code from string.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "overflow" | "o" => Some(Self::Overflow),
+            "not-overflow" | "no" => Some(Self::NotOverflow),
+            "below" | "b" | "c" => Some(Self::Below),
+            "above-equal" | "ae" | "nc" => Some(Self::AboveEqual),
+            "equal" | "e" | "zero" | "z" => Some(Self::Equal),
+            "not-equal" | "ne" | "not-zero" | "nz" => Some(Self::NotEqual),
+            "below-equal" | "be" => Some(Self::BelowEqual),
+            "above" | "a" => Some(Self::Above),
+            "sign" | "s" => Some(Self::Sign),
+            "not-sign" | "ns" => Some(Self::NotSign),
+            "parity" | "p" => Some(Self::Parity),
+            "not-parity" | "np" => Some(Self::NotParity),
+            "less" | "l" => Some(Self::Less),
+            "greater-equal" | "ge" => Some(Self::GreaterEqual),
+            "less-equal" | "le" => Some(Self::LessEqual),
+            "greater" | "g" => Some(Self::Greater),
+            _ => None,
         }
     }
 }
