@@ -10,7 +10,8 @@ on:
       - ".github/workflows/sync-my-lisp-contract.yml"
   pull_request:
     paths:
-      - "contracts/my-lisp/**"
+      - "contracts/my-lisp/language-contract.*"
+      - "contracts/my-lisp/lock.*"
 
 jobs:
   sync:
@@ -24,3 +25,6 @@ jobs:
     permissions:
       contents: read
     uses: juv4uk/my-lisp/.github/workflows/verify-language-contract.yml@main
+    with:
+      contract_path: contracts/my-lisp/language-contract.lisp
+      lock_path: contracts/my-lisp/lock.lisp

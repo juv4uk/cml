@@ -16,7 +16,7 @@ use std::fmt;
 pub const BOUNDARY_SCHEMA: &str = "machine-lowering-boundary/1";
 
 /// Upstream contract path in CML repository.
-pub const BOUNDARY_CONTRACT_PATH: &str = "contracts/my-lisp/machine-lowering-boundary.lisp";
+pub const BOUNDARY_CONTRACT_PATH: &str = "contracts/machine-lowering-boundary.lisp";
 
 /// Parsed machine lowering boundary representation.
 #[derive(Debug, Clone, PartialEq, Eq)]
