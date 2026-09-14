@@ -38,6 +38,19 @@ fn parse_error_line(line: &str) -> Option<(String, String)> {
     ))
 }
 
+fn gcc_command() -> Command {
+    let mut cmd = Command::new("gcc");
+    if std::env::var("C_INCLUDE_PATH").is_err()
+        && std::path::Path::new("/var/guix/profiles/shared/guix-profile/include").exists()
+    {
+        cmd.env(
+            "C_INCLUDE_PATH",
+            "/var/guix/profiles/shared/guix-profile/include",
+        );
+    }
+    cmd
+}
+
 fn compile_and_run(expr_str: &str, stem: &str) -> Result<std::process::Output, String> {
     let exprs =
         parser::parse(expr_str).map_err(|error| format!("parser admission failed: {error:?}"))?;
@@ -52,7 +65,7 @@ fn compile_and_run(expr_str: &str, stem: &str) -> Result<std::process::Output, S
     let c_path = format!("c_backend_{stem}.c");
     let bin_path = format!("c_backend_{stem}");
     fs::write(&c_path, &c_source).map_err(|error| error.to_string())?;
-    let compile = Command::new("gcc")
+    let compile = gcc_command()
         .arg(&c_path)
         .arg("-o")
         .arg(&bin_path)
@@ -242,7 +255,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         let bin_path = format!("c_backend_conf_{i}");
         fs::write(&c_path, &c_source).unwrap();
 
-        let compile = Command::new("gcc")
+        let compile = gcc_command()
             .arg(&c_path)
             .arg("-o")
             .arg(&bin_path)

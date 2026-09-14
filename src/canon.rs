@@ -118,11 +118,8 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
                     walk(arg, ids);
                 }
             }
-            Ir::MachinePrim { op, args } => {
-                let id = match op {
-                    crate::ir::MachineOp::Rdtsc => "1153",
-                };
-                ids.insert(id);
+            Ir::MachinePrim { args, .. } => {
+                // Machine primitives are compiler-owned target mechanisms, NOT language semantic IDs.
                 for arg in args {
                     walk(arg, ids);
                 }

@@ -1477,24 +1477,28 @@ fn named_variadic_def_self_tail_recursion_packs_rest() {
 
 #[test]
 fn machine_primitive_rdtsc_emits_hardware_instruction_and_runs() {
-    let expressions = parser::parse("(rdtsc)").unwrap();
-    let ir = lower::lower_program(&expressions).unwrap();
-    assert_eq!(
-        ir,
-        vec![Ir::MachinePrim {
-            op: cml::ir::MachineOp::Rdtsc,
-            args: vec![],
-        }]
-    );
+    // Machine primitive is compiler-owned mechanism: tested directly via Ir::MachinePrim
+    let ir = vec![Ir::MachinePrim {
+        op: cml::ir::MachineOp::Rdtsc,
+        args: vec![],
+    }];
     let assembly = X86FreestandingBackend::new().compile_program(&ir).unwrap();
     assert!(
         assembly.contains("rdtsc"),
         "emitted assembly must contain real rdtsc instruction"
     );
 
-    // Also test definition form: (def ticks (rdtsc)) ticks
-    let def_exprs = parser::parse("(def ticks (rdtsc))\nticks").unwrap();
-    let def_ir = lower::lower_program(&def_exprs).unwrap();
+    // Also test through definition IR
+    let def_ir = vec![
+        Ir::Def {
+            name: "ticks".to_string(),
+            value: Box::new(Ir::MachinePrim {
+                op: cml::ir::MachineOp::Rdtsc,
+                args: vec![],
+            }),
+        },
+        Ir::Var("ticks".to_string()),
+    ];
     let def_assembly = X86FreestandingBackend::new()
         .compile_program(&def_ir)
         .unwrap();
@@ -1503,14 +1507,36 @@ fn machine_primitive_rdtsc_emits_hardware_instruction_and_runs() {
         "def ticks assembly must contain real rdtsc instruction"
     );
 
-    // Also verify Ukrainian surface (такти-процесора)
-    let uk_exprs = parser::parse("(такти-процесора)").unwrap();
-    let uk_ir = lower::lower_program(&uk_exprs).unwrap();
+    // Authority boundary guard: (rdtsc) is NOT a recognized my-lisp language builtin.
+    // Lowering it treats it as an ordinary undefined symbol / function call, not Ir::MachinePrim.
+    let expressions = parser::parse("(rdtsc)").unwrap();
+    let lowered = lower::lower_program(&expressions).unwrap();
+    assert!(
+        !matches!(lowered.first(), Some(Ir::MachinePrim { .. })),
+        "cml must not invent language-surface primitive for rdtsc without upstream my-lisp authority"
+    );
+}
+
+#[test]
+fn retired_semantic_id_1153_is_not_an_active_language_callable() {
+    // Verify that 1153 does not exist in active callable IDs or operations
     assert_eq!(
-        uk_ir,
-        vec![Ir::MachinePrim {
-            op: cml::ir::MachineOp::Rdtsc,
-            args: vec![],
-        }]
+        cml::canon::callable_semantic_id("RDTSC"),
+        None,
+        "RDTSC must not exist as an active canonical callable builtin"
+    );
+    assert_eq!(
+        cml::canon::callable_semantic_id("rdtsc"),
+        None,
+        "rdtsc must not exist as an active canonical callable builtin"
+    );
+    assert_eq!(
+        cml::canon::canonical_builtin_name("1153"),
+        None,
+        "1153 must not map to any canonical builtin name"
+    );
+    assert!(
+        cml::canon::find_operation_by_id("1153").is_none(),
+        "semantic ID 1153 is retired and MUST NOT appear in CANON_OPERATIONS_TABLE"
     );
 }
