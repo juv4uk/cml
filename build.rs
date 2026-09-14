@@ -20,8 +20,11 @@ const TARGET_IDS: &[&str] = &["0001", "0002", "0003", "0004", "0005", "0006", "0
 /// Callable primitives and library operations whose semantic identity must survive
 /// surface spelling changes across English, Ukrainian, Sanskrit, and symbolic forms.
 const CALLABLE_IDS: &[&str] = &[
-    "0002", "0003", "0004", "0005", "0006", "0104", "1001", "1022", "1074", "1153",
+    "0002", "0003", "0004", "0005", "0006", "0104", "1001", "1022", "1074",
 ];
+
+/// Retired semantic IDs that must NEVER be active or recycled (e.g. 1153 for former RDTSC attribution).
+const RETIRED_SEMANTIC_IDS: &[&str] = &["1153"];
 
 /// Special-form dispatch sets: form name prefix -> registry IDs.
 const DISPATCH_FORMS: &[(&str, &[&str])] = &[
@@ -43,7 +46,6 @@ const BUILTIN_PROJECTIONS: &[(&str, &str)] = &[
     ("1001", "-"),
     ("1022", "EQUAL?"),
     ("1074", "NUMERIC-BUFFER-MAP"),
-    ("1153", "RDTSC"),
 ];
 
 struct OperationSpec {
@@ -268,20 +270,6 @@ const OPERATIONS: &[OperationSpec] = &[
         authority_owner: "my-lisp:language-core cml:compiler-middle-end",
         provenance_witness: "lib/surface/semantic-registry.wsm tests/c_backend_test.rs",
     },
-    OperationSpec {
-        canonical_name: "rdtsc",
-        semantic_id: "1153",
-        formal_action: "machine:rdtsc",
-        cml_ir_projection: "Ir::MachinePrim(MachineOp::Rdtsc)",
-        backend_projections: &[
-            ("fpga-lisp", "unsupported"),
-            ("c", "unsupported"),
-            ("x86_freestanding", "rdtsc"),
-        ],
-        status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.lisp tests/x86_freestanding_test.rs",
-    },
 ];
 
 #[derive(Debug, Clone)]
@@ -367,17 +355,16 @@ fn list(sexp: &Sexp) -> &[Sexp] {
 }
 
 fn collect_surfaces_detailed(root: &[Sexp], id: &str) -> Vec<(String, String)> {
+    if RETIRED_SEMANTIC_IDS.contains(&id) {
+        panic!(
+            "cml: semantic ID {id} is retired/forbidden by my-lisp authority and cannot be collected as an active surface"
+        );
+    }
     let entry = match root.iter().find(
         |form| matches!(form, Sexp::List(items) if !items.is_empty() && atom(&items[0]) == id),
     ) {
         Some(e) => e,
         None => {
-            if id == "1153" {
-                return vec![
-                    ("en".to_string(), "rdtsc".to_string()),
-                    ("uk".to_string(), "такти-процесора".to_string()),
-                ];
-            }
             panic!("cml#14: semantic-registry has no entry for Canon id {id}");
         }
     };
