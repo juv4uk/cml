@@ -409,6 +409,16 @@ impl NativeExecutable {
     pub fn call(&self) -> u64 {
         (self.func)()
     }
+
+    /// Invokes native buffer kernel with signature `(src, dst, len, addend)`.
+    #[inline(always)]
+    pub fn call_i32_kernel(&self, src: *const i32, dst: *mut i32, len: usize, addend: i32) {
+        unsafe {
+            let func: extern "C" fn(*const i32, *mut i32, usize, i32) =
+                std::mem::transmute(self.ptr);
+            func(src, dst, len, addend);
+        }
+    }
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
