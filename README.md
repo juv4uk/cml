@@ -2,7 +2,7 @@
 
 **Heterogeneous AOT compiler middle-end for my-lisp**
 
-[Українська](#українська) · [English](#english) · [Deutsch](#deutsch)
+[Українська](#українська) · [English](#english) · [Deutsch](#deutsch) · [Документація / CURRENT.md](docs/CURRENT.md) · [Архів](docs/archive/README.md)
 
 ## Українська
 
