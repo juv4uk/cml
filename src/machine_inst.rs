@@ -806,6 +806,112 @@ pub fn select_machine_primitive(op: MachineOp, fixnum_tag: u64) -> Vec<MachineIn
     }
 }
 
+/// An item in an assembleable machine code sequence: either a label or an instruction/jump.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MachineItem {
+    Label(String),
+    Inst(MachineInst),
+    JmpLabel {
+        target: String,
+        provenance: Provenance,
+    },
+    JccLabel {
+        cond: CondCode,
+        target: String,
+        provenance: Provenance,
+    },
+    CallLabel {
+        target: String,
+        provenance: Provenance,
+    },
+}
+
+/// Assembles a sequence of machine items, resolving all labels and relative branch offsets.
+pub fn assemble_program(items: &[MachineItem]) -> Result<Vec<u8>, String> {
+    use std::collections::HashMap;
+
+    // Pass 1: compute byte offsets of each item and record label positions
+    let mut label_offsets = HashMap::new();
+    let mut current_offset: usize = 0;
+
+    for item in items {
+        match item {
+            MachineItem::Label(name) => {
+                if label_offsets.insert(name.clone(), current_offset).is_some() {
+                    return Err(format!("duplicate label: {name}"));
+                }
+            }
+            MachineItem::Inst(inst) => {
+                current_offset += inst.encode_bytes().len();
+            }
+            MachineItem::JmpLabel { .. } => {
+                current_offset += 5; // 0xE9 + 4-byte displacement
+            }
+            MachineItem::JccLabel { .. } => {
+                current_offset += 6; // 0x0F 0x8x + 4-byte displacement
+            }
+            MachineItem::CallLabel { .. } => {
+                current_offset += 5; // 0xE8 + 4-byte displacement
+            }
+        }
+    }
+
+    // Pass 2: encode instructions and compute relative displacements
+    let mut bytes = Vec::with_capacity(current_offset);
+
+    for item in items {
+        match item {
+            MachineItem::Label(_) => {}
+            MachineItem::Inst(inst) => {
+                bytes.extend_from_slice(&inst.encode_bytes());
+            }
+            MachineItem::JmpLabel { target, provenance } => {
+                let target_offset = label_offsets
+                    .get(target)
+                    .ok_or_else(|| format!("unresolved label: {target}"))?;
+                let next_ip = bytes.len() + 5;
+                let disp = (*target_offset as isize) - (next_ip as isize);
+                let inst = MachineInst::JmpRel32 {
+                    disp: disp as i32,
+                    provenance: provenance.clone(),
+                };
+                bytes.extend_from_slice(&inst.encode_bytes());
+            }
+            MachineItem::JccLabel {
+                cond,
+                target,
+                provenance,
+            } => {
+                let target_offset = label_offsets
+                    .get(target)
+                    .ok_or_else(|| format!("unresolved label: {target}"))?;
+                let next_ip = bytes.len() + 6;
+                let disp = (*target_offset as isize) - (next_ip as isize);
+                let inst = MachineInst::JccRel32 {
+                    cond: *cond,
+                    disp: disp as i32,
+                    provenance: provenance.clone(),
+                };
+                bytes.extend_from_slice(&inst.encode_bytes());
+            }
+            MachineItem::CallLabel { target, provenance } => {
+                let target_offset = label_offsets
+                    .get(target)
+                    .ok_or_else(|| format!("unresolved label: {target}"))?;
+                let next_ip = bytes.len() + 5;
+                let disp = (*target_offset as isize) - (next_ip as isize);
+                let inst = MachineInst::CallRel32 {
+                    disp: disp as i32,
+                    provenance: provenance.clone(),
+                };
+                bytes.extend_from_slice(&inst.encode_bytes());
+            }
+        }
+    }
+
+    Ok(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1044,5 +1150,46 @@ mod tests {
                 "encoding mismatch for `{asm_text}`: direct={direct_bytes:02X?}, oracle={oracle_bytes:02X?}"
             );
         }
+    }
+
+    #[test]
+    fn test_assemble_program_two_pass_labels() {
+        let prov = Provenance::new(None, "assemble_program test");
+        let items = vec![
+            MachineItem::Inst(MachineInst::AluImm8 {
+                op: AluOp::Cmp,
+                dst: X86Reg::Rax,
+                imm: 0,
+                provenance: prov.clone(),
+            }),
+            MachineItem::JccLabel {
+                cond: CondCode::Equal,
+                target: "is_zero".to_string(),
+                provenance: prov.clone(),
+            },
+            MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rax,
+                imm: 1,
+                provenance: prov.clone(),
+            }),
+            MachineItem::JmpLabel {
+                target: "done".to_string(),
+                provenance: prov.clone(),
+            },
+            MachineItem::Label("is_zero".to_string()),
+            MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rax,
+                imm: 2,
+                provenance: prov.clone(),
+            }),
+            MachineItem::Label("done".to_string()),
+            MachineItem::Inst(MachineInst::Ret { provenance: prov }),
+        ];
+
+        let bytes = assemble_program(&items).expect("assemble two-pass program");
+        assert!(!bytes.is_empty());
+        assert_eq!(bytes.len(), 36);
+        assert_eq!(bytes[4..6], [0x0F, 0x84]);
+        assert_eq!(i32::from_le_bytes(bytes[6..10].try_into().unwrap()), 15);
     }
 }
