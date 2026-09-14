@@ -1233,9 +1233,20 @@ mod tests {
         let path = std::env::temp_dir().join(format!("cml-native-prog-{nonce}"));
 
         elf.write_executable(&path).expect("write executable");
-        let output = std::process::Command::new(&path)
-            .output()
-            .expect("run assembled ELF");
+        let mut output = None;
+        for _ in 0..10 {
+            match std::process::Command::new(&path).output() {
+                Ok(out) => {
+                    output = Some(out);
+                    break;
+                }
+                Err(e) if e.raw_os_error() == Some(26) => {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(e) => panic!("run assembled ELF: {e}"),
+            }
+        }
+        let output = output.expect("run assembled ELF");
         let _ = std::fs::remove_file(&path);
 
         assert_eq!(

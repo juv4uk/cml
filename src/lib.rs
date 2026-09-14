@@ -20,6 +20,7 @@ pub mod gpu_wgsl;
 pub mod ir;
 pub mod lisp_asm_vertical;
 pub mod lower;
+pub mod machine_boundary;
 pub mod machine_inst;
 pub mod machine_substrate;
 pub mod macros;
