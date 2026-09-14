@@ -567,6 +567,20 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
             ctx.current_block = join_block;
             Ok(result_vreg)
         }
+        Ir::Let { bindings, body } => {
+            let mut bound_vregs = Vec::new();
+            for (name, val_expr) in bindings {
+                if let Ir::Lambda { .. } = val_expr {
+                    continue;
+                }
+                let v = lower_expr(val_expr, ctx)?;
+                bound_vregs.push((name.clone(), v));
+            }
+            for (name, v) in bound_vregs {
+                ctx.bindings.insert(name, v);
+            }
+            lower_expr(body, ctx)
+        }
         other => Err(LirLowerError::Unsupported(format!(
             "semantic IR form {:?} is outside the #54 scalar LIR slice",
             other
