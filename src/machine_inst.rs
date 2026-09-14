@@ -232,6 +232,22 @@ pub enum MachineInst {
         provenance: Provenance,
     },
 
+    /// Symmetric ALU operation between 64-bit register and immediate 32-bit value: `OP $imm, %dst`.
+    AluImm32 {
+        op: AluOp,
+        dst: X86Reg,
+        imm: i32,
+        provenance: Provenance,
+    },
+
+    /// Load effective address into 64-bit register: `leaq disp(%base), %dst`.
+    Lea {
+        dst: X86Reg,
+        base: X86Reg,
+        disp: i32,
+        provenance: Provenance,
+    },
+
     /// Move 64-bit register to 64-bit register: `movq %src, %dst`.
     MovRegReg {
         dst: X86Reg,
@@ -340,6 +356,8 @@ impl MachineInst {
             | Self::CallRel32 { provenance, .. }
             | Self::AluRegReg { provenance, .. }
             | Self::AluImm8 { provenance, .. }
+            | Self::AluImm32 { provenance, .. }
+            | Self::Lea { provenance, .. }
             | Self::MovRegReg { provenance, .. }
             | Self::MovStore { provenance, .. }
             | Self::MovLoad { provenance, .. }
@@ -370,6 +388,18 @@ impl MachineInst {
             }
             Self::AluImm8 { op, dst, imm, .. } => {
                 format!("{} ${imm}, {}", op.name(), dst.name())
+            }
+            Self::AluImm32 { op, dst, imm, .. } => {
+                format!("{} ${imm}, {}", op.name(), dst.name())
+            }
+            Self::Lea {
+                dst, base, disp, ..
+            } => {
+                if *disp == 0 {
+                    format!("leaq ({}), {}", base.name(), dst.name())
+                } else {
+                    format!("leaq {disp}({}), {}", base.name(), dst.name())
+                }
             }
             Self::MovRegReg { dst, src, .. } => {
                 format!("movq {}, {}", src.name(), dst.name())
@@ -484,6 +514,41 @@ impl MachineInst {
                 let opcode = 0x83;
                 let modrm = (0b11 << 6) | (op.modrm_digit() << 3) | (dst.number() & 0x07);
                 vec![rex, opcode, modrm, *imm as u8]
+            }
+
+            Self::AluImm32 { op, dst, imm, .. } => {
+                if *dst == X86Reg::Rax {
+                    let rex = 0x48;
+                    let opcode = (*op as u8) * 8 + 0x05;
+                    let mut bytes = Vec::with_capacity(6);
+                    bytes.push(rex);
+                    bytes.push(opcode);
+                    bytes.extend_from_slice(&imm.to_le_bytes());
+                    bytes
+                } else {
+                    let rex = 0x48 | if dst.is_extended() { 0x01 } else { 0x00 };
+                    let opcode = 0x81;
+                    let modrm = (0b11 << 6) | (op.modrm_digit() << 3) | (dst.number() & 0x07);
+                    let mut bytes = Vec::with_capacity(7);
+                    bytes.push(rex);
+                    bytes.push(opcode);
+                    bytes.push(modrm);
+                    bytes.extend_from_slice(&imm.to_le_bytes());
+                    bytes
+                }
+            }
+
+            Self::Lea {
+                dst, base, disp, ..
+            } => {
+                let (rex, tail) =
+                    encode_memory_access(dst.number(), *base, *disp, dst.is_extended());
+                let opcode = 0x8D;
+                let mut bytes = Vec::with_capacity(2 + tail.len());
+                bytes.push(rex);
+                bytes.push(opcode);
+                bytes.extend_from_slice(&tail);
+                bytes
             }
 
             Self::MovRegReg { dst, src, .. } => {
@@ -848,6 +913,42 @@ mod tests {
                 op: AluOp::Add,
                 dst: X86Reg::Rax,
                 imm: 16,
+                provenance: prov.clone(),
+            },
+            MachineInst::AluImm32 {
+                op: AluOp::Add,
+                dst: X86Reg::Rax,
+                imm: 0x123456,
+                provenance: prov.clone(),
+            },
+            MachineInst::AluImm32 {
+                op: AluOp::Sub,
+                dst: X86Reg::R8,
+                imm: 1000,
+                provenance: prov.clone(),
+            },
+            MachineInst::AluImm32 {
+                op: AluOp::And,
+                dst: X86Reg::Rbx,
+                imm: 0x7FFFFFFF,
+                provenance: prov.clone(),
+            },
+            MachineInst::Lea {
+                dst: X86Reg::Rax,
+                base: X86Reg::Rsp,
+                disp: 16,
+                provenance: prov.clone(),
+            },
+            MachineInst::Lea {
+                dst: X86Reg::R12,
+                base: X86Reg::Rbx,
+                disp: 8,
+                provenance: prov.clone(),
+            },
+            MachineInst::Lea {
+                dst: X86Reg::Rdi,
+                base: X86Reg::Rsi,
+                disp: 0,
                 provenance: prov.clone(),
             },
             MachineInst::MovRegReg {
