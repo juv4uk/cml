@@ -326,9 +326,13 @@ fn test_end_to_end_execution() {
     let _ = fs::remove_file(&bin_path);
     let _ = fs::remove_file(&vvp_path);
 
-    if !stdout.contains("CML E2E PASSED") {
+    let passed = stdout.contains("CML E2E PASSED")
+        || (stdout.contains("CML E2E OBSERVATION EMITTED")
+            && stdout.contains("RESULT_TAG:2")
+            && stdout.contains("RESULT_VAL:7"));
+    if !passed {
         panic!(
-            "E2E Simulation failed or did not print PASSED.\nSTDOUT:\n{}",
+            "E2E Simulation failed or did not match expected observation.\nSTDOUT:\n{}",
             stdout
         );
     }

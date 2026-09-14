@@ -14,6 +14,19 @@ use cml::ir::{BufferLiteral, Ir, Params, PrimOp};
 use cml::lower;
 use cml::parser;
 
+fn gcc_command() -> Command {
+    let mut cmd = Command::new("gcc");
+    if std::env::var("C_INCLUDE_PATH").is_err()
+        && std::path::Path::new("/var/guix/profiles/shared/guix-profile/include").exists()
+    {
+        cmd.env(
+            "C_INCLUDE_PATH",
+            "/var/guix/profiles/shared/guix-profile/include",
+        );
+    }
+    cmd
+}
+
 fn compile_and_run_first_class(code: &str, stem: &str) -> String {
     let exprs = parser::parse(code).unwrap();
     let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
@@ -22,7 +35,7 @@ fn compile_and_run_first_class(code: &str, stem: &str) -> String {
     let bin_path = format!("c_backend_{stem}_test");
     fs::write(&c_path, &c_source).unwrap();
 
-    let compile = Command::new("gcc")
+    let compile = gcc_command()
         .arg(&c_path)
         .arg("-o")
         .arg(&bin_path)
@@ -49,7 +62,7 @@ fn compile_and_run_failure(code: &str, stem: &str) -> std::process::Output {
     let c_path = format!("c_backend_{stem}_test.c");
     let bin_path = format!("c_backend_{stem}_test");
     fs::write(&c_path, &c_source).unwrap();
-    let compile = Command::new("gcc")
+    let compile = gcc_command()
         .arg(&c_path)
         .arg("-o")
         .arg(&bin_path)
@@ -71,7 +84,7 @@ fn compile_ir_and_run(program: &[Ir], stem: &str) -> std::process::Output {
     let c_path = format!("c_backend_{stem}_test.c");
     let bin_path = format!("c_backend_{stem}_test");
     fs::write(&c_path, &c_source).unwrap();
-    let compile = Command::new("gcc")
+    let compile = gcc_command()
         .arg(&c_path)
         .arg("-o")
         .arg(&bin_path)
@@ -313,7 +326,7 @@ fn compiles_add1_to_c_and_runs_it() {
     let bin_path = "c_backend_add1_test";
     fs::write(c_path, &c_source).unwrap();
 
-    let compile = Command::new("gcc")
+    let compile = gcc_command()
         .arg(c_path)
         .arg("-o")
         .arg(bin_path)
@@ -359,7 +372,7 @@ fn compiles_self_recursive_def_to_c_and_runs_it() {
     let bin_path = "c_backend_count_test";
     fs::write(c_path, &c_source).unwrap();
 
-    let compile = Command::new("gcc")
+    let compile = gcc_command()
         .arg(c_path)
         .arg("-o")
         .arg(bin_path)
@@ -401,7 +414,7 @@ fn compiles_let_to_c_and_runs_it() {
     let bin_path = "c_backend_let_test";
     fs::write(c_path, &c_source).unwrap();
 
-    let compile = Command::new("gcc")
+    let compile = gcc_command()
         .arg(c_path)
         .arg("-o")
         .arg(bin_path)
@@ -442,7 +455,7 @@ fn compiles_variadic_and_dotted_lambda_params_to_c_and_runs_it() {
     let bin_path = "c_backend_variadic_test";
     fs::write(c_path, &c_source).unwrap();
 
-    let compile = Command::new("gcc")
+    let compile = gcc_command()
         .arg(c_path)
         .arg("-o")
         .arg(bin_path)
@@ -485,7 +498,7 @@ fn compiles_quoted_list_access_to_c_and_runs_it() {
     let bin_path = "c_backend_quoted_list_test";
     fs::write(c_path, &c_source).unwrap();
 
-    let compile = Command::new("gcc")
+    let compile = gcc_command()
         .arg(c_path)
         .arg("-o")
         .arg(bin_path)
