@@ -19,6 +19,7 @@ pub mod gpu_wgpu_runtime;
 pub mod gpu_wgsl;
 pub mod ir;
 pub mod lisp_asm_vertical;
+pub mod lisp_encoder_bridge;
 pub mod lower;
 pub mod machine_boundary;
 pub mod machine_inst;
