@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: juv4uk/my-lisp
-          ref: 47f4c18bf99e589bf25767f97982899e1a8befa2
+          ref: d4ad7e7c7717a610599875ffb90123b713ac05c7
           path: my-lisp
 
       - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
