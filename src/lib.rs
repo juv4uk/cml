@@ -26,6 +26,7 @@ pub mod machine_inst;
 pub mod machine_substrate;
 pub mod macros;
 pub mod native_baseline;
+pub mod numeric_specialization;
 pub mod parser;
 pub mod placement;
 pub mod pratyahara;
