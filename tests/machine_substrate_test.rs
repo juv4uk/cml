@@ -91,7 +91,10 @@ fn lisp_macro_atoms_expand_to_structured_machine_items() {
         MachineItem::Inst(MachineInst::Ret { provenance: prov }),
     ];
     assert_eq!(items, expected);
-    assert_eq!(assemble_program(&items).unwrap(), assemble_program(&expected).unwrap());
+    assert_eq!(
+        assemble_program(&items).unwrap(),
+        assemble_program(&expected).unwrap()
+    );
 }
 
 #[test]
@@ -129,7 +132,10 @@ fn machine_substrate_rejects_language_forms_and_lossy_immediates() {
         "(x86 invalid-op rax)",
         "(x86 mov-reg-reg not-a-register rax)",
     ] {
-        assert!(parse_machine_program(source).is_err(), "must reject {source}");
+        assert!(
+            parse_machine_program(source).is_err(),
+            "must reject {source}"
+        );
     }
 
     for source in [
