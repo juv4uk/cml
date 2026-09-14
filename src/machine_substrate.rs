@@ -44,8 +44,7 @@ impl fmt::Display for MachineSubstrateError {
 
 impl std::error::Error for MachineSubstrateError {}
 
-const SUBSTRATE_PROVENANCE: Provenance =
-    Provenance::new(None, "lisp-authored assembler substrate");
+const SUBSTRATE_PROVENANCE: Provenance = Provenance::new(None, "lisp-authored assembler substrate");
 
 pub fn inst_to_sexp(inst: &MachineInst) -> String {
     match inst {
@@ -68,11 +67,9 @@ pub fn inst_to_sexp(inst: &MachineInst) -> String {
         MachineInst::AluImm8 { op, dst, imm, .. } => {
             format!("(x86 alu-imm8 {} {} {imm})", op.raw_name(), dst.raw_name())
         }
-        MachineInst::AluImm32 { op, dst, imm, .. } => format!(
-            "(x86 alu-imm32 {} {} {imm})",
-            op.raw_name(),
-            dst.raw_name()
-        ),
+        MachineInst::AluImm32 { op, dst, imm, .. } => {
+            format!("(x86 alu-imm32 {} {} {imm})", op.raw_name(), dst.raw_name())
+        }
         MachineInst::Lea {
             dst, base, disp, ..
         } => format!("(x86 lea {} {} {disp})", dst.raw_name(), base.raw_name()),
@@ -125,7 +122,11 @@ pub fn item_to_sexp(item: &MachineItem) -> String {
 }
 
 pub fn program_to_sexp(items: &[MachineItem]) -> String {
-    items.iter().map(item_to_sexp).collect::<Vec<_>>().join("\n")
+    items
+        .iter()
+        .map(item_to_sexp)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn expect_symbol(expr: &Expr, context: &str) -> Result<String, MachineSubstrateError> {
@@ -192,7 +193,9 @@ pub fn item_from_sexp(expr: &Expr) -> Result<MachineItem, MachineSubstrateError>
         )));
     };
     if list.is_empty() {
-        return Err(MachineSubstrateError::MalformedForm("empty form".to_string()));
+        return Err(MachineSubstrateError::MalformedForm(
+            "empty form".to_string(),
+        ));
     }
 
     let target = expect_symbol(&list[0], "target selector")?;
@@ -264,12 +267,27 @@ fn inst_from_elements(op: &str, args: &[Expr]) -> Result<MachineInst, MachineSub
         "shl-imm" | "shr-imm" | "sar-imm" => {
             expect_arity(args, 2, &format!("(x86 {op} <reg> <imm8>)"))?;
             let reg = parse_reg(&args[0])?;
-            let imm = checked_u8(expect_integer(&args[1], "shift immediate")?, "shift immediate")?;
+            let imm = checked_u8(
+                expect_integer(&args[1], "shift immediate")?,
+                "shift immediate",
+            )?;
             let provenance = SUBSTRATE_PROVENANCE;
             Ok(match op {
-                "shl-imm" => MachineInst::ShlImm { reg, imm, provenance },
-                "shr-imm" => MachineInst::ShrImm { reg, imm, provenance },
-                _ => MachineInst::SarImm { reg, imm, provenance },
+                "shl-imm" => MachineInst::ShlImm {
+                    reg,
+                    imm,
+                    provenance,
+                },
+                "shr-imm" => MachineInst::ShrImm {
+                    reg,
+                    imm,
+                    provenance,
+                },
+                _ => MachineInst::SarImm {
+                    reg,
+                    imm,
+                    provenance,
+                },
             })
         }
         "alu-reg-reg" => {
@@ -431,7 +449,8 @@ fn expect_arity(args: &[Expr], expected: usize, usage: &str) -> Result<(), Machi
 }
 
 pub fn parse_machine_program(source: &str) -> Result<Vec<MachineItem>, MachineSubstrateError> {
-    let exprs = parse(source).map_err(|error| MachineSubstrateError::ParseError(error.to_string()))?;
+    let exprs =
+        parse(source).map_err(|error| MachineSubstrateError::ParseError(error.to_string()))?;
     exprs.iter().map(item_from_sexp).collect()
 }
 
@@ -441,7 +460,8 @@ pub fn assemble_sexp_program(source: &str) -> Result<Vec<u8>, MachineSubstrateEr
 }
 
 pub fn expand_macro_atoms(source: &str) -> Result<Vec<MachineItem>, MachineSubstrateError> {
-    let exprs = parse(source).map_err(|error| MachineSubstrateError::ParseError(error.to_string()))?;
+    let exprs =
+        parse(source).map_err(|error| MachineSubstrateError::ParseError(error.to_string()))?;
     let mut expander = MacroExpander::new();
     let expanded = expander
         .process(&exprs)
