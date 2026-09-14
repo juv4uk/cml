@@ -36,3 +36,4 @@ pub mod semantic_export;
 pub mod x86_freestanding;
 pub mod x86_freestanding_metadata;
 pub mod x86_lir;
+pub mod x86_regalloc;
