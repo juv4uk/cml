@@ -141,14 +141,28 @@ pub enum LirInst {
         rhs: VReg,
         provenance: Provenance,
     },
+    /// Untag a boxed fixnum into raw 64-bit integer: `dst = src >> 3`
+    UnboxFixnum {
+        dst: VReg,
+        src: VReg,
+        provenance: Provenance,
+    },
+    /// Tag a raw 64-bit integer into a boxed fixnum: `dst = (src << 3) | Tag::Fixnum`
+    BoxFixnum {
+        dst: VReg,
+        src: VReg,
+        provenance: Provenance,
+    },
 }
 
 impl LirInst {
     pub fn destination(&self) -> Option<VReg> {
         match self {
-            Self::Const64 { dst, .. } | Self::Copy { dst, .. } | Self::Alu { dst, .. } => {
-                Some(*dst)
-            }
+            Self::Const64 { dst, .. }
+            | Self::Copy { dst, .. }
+            | Self::Alu { dst, .. }
+            | Self::UnboxFixnum { dst, .. }
+            | Self::BoxFixnum { dst, .. } => Some(*dst),
             Self::Cmp { .. } => None,
         }
     }
@@ -158,7 +172,9 @@ impl LirInst {
             Self::Const64 { provenance, .. }
             | Self::Copy { provenance, .. }
             | Self::Alu { provenance, .. }
-            | Self::Cmp { provenance, .. } => provenance,
+            | Self::Cmp { provenance, .. }
+            | Self::UnboxFixnum { provenance, .. }
+            | Self::BoxFixnum { provenance, .. } => provenance,
         }
     }
 }
@@ -315,6 +331,12 @@ impl LirFunction {
                     }
                     LirInst::Cmp { lhs, rhs, .. } => {
                         out.push_str(&format!("cmp {lhs}, {rhs}\n"));
+                    }
+                    LirInst::UnboxFixnum { dst, src, .. } => {
+                        out.push_str(&format!("{dst} = unbox_fixnum {src}\n"));
+                    }
+                    LirInst::BoxFixnum { dst, src, .. } => {
+                        out.push_str(&format!("{dst} = box_fixnum {src}\n"));
                     }
                 }
             }
@@ -684,6 +706,52 @@ pub fn lir_to_machine_items(func: &LirFunction) -> Result<Vec<MachineItem>, LirE
                         op: AluOp::Cmp,
                         dst: phys_lhs,
                         src: phys_rhs,
+                        provenance: provenance.clone(),
+                    }));
+                }
+                LirInst::UnboxFixnum {
+                    dst,
+                    src,
+                    provenance,
+                } => {
+                    let phys_dst = map_vreg_to_phys(*dst)?;
+                    let phys_src = map_vreg_to_phys(*src)?;
+                    if phys_dst != phys_src {
+                        items.push(MachineItem::Inst(MachineInst::MovRegReg {
+                            dst: phys_dst,
+                            src: phys_src,
+                            provenance: provenance.clone(),
+                        }));
+                    }
+                    items.push(MachineItem::Inst(MachineInst::SarImm {
+                        reg: phys_dst,
+                        imm: 3,
+                        provenance: provenance.clone(),
+                    }));
+                }
+                LirInst::BoxFixnum {
+                    dst,
+                    src,
+                    provenance,
+                } => {
+                    let phys_dst = map_vreg_to_phys(*dst)?;
+                    let phys_src = map_vreg_to_phys(*src)?;
+                    if phys_dst != phys_src {
+                        items.push(MachineItem::Inst(MachineInst::MovRegReg {
+                            dst: phys_dst,
+                            src: phys_src,
+                            provenance: provenance.clone(),
+                        }));
+                    }
+                    items.push(MachineItem::Inst(MachineInst::ShlImm {
+                        reg: phys_dst,
+                        imm: 3,
+                        provenance: provenance.clone(),
+                    }));
+                    items.push(MachineItem::Inst(MachineInst::AluImm8 {
+                        op: AluOp::Or,
+                        dst: phys_dst,
+                        imm: wsm_os_target::Tag::Fixnum as i8,
                         provenance: provenance.clone(),
                     }));
                 }
