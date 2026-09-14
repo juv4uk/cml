@@ -189,8 +189,20 @@ mod tests {
         let path = std::env::temp_dir().join(format!("cml-elf-test-{nonce}"));
 
         elf.write_executable(&path).expect("write executable");
-
-        let output = Command::new(&path).output().expect("run standalone ELF");
+        let mut output = None;
+        for _ in 0..10 {
+            match Command::new(&path).output() {
+                Ok(out) => {
+                    output = Some(out);
+                    break;
+                }
+                Err(e) if e.raw_os_error() == Some(26) => {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(e) => panic!("run standalone ELF: {e}"),
+            }
+        }
+        let output = output.expect("run standalone ELF");
         let _ = std::fs::remove_file(&path);
 
         assert_eq!(
