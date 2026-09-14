@@ -11,9 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use cml::elf64::Elf64Executable;
 use cml::ir::{Ir, PrimOp};
-use cml::lisp_asm_vertical::{
-    VerticalSliceError, items_to_gnu_asm, select_arithmetic_slice,
-};
+use cml::lisp_asm_vertical::{VerticalSliceError, items_to_gnu_asm, select_arithmetic_slice};
 use cml::lower;
 use cml::machine_inst::assemble_program;
 use cml::macros::MacroExpander;
