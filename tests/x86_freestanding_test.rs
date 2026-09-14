@@ -1471,3 +1471,45 @@ fn named_variadic_def_self_tail_recursion_packs_rest() {
     assert!(run.status.success(), "variadic tail-recursion must succeed");
 }
 
+#[test]
+fn machine_primitive_rdtsc_emits_hardware_instruction_and_runs() {
+    let expressions = parser::parse("(rdtsc)").unwrap();
+    let ir = lower::lower_program(&expressions).unwrap();
+    assert_eq!(
+        ir,
+        vec![Ir::MachinePrim {
+            op: cml::ir::MachineOp::Rdtsc,
+            args: vec![],
+        }]
+    );
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&ir)
+        .unwrap();
+    assert!(
+        assembly.contains("rdtsc"),
+        "emitted assembly must contain real rdtsc instruction"
+    );
+
+    // Also test definition form: (def ticks (rdtsc)) ticks
+    let def_exprs = parser::parse("(def ticks (rdtsc))\nticks").unwrap();
+    let def_ir = lower::lower_program(&def_exprs).unwrap();
+    let def_assembly = X86FreestandingBackend::new()
+        .compile_program(&def_ir)
+        .unwrap();
+    assert!(
+        def_assembly.contains("rdtsc"),
+        "def ticks assembly must contain real rdtsc instruction"
+    );
+
+    // Also verify Ukrainian surface (такти-процесора)
+    let uk_exprs = parser::parse("(такти-процесора)").unwrap();
+    let uk_ir = lower::lower_program(&uk_exprs).unwrap();
+    assert_eq!(
+        uk_ir,
+        vec![Ir::MachinePrim {
+            op: cml::ir::MachineOp::Rdtsc,
+            args: vec![],
+        }]
+    );
+}
+

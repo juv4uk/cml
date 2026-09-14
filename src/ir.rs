@@ -52,6 +52,16 @@ pub enum PrimOp {
     EqualP,
 }
 
+/// Bounded machine-level primitives for direct physical machine access.
+///
+/// These operations represent irreducible CPU/hardware instructions
+/// (e.g. `rdtsc`, `in`, `out`) that provide physical machine mechanism
+/// directly to Lisp without any intermediate Rust or C runtime layer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MachineOp {
+    Rdtsc,
+}
+
 /// Fixed vs. variadic parameter lists, mirroring `compile_lambda`'s three
 /// cases (`Expr::List`, `Expr::DottedList`, bare `Expr::Symbol`).
 #[derive(Debug, Clone, PartialEq)]
@@ -118,6 +128,11 @@ pub enum Ir {
     },
     Prim {
         op: PrimOp,
+        args: Vec<Ir>,
+    },
+    /// A bounded machine primitive instruction that lowers directly to native CPU instructions.
+    MachinePrim {
+        op: MachineOp,
         args: Vec<Ir>,
     },
     /// A self-tail-call recognised by the lowering pass inside a `Def` body.

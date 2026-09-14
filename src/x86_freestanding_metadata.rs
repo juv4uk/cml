@@ -164,7 +164,7 @@ fn collect_backend_symbol_names(ir: &Ir, out: &mut BTreeSet<String>) {
             collect_backend_symbol_names(value, out);
             out.insert(name.clone());
         }
-        Ir::Prim { args, .. } | Ir::TailSelfCall { args } => {
+        Ir::Prim { args, .. } | Ir::MachinePrim { args, .. } | Ir::TailSelfCall { args } => {
             for arg in args {
                 collect_backend_symbol_names(arg, out);
             }

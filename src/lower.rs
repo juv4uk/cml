@@ -160,6 +160,10 @@ fn reify_primitive_calls(ir: Ir) -> Ir {
             func: Box::new(Ir::Var(primitive_name(op).to_string())),
             args: args.into_iter().map(reify_primitive_calls).collect(),
         },
+        Ir::MachinePrim { op, args } => Ir::MachinePrim {
+            op,
+            args: args.into_iter().map(reify_primitive_calls).collect(),
+        },
         Ir::Lambda { params, body } => Ir::Lambda {
             params,
             body: Box::new(reify_primitive_calls(*body)),
@@ -358,6 +362,15 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
                     return Err(LowerError::arity(
                         "numeric-buffer-map expects exactly two arguments",
                     ));
+                }
+                ("1153", 0) => {
+                    return Ok(Ir::MachinePrim {
+                        op: crate::ir::MachineOp::Rdtsc,
+                        args: vec![],
+                    });
+                }
+                ("1153", _) => {
+                    return Err(LowerError::arity("rdtsc expects exactly zero arguments"));
                 }
                 _ => {}
             }

@@ -118,6 +118,15 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
                     walk(arg, ids);
                 }
             }
+            Ir::MachinePrim { op, args } => {
+                let id = match op {
+                    crate::ir::MachineOp::Rdtsc => "1153",
+                };
+                ids.insert(id);
+                for arg in args {
+                    walk(arg, ids);
+                }
+            }
             Ir::Builtin(name) => {
                 if let Some(id) = callable_semantic_id(name) {
                     ids.insert(id);

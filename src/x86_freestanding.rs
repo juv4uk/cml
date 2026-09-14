@@ -5,7 +5,7 @@
 //! Unsupported IR is rejected during preflight, before any assembly text is
 //! produced. There is no libc, host syscall, filesystem, or C-backend fallback.
 
-use crate::ir::{Ir, Params, PrimOp, Quoted};
+use crate::ir::{Ir, MachineOp, Params, PrimOp, Quoted};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -450,7 +450,9 @@ impl X86FreestandingBackend {
 fn contains_tail_self_call(ir: &Ir) -> bool {
     match ir {
         Ir::TailSelfCall { .. } => true,
-        Ir::Prim { args, .. } | Ir::App { args, .. } => args.iter().any(contains_tail_self_call),
+        Ir::Prim { args, .. } | Ir::MachinePrim { args, .. } | Ir::App { args, .. } => {
+            args.iter().any(contains_tail_self_call)
+        }
         Ir::Lambda { body, .. } | Ir::Def { value: body, .. } => contains_tail_self_call(body),
         Ir::Cond { branches } => branches
             .iter()
@@ -546,7 +548,7 @@ fn collect_first_class_named_refs(
         Ir::Def { value, .. } => {
             collect_first_class_named_refs(value, def_arities, bound, false, out)?;
         }
-        Ir::Prim { args, .. } | Ir::TailSelfCall { args } => {
+        Ir::Prim { args, .. } | Ir::MachinePrim { args, .. } | Ir::TailSelfCall { args } => {
             for arg in args {
                 collect_first_class_named_refs(arg, def_arities, bound, false, out)?;
             }
@@ -581,6 +583,20 @@ fn preflight_env(
         Ir::Quote(value) => preflight_quoted(value, symbols, slots)?,
         Ir::Prim { op, args } => {
             let (name, expected) = primitive_contract(*op)?;
+            if args.len() != expected {
+                return Err(CompileError::InvalidArity {
+                    operation: name,
+                    expected,
+                    actual: args.len(),
+                });
+            }
+            for argument in args {
+                preflight_env(argument, bindings, symbols, def_arities, slots)?;
+            }
+            return Ok(());
+        }
+        Ir::MachinePrim { op, args } => {
+            let (name, expected) = machine_primitive_contract(*op)?;
             if args.len() != expected {
                 return Err(CompileError::InvalidArity {
                     operation: name,
@@ -836,6 +852,20 @@ fn preflight_lambda_body(
             }
             Ok(())
         }
+        Ir::MachinePrim { op, args } => {
+            let (name, expected) = machine_primitive_contract(*op)?;
+            if args.len() != expected {
+                return Err(CompileError::InvalidArity {
+                    operation: name,
+                    expected,
+                    actual: args.len(),
+                });
+            }
+            for argument in args {
+                preflight_lambda_body(argument, bindings, symbols, slots)?;
+            }
+            Ok(())
+        }
         Ir::Cond { branches } => {
             for (test, expression) in branches {
                 preflight_lambda_body(test, bindings, symbols, slots)?;
@@ -993,6 +1023,20 @@ fn preflight_def_body(
         Ir::Quote(value) => preflight_quoted(value, symbols, slots),
         Ir::Prim { op, args } => {
             let (name, expected) = primitive_contract(*op)?;
+            if args.len() != expected {
+                return Err(CompileError::InvalidArity {
+                    operation: name,
+                    expected,
+                    actual: args.len(),
+                });
+            }
+            for argument in args {
+                preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+            }
+            Ok(())
+        }
+        Ir::MachinePrim { op, args } => {
+            let (name, expected) = machine_primitive_contract(*op)?;
             if args.len() != expected {
                 return Err(CompileError::InvalidArity {
                     operation: name,
@@ -1246,6 +1290,12 @@ fn primitive_contract(operation: PrimOp) -> Result<(&'static str, usize), Compil
         PrimOp::Add => Ok(("add", 2)),
         PrimOp::Sub => Ok(("sub", 2)),
         PrimOp::EqualP => Err(CompileError::UnsupportedVariant("equal? primitive")),
+    }
+}
+
+fn machine_primitive_contract(operation: MachineOp) -> Result<(&'static str, usize), CompileError> {
+    match operation {
+        MachineOp::Rdtsc => Ok(("rdtsc", 0)),
     }
 }
 
@@ -1672,6 +1722,7 @@ impl Emitter {
                 }
             }
             Ir::Prim { op, args } => self.emit_primitive(*op, args),
+            Ir::MachinePrim { op, args } => self.emit_machine_primitive(*op, args),
             Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
         }
     }
@@ -2111,6 +2162,31 @@ impl Emitter {
             }
         }
         Ok(())
+    }
+
+    fn emit_machine_primitive(
+        &mut self,
+        operation: MachineOp,
+        args: &[Ir],
+    ) -> Result<(), CompileError> {
+        let (name, expected) = machine_primitive_contract(operation)?;
+        debug_assert_eq!(args.len(), expected, "preflight checked {name} arity");
+
+        match operation {
+            MachineOp::Rdtsc => {
+                self.line("    rdtsc");
+                self.line("    shlq $32, %rdx");
+                self.line("    orq %rdx, %rax");
+                self.line("    movabsq $0x0FFFFFFFFFFFFFFF, %rcx");
+                self.line("    andq %rcx, %rax");
+                self.line("    shlq $3, %rax");
+                self.line(&format!(
+                    "    orq ${}, %rax",
+                    wsm_os_target::Tag::Fixnum as u64
+                ));
+                Ok(())
+            }
+        }
     }
 
     fn emit_primitive(&mut self, operation: PrimOp, args: &[Ir]) -> Result<(), CompileError> {
