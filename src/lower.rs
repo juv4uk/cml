@@ -363,15 +363,6 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
                         "numeric-buffer-map expects exactly two arguments",
                     ));
                 }
-                ("1153", 0) => {
-                    return Ok(Ir::MachinePrim {
-                        op: crate::ir::MachineOp::Rdtsc,
-                        args: vec![],
-                    });
-                }
-                ("1153", _) => {
-                    return Err(LowerError::arity("rdtsc expects exactly zero arguments"));
-                }
                 _ => {}
             }
         }

@@ -5,7 +5,7 @@
 //! # Architecture
 //!
 //! ```text
-//! my-lisp semantic identity (e.g. read-cycle-counter, semantic ID 1153)
+//! CML compiler target mechanism (e.g. read-cycle-counter / RDTSC)
 //!         │
 //!         ▼
 //! CML backend-neutral IR: Ir::MachinePrim(MachineOp::Rdtsc)
@@ -300,25 +300,16 @@ pub enum MachineInst {
     },
 
     /// Push 64-bit register onto stack: `pushq %reg`.
-    PushReg {
-        reg: X86Reg,
-        provenance: Provenance,
-    },
+    PushReg { reg: X86Reg, provenance: Provenance },
 
     /// Pop 64-bit register from stack: `popq %reg`.
-    PopReg {
-        reg: X86Reg,
-        provenance: Provenance,
-    },
+    PopReg { reg: X86Reg, provenance: Provenance },
 
     /// Fast system call invocation: `syscall`.
     Syscall { provenance: Provenance },
 
     /// Unconditional near jump with 32-bit relative displacement: `jmp rel32`.
-    JmpRel32 {
-        disp: i32,
-        provenance: Provenance,
-    },
+    JmpRel32 { disp: i32, provenance: Provenance },
 
     /// Conditional near jump with 32-bit relative displacement: `j<cond> rel32`.
     JccRel32 {
@@ -328,10 +319,7 @@ pub enum MachineInst {
     },
 
     /// Near procedure call with 32-bit relative displacement: `call rel32`.
-    CallRel32 {
-        disp: i32,
-        provenance: Provenance,
-    },
+    CallRel32 { disp: i32, provenance: Provenance },
 
     /// No operation: `nop`.
     Nop { provenance: Provenance },
@@ -650,9 +638,19 @@ fn encode_memory_access(modrm_reg: u8, base: X86Reg, disp: i32, reg_is_ext: bool
 pub enum MachineItem {
     Label(String),
     Inst(MachineInst),
-    JmpLabel { target: String, provenance: Provenance },
-    JccLabel { cond: CondCode, target: String, provenance: Provenance },
-    CallLabel { target: String, provenance: Provenance },
+    JmpLabel {
+        target: String,
+        provenance: Provenance,
+    },
+    JccLabel {
+        cond: CondCode,
+        target: String,
+        provenance: Provenance,
+    },
+    CallLabel {
+        target: String,
+        provenance: Provenance,
+    },
 }
 
 /// Assembles a sequence of machine items, resolving all labels and relative branch offsets.
@@ -706,7 +704,11 @@ pub fn assemble_program(items: &[MachineItem]) -> Result<Vec<u8>, String> {
                 };
                 bytes.extend_from_slice(&inst.encode_bytes());
             }
-            MachineItem::JccLabel { cond, target, provenance } => {
+            MachineItem::JccLabel {
+                cond,
+                target,
+                provenance,
+            } => {
                 let target_offset = label_offsets
                     .get(target)
                     .ok_or_else(|| format!("unresolved label: {target}"))?;
@@ -742,8 +744,8 @@ pub fn select_machine_primitive(op: MachineOp, fixnum_tag: u64) -> Vec<MachineIn
     match op {
         MachineOp::Rdtsc => {
             let prov = Provenance::new(
-                Some("1153"),
-                "rdtsc cycle counter normalized into tagged fixnum",
+                None,
+                "compiler target mechanism: rdtsc cycle counter normalized into tagged fixnum",
             );
             vec![
                 MachineInst::Rdtsc {
@@ -845,7 +847,8 @@ mod tests {
         let insts = select_machine_primitive(MachineOp::Rdtsc, 1);
         assert_eq!(insts.len(), 7);
         for inst in &insts {
-            assert_eq!(inst.provenance().semantic_id, Some("1153"));
+            // Must be None: compiler-owned target mechanism, never claiming language semantic ID
+            assert_eq!(inst.provenance().semantic_id, None);
         }
     }
 
@@ -1010,7 +1013,9 @@ mod tests {
             MachineInst::Nop {
                 provenance: prov.clone(),
             },
-            MachineInst::Ret { provenance: prov.clone() },
+            MachineInst::Ret {
+                provenance: prov.clone(),
+            },
         ];
 
         for inst in test_cases {
