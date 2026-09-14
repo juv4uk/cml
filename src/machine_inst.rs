@@ -1192,4 +1192,56 @@ mod tests {
         assert_eq!(bytes[4..6], [0x0F, 0x84]);
         assert_eq!(i32::from_le_bytes(bytes[6..10].try_into().unwrap()), 15);
     }
+
+    #[test]
+    fn test_assemble_program_and_run_native_elf() {
+        use crate::elf64::Elf64Executable;
+
+        let prov = Provenance::new(None, "native elf test");
+        // Compute (10 + 32) and exit with that code via Linux syscall
+        let items = vec![
+            MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rdi,
+                imm: 10,
+                provenance: prov.clone(),
+            }),
+            MachineItem::Inst(MachineInst::AluImm8 {
+                op: AluOp::Add,
+                dst: X86Reg::Rdi,
+                imm: 32,
+                provenance: prov.clone(),
+            }),
+            MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rax,
+                imm: 60, // sys_exit
+                provenance: prov.clone(),
+            }),
+            MachineItem::Inst(MachineInst::Syscall { provenance: prov }),
+        ];
+
+        let code = assemble_program(&items).expect("assemble exit program");
+        let elf = Elf64Executable::new(code);
+
+        let nonce = format!(
+            "{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let path = std::env::temp_dir().join(format!("cml-native-prog-{nonce}"));
+
+        elf.write_executable(&path).expect("write executable");
+        let output = std::process::Command::new(&path)
+            .output()
+            .expect("run assembled ELF");
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(
+            output.status.code(),
+            Some(42),
+            "Native assembled program must compute 10+32=42 and exit with 42"
+        );
+    }
 }

@@ -5,6 +5,7 @@ pub mod c_backend;
 pub mod canon;
 pub mod compiler;
 pub mod compute;
+pub mod elf64;
 pub mod execution;
 mod execution_scheduler;
 mod execution_store;
