@@ -18,6 +18,7 @@ pub mod gpu_cuda_runtime;
 pub mod gpu_wgpu_runtime;
 pub mod gpu_wgsl;
 pub mod ir;
+pub mod lisp_asm_vertical;
 pub mod lower;
 pub mod machine_inst;
 pub mod macros;
