@@ -119,6 +119,29 @@ impl X86Reg {
         }
     }
 
+    /// 32-bit register name (e.g. "%eax", "%ecx").
+    #[inline]
+    pub const fn name_32(self) -> &'static str {
+        match self {
+            Self::Rax => "%eax",
+            Self::Rcx => "%ecx",
+            Self::Rdx => "%edx",
+            Self::Rbx => "%ebx",
+            Self::Rsp => "%esp",
+            Self::Rbp => "%ebp",
+            Self::Rsi => "%esi",
+            Self::Rdi => "%edi",
+            Self::R8 => "%r8d",
+            Self::R9 => "%r9d",
+            Self::R10 => "%r10d",
+            Self::R11 => "%r11d",
+            Self::R12 => "%r12d",
+            Self::R13 => "%r13d",
+            Self::R14 => "%r14d",
+            Self::R15 => "%r15d",
+        }
+    }
+
     /// Parse register from name string (with or without '%' prefix).
     pub fn from_name(name: &str) -> Option<Self> {
         let clean = name.strip_prefix('%').unwrap_or(name);
@@ -140,6 +163,92 @@ impl X86Reg {
             "r14" => Some(Self::R14),
             "r15" => Some(Self::R15),
             _ => None,
+        }
+    }
+}
+
+/// Target x86-64 256-bit AVX2 YMM vector registers (%ymm0..%ymm7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum YmmReg {
+    Ymm0,
+    Ymm1,
+    Ymm2,
+    Ymm3,
+    Ymm4,
+    Ymm5,
+    Ymm6,
+    Ymm7,
+}
+
+impl YmmReg {
+    #[inline]
+    pub const fn number(self) -> u8 {
+        match self {
+            Self::Ymm0 => 0,
+            Self::Ymm1 => 1,
+            Self::Ymm2 => 2,
+            Self::Ymm3 => 3,
+            Self::Ymm4 => 4,
+            Self::Ymm5 => 5,
+            Self::Ymm6 => 6,
+            Self::Ymm7 => 7,
+        }
+    }
+
+    #[inline]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Ymm0 => "%ymm0",
+            Self::Ymm1 => "%ymm1",
+            Self::Ymm2 => "%ymm2",
+            Self::Ymm3 => "%ymm3",
+            Self::Ymm4 => "%ymm4",
+            Self::Ymm5 => "%ymm5",
+            Self::Ymm6 => "%ymm6",
+            Self::Ymm7 => "%ymm7",
+        }
+    }
+}
+
+/// Target x86-64 128-bit SSE/AVX XMM vector registers (%xmm0..%xmm7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum XmmReg {
+    Xmm0,
+    Xmm1,
+    Xmm2,
+    Xmm3,
+    Xmm4,
+    Xmm5,
+    Xmm6,
+    Xmm7,
+}
+
+impl XmmReg {
+    #[inline]
+    pub const fn number(self) -> u8 {
+        match self {
+            Self::Xmm0 => 0,
+            Self::Xmm1 => 1,
+            Self::Xmm2 => 2,
+            Self::Xmm3 => 3,
+            Self::Xmm4 => 4,
+            Self::Xmm5 => 5,
+            Self::Xmm6 => 6,
+            Self::Xmm7 => 7,
+        }
+    }
+
+    #[inline]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Xmm0 => "%xmm0",
+            Self::Xmm1 => "%xmm1",
+            Self::Xmm2 => "%xmm2",
+            Self::Xmm3 => "%xmm3",
+            Self::Xmm4 => "%xmm4",
+            Self::Xmm5 => "%xmm5",
+            Self::Xmm6 => "%xmm6",
+            Self::Xmm7 => "%xmm7",
         }
     }
 }
@@ -182,6 +291,21 @@ impl AluOp {
             Self::Sub => "subq",
             Self::Xor => "xorq",
             Self::Cmp => "cmpq",
+        }
+    }
+
+    /// Standard GNU mnemonic for 32-bit doubleword form (e.g. "addl", "subl").
+    #[inline]
+    pub const fn name_32(self) -> &'static str {
+        match self {
+            Self::Add => "addl",
+            Self::Or => "orl",
+            Self::Adc => "adcl",
+            Self::Sbb => "sbbl",
+            Self::And => "andl",
+            Self::Sub => "subl",
+            Self::Xor => "xorl",
+            Self::Cmp => "cmpl",
         }
     }
 
@@ -449,6 +573,71 @@ pub enum MachineInst {
 
     /// Near return to calling procedure: `ret`.
     Ret { provenance: Provenance },
+
+    /// Zero upper bits of all YMM registers: `vzeroupper`.
+    Vzeroupper { provenance: Provenance },
+
+    /// Load 256-bit unaligned integer vector: `vmovdqu disp(%base), %dst`.
+    VmovdquLoad {
+        dst: YmmReg,
+        base: X86Reg,
+        disp: i32,
+        provenance: Provenance,
+    },
+
+    /// Store 256-bit unaligned integer vector: `vmovdqu %src, disp(%base)`.
+    VmovdquStore {
+        base: X86Reg,
+        disp: i32,
+        src: YmmReg,
+        provenance: Provenance,
+    },
+
+    /// Vector packed 32-bit integer add: `vpaddd %src2, %src1, %dst`.
+    Vpaddd {
+        dst: YmmReg,
+        src1: YmmReg,
+        src2: YmmReg,
+        provenance: Provenance,
+    },
+
+    /// Move 32-bit GPR into 128-bit XMM vector register: `vmovd %src, %dst`.
+    VmovdGprToXmm {
+        dst: XmmReg,
+        src: X86Reg,
+        provenance: Provenance,
+    },
+
+    /// Broadcast 32-bit integer from XMM to all elements of YMM: `vpbroadcastd %src, %dst`.
+    Vpbroadcastd {
+        dst: YmmReg,
+        src: XmmReg,
+        provenance: Provenance,
+    },
+
+    /// Load 32-bit doubleword from memory displacement: `movl disp(%base), %dst`.
+    MovLoad32 {
+        dst: X86Reg,
+        base: X86Reg,
+        disp: i32,
+        provenance: Provenance,
+    },
+
+    /// Store 32-bit doubleword into memory displacement: `movl %src, disp(%base)`.
+    MovStore32 {
+        base: X86Reg,
+        disp: i32,
+        src: X86Reg,
+        provenance: Provenance,
+    },
+
+    /// Symmetric 32-bit ALU operation between two registers: `OP %src, %dst`.
+    Alu32RegReg {
+        op: AluOp,
+        dst: X86Reg,
+        src: X86Reg,
+        provenance: Provenance,
+    },
 }
 
 impl MachineInst {
@@ -475,7 +664,16 @@ impl MachineInst {
             | Self::MovImm64 { provenance, .. }
             | Self::TestRegReg { provenance, .. }
             | Self::Nop { provenance }
-            | Self::Ret { provenance } => provenance,
+            | Self::Ret { provenance }
+            | Self::Vzeroupper { provenance }
+            | Self::VmovdquLoad { provenance, .. }
+            | Self::VmovdquStore { provenance, .. }
+            | Self::Vpaddd { provenance, .. }
+            | Self::VmovdGprToXmm { provenance, .. }
+            | Self::Vpbroadcastd { provenance, .. }
+            | Self::MovLoad32 { provenance, .. }
+            | Self::MovStore32 { provenance, .. }
+            | Self::Alu32RegReg { provenance, .. } => provenance,
         }
     }
 
@@ -539,6 +737,57 @@ impl MachineInst {
             }
             Self::Nop { .. } => "nop".to_string(),
             Self::Ret { .. } => "ret".to_string(),
+            Self::Vzeroupper { .. } => "vzeroupper".to_string(),
+            Self::VmovdquLoad {
+                dst, base, disp, ..
+            } => {
+                if *disp == 0 {
+                    format!("vmovdqu ({}), {}", base.name(), dst.name())
+                } else {
+                    format!("vmovdqu {disp}({}), {}", base.name(), dst.name())
+                }
+            }
+            Self::VmovdquStore {
+                base, disp, src, ..
+            } => {
+                if *disp == 0 {
+                    format!("vmovdqu {}, ({})", src.name(), base.name())
+                } else {
+                    format!("vmovdqu {}, {disp}({})", src.name(), base.name())
+                }
+            }
+            Self::Vpaddd {
+                dst, src1, src2, ..
+            } => {
+                format!("vpaddd {}, {}, {}", src2.name(), src1.name(), dst.name())
+            }
+            Self::VmovdGprToXmm { dst, src, .. } => {
+                format!("vmovd {}, {}", src.name_32(), dst.name())
+            }
+            Self::Vpbroadcastd { dst, src, .. } => {
+                format!("vpbroadcastd {}, {}", src.name(), dst.name())
+            }
+            Self::MovLoad32 {
+                dst, base, disp, ..
+            } => {
+                if *disp == 0 {
+                    format!("movl ({}), {}", base.name(), dst.name_32())
+                } else {
+                    format!("movl {disp}({}), {}", base.name(), dst.name_32())
+                }
+            }
+            Self::MovStore32 {
+                base, disp, src, ..
+            } => {
+                if *disp == 0 {
+                    format!("movl {}, ({})", src.name_32(), base.name())
+                } else {
+                    format!("movl {}, {disp}({})", src.name_32(), base.name())
+                }
+            }
+            Self::Alu32RegReg { op, dst, src, .. } => {
+                format!("{} {}, {}", op.name_32(), src.name_32(), dst.name_32())
+            }
         }
     }
 
@@ -719,8 +968,157 @@ impl MachineInst {
             Self::Nop { .. } => vec![0x90],
 
             Self::Ret { .. } => vec![0xC3],
+
+            Self::Vzeroupper { .. } => vec![0xC5, 0xF8, 0x77],
+
+            Self::VmovdquLoad {
+                dst, base, disp, ..
+            } => {
+                let base_num = base.number();
+                let (mod_bits, disp_bytes) = if *disp == 0 && (base_num & 0x07) != 5 {
+                    (0b00, vec![])
+                } else if *disp >= -128 && *disp <= 127 {
+                    (0b01, vec![*disp as u8])
+                } else {
+                    (0b10, disp.to_le_bytes().to_vec())
+                };
+                let modrm = (mod_bits << 6) | ((dst.number() & 0x07) << 3) | (base_num & 0x07);
+                let mut bytes = Vec::with_capacity(4 + disp_bytes.len());
+                bytes.push(0xC5);
+                bytes.push(0xFE);
+                bytes.push(0x6F);
+                bytes.push(modrm);
+                bytes.extend_from_slice(&disp_bytes);
+                bytes
+            }
+
+            Self::VmovdquStore {
+                base, disp, src, ..
+            } => {
+                let base_num = base.number();
+                let (mod_bits, disp_bytes) = if *disp == 0 && (base_num & 0x07) != 5 {
+                    (0b00, vec![])
+                } else if *disp >= -128 && *disp <= 127 {
+                    (0b01, vec![*disp as u8])
+                } else {
+                    (0b10, disp.to_le_bytes().to_vec())
+                };
+                let modrm = (mod_bits << 6) | ((src.number() & 0x07) << 3) | (base_num & 0x07);
+                let mut bytes = Vec::with_capacity(4 + disp_bytes.len());
+                bytes.push(0xC5);
+                bytes.push(0xFE);
+                bytes.push(0x7F);
+                bytes.push(modrm);
+                bytes.extend_from_slice(&disp_bytes);
+                bytes
+            }
+
+            Self::Vpaddd {
+                dst, src1, src2, ..
+            } => {
+                let vvvv = (!src1.number()) & 0x0F;
+                let byte2 = 0x80 | (vvvv << 3) | 0x04 | 0x01;
+                let opcode = 0xFE;
+                let modrm = (0b11 << 6) | ((dst.number() & 0x07) << 3) | (src2.number() & 0x07);
+                vec![0xC5, byte2, opcode, modrm]
+            }
+
+            Self::VmovdGprToXmm { dst, src, .. } => {
+                let rex_r = if dst.number() >= 8 { 0 } else { 0x80 };
+                let byte2 = rex_r | (0b1111 << 3) | 0x01;
+                let opcode = 0x6E;
+                let modrm = (0b11 << 6) | ((dst.number() & 0x07) << 3) | (src.number() & 0x07);
+                vec![0xC5, byte2, opcode, modrm]
+            }
+
+            Self::Vpbroadcastd { dst, src, .. } => {
+                let opcode = 0x58;
+                let modrm = (0b11 << 6) | ((dst.number() & 0x07) << 3) | (src.number() & 0x07);
+                vec![0xC4, 0xE2, 0x7D, opcode, modrm]
+            }
+
+            Self::MovLoad32 {
+                dst, base, disp, ..
+            } => {
+                let (rex_opt, tail) =
+                    encode_memory_access_32(dst.number(), *base, *disp, dst.is_extended());
+                let opcode = 0x8B;
+                let mut bytes = Vec::with_capacity(2 + tail.len());
+                if let Some(rex) = rex_opt {
+                    bytes.push(rex);
+                }
+                bytes.push(opcode);
+                bytes.extend_from_slice(&tail);
+                bytes
+            }
+
+            Self::MovStore32 {
+                base, disp, src, ..
+            } => {
+                let (rex_opt, tail) =
+                    encode_memory_access_32(src.number(), *base, *disp, src.is_extended());
+                let opcode = 0x89;
+                let mut bytes = Vec::with_capacity(2 + tail.len());
+                if let Some(rex) = rex_opt {
+                    bytes.push(rex);
+                }
+                bytes.push(opcode);
+                bytes.extend_from_slice(&tail);
+                bytes
+            }
+
+            Self::Alu32RegReg { op, dst, src, .. } => {
+                let mut bytes = Vec::with_capacity(3);
+                let rex_r = if src.is_extended() { 0x04 } else { 0x00 };
+                let rex_b = if dst.is_extended() { 0x01 } else { 0x00 };
+                if rex_r != 0 || rex_b != 0 {
+                    bytes.push(0x40 | rex_r | rex_b);
+                }
+                bytes.push(op.opcode_reg_reg());
+                let modrm = (0b11 << 6) | ((src.number() & 0x07) << 3) | (dst.number() & 0x07);
+                bytes.push(modrm);
+                bytes
+            }
         }
     }
+}
+
+/// Helper to encode 32-bit x86-64 memory addressing forms without mandatory REX.W prefix.
+fn encode_memory_access_32(
+    modrm_reg: u8,
+    base: X86Reg,
+    disp: i32,
+    reg_is_ext: bool,
+) -> (Option<u8>, Vec<u8>) {
+    let base_num = base.number();
+    let base_is_ext = base.is_extended();
+    let rex_b = if base_is_ext { 0x01 } else { 0x00 };
+    let rex_r = if reg_is_ext { 0x04 } else { 0x00 };
+    let rex = if rex_r != 0 || rex_b != 0 {
+        Some(0x40 | rex_r | rex_b)
+    } else {
+        None
+    };
+
+    let needs_sib = (base_num & 0x07) == 4; // RSP or R12 requires SIB byte
+    let (mod_bits, disp_bytes) = if disp == 0 && (base_num & 0x07) != 5 {
+        (0b00, vec![])
+    } else if disp >= -128 && disp <= 127 {
+        (0b01, vec![disp as u8])
+    } else {
+        (0b10, disp.to_le_bytes().to_vec())
+    };
+
+    let rm_bits = if needs_sib { 0b100 } else { base_num & 0x07 };
+    let modrm = (mod_bits << 6) | ((modrm_reg & 0x07) << 3) | rm_bits;
+
+    let mut tail = Vec::with_capacity(1 + if needs_sib { 1 } else { 0 } + disp_bytes.len());
+    tail.push(modrm);
+    if needs_sib {
+        tail.push(0x24);
+    }
+    tail.extend_from_slice(&disp_bytes);
+    (rex, tail)
 }
 
 /// Helper to encode x86-64 memory addressing forms (`disp(%base)`) with ModR/M, optional SIB, and displacement.
@@ -1137,6 +1535,55 @@ mod tests {
                 provenance: prov.clone(),
             },
             MachineInst::Ret {
+                provenance: prov.clone(),
+            },
+            MachineInst::Vzeroupper {
+                provenance: prov.clone(),
+            },
+            MachineInst::VmovdquLoad {
+                dst: YmmReg::Ymm0,
+                base: X86Reg::Rdi,
+                disp: 0,
+                provenance: prov.clone(),
+            },
+            MachineInst::VmovdquStore {
+                base: X86Reg::Rsi,
+                disp: 0,
+                src: YmmReg::Ymm0,
+                provenance: prov.clone(),
+            },
+            MachineInst::Vpaddd {
+                dst: YmmReg::Ymm0,
+                src1: YmmReg::Ymm0,
+                src2: YmmReg::Ymm1,
+                provenance: prov.clone(),
+            },
+            MachineInst::VmovdGprToXmm {
+                dst: XmmReg::Xmm1,
+                src: X86Reg::Rcx,
+                provenance: prov.clone(),
+            },
+            MachineInst::Vpbroadcastd {
+                dst: YmmReg::Ymm1,
+                src: XmmReg::Xmm1,
+                provenance: prov.clone(),
+            },
+            MachineInst::MovLoad32 {
+                dst: X86Reg::Rax,
+                base: X86Reg::Rdi,
+                disp: 0,
+                provenance: prov.clone(),
+            },
+            MachineInst::MovStore32 {
+                base: X86Reg::Rsi,
+                disp: 0,
+                src: X86Reg::Rax,
+                provenance: prov.clone(),
+            },
+            MachineInst::Alu32RegReg {
+                op: AluOp::Add,
+                dst: X86Reg::Rax,
+                src: X86Reg::Rcx,
                 provenance: prov.clone(),
             },
         ];

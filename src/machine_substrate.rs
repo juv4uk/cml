@@ -106,6 +106,55 @@ pub fn inst_to_sexp(inst: &MachineInst) -> String {
         MachineInst::CallRel32 { disp, .. } => format!("(x86 call-rel32 {disp})"),
         MachineInst::Nop { .. } => "(x86 nop)".to_string(),
         MachineInst::Ret { .. } => "(x86 ret)".to_string(),
+        MachineInst::Vzeroupper { .. } => "(x86 vzeroupper)".to_string(),
+        MachineInst::VmovdquLoad {
+            dst, base, disp, ..
+        } => format!(
+            "(x86 vmovdqu-load {} {} {disp})",
+            dst.name(),
+            base.raw_name()
+        ),
+        MachineInst::VmovdquStore {
+            base, disp, src, ..
+        } => format!(
+            "(x86 vmovdqu-store {} {disp} {})",
+            base.raw_name(),
+            src.name()
+        ),
+        MachineInst::Vpaddd {
+            dst, src1, src2, ..
+        } => format!(
+            "(x86 vpaddd {} {} {})",
+            dst.name(),
+            src1.name(),
+            src2.name()
+        ),
+        MachineInst::VmovdGprToXmm { dst, src, .. } => {
+            format!("(x86 vmovd-gpr-to-xmm {} {})", dst.name(), src.raw_name())
+        }
+        MachineInst::Vpbroadcastd { dst, src, .. } => {
+            format!("(x86 vpbroadcastd {} {})", dst.name(), src.name())
+        }
+        MachineInst::MovLoad32 {
+            dst, base, disp, ..
+        } => format!(
+            "(x86 mov-load32 {} {} {disp})",
+            dst.raw_name(),
+            base.raw_name()
+        ),
+        MachineInst::MovStore32 {
+            base, disp, src, ..
+        } => format!(
+            "(x86 mov-store32 {} {disp} {})",
+            base.raw_name(),
+            src.raw_name()
+        ),
+        MachineInst::Alu32RegReg { op, dst, src, .. } => format!(
+            "(x86 alu32-reg-reg {} {} {})",
+            op.raw_name(),
+            dst.raw_name(),
+            src.raw_name()
+        ),
     }
 }
 
