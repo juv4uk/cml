@@ -20,7 +20,7 @@
 //!         └───► Oracle verification: direct bytes == GNU as objdump bytes
 //! ```
 
-use crate::ir::MachineOp;
+use crate::ir::{Ir, MachineOp, PrimOp};
 
 /// Target x86-64 64-bit general-purpose registers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -787,6 +787,242 @@ pub fn select_machine_primitive(op: MachineOp, fixnum_tag: u64) -> Vec<MachineIn
             ]
         }
     }
+}
+
+/// Errors occurring during target selection for the vertical slice witness.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VerticalSliceError {
+    EmptyProgram,
+    UnsupportedIrVariant(&'static str),
+    InvalidArity { expected: usize, actual: usize },
+    FixnumOutOfRange(i64),
+}
+
+impl std::fmt::Display for VerticalSliceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptyProgram => write!(f, "empty program has no execution entry"),
+            Self::UnsupportedIrVariant(v) => {
+                write!(f, "unsupported IR variant in vertical slice: {v}")
+            }
+            Self::InvalidArity { expected, actual } => {
+                write!(f, "invalid arity: expected {expected}, got {actual}")
+            }
+            Self::FixnumOutOfRange(n) => write!(f, "fixnum out of range: {n}"),
+        }
+    }
+}
+
+impl std::error::Error for VerticalSliceError {}
+
+/// Target selection for the minimal vertical slice witness (#36):
+/// Lowers an admitted fixnum arithmetic IR expression into executable `MachineItem`s.
+///
+/// Implements full standalone Linux execution:
+/// 1. Evaluates arithmetic on tagged fixnums using canonical ABI tags.
+/// 2. Writes the 8-byte little-endian tagged result word to stdout via `sys_write`.
+/// 3. Exits cleanly via `sys_exit` with the unboxed fixnum exit code.
+pub fn select_arithmetic_slice(program: &[Ir]) -> Result<Vec<MachineItem>, VerticalSliceError> {
+    if program.is_empty() {
+        return Err(VerticalSliceError::EmptyProgram);
+    }
+    let prov = Provenance::new(None, "vertical slice witness #36");
+    let mut items = Vec::new();
+
+    // Entry point: _start
+    items.push(MachineItem::Label("_start".to_string()));
+
+    // Align stack to 16-byte boundary per SysV AMD64 ABI
+    items.push(MachineItem::Inst(MachineInst::AluImm8 {
+        op: AluOp::And,
+        dst: X86Reg::Rsp,
+        imm: -16,
+        provenance: prov.clone(),
+    }));
+
+    match &program[0] {
+        Ir::Int(val) => {
+            let tagged = wsm_os_target::encode_fixnum(*val)
+                .ok_or(VerticalSliceError::FixnumOutOfRange(*val))?;
+            items.push(MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rax,
+                imm: tagged,
+                provenance: prov.clone(),
+            }));
+        }
+        Ir::Prim { op, args } if matches!(op, PrimOp::Add | PrimOp::Sub) => {
+            if args.len() != 2 {
+                return Err(VerticalSliceError::InvalidArity {
+                    expected: 2,
+                    actual: args.len(),
+                });
+            }
+            let a = match &args[0] {
+                Ir::Int(n) => *n,
+                _ => {
+                    return Err(VerticalSliceError::UnsupportedIrVariant(
+                        "non-integer operand",
+                    ));
+                }
+            };
+            let b = match &args[1] {
+                Ir::Int(n) => *n,
+                _ => {
+                    return Err(VerticalSliceError::UnsupportedIrVariant(
+                        "non-integer operand",
+                    ));
+                }
+            };
+
+            let tagged_a =
+                wsm_os_target::encode_fixnum(a).ok_or(VerticalSliceError::FixnumOutOfRange(a))?;
+            let tagged_b =
+                wsm_os_target::encode_fixnum(b).ok_or(VerticalSliceError::FixnumOutOfRange(b))?;
+
+            // Load tagged A into %rcx, untag by shifting right 3
+            items.push(MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rcx,
+                imm: tagged_a,
+                provenance: prov.clone(),
+            }));
+            items.push(MachineItem::Inst(MachineInst::SarImm {
+                reg: X86Reg::Rcx,
+                imm: 3,
+                provenance: prov.clone(),
+            }));
+
+            // Load tagged B into %rdx, untag by shifting right 3
+            items.push(MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rdx,
+                imm: tagged_b,
+                provenance: prov.clone(),
+            }));
+            items.push(MachineItem::Inst(MachineInst::SarImm {
+                reg: X86Reg::Rdx,
+                imm: 3,
+                provenance: prov.clone(),
+            }));
+
+            // Perform arithmetic operation: %rcx = %rcx OP %rdx
+            let alu_op = match op {
+                PrimOp::Add => AluOp::Add,
+                PrimOp::Sub => AluOp::Sub,
+                _ => unreachable!(),
+            };
+            items.push(MachineItem::Inst(MachineInst::AluRegReg {
+                op: alu_op,
+                dst: X86Reg::Rcx,
+                src: X86Reg::Rdx,
+                provenance: prov.clone(),
+            }));
+
+            // Retag: %rcx = (%rcx << 3) | 3
+            items.push(MachineItem::Inst(MachineInst::ShlImm {
+                reg: X86Reg::Rcx,
+                imm: 3,
+                provenance: prov.clone(),
+            }));
+            items.push(MachineItem::Inst(MachineInst::AluImm8 {
+                op: AluOp::Or,
+                dst: X86Reg::Rcx,
+                imm: wsm_os_target::Tag::Fixnum as i8,
+                provenance: prov.clone(),
+            }));
+
+            // Move result into %rax
+            items.push(MachineItem::Inst(MachineInst::MovRegReg {
+                dst: X86Reg::Rax,
+                src: X86Reg::Rcx,
+                provenance: prov.clone(),
+            }));
+        }
+        _ => {
+            return Err(VerticalSliceError::UnsupportedIrVariant(
+                "expected fixnum or binary arithmetic",
+            ));
+        }
+    }
+
+    // Now emit output & exit mechanism:
+    // 1. Push %rax (64-bit tagged word) onto stack
+    items.push(MachineItem::Inst(MachineInst::PushReg {
+        reg: X86Reg::Rax,
+        provenance: prov.clone(),
+    }));
+
+    // 2. sys_write(stdout=1, buf=%rsp, count=8):
+    // %rsi = %rsp (pointer to buffer on stack)
+    items.push(MachineItem::Inst(MachineInst::MovRegReg {
+        dst: X86Reg::Rsi,
+        src: X86Reg::Rsp,
+        provenance: prov.clone(),
+    }));
+    // %rdi = 1 (stdout)
+    items.push(MachineItem::Inst(MachineInst::MovImm64 {
+        dst: X86Reg::Rdi,
+        imm: 1,
+        provenance: prov.clone(),
+    }));
+    // %rdx = 8 (count)
+    items.push(MachineItem::Inst(MachineInst::MovImm64 {
+        dst: X86Reg::Rdx,
+        imm: 8,
+        provenance: prov.clone(),
+    }));
+    // %rax = 1 (SYS_write)
+    items.push(MachineItem::Inst(MachineInst::MovImm64 {
+        dst: X86Reg::Rax,
+        imm: 1,
+        provenance: prov.clone(),
+    }));
+    items.push(MachineItem::Inst(MachineInst::Syscall {
+        provenance: prov.clone(),
+    }));
+
+    // 3. Pop %rax back
+    items.push(MachineItem::Inst(MachineInst::PopReg {
+        reg: X86Reg::Rax,
+        provenance: prov.clone(),
+    }));
+
+    // 4. Untag into %rdi for exit code: %rdi = %rax >> 3
+    items.push(MachineItem::Inst(MachineInst::MovRegReg {
+        dst: X86Reg::Rdi,
+        src: X86Reg::Rax,
+        provenance: prov.clone(),
+    }));
+    items.push(MachineItem::Inst(MachineInst::SarImm {
+        reg: X86Reg::Rdi,
+        imm: 3,
+        provenance: prov.clone(),
+    }));
+
+    // 5. sys_exit(%rdi): %rax = 60
+    items.push(MachineItem::Inst(MachineInst::MovImm64 {
+        dst: X86Reg::Rax,
+        imm: 60,
+        provenance: prov.clone(),
+    }));
+    items.push(MachineItem::Inst(MachineInst::Syscall { provenance: prov }));
+
+    Ok(items)
+}
+
+/// Project a sequence of `MachineItem`s into standard GNU assembler text.
+pub fn items_to_gnu_asm(items: &[MachineItem]) -> String {
+    let mut s = String::from(".text\n.globl _start\n.type _start, @function\n");
+    for item in items {
+        match item {
+            MachineItem::Label(l) => s.push_str(&format!("{l}:\n")),
+            MachineItem::Inst(inst) => s.push_str(&format!("    {}\n", inst.print_gnu_asm())),
+            MachineItem::JmpLabel { target, .. } => s.push_str(&format!("    jmp {target}\n")),
+            MachineItem::JccLabel { cond, target, .. } => {
+                s.push_str(&format!("    j{} {target}\n", cond.mnemonic_suffix()))
+            }
+            MachineItem::CallLabel { target, .. } => s.push_str(&format!("    call {target}\n")),
+        }
+    }
+    s
 }
 
 #[cfg(test)]
