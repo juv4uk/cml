@@ -139,6 +139,51 @@ impl AluOp {
     }
 }
 
+/// x86 condition codes for conditional jumps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CondCode {
+    Overflow = 0x0,
+    NotOverflow = 0x1,
+    Below = 0x2,
+    AboveEqual = 0x3,
+    Equal = 0x4,
+    NotEqual = 0x5,
+    BelowEqual = 0x6,
+    Above = 0x7,
+    Sign = 0x8,
+    NotSign = 0x9,
+    Parity = 0xA,
+    NotParity = 0xB,
+    Less = 0xC,
+    GreaterEqual = 0xD,
+    LessEqual = 0xE,
+    Greater = 0xF,
+}
+
+impl CondCode {
+    #[inline]
+    pub const fn mnemonic_suffix(self) -> &'static str {
+        match self {
+            Self::Overflow => "o",
+            Self::NotOverflow => "no",
+            Self::Below => "b",
+            Self::AboveEqual => "ae",
+            Self::Equal => "e",
+            Self::NotEqual => "ne",
+            Self::BelowEqual => "be",
+            Self::Above => "a",
+            Self::Sign => "s",
+            Self::NotSign => "ns",
+            Self::Parity => "p",
+            Self::NotParity => "np",
+            Self::Less => "l",
+            Self::GreaterEqual => "ge",
+            Self::LessEqual => "le",
+            Self::Greater => "g",
+        }
+    }
+}
+
 /// Provenance metadata tracking which semantic identity / pass produced this machine instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Provenance {
@@ -224,6 +269,54 @@ pub enum MachineInst {
         provenance: Provenance,
     },
 
+    /// Arithmetic shift right 64-bit register by immediate 8-bit count: `sarq $imm, %reg`.
+    SarImm {
+        reg: X86Reg,
+        imm: u8,
+        provenance: Provenance,
+    },
+
+    /// Logical shift right 64-bit register by immediate 8-bit count: `shrq $imm, %reg`.
+    ShrImm {
+        reg: X86Reg,
+        imm: u8,
+        provenance: Provenance,
+    },
+
+    /// Push 64-bit register onto stack: `pushq %reg`.
+    PushReg {
+        reg: X86Reg,
+        provenance: Provenance,
+    },
+
+    /// Pop 64-bit register from stack: `popq %reg`.
+    PopReg {
+        reg: X86Reg,
+        provenance: Provenance,
+    },
+
+    /// Fast system call invocation: `syscall`.
+    Syscall { provenance: Provenance },
+
+    /// Unconditional near jump with 32-bit relative displacement: `jmp rel32`.
+    JmpRel32 {
+        disp: i32,
+        provenance: Provenance,
+    },
+
+    /// Conditional near jump with 32-bit relative displacement: `j<cond> rel32`.
+    JccRel32 {
+        cond: CondCode,
+        disp: i32,
+        provenance: Provenance,
+    },
+
+    /// Near procedure call with 32-bit relative displacement: `call rel32`.
+    CallRel32 {
+        disp: i32,
+        provenance: Provenance,
+    },
+
     /// No operation: `nop`.
     Nop { provenance: Provenance },
 
@@ -237,6 +330,14 @@ impl MachineInst {
         match self {
             Self::Rdtsc { provenance }
             | Self::ShlImm { provenance, .. }
+            | Self::SarImm { provenance, .. }
+            | Self::ShrImm { provenance, .. }
+            | Self::PushReg { provenance, .. }
+            | Self::PopReg { provenance, .. }
+            | Self::Syscall { provenance }
+            | Self::JmpRel32 { provenance, .. }
+            | Self::JccRel32 { provenance, .. }
+            | Self::CallRel32 { provenance, .. }
             | Self::AluRegReg { provenance, .. }
             | Self::AluImm8 { provenance, .. }
             | Self::MovRegReg { provenance, .. }
@@ -254,6 +355,16 @@ impl MachineInst {
         match self {
             Self::Rdtsc { .. } => "rdtsc".to_string(),
             Self::ShlImm { reg, imm, .. } => format!("shlq ${imm}, {}", reg.name()),
+            Self::SarImm { reg, imm, .. } => format!("sarq ${imm}, {}", reg.name()),
+            Self::ShrImm { reg, imm, .. } => format!("shrq ${imm}, {}", reg.name()),
+            Self::PushReg { reg, .. } => format!("pushq {}", reg.name()),
+            Self::PopReg { reg, .. } => format!("popq {}", reg.name()),
+            Self::Syscall { .. } => "syscall".to_string(),
+            Self::JmpRel32 { disp, .. } => format!(".byte 0xe9; .long {disp}"),
+            Self::JccRel32 { cond, disp, .. } => {
+                format!(".byte 0x0f, 0x{:02x}; .long {disp}", 0x80 + (*cond as u8))
+            }
+            Self::CallRel32 { disp, .. } => format!(".byte 0xe8; .long {disp}"),
             Self::AluRegReg { op, dst, src, .. } => {
                 format!("{} {}, {}", op.name(), src.name(), dst.name())
             }
@@ -301,6 +412,62 @@ impl MachineInst {
                 // ModR/M: mod=11 (register direct), reg=100 (/4 for SHL), rm=reg.number() & 7
                 let modrm = (0b11 << 6) | (0b100 << 3) | (reg.number() & 0x07);
                 vec![rex, opcode, modrm, *imm]
+            }
+
+            Self::SarImm { reg, imm, .. } => {
+                let rex = 0x48 | if reg.is_extended() { 0x01 } else { 0x00 };
+                let opcode = 0xC1;
+                // ModR/M: mod=11 (register direct), reg=111 (/7 for SAR), rm=reg.number() & 7
+                let modrm = (0b11 << 6) | (0b111 << 3) | (reg.number() & 0x07);
+                vec![rex, opcode, modrm, *imm]
+            }
+
+            Self::ShrImm { reg, imm, .. } => {
+                let rex = 0x48 | if reg.is_extended() { 0x01 } else { 0x00 };
+                let opcode = 0xC1;
+                // ModR/M: mod=11 (register direct), reg=101 (/5 for SHR), rm=reg.number() & 7
+                let modrm = (0b11 << 6) | (0b101 << 3) | (reg.number() & 0x07);
+                vec![rex, opcode, modrm, *imm]
+            }
+
+            Self::PushReg { reg, .. } => {
+                if reg.is_extended() {
+                    vec![0x41, 0x50 + (reg.number() & 0x07)]
+                } else {
+                    vec![0x50 + reg.number()]
+                }
+            }
+
+            Self::PopReg { reg, .. } => {
+                if reg.is_extended() {
+                    vec![0x41, 0x58 + (reg.number() & 0x07)]
+                } else {
+                    vec![0x58 + reg.number()]
+                }
+            }
+
+            Self::Syscall { .. } => vec![0x0F, 0x05],
+
+            Self::JmpRel32 { disp, .. } => {
+                let mut bytes = Vec::with_capacity(5);
+                bytes.push(0xE9);
+                bytes.extend_from_slice(&disp.to_le_bytes());
+                bytes
+            }
+
+            Self::JccRel32 { cond, disp, .. } => {
+                let mut bytes = Vec::with_capacity(6);
+                bytes.push(0x0F);
+                bytes.push(0x80 + (*cond as u8));
+                bytes.extend_from_slice(&disp.to_le_bytes());
+                bytes
+            }
+
+            Self::CallRel32 { disp, .. } => {
+                let mut bytes = Vec::with_capacity(5);
+                bytes.push(0xE8);
+                bytes.extend_from_slice(&disp.to_le_bytes());
+                bytes
             }
 
             Self::AluRegReg { op, dst, src, .. } => {
@@ -413,6 +580,98 @@ fn encode_memory_access(modrm_reg: u8, base: X86Reg, disp: i32, reg_is_ext: bool
     (rex, tail)
 }
 
+/// An item in an assembleable machine code sequence: either a label or an instruction/jump.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MachineItem {
+    Label(String),
+    Inst(MachineInst),
+    JmpLabel { target: String, provenance: Provenance },
+    JccLabel { cond: CondCode, target: String, provenance: Provenance },
+    CallLabel { target: String, provenance: Provenance },
+}
+
+/// Assembles a sequence of machine items, resolving all labels and relative branch offsets.
+pub fn assemble_program(items: &[MachineItem]) -> Result<Vec<u8>, String> {
+    use std::collections::HashMap;
+
+    // Pass 1: compute byte offsets of each item and record label positions
+    let mut label_offsets = HashMap::new();
+    let mut current_offset: usize = 0;
+
+    for item in items {
+        match item {
+            MachineItem::Label(name) => {
+                if label_offsets.insert(name.clone(), current_offset).is_some() {
+                    return Err(format!("duplicate label: {name}"));
+                }
+            }
+            MachineItem::Inst(inst) => {
+                current_offset += inst.encode_bytes().len();
+            }
+            MachineItem::JmpLabel { .. } => {
+                current_offset += 5; // 0xE9 + 4-byte displacement
+            }
+            MachineItem::JccLabel { .. } => {
+                current_offset += 6; // 0x0F 0x8x + 4-byte displacement
+            }
+            MachineItem::CallLabel { .. } => {
+                current_offset += 5; // 0xE8 + 4-byte displacement
+            }
+        }
+    }
+
+    // Pass 2: encode instructions and compute relative displacements
+    let mut bytes = Vec::with_capacity(current_offset);
+
+    for item in items {
+        match item {
+            MachineItem::Label(_) => {}
+            MachineItem::Inst(inst) => {
+                bytes.extend_from_slice(&inst.encode_bytes());
+            }
+            MachineItem::JmpLabel { target, provenance } => {
+                let target_offset = label_offsets
+                    .get(target)
+                    .ok_or_else(|| format!("unresolved label: {target}"))?;
+                let next_ip = bytes.len() + 5;
+                let disp = (*target_offset as isize) - (next_ip as isize);
+                let inst = MachineInst::JmpRel32 {
+                    disp: disp as i32,
+                    provenance: provenance.clone(),
+                };
+                bytes.extend_from_slice(&inst.encode_bytes());
+            }
+            MachineItem::JccLabel { cond, target, provenance } => {
+                let target_offset = label_offsets
+                    .get(target)
+                    .ok_or_else(|| format!("unresolved label: {target}"))?;
+                let next_ip = bytes.len() + 6;
+                let disp = (*target_offset as isize) - (next_ip as isize);
+                let inst = MachineInst::JccRel32 {
+                    cond: *cond,
+                    disp: disp as i32,
+                    provenance: provenance.clone(),
+                };
+                bytes.extend_from_slice(&inst.encode_bytes());
+            }
+            MachineItem::CallLabel { target, provenance } => {
+                let target_offset = label_offsets
+                    .get(target)
+                    .ok_or_else(|| format!("unresolved label: {target}"))?;
+                let next_ip = bytes.len() + 5;
+                let disp = (*target_offset as isize) - (next_ip as isize);
+                let inst = MachineInst::CallRel32 {
+                    disp: disp as i32,
+                    provenance: provenance.clone(),
+                };
+                bytes.extend_from_slice(&inst.encode_bytes());
+            }
+        }
+    }
+
+    Ok(bytes)
+}
+
 /// Target selection pass: lower a backend-neutral `MachineOp` into target-specific `MachineInst`s.
 pub fn select_machine_primitive(op: MachineOp, fixnum_tag: u64) -> Vec<MachineInst> {
     match op {
@@ -486,14 +745,18 @@ mod tests {
         writeln!(file, ".global _start\n_start:\n    {text}").expect("write asm text");
         file.flush().expect("flush asm text");
 
-        let status = Command::new("as")
+        let output = Command::new("as")
             .arg("--64")
             .arg(&s_path)
             .arg("-o")
             .arg(&o_path)
-            .status()
+            .output()
             .expect("run GNU as");
-        assert!(status.success(), "GNU as failed to assemble: {text}");
+        assert!(
+            output.status.success(),
+            "GNU as failed to assemble `{text}`: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         let objcopy = Command::new("objcopy")
             .arg("-O")
@@ -614,10 +877,39 @@ mod tests {
                 reg2: X86Reg::Rax,
                 provenance: prov.clone(),
             },
+            MachineInst::SarImm {
+                reg: X86Reg::Rcx,
+                imm: 3,
+                provenance: prov.clone(),
+            },
+            MachineInst::ShrImm {
+                reg: X86Reg::Rdx,
+                imm: 4,
+                provenance: prov.clone(),
+            },
+            MachineInst::PushReg {
+                reg: X86Reg::Rbx,
+                provenance: prov.clone(),
+            },
+            MachineInst::PushReg {
+                reg: X86Reg::R12,
+                provenance: prov.clone(),
+            },
+            MachineInst::PopReg {
+                reg: X86Reg::R12,
+                provenance: prov.clone(),
+            },
+            MachineInst::PopReg {
+                reg: X86Reg::Rbx,
+                provenance: prov.clone(),
+            },
+            MachineInst::Syscall {
+                provenance: prov.clone(),
+            },
             MachineInst::Nop {
                 provenance: prov.clone(),
             },
-            MachineInst::Ret { provenance: prov },
+            MachineInst::Ret { provenance: prov.clone() },
         ];
 
         for inst in test_cases {
@@ -629,5 +921,97 @@ mod tests {
                 "encoding mismatch for `{asm_text}`: direct={direct_bytes:02X?}, oracle={oracle_bytes:02X?}"
             );
         }
+    }
+
+    #[test]
+    fn test_assemble_program_two_pass_labels() {
+        let prov = Provenance::new(None, "assemble_program test");
+        let items = vec![
+            MachineItem::Inst(MachineInst::AluImm8 {
+                op: AluOp::Cmp,
+                dst: X86Reg::Rax,
+                imm: 0,
+                provenance: prov.clone(),
+            }),
+            MachineItem::JccLabel {
+                cond: CondCode::Equal,
+                target: "is_zero".to_string(),
+                provenance: prov.clone(),
+            },
+            MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rax,
+                imm: 1,
+                provenance: prov.clone(),
+            }),
+            MachineItem::JmpLabel {
+                target: "done".to_string(),
+                provenance: prov.clone(),
+            },
+            MachineItem::Label("is_zero".to_string()),
+            MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rax,
+                imm: 2,
+                provenance: prov.clone(),
+            }),
+            MachineItem::Label("done".to_string()),
+            MachineItem::Inst(MachineInst::Ret { provenance: prov }),
+        ];
+
+        let bytes = assemble_program(&items).expect("assemble two-pass program");
+        assert!(!bytes.is_empty());
+        // Verify that bytes disassemble or match expected length
+        // cmp: 4, jcc: 6, mov: 10, jmp: 5, mov: 10, ret: 1 = 36 bytes
+        assert_eq!(bytes.len(), 36);
+        // Verify relative displacement in Jcc (target is offset 25, jcc starts at 4, next_ip is 10 -> disp = 15 = 0x0F)
+        assert_eq!(bytes[4..6], [0x0F, 0x84]);
+        assert_eq!(i32::from_le_bytes(bytes[6..10].try_into().unwrap()), 15);
+    }
+
+    #[test]
+    fn test_assemble_program_and_run_native_elf() {
+        use crate::elf64::Elf64Executable;
+
+        let prov = Provenance::new(None, "native elf test");
+        // Compute (10 + 32) and exit with that code via Linux syscall
+        let items = vec![
+            MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rdi,
+                imm: 10,
+                provenance: prov.clone(),
+            }),
+            MachineItem::Inst(MachineInst::AluImm8 {
+                op: AluOp::Add,
+                dst: X86Reg::Rdi,
+                imm: 32,
+                provenance: prov.clone(),
+            }),
+            MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rax,
+                imm: 60, // sys_exit
+                provenance: prov.clone(),
+            }),
+            MachineItem::Inst(MachineInst::Syscall { provenance: prov }),
+        ];
+
+        let code = assemble_program(&items).expect("assemble exit program");
+        let elf = Elf64Executable::new(code);
+
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("cml-native-prog-{nonce}"));
+
+        elf.write_executable(&path).expect("write executable");
+        let output = std::process::Command::new(&path)
+            .output()
+            .expect("run assembled ELF");
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(
+            output.status.code(),
+            Some(42),
+            "Native assembled program must compute 10+32=42 and exit with 42"
+        );
     }
 }
