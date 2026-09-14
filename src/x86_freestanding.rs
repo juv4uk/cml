@@ -2169,21 +2169,14 @@ impl Emitter {
         let (name, expected) = machine_primitive_contract(operation)?;
         debug_assert_eq!(args.len(), expected, "preflight checked {name} arity");
 
-        match operation {
-            MachineOp::Rdtsc => {
-                self.line("    rdtsc");
-                self.line("    shlq $32, %rdx");
-                self.line("    orq %rdx, %rax");
-                self.line("    movabsq $0x0FFFFFFFFFFFFFFF, %rcx");
-                self.line("    andq %rcx, %rax");
-                self.line("    shlq $3, %rax");
-                self.line(&format!(
-                    "    orq ${}, %rax",
-                    wsm_os_target::Tag::Fixnum as u64
-                ));
-                Ok(())
-            }
+        let insts = crate::machine_inst::select_machine_primitive(
+            operation,
+            wsm_os_target::Tag::Fixnum as u64,
+        );
+        for inst in &insts {
+            self.line(&format!("    {}", inst.print_gnu_asm()));
         }
+        Ok(())
     }
 
     fn emit_primitive(&mut self, operation: PrimOp, args: &[Ir]) -> Result<(), CompileError> {
