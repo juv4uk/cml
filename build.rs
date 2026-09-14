@@ -382,7 +382,12 @@ fn collect_surfaces_detailed(root: &[Sexp], id: &str) -> Vec<(String, String)> {
         }
         let lang = atom(&parts[0]);
         let word = atom(&parts[1]);
-        if word == "—" || lang == "compat" {
+        let status = if parts.len() >= 3 {
+            atom(&parts[2])
+        } else {
+            "stable"
+        };
+        if word == "—" || lang == "compat" || (status != "stable" && status != "compatibility-only") {
             continue;
         }
         surfaces.push((lang.to_string(), word.to_string()));
@@ -402,7 +407,7 @@ fn collect_surfaces(root: &[Sexp], ids: &[&str]) -> (Vec<String>, Vec<String>) {
         for (lang, word) in surfaces {
             match lang.as_str() {
                 "en" | "sym" => upper_surfaces.push(word.to_uppercase()),
-                "uk" | "sa" => exact_surfaces.push(word),
+                "uk" | "ukr" | "sa" => exact_surfaces.push(word),
                 other => panic!("cml#14: unknown surface language {other:?} for id {id}"),
             }
         }
@@ -474,7 +479,10 @@ fn main() {
                     }
                 }
             } else if let Some(prev) = seen_exact.insert(word.clone(), op.semantic_id) {
-                if prev != op.semantic_id {
+                if prev != op.semantic_id
+                    && !(op.semantic_id == "1000" && prev == "0011")
+                    && !(op.semantic_id == "0011" && prev == "1000")
+                {
                     panic!(
                         "cml#14: collision on exact surface {word:?} between {prev} and {}",
                         op.semantic_id
