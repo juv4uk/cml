@@ -134,13 +134,14 @@ impl Elf64Executable {
     /// Write executable to path and grant execution permissions (`0o755`).
     pub fn write_executable<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
         let bytes = self.to_bytes();
-        let mut file = File::create(&path)?;
+        let path = path.as_ref();
+        let mut file = File::create(path)?;
         file.write_all(&bytes)?;
-        file.flush()?;
-
+        file.sync_all()?;
         let mut perms = file.metadata()?.permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(path, perms)?;
+        file.set_permissions(perms)?;
+        drop(file);
         Ok(())
     }
 }
