@@ -1006,11 +1006,9 @@ fn preflight_def_body(
             Some(DefArity::Fixed(_)) => Err(CompileError::UnsupportedVariant(
                 "first-class named function (arity != 1)",
             )),
-            Some(DefArity::Variadic { .. }) | Some(DefArity::AllRest) => {
-                Err(CompileError::UnsupportedVariant(
-                    "first-class named function (variadic)",
-                ))
-            }
+            Some(DefArity::Variadic { .. }) | Some(DefArity::AllRest) => Err(
+                CompileError::UnsupportedVariant("first-class named function (variadic)"),
+            ),
             // cml#8: a data-only def is an ordinary value read.
             Some(DefArity::Data) => Ok(()),
             None => Err(CompileError::UnsupportedVariant("unbound variable")),
@@ -1610,7 +1608,9 @@ impl Emitter {
                                     Self::slot_offset(i)
                                 ));
                             } else {
-                                return Err(CompileError::UnsupportedVariant("Def (too many params)"));
+                                return Err(CompileError::UnsupportedVariant(
+                                    "Def (too many params)",
+                                ));
                             }
                             param_env.insert(param.clone(), i);
                         }
@@ -1701,10 +1701,7 @@ impl Emitter {
                         let frame_bytes = frame_slots * 8;
                         self.line(&format!(".Lfn_{label}:"));
                         self.line(&format!("    subq ${frame_bytes}, %rsp"));
-                        self.line(&format!(
-                            "    movq %rsi, {}(%rsp)",
-                            Self::slot_offset(0)
-                        ));
+                        self.line(&format!("    movq %rsi, {}(%rsp)", Self::slot_offset(0)));
                         let mut param_env = BTreeMap::new();
                         param_env.insert(rest.clone(), 0);
                         self.line(&format!(".Ltcloop_{label}:"));
@@ -2347,7 +2344,10 @@ impl Emitter {
                         ));
                     }
                     // Place packed rest into the rest param slot (at index `fixed`)
-                    self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(rest_slot)));
+                    self.line(&format!(
+                        "    movq {}(%rsp), %rax",
+                        Self::slot_offset(rest_slot)
+                    ));
                     self.line(&format!(
                         "    movq %rax, {}(%rsp)",
                         Self::slot_offset(fixed)

@@ -305,12 +305,14 @@ fn canonical_decoder_renders_proper_and_dotted_heap_structures() {
 
 #[test]
 fn test_conformance() {
-    let fixture_path = if std::path::Path::new("../my-lisp/tests/fixtures/conformance.lisp").exists() {
-        "../my-lisp/tests/fixtures/conformance.lisp"
-    } else {
-        "../my-lisp/tests/fixtures/conformance.my"
-    };
-    let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read conformance fixture");
+    let fixture_path =
+        if std::path::Path::new("../my-lisp/tests/fixtures/conformance.lisp").exists() {
+            "../my-lisp/tests/fixtures/conformance.lisp"
+        } else {
+            "../my-lisp/tests/fixtures/conformance.my"
+        };
+    let fixture_content =
+        fs::read_to_string(fixture_path).expect("Failed to read conformance fixture");
 
     // 1. Build the simulator once. Sources are read from ../fpga-lisp
     // (current_dir), but the compiled .vvp is written back into this
@@ -535,14 +537,12 @@ fn test_conformance() {
         // Classify result with predeclared unsupported check
         let classification = match (result, predeclared_unsupported) {
             (Ok(ConformanceResult::Supported), None) => ConformanceResult::Supported,
-            (Ok(ConformanceResult::Supported), Some(reason)) => {
-                ConformanceResult::Failed {
-                    stage: FailureStage::Simulate,
-                    detail: format!(
-                        "{expr_str}: fixture succeeded but was predeclared unsupported: {reason:?}"
-                    ),
-                }
-            }
+            (Ok(ConformanceResult::Supported), Some(reason)) => ConformanceResult::Failed {
+                stage: FailureStage::Simulate,
+                detail: format!(
+                    "{expr_str}: fixture succeeded but was predeclared unsupported: {reason:?}"
+                ),
+            },
             (Ok(ConformanceResult::Unsupported { .. }), _)
             | (Ok(ConformanceResult::Failed { .. }), _) => {
                 // Should not happen: our code only returns Supported or Err

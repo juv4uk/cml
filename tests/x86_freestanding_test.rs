@@ -1289,10 +1289,8 @@ fn quoted_symbols_differing_only_by_case_are_not_eq() {
 
 #[test]
 fn named_all_rest_def_list_assembles_and_runs() {
-    let expressions = parser::parse(
-        "(def list (lambda args args))\n         (list 1 2 3)",
-    )
-    .unwrap();
+    let expressions =
+        parser::parse("(def list (lambda args args))\n         (list 1 2 3)").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
@@ -1342,10 +1340,7 @@ fn named_all_rest_def_list_assembles_and_runs() {
 
 #[test]
 fn named_all_rest_def_empty_call_returns_nil() {
-    let expressions = parser::parse(
-        "(def list (lambda args args))\n         (list)",
-    )
-    .unwrap();
+    let expressions = parser::parse("(def list (lambda args args))\n         (list)").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
@@ -1355,7 +1350,8 @@ fn named_all_rest_def_empty_call_returns_nil() {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let base = std::env::temp_dir().join(format!("cml-allrest-empty-{}-{nonce}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("cml-allrest-empty-{}-{nonce}", std::process::id()));
     let source = base.with_extension("s");
     let harness = base.with_extension("c");
     let executable = base.with_extension("bin");
@@ -1375,7 +1371,11 @@ fn named_all_rest_def_empty_call_returns_nil() {
         .arg(&executable)
         .output()
         .unwrap();
-    assert!(linked.status.success(), "cc must succeed: {}", String::from_utf8_lossy(&linked.stderr));
+    assert!(
+        linked.status.success(),
+        "cc must succeed: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
     let run = Command::new(&executable).output().unwrap();
     let _ = fs::remove_file(source);
     let _ = fs::remove_file(harness);
@@ -1398,7 +1398,8 @@ fn named_variadic_def_with_fixed_and_rest_params() {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let base = std::env::temp_dir().join(format!("cml-variadic-def-{}-{nonce}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("cml-variadic-def-{}-{nonce}", std::process::id()));
     let source = base.with_extension("s");
     let harness = base.with_extension("c");
     let executable = base.with_extension("bin");
@@ -1463,7 +1464,10 @@ fn named_variadic_def_self_tail_recursion_packs_rest() {
         .arg(&executable)
         .output()
         .unwrap();
-    assert!(linked.status.success(), "variadic tail-call witness must link");
+    assert!(
+        linked.status.success(),
+        "variadic tail-call witness must link"
+    );
     let run = Command::new(&executable).output().unwrap();
     let _ = fs::remove_file(source);
     let _ = fs::remove_file(harness);
@@ -1482,9 +1486,7 @@ fn machine_primitive_rdtsc_emits_hardware_instruction_and_runs() {
             args: vec![],
         }]
     );
-    let assembly = X86FreestandingBackend::new()
-        .compile_program(&ir)
-        .unwrap();
+    let assembly = X86FreestandingBackend::new().compile_program(&ir).unwrap();
     assert!(
         assembly.contains("rdtsc"),
         "emitted assembly must contain real rdtsc instruction"
@@ -1512,4 +1514,3 @@ fn machine_primitive_rdtsc_emits_hardware_instruction_and_runs() {
         }]
     );
 }
-

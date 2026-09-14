@@ -100,8 +100,7 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
     } else {
         fpga_lisp.join("isa-contract.my")
     };
-    let isa = fs::read_to_string(isa_file)
-        .expect("fpga-lisp ISA contract should be readable");
+    let isa = fs::read_to_string(isa_file).expect("fpga-lisp ISA contract should be readable");
     assert!(
         isa.contains("(version . (1 1))")
             || isa.contains("(version . (1 2))")
@@ -131,8 +130,8 @@ fn compatibility_my_contract_version_matches_language_contract_my() {
     } else {
         my_lisp.join("language-contract.my")
     };
-    let language_contract = fs::read_to_string(lang_file)
-        .expect("my-lisp's language contract should be readable");
+    let language_contract =
+        fs::read_to_string(lang_file).expect("my-lisp's language contract should be readable");
 
     let major = extract_field(&language_contract, "major")
         .expect("language contract should have a (major . N) field");

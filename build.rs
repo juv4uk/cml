@@ -387,7 +387,8 @@ fn collect_surfaces_detailed(root: &[Sexp], id: &str) -> Vec<(String, String)> {
         } else {
             "stable"
         };
-        if word == "—" || lang == "compat" || (status != "stable" && status != "compatibility-only") {
+        if word == "—" || lang == "compat" || (status != "stable" && status != "compatibility-only")
+        {
             continue;
         }
         surfaces.push((lang.to_string(), word.to_string()));

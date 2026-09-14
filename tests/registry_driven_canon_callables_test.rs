@@ -160,8 +160,8 @@ fn operations_table_file_matches_compiled_canon_table() {
     } else {
         "contracts/cml-operations.my"
     };
-    let file_content = std::fs::read_to_string(ops_path)
-        .expect("contracts/cml-operations contract must exist");
+    let file_content =
+        std::fs::read_to_string(ops_path).expect("contracts/cml-operations contract must exist");
     assert!(file_content.contains("((kind . cml-operations-table)"));
     assert!(file_content.contains("(version . (1 0))"));
 
