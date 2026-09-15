@@ -48,7 +48,11 @@ fn run() -> Result<(), String> {
     }
 
     let source_path = Path::new(&source);
-    if source_path.extension().and_then(|extension| extension.to_str()) != Some("lisp") {
+    if source_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        != Some("lisp")
+    {
         return Err("compiler source must use the canonical .lisp extension".into());
     }
 
@@ -64,7 +68,12 @@ fn run() -> Result<(), String> {
 
     Elf64Executable::new(bytes)
         .write_executable(&output)
-        .map_err(|error| format!("could not write {}: {error}", Path::new(&output).display()))?;
+        .map_err(|error| {
+            format!(
+                "could not write {}: {error}",
+                Path::new(&output).display()
+            )
+        })?;
 
     Ok(())
 }
