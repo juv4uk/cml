@@ -6,12 +6,8 @@
 use std::{env, fs, path::Path, process::ExitCode};
 
 use cml::{
-    elf64::Elf64Executable,
-    lisp_asm_vertical::select_arithmetic_slice,
-    lower,
-    machine_inst::assemble_program,
-    macros::MacroExpander,
-    parser,
+    elf64::Elf64Executable, lisp_asm_vertical::select_arithmetic_slice, lower,
+    machine_inst::assemble_program, macros::MacroExpander, parser,
 };
 
 fn main() -> ExitCode {
@@ -68,12 +64,7 @@ fn run() -> Result<(), String> {
 
     Elf64Executable::new(bytes)
         .write_executable(&output)
-        .map_err(|error| {
-            format!(
-                "could not write {}: {error}",
-                Path::new(&output).display()
-            )
-        })?;
+        .map_err(|error| format!("could not write {}: {error}", Path::new(&output).display()))?;
 
     Ok(())
 }
