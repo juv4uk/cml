@@ -152,8 +152,7 @@ unsafe fn execute_bytes_as_fn(bytes: &[u8]) -> u64 {
 /// out and not an empty/uninitialized submodule directory.
 #[test]
 fn test_external_my_lisp_submodule_is_checked_out() {
-    let encoder_path =
-        submodule_repo("my-lisp").join("lib/machine/encoding/x86-64.lisp");
+    let encoder_path = submodule_repo("my-lisp").join("lib/machine/encoding/x86-64.lisp");
     assert!(
         encoder_path.exists(),
         "external/my-lisp submodule not checked out at {} — run `git submodule update --init`",
