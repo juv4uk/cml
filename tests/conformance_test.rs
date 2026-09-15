@@ -306,8 +306,12 @@ fn canonical_decoder_renders_proper_and_dotted_heap_structures() {
 
 #[test]
 fn test_conformance() {
-    let fixture_path = "../my-lisp/tests/fixtures/conformance.my";
-    let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read conformance.my");
+    // my-lisp is mid-migration renaming .my sources to .lisp; prefer the
+    // new extension, fall back to the old one so this test survives either
+    // state of the sibling checkout.
+    let fixture_content = fs::read_to_string("../my-lisp/tests/fixtures/conformance.lisp")
+        .or_else(|_| fs::read_to_string("../my-lisp/tests/fixtures/conformance.my"))
+        .expect("Failed to read conformance.lisp or conformance.my");
 
     // 1. Build the simulator once. Sources are read from ../fpga-lisp
     // (current_dir), but the compiled .vvp is written back into this

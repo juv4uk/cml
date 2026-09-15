@@ -117,8 +117,12 @@ fn parses_fixture_capability_requirements() {
 
 #[test]
 fn c_backend_matches_every_constitutive_tier1_fixture() {
-    let fixture_path = "../my-lisp/tests/fixtures/conformance.my";
-    let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read conformance.my");
+    // my-lisp is mid-migration renaming .my sources to .lisp; prefer the
+    // new extension, fall back to the old one so this test survives either
+    // state of the sibling checkout.
+    let fixture_content = fs::read_to_string("../my-lisp/tests/fixtures/conformance.lisp")
+        .or_else(|_| fs::read_to_string("../my-lisp/tests/fixtures/conformance.my"))
+        .expect("Failed to read conformance.lisp or conformance.my");
 
     let mut checked = 0;
     let mut checked_errors = 0;

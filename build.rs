@@ -163,7 +163,12 @@ fn collect_surfaces(root: &[Sexp], ids: &[&str]) -> (Vec<String>, Vec<String>) {
                     found_any = true;
                     upper_surfaces.push(word.to_uppercase());
                 }
-                "uk" | "sa" => {
+                // "ukr" appeared in the registry alongside "uk" (upstream
+                // my-lisp is migrating Ukrainian surfaces, per the
+                // ecosystem's ECO-UKRAINIAN-SOURCE-1 work); both are the
+                // same Ukrainian exact-match surface family cml already
+                // established for "uk", not a new match policy.
+                "uk" | "ukr" | "sa" => {
                     found_any = true;
                     exact_surfaces.push(word.to_string());
                 }
@@ -188,22 +193,33 @@ fn collect_surfaces(root: &[Sexp], ids: &[&str]) -> (Vec<String>, Vec<String>) {
 
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set");
-    let registry_path = PathBuf::from(&manifest_dir)
+    let surface_dir = PathBuf::from(&manifest_dir)
         .join("..")
         .join("my-lisp")
         .join("lib")
-        .join("surface")
-        .join("semantic-registry.wsm");
-    println!("cargo:rerun-if-changed={}", registry_path.display());
+        .join("surface");
+    // my-lisp renamed semantic-registry.wsm -> semantic-registry.lisp
+    // upstream (ECO-UKRAINIAN-SOURCE-1 / ECO-LISP-SCRIPTS-1 landing). Prefer
+    // the new name; fall back to the old one so a slightly-behind sibling
+    // checkout still builds, and fail closed with both attempted paths if
+    // neither exists rather than a bare ENOENT on one.
+    let lisp_path = surface_dir.join("semantic-registry.lisp");
+    let wsm_path = surface_dir.join("semantic-registry.wsm");
+    println!("cargo:rerun-if-changed={}", lisp_path.display());
+    println!("cargo:rerun-if-changed={}", wsm_path.display());
 
-    let source = fs::read_to_string(&registry_path).unwrap_or_else(|e| {
-        panic!(
-            "cml#9: could not read the real semantic-registry.wsm at {} ({e}). \
-             This build depends on a sibling my-lisp checkout, same convention \
-             as compatibility.my's own sibling-repo pin.",
-            registry_path.display()
-        )
-    });
+    let (_registry_path, source) = fs::read_to_string(&lisp_path)
+        .map(|s| (lisp_path.clone(), s))
+        .or_else(|_| fs::read_to_string(&wsm_path).map(|s| (wsm_path.clone(), s)))
+        .unwrap_or_else(|e| {
+            panic!(
+                "cml#9: could not read the real semantic-registry at {} or {} ({e}). \
+                 This build depends on a sibling my-lisp checkout, same convention \
+                 as compatibility.my's own sibling-repo pin.",
+                lisp_path.display(),
+                wsm_path.display()
+            )
+        });
 
     let forms = parse_all(&source);
     let root = forms

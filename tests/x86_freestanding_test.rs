@@ -1132,6 +1132,123 @@ fn standalone_cond_true_false_branch_selection_witness() {
 }
 
 #[test]
+fn compiler_corpus_quote_radio_returns_the_interned_symbol() {
+    // tests/fixtures/conformance.my (my-lisp, compiler-corpus tag):
+    // (expr . "(quote radio)") (expected . "radio"). No primitive call
+    // involved -- a bare quoted symbol is a real cml frontend fixture this
+    // backend already admits end to end, real parse+lower+compile+link+run.
+    let expressions = parser::parse("(quote radio)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .unwrap();
+    let radio_word = wsm_os_target::encode_symbol(1).unwrap();
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!(
+        "cml-corpus-quote-radio-{}-{nonce}",
+        std::process::id()
+    ));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, &assembly).unwrap();
+    fs::write(
+        &harness,
+        format!(
+            "#include <stdint.h>\nextern uint64_t wsm_entry(void *);\nint main(void) {{ return wsm_entry(0) == {radio_word}ULL ? 0 : 1; }}\n"
+        ),
+    )
+    .unwrap();
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(linked.status.success(), "quote-radio witness must link");
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(run.status.success(), "(quote radio) must return `radio`");
+}
+
+#[test]
+fn compiler_corpus_eq_on_matching_and_differing_quoted_symbols() {
+    // conformance.my compiler-corpus fixtures:
+    // (eq (quote radio) (quote radio)) => t
+    // (eq (quote radio) (quote antenna)) => ()
+    // wsm_eq is real word-equality (same convention this file's other eq
+    // witnesses already use, e.g. quoted_symbols_differing_only_by_case_are_
+    // not_eq) -- not a manufactured truth value, so this is genuine
+    // end-to-end evidence for both fixtures, real parse+lower+compile+link+
+    // run, not just an assembly-shape check.
+    let canonical_t = wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX).unwrap();
+    let nil = wsm_os_target::NIL;
+    let eq_harness = format!(
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nuint64_t wsm_eq(void *ctx, uint64_t a, uint64_t b) {{ (void)ctx; return a == b ? {canonical_t}ULL : {nil}ULL; }}\nvoid wsm_fail(void *ctx, unsigned code, uint64_t a, uint64_t b) {{ (void)ctx; (void)code; (void)a; (void)b; abort(); }}\n"
+    );
+
+    for (source_expr, expect_true, label) in [
+        ("(eq (quote radio) (quote radio))", true, "matching"),
+        ("(eq (quote radio) (quote antenna))", false, "differing"),
+    ] {
+        let expressions = parser::parse(source_expr).unwrap();
+        let program = lower::lower_program(&expressions).unwrap();
+        let assembly = X86FreestandingBackend::new()
+            .compile_program(&program)
+            .unwrap();
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!(
+            "cml-corpus-eq-{label}-{}-{nonce}",
+            std::process::id()
+        ));
+        let source = base.with_extension("s");
+        let harness = base.with_extension("c");
+        let executable = base.with_extension("bin");
+        fs::write(&source, &assembly).unwrap();
+        let expected_word = if expect_true { canonical_t } else { nil };
+        fs::write(
+            &harness,
+            format!(
+                "{eq_harness}int main(void) {{ return wsm_entry(0) == {expected_word}ULL ? 0 : 1; }}\n"
+            ),
+        )
+        .unwrap();
+        let linked = Command::new("cc")
+            .arg(&harness)
+            .arg(&source)
+            .arg("-o")
+            .arg(&executable)
+            .output()
+            .unwrap();
+        assert!(
+            linked.status.success(),
+            "{label} eq-radio witness must link: {}",
+            String::from_utf8_lossy(&linked.stderr)
+        );
+        let run = Command::new(&executable).output().unwrap();
+        let _ = fs::remove_file(source);
+        let _ = fs::remove_file(harness);
+        let _ = fs::remove_file(executable);
+        assert!(
+            run.status.success(),
+            "{source_expr} must return {}",
+            if expect_true { "t" } else { "()" }
+        );
+    }
+}
+
+#[test]
 fn quoted_symbols_differing_only_by_case_are_not_eq() {
     // cml#13: before this fix, lower.rs's lower_quoted uppercased every
     // quoted symbol's text before it ever reached a backend, so `radio` and

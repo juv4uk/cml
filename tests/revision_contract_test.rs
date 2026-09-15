@@ -12,6 +12,20 @@ fn sibling(name: &str) -> PathBuf {
         .join(name)
 }
 
+/// my-lisp and fpga-lisp renamed their `.my` source files to `.lisp`
+/// upstream (ecosystem ECO-UKRAINIAN-SOURCE-1/ECO-LISP-SCRIPTS-1 work in
+/// progress). Prefer the new extension, fall back to the old one so a
+/// slightly-behind sibling checkout still passes, and fail closed on the
+/// `.lisp` path's error if neither is readable.
+fn read_contract_file(dir: &Path, stem: &str) -> String {
+    let lisp_path = dir.join(format!("{stem}.lisp"));
+    match fs::read_to_string(&lisp_path) {
+        Ok(contents) => contents,
+        Err(_) => fs::read_to_string(dir.join(format!("{stem}.my")))
+            .unwrap_or_else(|e| panic!("{} should be readable ({e})", lisp_path.display())),
+    }
+}
+
 fn head(path: &Path) -> String {
     let output = Command::new("git")
         .arg("-c")
@@ -89,8 +103,7 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
         );
     }
 
-    let isa = fs::read_to_string(fpga_lisp.join("isa-contract.my"))
-        .expect("fpga-lisp ISA contract should be readable");
+    let isa = read_contract_file(&fpga_lisp, "isa-contract");
     assert!(
         isa.contains("(version . (1 1))"),
         "fpga-lisp ISA version drift"
@@ -113,8 +126,7 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
 #[test]
 fn compatibility_my_contract_version_matches_language_contract_my() {
     let my_lisp = sibling("my-lisp");
-    let language_contract = fs::read_to_string(my_lisp.join("language-contract.my"))
-        .expect("my-lisp's language-contract.my should be readable");
+    let language_contract = read_contract_file(&my_lisp, "language-contract");
 
     let major = extract_field(&language_contract, "major")
         .expect("language-contract.my should have a (major . N) field");
