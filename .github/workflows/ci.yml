@@ -18,8 +18,21 @@ jobs:
           # MODEL-2026-09-16): my-lisp is a contract dependency (cml reads
           # its .lisp source tree directly for the encoder bridge, CPU
           # profile, and conformance corpus), so it travels with cml's own
-          # checkout instead of a separately pinned sibling checkout below.
+          # checkout instead of a separately pinned sibling checkout.
           submodules: true
+
+      # revision_contract_test.rs deliberately checks against a frozen,
+      # independently-pinned historical my-lisp snapshot (MY_LISP_SHA) for
+      # the Reader Contract 4 compatibility record — a different, intentionally
+      # versioned concern from the external/my-lisp submodule above (which
+      # always tracks cml's own current contract dependency). Both my-lisp
+      # checkouts coexisting here is correct, not duplication.
+      - name: Checkout my-lisp (sibling, frozen snapshot for revision_contract_test)
+        uses: actions/checkout@v4
+        with:
+          repository: juv4uk/my-lisp
+          ref: d4ad7e7c7717a610599875ffb90123b713ac05c7
+          path: my-lisp
 
       - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
         uses: actions/checkout@v4
