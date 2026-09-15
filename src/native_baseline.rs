@@ -20,7 +20,6 @@
 
 use crate::compute::{ComputeBackend, CpuComputeBackend};
 use crate::ir::{BufferLiteral, Ir, Params, PrimOp};
-use crate::lisp_encoder_bridge::PINNED_MYLISP_COMMIT;
 use crate::machine_inst::{
     AluOp, CondCode, MachineInst, MachineItem, Provenance, X86Reg, assemble_program,
 };
@@ -441,7 +440,12 @@ pub unsafe fn execute_native_bytes(bytes: &[u8]) -> u64 {
 }
 
 /// Runs the standard benchmark suite and returns the comprehensive BaselineReport.
-pub fn generate_baseline_report(cml_commit: &str) -> BaselineReport {
+///
+/// `mylisp_pin` is the caller's own reading of `external/my-lisp`'s checked-out
+/// commit (see `cml-baseline`'s `get_mylisp_pin`) — not a hardcoded constant,
+/// per ecosystem's SUBMODULE-DEPENDENCY-MODEL-2026-09-16 ("one dependency, one
+/// channel of truth": the submodule gitlink is the only pin).
+pub fn generate_baseline_report(cml_commit: &str, mylisp_pin: &str) -> BaselineReport {
     let cpu_profile = detect_cpu_profile();
     let mut workloads = Vec::new();
     let prov = Provenance::new(None, "baseline");
@@ -751,7 +755,7 @@ pub fn generate_baseline_report(cml_commit: &str) -> BaselineReport {
     BaselineReport {
         target_cpu_profile: cpu_profile,
         cml_commit: cml_commit.to_string(),
-        mylisp_pin: PINNED_MYLISP_COMMIT.to_string(),
+        mylisp_pin: mylisp_pin.to_string(),
         optimization_configuration: "opt=off (unoptimized-baseline)".to_string(),
         workloads,
     }
@@ -798,7 +802,7 @@ mod tests {
 
     #[test]
     fn baseline_report_generation_preserves_correctness() {
-        let report = generate_baseline_report("test-commit-052efac");
+        let report = generate_baseline_report("test-commit-052efac", "test-mylisp-pin");
         assert_eq!(report.workloads.len(), 4);
         for w in &report.workloads {
             assert_eq!(

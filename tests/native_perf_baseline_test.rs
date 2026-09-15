@@ -11,7 +11,7 @@ use cml::native_baseline::generate_baseline_report;
 
 #[test]
 fn test_corpus_admitted_workloads_correctness() {
-    let report = generate_baseline_report("head");
+    let report = generate_baseline_report("head", "test-mylisp-pin");
 
     // All workloads must pass correctness independently of performance
     for w in &report.workloads {
@@ -76,8 +76,8 @@ fn test_corpus_admitted_workloads_correctness() {
 
 #[test]
 fn test_structural_metrics_stability_and_determinism() {
-    let report1 = generate_baseline_report("head-1");
-    let report2 = generate_baseline_report("head-2");
+    let report1 = generate_baseline_report("head-1", "test-mylisp-pin");
+    let report2 = generate_baseline_report("head-2", "test-mylisp-pin");
 
     let w1_1 = report1
         .workloads
@@ -126,7 +126,7 @@ fn test_structural_metrics_stability_and_determinism() {
 
 #[test]
 fn test_report_serialization_formats() {
-    let report = generate_baseline_report("abc1234");
+    let report = generate_baseline_report("abc1234", "test-mylisp-pin");
     let json = report.to_json();
     assert!(json.starts_with('{'));
     assert!(json.ends_with("}\n"));
