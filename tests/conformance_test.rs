@@ -306,10 +306,10 @@ fn canonical_decoder_renders_proper_and_dotted_heap_structures() {
 #[test]
 fn test_conformance() {
     let fixture_path =
-        if std::path::Path::new("../my-lisp/tests/fixtures/conformance.lisp").exists() {
-            "../my-lisp/tests/fixtures/conformance.lisp"
+        if std::path::Path::new("external/my-lisp/tests/fixtures/conformance.lisp").exists() {
+            "external/my-lisp/tests/fixtures/conformance.lisp"
         } else {
-            "../my-lisp/tests/fixtures/conformance.my"
+            "external/my-lisp/tests/fixtures/conformance.my"
         };
     let fixture_content =
         fs::read_to_string(fixture_path).expect("Failed to read conformance fixture");

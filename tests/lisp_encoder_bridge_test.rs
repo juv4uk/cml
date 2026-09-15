@@ -5,13 +5,11 @@
 //! 2. Triple-oracle identity: Lisp-owned encoder (A) == CML direct encoder (B) == GNU as oracle (C).
 //! 3. Native machine execution witness on Linux x86-64.
 //! 4. Fail-closed rejection of unadmitted instructions and non-inst items.
-//! 5. Upstream commit pin consistency.
 
 #![cfg(all(target_os = "linux", target_arch = "x86_64"))]
 
 use cml::lisp_encoder_bridge::{
-    BridgeError, PINNED_MYLISP_COMMIT, inst_to_lisp_encoder_call, items_to_lisp_encoder_program,
-    parse_lisp_byte_list_str,
+    BridgeError, inst_to_lisp_encoder_call, items_to_lisp_encoder_program, parse_lisp_byte_list_str,
 };
 use cml::machine_inst::{AluOp, MachineInst, MachineItem, Provenance, X86Reg, assemble_program};
 use my_lisp::{Session, eval_program, load_core_library};
@@ -24,10 +22,11 @@ fn test_prov() -> Provenance {
     Provenance::new(None, "lisp_encoder_bridge_test")
 }
 
-fn sibling_repo(name: &str) -> PathBuf {
+/// The `external/my-lisp` submodule's checked-out tree — the single pin
+/// (SUBMODULE-DEPENDENCY-MODEL-2026-09-16), not a sibling checkout guess.
+fn submodule_repo(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("cml workspace parent")
+        .join("external")
         .join(name)
 }
 
@@ -35,7 +34,7 @@ fn create_lisp_encoder_session() -> Session {
     let mut session = Session::default();
     load_core_library(&mut session).expect("load_core_library must succeed");
 
-    let encoder_path = sibling_repo("my-lisp").join("lib/machine/encoding/x86-64.lisp");
+    let encoder_path = submodule_repo("my-lisp").join("lib/machine/encoding/x86-64.lisp");
     let encoder_src = fs::read_to_string(&encoder_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", encoder_path.display()));
     eval_program(&encoder_src, &mut session)
@@ -147,27 +146,18 @@ unsafe fn execute_bytes_as_fn(bytes: &[u8]) -> u64 {
     }
 }
 
+/// The submodule gitlink itself is the only pin (SUBMODULE-DEPENDENCY-MODEL-
+/// 2026-09-16) — there is no separate SHA constant to compare it against
+/// anymore, so this just proves the contract dependency is actually checked
+/// out and not an empty/uninitialized submodule directory.
 #[test]
-fn test_pinned_mylisp_commit_consistency() {
-    let my_lisp_dir = sibling_repo("my-lisp");
-    if my_lisp_dir.exists() {
-        let output = Command::new("git")
-            .arg("-c")
-            .arg(format!("safe.directory={}", my_lisp_dir.display()))
-            .arg("-C")
-            .arg(&my_lisp_dir)
-            .args(["rev-parse", "HEAD"])
-            .output();
-        if let Ok(out) = output {
-            if out.status.success() {
-                let actual_head = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                assert_eq!(
-                    PINNED_MYLISP_COMMIT, actual_head,
-                    "PINNED_MYLISP_COMMIT ({PINNED_MYLISP_COMMIT}) must match sibling my-lisp checkout ({actual_head})"
-                );
-            }
-        }
-    }
+fn test_external_my_lisp_submodule_is_checked_out() {
+    let encoder_path = submodule_repo("my-lisp").join("lib/machine/encoding/x86-64.lisp");
+    assert!(
+        encoder_path.exists(),
+        "external/my-lisp submodule not checked out at {} — run `git submodule update --init`",
+        encoder_path.display()
+    );
 }
 
 #[test]

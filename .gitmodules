@@ -1,0 +1,3 @@
+[submodule "external/my-lisp"]
+	path = external/my-lisp
+	url = https://github.com/juv4uk/my-lisp.git

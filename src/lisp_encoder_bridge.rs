@@ -17,9 +17,6 @@
 
 use crate::machine_inst::{AluOp, MachineInst, MachineItem, X86Reg};
 
-/// Exact commit SHA of upstream `juv4uk/my-lisp` providing the x86-64 encoder.
-pub const PINNED_MYLISP_COMMIT: &str = "d4ad7e7c7717a610599875ffb90123b713ac05c7";
-
 /// Bridge conversion or parsing error.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BridgeError {

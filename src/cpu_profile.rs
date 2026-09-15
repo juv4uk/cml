@@ -19,61 +19,17 @@
 //! валідацію CPUID/XGETBV для AVX2 та веде журнал походження можливостей (capability provenance).
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 
 use crate::ast::Expr;
 use crate::parser::parse;
 
-/// Canonical embedded copy of the upstream i5-6400 CPU profile from `my-lisp #118`.
-pub const CANONICAL_I5_6400_PROFILE_LISP: &str = r#"; Concrete CPU capability profile for the user's Intel Core i5-6400 (Skylake).
-(cpu-profile/1
-  (cpu intel-core-i5-6400)
-  (microarchitecture skylake)
-  (isa x86-64)
-  (mode 64-bit)
-
-  (supported-extension X86-BASE)
-  (supported-extension X86-64)
-  (supported-extension X87)
-  (supported-extension MMX)
-  (supported-extension SSE)
-  (supported-extension SSE2)
-  (supported-extension SSE3)
-  (supported-extension SSSE3)
-  (supported-extension SSE4.1)
-  (supported-extension SSE4.2)
-
-  (gated-extension AES-NI (gate cpuid-aes))
-  (gated-extension PCLMULQDQ (gate cpuid-pclmulqdq))
-  (gated-extension AVX (gate cpuid-avx+osxsave+xgetbv-xmm-ymm))
-  (gated-extension F16C (gate cpuid-f16c+avx-state))
-  (gated-extension FMA3 (gate cpuid-fma+avx-state))
-  (gated-extension BMI1 (gate cpuid-bmi1))
-  (gated-extension BMI2 (gate cpuid-bmi2))
-  (gated-extension AVX2 (gate cpuid-avx2+avx-state))
-  (gated-extension RDRAND (gate cpuid-rdrand))
-  (gated-extension RDSEED (gate cpuid-rdseed))
-  (gated-extension ADX (gate cpuid-adx))
-  (gated-extension XSAVE (gate cpuid-xsave))
-  (gated-extension CLFLUSHOPT (gate cpuid-clflushopt))
-
-  (platform-gated-extension MPX (gate cpuid-mpx+os-support))
-  (platform-gated-extension SGX (gate cpuid-sgx+firmware+os-support))
-
-  (virtualization-capability VT-X supported)
-  (virtualization-capability VT-D supported)
-  (virtualization-capability EPT supported)
-
-  (unavailable-extension TSX)
-  (unavailable-extension AVX-512)
-  (unavailable-extension AMX)
-
-  (execution-policy
-    (ordinary-user-instructions user-mode)
-    (privileged-instructions forbidden)
-    (runtime-feature-check required)
-    (avx-state-check xgetbv-required)))
-"#;
+/// The i5-6400 CPU profile, compiled in directly from the `external/my-lisp`
+/// submodule (SUBMODULE-DEPENDENCY-MODEL-2026-09-16) — never a hand-copied
+/// duplicate. `include_str!` also means a missing/uninitialized submodule
+/// fails the *build*, not silently at runtime with stale data: this repo's
+/// own architecture explicitly forbids a silent fallback for CPU profiles.
+pub const CANONICAL_I5_6400_PROFILE_LISP: &str =
+    include_str!("../external/my-lisp/lib/machine/cpu/intel-core-i5-6400.lisp");
 
 /// Structured model of a CPU capability profile.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -246,22 +202,9 @@ impl CpuProfile {
         })
     }
 
-    /// Loads the canonical i5-6400 profile from filesystem if available, falling back
-    /// to the embedded copy.
+    /// Loads the canonical i5-6400 profile compiled in from `external/my-lisp`
+    /// (see `CANONICAL_I5_6400_PROFILE_LISP`) — one channel, no path guessing.
     pub fn load_skylake_i5_6400() -> Result<Self, String> {
-        let candidates = [
-            "../my-lisp/lib/machine/cpu/intel-core-i5-6400.lisp",
-            "../../my-lisp/lib/machine/cpu/intel-core-i5-6400.lisp",
-            "/home/agents/GitHub/my-lisp/lib/machine/cpu/intel-core-i5-6400.lisp",
-        ];
-        for path_str in candidates {
-            let path = Path::new(path_str);
-            if path.exists() {
-                if let Ok(content) = std::fs::read_to_string(path) {
-                    return Self::parse(&content);
-                }
-            }
-        }
         Self::parse(CANONICAL_I5_6400_PROFILE_LISP)
     }
 
