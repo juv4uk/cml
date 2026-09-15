@@ -19,7 +19,7 @@ use std::fmt;
 pub enum SemanticErrorKind {
     DuplicateParameter,
     UnsupportedSequentialBody,
-    /// #f32(...) numeric buffer — no backend supports Buffer(F32).
+    /// #f32(...) numeric buffer — source-level F32 buffers unsupported at front-end admission.
     UnsupportedF32Buffer,
     /// Attempt to bind a reserved Canon 0+7 surface name (Contract 6.0).
     ReservedCanonName,
@@ -72,11 +72,11 @@ pub fn analyze_program(exprs: &[Expr]) -> Result<(), SemanticError> {
 }
 
 pub fn analyze_expr(expr: &Expr) -> Result<(), SemanticError> {
-    // #f32(...) numeric buffer — no backend supports Buffer(F32)
+    // #f32(...) numeric buffer source syntax is rejected at front-end admission
     if let Expr::NumericBuffer(NumericBufferLiteral::F32(_)) = expr {
         return Err(SemanticError {
             kind: SemanticErrorKind::UnsupportedF32Buffer,
-            detail: "#f32(...) numeric buffer not supported (no backend supports F32 buffers)"
+            detail: "#f32(...) numeric buffer syntax not admitted at front-end (source-level F32 buffers unsupported)"
                 .to_string(),
         });
     }

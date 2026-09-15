@@ -298,8 +298,91 @@ fn nested_lambda_copies_a_captured_outer_binding() {
         .compile_program(&program)
         .expect("nested lambda should closure-convert the bounded outer binding");
     assert_eq!(assembly.matches("call .Llambda_").count(), 2);
-    assert!(assembly.contains("movq %rsp, %rdx"));
-    assert!(assembly.contains("movq 0(%rdx), %rax"));
+    assert!(assembly.contains("movq %rsp, %r10"));
+    assert!(assembly.contains("movq 0(%r10), %rax"));
+}
+
+#[test]
+fn nullary_lambda_application_evaluates_body() {
+    let expressions = parser::parse("((lambda () 42))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("nullary lambda application should compile");
+    assert!(assembly.contains("call .Llambda_"));
+    let encoded = wsm_os_target::encode_fixnum(42).unwrap();
+    assert!(assembly.contains(&format!("movabsq ${encoded}, %rax")));
+}
+
+#[test]
+fn multi_argument_lambda_application_passes_registers() {
+    let expressions = parser::parse("((lambda (x y) (+ x y)) 10 20)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("binary lambda application should compile");
+    assert!(assembly.contains("call .Llambda_"));
+    assert!(assembly.contains("movq %rsi, 0(%rsp)"));
+    assert!(assembly.contains("movq %rdx, 8(%rsp)"));
+}
+
+#[test]
+fn ternary_lambda_application_with_captures() {
+    let expressions =
+        parser::parse("((lambda (base) ((lambda (a b c) (+ base (+ a (+ b c)))) 1 2 3)) 100)")
+            .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("ternary lambda with capture should compile");
+    assert_eq!(assembly.matches("call .Llambda_").count(), 2);
+    assert!(assembly.contains("movq %rsp, %r10"));
+    assert!(assembly.contains("movq %rsi, 0(%rsp)"));
+    assert!(assembly.contains("movq %rdx, 8(%rsp)"));
+    assert!(assembly.contains("movq %rcx, 16(%rsp)"));
+}
+
+#[test]
+fn variadic_lambda_application_packs_cons_list() {
+    let expressions = parser::parse("((lambda (a b . rest) rest) 1 2 3 4 5)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("variadic lambda application should compile");
+    assert!(assembly.contains("call .Llambda_"));
+    assert!(assembly.contains("call wsm_cons"));
+    assert!(assembly.contains("movq %rsi, 0(%rsp)"));
+    assert!(assembly.contains("movq %rdx, 8(%rsp)"));
+    assert!(assembly.contains("movq %rcx, 16(%rsp)"));
+}
+
+#[test]
+fn all_rest_lambda_application_packs_cons_list() {
+    let expressions = parser::parse("((lambda args args) 1 2 3)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("all-rest lambda application should compile");
+    assert!(assembly.contains("call .Llambda_"));
+    assert!(assembly.contains("call wsm_cons"));
+    assert!(assembly.contains("movq %rsi, 0(%rsp)"));
+}
+
+#[test]
+fn variadic_lambda_under_arity_is_rejected() {
+    let expressions = parser::parse("((lambda (a b . rest) a) 1)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let error = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect_err("under-arity variadic lambda application must fail");
+    assert_eq!(
+        error,
+        CompileError::InvalidArity {
+            operation: "variadic lambda",
+            expected: 2,
+            actual: 1,
+        }
+    );
 }
 
 #[test]
@@ -1040,10 +1123,12 @@ fn named_definition_allocates_a_list_through_the_asm_nucleus() {
         "#include <stdint.h>\nextern uint64_t wsm_entry(void *);\nextern uint64_t wsm_car(void *, uint64_t);\nint main(void) { uint64_t pair = wsm_entry(0); return wsm_car(0, pair) == 339 ? 0 : 1; }\n",
     )
     .unwrap();
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("resolve nucleus.s for freestanding list witness");
     let linked = Command::new("cc")
         .arg(&harness)
         .arg(&source)
-        .arg("/home/agents/GitHub/wsm-my-lisp/asm/nucleus.s")
+        .arg(&nucleus_path)
         .arg("-o")
         .arg(&executable)
         .output()
@@ -1316,5 +1401,259 @@ fn quoted_symbols_differing_only_by_case_are_not_eq() {
         "compiled (eq (quote radio) (quote RADIO)) must return NIL: \
          `radio` and `RADIO` are distinct quoted-symbol data, not the same \
          identifier merged by case-folding"
+    );
+}
+
+#[test]
+fn named_all_rest_def_list_assembles_and_runs() {
+    let expressions =
+        parser::parse("(def list (lambda args args))\n         (list 1 2 3)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("named list def should compile");
+
+    assert!(assembly.contains("call wsm_cons"));
+    assert!(assembly.contains(".Lfn_"));
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-allrest-def-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, &assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nextern uint64_t wsm_car(void *, uint64_t);\nextern uint64_t wsm_cdr(void *, uint64_t);\nint main(void) {\n    uint64_t l = wsm_entry(0);\n    if (wsm_car(0, l) != 11) return 1;\n    l = wsm_cdr(0, l);\n    if (wsm_car(0, l) != 19) return 2;\n    l = wsm_cdr(0, l);\n    if (wsm_car(0, l) != 27) return 3;\n    l = wsm_cdr(0, l);\n    if (l != 1) return 4;\n    return 0;\n}\n",
+    )
+    .unwrap();
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("resolve nucleus.s for freestanding list witness");
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg(&nucleus_path)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "asm-nucleus list witness must link: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(
+        run.status.success(),
+        "named list definition must construct (1 2 3)"
+    );
+}
+
+#[test]
+fn named_all_rest_def_empty_call_returns_nil() {
+    let expressions = parser::parse("(def list (lambda args args))\n         (list)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("named empty list call should compile");
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base =
+        std::env::temp_dir().join(format!("cml-allrest-empty-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, &assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { return wsm_entry(0) == 1 ? 0 : 1; }\n",
+    )
+    .unwrap();
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("resolve nucleus.s for freestanding list witness");
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg(&nucleus_path)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "cc must succeed: {}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(run.status.success(), "named (list) must return NIL");
+}
+
+#[test]
+fn named_variadic_def_with_fixed_and_rest_params() {
+    let expressions = parser::parse(
+        "(def pick-rest (lambda (a b . rest) rest))\n         (pick-rest 10 20 30 40)",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("named variadic def should compile");
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base =
+        std::env::temp_dir().join(format!("cml-variadic-def-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nextern uint64_t wsm_car(void *, uint64_t);\nextern uint64_t wsm_cdr(void *, uint64_t);\nint main(void) {\n    uint64_t rest = wsm_entry(0);\n    if (wsm_car(0, rest) != ((30 << 3) | 3)) return 1;\n    rest = wsm_cdr(0, rest);\n    if (wsm_car(0, rest) != ((40 << 3) | 3)) return 2;\n    if (wsm_cdr(0, rest) != 1) return 3;\n    return 0;\n}\n",
+    )
+    .unwrap();
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("resolve nucleus.s for freestanding list witness");
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg(&nucleus_path)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(linked.status.success(), "variadic def witness must link");
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(run.status.success(), "pick-rest must return (30 40)");
+}
+
+#[test]
+fn named_variadic_def_self_tail_recursion_packs_rest() {
+    let expressions = parser::parse(
+        "(def drop-first (lambda (n . rest)\n           (cond ((eq n 0) rest)\n                 (t (drop-first (- n 1) 99)))))\n         (drop-first 1 42)",
+    )
+    .unwrap();
+    let program = lower::lower_program_with_tail_calls(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("variadic self-tail-recursive def should compile");
+
+    assert!(assembly.contains("jmp .Ltcloop_"));
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-variadic-tc-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+    fs::write(&source, &assembly).unwrap();
+    fs::write(
+        &harness,
+        "#include <stdint.h>\n#include <stdlib.h>\nextern uint64_t wsm_entry(void *);\nextern uint64_t wsm_car(void *, uint64_t);\nextern uint64_t wsm_cdr(void *, uint64_t);\nint main(void) {\n    uint64_t l = wsm_entry(0);\n    if (wsm_car(0, l) != ((99 << 3) | 3)) return 1;\n    if (wsm_cdr(0, l) != 1) return 2;\n    return 0;\n}\n",
+    )
+    .unwrap();
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("resolve nucleus.s for freestanding list witness");
+    let linked = Command::new("cc")
+        .arg(&harness)
+        .arg(&source)
+        .arg(&nucleus_path)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "variadic tail-call witness must link"
+    );
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(source);
+    let _ = fs::remove_file(harness);
+    let _ = fs::remove_file(executable);
+    assert!(run.status.success(), "variadic tail-recursion must succeed");
+}
+
+#[test]
+fn machine_primitive_rdtsc_emits_hardware_instruction_and_runs() {
+    // Machine primitive is compiler-owned mechanism: tested directly via Ir::MachinePrim
+    let ir = vec![Ir::MachinePrim {
+        op: cml::ir::MachineOp::Rdtsc,
+        args: vec![],
+    }];
+    let assembly = X86FreestandingBackend::new().compile_program(&ir).unwrap();
+    assert!(
+        assembly.contains("rdtsc"),
+        "emitted assembly must contain real rdtsc instruction"
+    );
+
+    // Also test through definition IR
+    let def_ir = vec![
+        Ir::Def {
+            name: "ticks".to_string(),
+            value: Box::new(Ir::MachinePrim {
+                op: cml::ir::MachineOp::Rdtsc,
+                args: vec![],
+            }),
+        },
+        Ir::Var("ticks".to_string()),
+    ];
+    let def_assembly = X86FreestandingBackend::new()
+        .compile_program(&def_ir)
+        .unwrap();
+    assert!(
+        def_assembly.contains("rdtsc"),
+        "def ticks assembly must contain real rdtsc instruction"
+    );
+
+    // Authority boundary guard: (rdtsc) is NOT a recognized my-lisp language builtin.
+    // Lowering it treats it as an ordinary undefined symbol / function call, not Ir::MachinePrim.
+    let expressions = parser::parse("(rdtsc)").unwrap();
+    let lowered = lower::lower_program(&expressions).unwrap();
+    assert!(
+        !matches!(lowered.first(), Some(Ir::MachinePrim { .. })),
+        "cml must not invent language-surface primitive for rdtsc without upstream my-lisp authority"
+    );
+}
+
+#[test]
+fn retired_semantic_id_1153_is_not_an_active_language_callable() {
+    // Verify that 1153 does not exist in active callable IDs or operations
+    assert_eq!(
+        cml::canon::callable_semantic_id("RDTSC"),
+        None,
+        "RDTSC must not exist as an active canonical callable builtin"
+    );
+    assert_eq!(
+        cml::canon::callable_semantic_id("rdtsc"),
+        None,
+        "rdtsc must not exist as an active canonical callable builtin"
+    );
+    assert_eq!(
+        cml::canon::canonical_builtin_name("1153"),
+        None,
+        "1153 must not map to any canonical builtin name"
+    );
+    assert!(
+        cml::canon::find_operation_by_id("1153").is_none(),
+        "semantic ID 1153 is retired and MUST NOT appear in CANON_OPERATIONS_TABLE"
     );
 }

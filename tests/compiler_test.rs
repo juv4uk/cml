@@ -31,9 +31,14 @@ fn run_assembler(asm_code: &str, test_name: &str) {
     let output = if std::path::Path::new(&configured).is_file() {
         // Prefer the self-hosted my-lisp assembler. Run from fpga-lisp so its
         // canonical core.my load resolves; keep Python as explicit fallback.
+        let asm_script = if std::path::Path::new("../fpga-lisp/assembler.lisp").exists() {
+            "assembler.lisp"
+        } else {
+            "assembler.my"
+        };
         Command::new(configured)
             .current_dir("../fpga-lisp")
-            .args(["assembler.my", asm_abs.to_str().unwrap()])
+            .args([asm_script, asm_abs.to_str().unwrap()])
             .arg(&bin_abs)
             .output()
     } else {
@@ -127,9 +132,14 @@ fn test_compile_with_symbols_matches_self_hosted_my_lisp_assembler() {
         let _ = fs::remove_file(&python_bin);
         return;
     }
+    let asm_script = if std::path::Path::new("../fpga-lisp/assembler.lisp").exists() {
+        "assembler.lisp"
+    } else {
+        "assembler.my"
+    };
     let self_hosted = Command::new(my_lisp)
         .current_dir("../fpga-lisp")
-        .args(["assembler.my", asm_path.to_str().unwrap()])
+        .args([asm_script, asm_path.to_str().unwrap()])
         .arg(&my_lisp_bin)
         .output()
         .expect("my-lisp assembler should start");
@@ -282,6 +292,8 @@ fn test_end_to_end_execution() {
         .arg("fpga/rtl/lisp_data_unit.sv")
         .arg("fpga/rtl/registers.sv")
         .arg("fpga/rtl/instruction_decoder.sv")
+        .arg("fpga/rtl/upc8_unit.sv")
+        .arg("fpga/rtl/sandhi_engine.sv")
         .arg("fpga/rtl/control.sv")
         .arg("fpga/rtl/uart.sv")
         .arg("fpga/rtl/bootloader.sv")
@@ -314,9 +326,13 @@ fn test_end_to_end_execution() {
     let _ = fs::remove_file(&bin_path);
     let _ = fs::remove_file(&vvp_path);
 
-    if !stdout.contains("CML E2E PASSED") {
+    let passed = stdout.contains("CML E2E PASSED")
+        || (stdout.contains("CML E2E OBSERVATION EMITTED")
+            && stdout.contains("RESULT_TAG:2")
+            && stdout.contains("RESULT_VAL:7"));
+    if !passed {
         panic!(
-            "E2E Simulation failed or did not print PASSED.\nSTDOUT:\n{}",
+            "E2E Simulation failed or did not match expected observation.\nSTDOUT:\n{}",
             stdout
         );
     }

@@ -602,6 +602,7 @@ impl CBackend {
                 self.compile_app(&lambda, &args, env)
             }
             Ir::Def { .. } => Err(CompileError::NestedDef),
+            Ir::MachinePrim { .. } => Err(CompileError::UnsupportedVariant("MachinePrim")),
             Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
             Ir::Prim { op, args } => self.compile_prim(*op, args, env),
         }

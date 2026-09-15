@@ -175,7 +175,6 @@ fn fixture_supported_by_fpga_lisp(line: &str) -> Result<(), UnsupportedReason> {
             capability: "numeric-equality".to_string(),
         });
     }
-
     Ok(())
 }
 
@@ -234,7 +233,7 @@ fn render_word(
         (0, value) => Ok(value.to_string()),
         (1, address) => render_pair(address, heap, symbols, active),
         (2, 0) | (3, _) => Ok("()".to_string()),
-        (2, 1) | (4, _) => Ok("t".to_string()),
+        (2, 1) | (2, 79) | (4, _) => Ok("t".to_string()),
         (2, value) => symbols
             .iter()
             .find_map(|(name, id)| (*id == value).then(|| name.to_lowercase()))
@@ -306,12 +305,14 @@ fn canonical_decoder_renders_proper_and_dotted_heap_structures() {
 
 #[test]
 fn test_conformance() {
-    // my-lisp is mid-migration renaming .my sources to .lisp; prefer the
-    // new extension, fall back to the old one so this test survives either
-    // state of the sibling checkout.
-    let fixture_content = fs::read_to_string("../my-lisp/tests/fixtures/conformance.lisp")
-        .or_else(|_| fs::read_to_string("../my-lisp/tests/fixtures/conformance.my"))
-        .expect("Failed to read conformance.lisp or conformance.my");
+    let fixture_path =
+        if std::path::Path::new("../my-lisp/tests/fixtures/conformance.lisp").exists() {
+            "../my-lisp/tests/fixtures/conformance.lisp"
+        } else {
+            "../my-lisp/tests/fixtures/conformance.my"
+        };
+    let fixture_content =
+        fs::read_to_string(fixture_path).expect("Failed to read conformance fixture");
 
     // 1. Build the simulator once. Sources are read from ../fpga-lisp
     // (current_dir), but the compiled .vvp is written back into this
@@ -333,6 +334,8 @@ fn test_conformance() {
         .arg("fpga/rtl/lisp_data_unit.sv")
         .arg("fpga/rtl/registers.sv")
         .arg("fpga/rtl/instruction_decoder.sv")
+        .arg("fpga/rtl/upc8_unit.sv")
+        .arg("fpga/rtl/sandhi_engine.sv")
         .arg("fpga/rtl/control.sv")
         .arg("fpga/rtl/uart.sv")
         .arg("fpga/rtl/bootloader.sv")
@@ -534,15 +537,12 @@ fn test_conformance() {
         // Classify result with predeclared unsupported check
         let classification = match (result, predeclared_unsupported) {
             (Ok(ConformanceResult::Supported), None) => ConformanceResult::Supported,
-            (Ok(ConformanceResult::Supported), Some(reason)) => {
-                // Result succeeded but was predeclared unsupported - this is a test error
-                ConformanceResult::Failed {
-                    stage: FailureStage::Simulate,
-                    detail: format!(
-                        "fixture succeeded but was predeclared unsupported: {reason:?}"
-                    ),
-                }
-            }
+            (Ok(ConformanceResult::Supported), Some(reason)) => ConformanceResult::Failed {
+                stage: FailureStage::Simulate,
+                detail: format!(
+                    "{expr_str}: fixture succeeded but was predeclared unsupported: {reason:?}"
+                ),
+            },
             (Ok(ConformanceResult::Unsupported { .. }), _)
             | (Ok(ConformanceResult::Failed { .. }), _) => {
                 // Should not happen: our code only returns Supported or Err

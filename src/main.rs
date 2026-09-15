@@ -12,7 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 fn usage() -> ! {
     eprintln!(
-        "Usage:\n  cml <file.my>                    emit fpga-lisp assembly\n  cml build <file.my> [-o out] [--keep-c]\n                                   COMPILER-01: C backend \u{2192} native executable\n  cml x86-asm <file.wsm>           emit x86 freestanding assembly\n  cml x86-elf <file.wsm> <output>  link x86 freestanding ELF"
+        "Usage:\n  cml <file.lisp>                  emit fpga-lisp assembly\n  cml build <file.lisp> [-o out] [--keep-c]\n                                   COMPILER-01: C backend \u{2192} native executable\n  cml x86-asm <file.lisp>          emit x86 freestanding assembly\n  cml x86-elf <file.lisp> <output> link x86 freestanding ELF"
     );
     std::process::exit(1);
 }
@@ -150,10 +150,12 @@ fn link_x86_elf(assembly: &str, output: &str) {
         "#include <stdint.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { (void)wsm_entry(0); return 0; }\n",
     )
     .unwrap_or_else(|err| fatal(&format!("writing launcher: {err}")));
+    let nucleus_path =
+        cml::x86_freestanding::resolve_nucleus_asm_path().unwrap_or_else(|err| fatal(&err));
     let linked = Command::new("cc")
         .arg(&launcher)
         .arg(&source)
-        .arg("/home/agents/GitHub/wsm-my-lisp/asm/nucleus.s")
+        .arg(&nucleus_path)
         .arg("-o")
         .arg(output)
         .output()

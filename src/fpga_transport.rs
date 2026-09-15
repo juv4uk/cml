@@ -202,7 +202,7 @@ impl FpgaResultV1 {
 
 /// Physical transport lifecycle: reset/admit the bootloader frame, wait for
 /// HALT, issue monitor register/error queries, and return their decoded words.
-pub trait FpgaTransport {
+pub trait FpgaTransport: Send {
     fn execute(&mut self, job: &FpgaJobV1) -> Result<FpgaResultV1, FpgaProtocolError>;
 }
 

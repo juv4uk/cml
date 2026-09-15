@@ -60,10 +60,13 @@ fn named_unary_function_is_a_stable_first_class_closure_identity() {
     )
     .expect("write C witness harness");
 
+    let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path()
+        .expect("portable x86 asm nucleus must resolve for Stage2 closure witness");
+
     let linked = Command::new("cc")
         .arg(&c_path)
         .arg(&asm_path)
-        .arg("/home/agents/GitHub/wsm-my-lisp/asm/nucleus.s")
+        .arg(&nucleus_path)
         .arg("-o")
         .arg(&exe_path)
         .output()

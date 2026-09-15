@@ -1,4 +1,4 @@
-; macros.my — a from-scratch, .my-hosted reimplementation of cml's
+; macros.lisp — a from-scratch, .lisp-hosted reimplementation of cml's
 ; macros.rs defmacro-expansion algorithm (a compile-time-only source
 ; transform, never reaching fpga-lisp -- see compatibility.my's `defmacro`
 ; entry). Same status as fpga-lisp's assembler.my relative to

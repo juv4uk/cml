@@ -94,6 +94,7 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
         }
         Ir::Def { value, .. } => validate_ir(value),
         Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
+        Ir::MachinePrim { .. } => Err(CompileError::UnsupportedVariant("MachinePrim")),
         Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
     }
 }
@@ -296,6 +297,7 @@ impl Compiler {
             Ir::Let { bindings, body } => self.compile_let(bindings, body, target_reg),
             Ir::Def { name, value } => self.compile_def(name, value, target_reg),
             Ir::Prim { op, args } => self.compile_prim(*op, args, target_reg),
+            Ir::MachinePrim { .. } => unreachable!("MachinePrim rejected by validate_ir"),
             Ir::TailSelfCall { .. } => unreachable!("TailSelfCall rejected by validate_ir"),
         }
     }

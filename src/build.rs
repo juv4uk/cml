@@ -5,7 +5,7 @@
 //!
 //! COMPILER-06: macro expansion is an explicit front-end stage
 //! (`expand_macros`) before lowering. The Rust `MacroExpander` is the
-//! live authority in-process; `macros.my` is the parallel Lisp
+//! live authority in-process; `macros.lisp` is the parallel Lisp
 //! implementation (differential evidence only until a host embedding
 //! decision wires it).
 
@@ -19,7 +19,10 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static BUILD_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug)]
 pub enum BuildError {
@@ -106,7 +109,11 @@ pub fn compile_c_to_executable(c_source: &str, output: &Path) -> Result<(), Buil
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let tmp = std::env::temp_dir().join(format!("cml-build-{}-{nonce}.c", std::process::id()));
+    let count = BUILD_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cml-build-{}-{nonce}-{count}.c",
+        std::process::id()
+    ));
     fs::write(&tmp, c_source).map_err(|e| BuildError::Io(e.to_string()))?;
     let cc = Command::new("cc")
         .arg(&tmp)
@@ -167,7 +174,8 @@ pub fn compile_and_run(source: &str) -> Result<Observation, BuildError> {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let bin = std::env::temp_dir().join(format!("cml-run-{}-{nonce}", std::process::id()));
+    let count = BUILD_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let bin = std::env::temp_dir().join(format!("cml-run-{}-{nonce}-{count}", std::process::id()));
     let opts = BuildOptions {
         output: bin.clone(),
         keep_c: false,

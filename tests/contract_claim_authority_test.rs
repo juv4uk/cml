@@ -13,12 +13,22 @@ use std::fs;
 use std::path::PathBuf;
 
 fn compatibility_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("compatibility.my")
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("compatibility.lisp");
+    if p.exists() {
+        p
+    } else {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("compatibility.my")
+    }
 }
 
 fn load_compat() -> String {
-    let main = fs::read_to_string(compatibility_path()).expect("compatibility.my must exist");
-    let authority = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("claim-authority.my");
+    let main = fs::read_to_string(compatibility_path()).expect("compatibility contract must exist");
+    let authority_lisp = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("claim-authority.lisp");
+    let authority = if authority_lisp.exists() {
+        authority_lisp
+    } else {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("claim-authority.my")
+    };
     if let Ok(extra) = fs::read_to_string(&authority) {
         format!("{main}\n{extra}")
     } else {

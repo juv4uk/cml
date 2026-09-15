@@ -38,6 +38,19 @@ fn parse_error_line(line: &str) -> Option<(String, String)> {
     ))
 }
 
+fn gcc_command() -> Command {
+    let mut cmd = Command::new("gcc");
+    if std::env::var("C_INCLUDE_PATH").is_err()
+        && std::path::Path::new("/var/guix/profiles/shared/guix-profile/include").exists()
+    {
+        cmd.env(
+            "C_INCLUDE_PATH",
+            "/var/guix/profiles/shared/guix-profile/include",
+        );
+    }
+    cmd
+}
+
 fn compile_and_run(expr_str: &str, stem: &str) -> Result<std::process::Output, String> {
     let exprs =
         parser::parse(expr_str).map_err(|error| format!("parser admission failed: {error:?}"))?;
@@ -52,7 +65,7 @@ fn compile_and_run(expr_str: &str, stem: &str) -> Result<std::process::Output, S
     let c_path = format!("c_backend_{stem}.c");
     let bin_path = format!("c_backend_{stem}");
     fs::write(&c_path, &c_source).map_err(|error| error.to_string())?;
-    let compile = Command::new("gcc")
+    let compile = gcc_command()
         .arg(&c_path)
         .arg("-o")
         .arg(&bin_path)
@@ -117,12 +130,14 @@ fn parses_fixture_capability_requirements() {
 
 #[test]
 fn c_backend_matches_every_constitutive_tier1_fixture() {
-    // my-lisp is mid-migration renaming .my sources to .lisp; prefer the
-    // new extension, fall back to the old one so this test survives either
-    // state of the sibling checkout.
-    let fixture_content = fs::read_to_string("../my-lisp/tests/fixtures/conformance.lisp")
-        .or_else(|_| fs::read_to_string("../my-lisp/tests/fixtures/conformance.my"))
-        .expect("Failed to read conformance.lisp or conformance.my");
+    let fixture_path =
+        if std::path::Path::new("../my-lisp/tests/fixtures/conformance.lisp").exists() {
+            "../my-lisp/tests/fixtures/conformance.lisp"
+        } else {
+            "../my-lisp/tests/fixtures/conformance.my"
+        };
+    let fixture_content =
+        fs::read_to_string(fixture_path).expect("Failed to read conformance fixture");
 
     let mut checked = 0;
     let mut checked_errors = 0;
@@ -240,7 +255,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         let bin_path = format!("c_backend_conf_{i}");
         fs::write(&c_path, &c_source).unwrap();
 
-        let compile = Command::new("gcc")
+        let compile = gcc_command()
             .arg(&c_path)
             .arg("-o")
             .arg(&bin_path)

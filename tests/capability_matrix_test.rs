@@ -8,10 +8,18 @@ use std::fs;
 /// 2. Every "supported" capability has an evidence entry
 /// 3. No backend claims a capability without evidence
 /// 4. The matrix is consistent with known backend implementations
+fn read_matrix() -> String {
+    let p = if std::path::Path::new("capability-matrix.lisp").exists() {
+        "capability-matrix.lisp"
+    } else {
+        "capability-matrix.my"
+    };
+    fs::read_to_string(p).expect("capability-matrix should exist and be readable")
+}
+
 #[test]
 fn capability_matrix_global_contract_is_min_of_backend_contracts() {
-    let matrix = fs::read_to_string("capability-matrix.my")
-        .expect("capability-matrix.my should exist and be readable");
+    let matrix = read_matrix();
 
     // Parse global contract
     let global_contract = extract_contract(&matrix, "global-contract")
@@ -42,8 +50,7 @@ fn capability_matrix_global_contract_is_min_of_backend_contracts() {
 
 #[test]
 fn capability_matrix_every_supported_capability_has_evidence() {
-    let matrix = fs::read_to_string("capability-matrix.my")
-        .expect("capability-matrix.my should exist and be readable");
+    let matrix = read_matrix();
 
     // Evidence entries from the matrix (capability -> evidence name)
     let evidence_map: BTreeMap<&str, &str> = [
@@ -155,8 +162,7 @@ fn capability_matrix_every_supported_capability_has_evidence() {
 
 #[test]
 fn capability_matrix_no_duplicate_capabilities() {
-    let matrix = fs::read_to_string("capability-matrix.my")
-        .expect("capability-matrix.my should exist and be readable");
+    let matrix = read_matrix();
 
     // Check each backend section for duplicate capabilities
     for backend in ["fpga-lisp", "c-backend", "x86-freestanding"] {
@@ -175,8 +181,7 @@ fn capability_matrix_no_duplicate_capabilities() {
 
 #[test]
 fn capability_matrix_c_backend_2_1_slice_explicitly_labelled() {
-    let matrix = fs::read_to_string("capability-matrix.my")
-        .expect("capability-matrix.my should exist and be readable");
+    let matrix = read_matrix();
 
     let c_backend_contract = extract_backend_contract(&matrix, "c-backend")
         .expect("c-backend must be defined in capability matrix");
@@ -225,8 +230,7 @@ fn capability_matrix_c_backend_2_1_slice_explicitly_labelled() {
 
 #[test]
 fn capability_matrix_fpga_lisp_stays_at_2_0() {
-    let matrix = fs::read_to_string("capability-matrix.my")
-        .expect("capability-matrix.my should exist and be readable");
+    let matrix = read_matrix();
 
     let fpga_contract =
         extract_backend_contract(&matrix, "fpga-lisp").expect("fpga-lisp must be defined");
@@ -255,8 +259,7 @@ fn capability_matrix_fpga_lisp_stays_at_2_0() {
 
 #[test]
 fn capability_matrix_x86_freestanding_stays_at_2_0() {
-    let matrix = fs::read_to_string("capability-matrix.my")
-        .expect("capability-matrix.my should exist and be readable");
+    let matrix = read_matrix();
 
     let x86_contract = extract_backend_contract(&matrix, "x86-freestanding")
         .expect("x86-freestanding must be defined");
@@ -272,12 +275,41 @@ fn capability_matrix_x86_freestanding_stays_at_2_0() {
         caps.get("def-self-tail-recursive") == Some(&"supported".to_string()),
         "x86-freestanding must support self-tail-recursive def (CML-X86-DEF-BOUNDED-SELF-TAIL-RECURSIVE-FUNCTION)"
     );
+    assert_eq!(
+        caps.get("cons"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark cons as supported"
+    );
+    assert_eq!(
+        caps.get("car"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark car as supported"
+    );
+    assert_eq!(
+        caps.get("cdr"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark cdr as supported"
+    );
+    assert_eq!(
+        caps.get("let"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark let as supported"
+    );
+    assert_eq!(
+        caps.get("lambda-variadic"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark lambda-variadic as supported"
+    );
+    assert_eq!(
+        caps.get("lambda-bare-symbol-params"),
+        Some(&"supported".to_string()),
+        "x86-freestanding must mark lambda-bare-symbol-params as supported"
+    );
 }
 
 #[test]
 fn capability_matrix_validation_rules_present() {
-    let matrix = fs::read_to_string("capability-matrix.my")
-        .expect("capability-matrix.my should exist and be readable");
+    let matrix = read_matrix();
 
     assert!(
         matrix.contains("validation-rules"),

@@ -1,0 +1,399 @@
+//! Intel Core i5-6400 (Skylake) CPU capability profile parser and capability authority (#59).
+//!
+//! # Architecture and Philosophy
+//!
+//! - **Target Hardware Profile Authority**: Consumes `my-lisp/lib/machine/cpu/intel-core-i5-6400.lisp`.
+//!   The compiler does not hardcode "Skylake implies everything"; capabilities are determined
+//!   by reading the exact target profile.
+//! - **Fail-Closed Capability Enforcement**: Features recorded as unavailable (e.g. AVX-512, AMX, TSX)
+//!   must never be emitted. Unknown capability state fails closed to the admitted scalar path.
+//! - **Runtime Gate Verification**: Gated extensions (such as AVX and AVX2) require checking
+//!   host CPUID flags and OSXSAVE/XGETBV state before vector paths are selected.
+//! - **Capability Provenance**: Every selection decision records why a feature was selected
+//!   or rejected, making target optimization policy auditable.
+//!
+//! # Українська документація (Ukrainian Documentation)
+//!
+//! Цей модуль зчитує та валідує профіль апаратних можливостей процесора Intel Core i5-6400 (Skylake)
+//! із файлу `lib/machine/cpu/intel-core-i5-6400.lisp`. Він реалізує fail-closed перевірку розширень,
+//! валідацію CPUID/XGETBV для AVX2 та веде журнал походження можливостей (capability provenance).
+
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
+
+use crate::ast::Expr;
+use crate::parser::parse;
+
+/// Canonical embedded copy of the upstream i5-6400 CPU profile from `my-lisp #118`.
+pub const CANONICAL_I5_6400_PROFILE_LISP: &str = r#"; Concrete CPU capability profile for the user's Intel Core i5-6400 (Skylake).
+(cpu-profile/1
+  (cpu intel-core-i5-6400)
+  (microarchitecture skylake)
+  (isa x86-64)
+  (mode 64-bit)
+
+  (supported-extension X86-BASE)
+  (supported-extension X86-64)
+  (supported-extension X87)
+  (supported-extension MMX)
+  (supported-extension SSE)
+  (supported-extension SSE2)
+  (supported-extension SSE3)
+  (supported-extension SSSE3)
+  (supported-extension SSE4.1)
+  (supported-extension SSE4.2)
+
+  (gated-extension AES-NI (gate cpuid-aes))
+  (gated-extension PCLMULQDQ (gate cpuid-pclmulqdq))
+  (gated-extension AVX (gate cpuid-avx+osxsave+xgetbv-xmm-ymm))
+  (gated-extension F16C (gate cpuid-f16c+avx-state))
+  (gated-extension FMA3 (gate cpuid-fma+avx-state))
+  (gated-extension BMI1 (gate cpuid-bmi1))
+  (gated-extension BMI2 (gate cpuid-bmi2))
+  (gated-extension AVX2 (gate cpuid-avx2+avx-state))
+  (gated-extension RDRAND (gate cpuid-rdrand))
+  (gated-extension RDSEED (gate cpuid-rdseed))
+  (gated-extension ADX (gate cpuid-adx))
+  (gated-extension XSAVE (gate cpuid-xsave))
+  (gated-extension CLFLUSHOPT (gate cpuid-clflushopt))
+
+  (platform-gated-extension MPX (gate cpuid-mpx+os-support))
+  (platform-gated-extension SGX (gate cpuid-sgx+firmware+os-support))
+
+  (virtualization-capability VT-X supported)
+  (virtualization-capability VT-D supported)
+  (virtualization-capability EPT supported)
+
+  (unavailable-extension TSX)
+  (unavailable-extension AVX-512)
+  (unavailable-extension AMX)
+
+  (execution-policy
+    (ordinary-user-instructions user-mode)
+    (privileged-instructions forbidden)
+    (runtime-feature-check required)
+    (avx-state-check xgetbv-required)))
+"#;
+
+/// Structured model of a CPU capability profile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CpuProfile {
+    pub cpu: String,
+    pub microarchitecture: String,
+    pub isa: String,
+    pub mode: String,
+    pub supported_extensions: HashSet<String>,
+    pub gated_extensions: HashMap<String, String>,
+    pub platform_gated_extensions: HashMap<String, String>,
+    pub virtualization_capabilities: HashMap<String, String>,
+    pub unavailable_extensions: HashSet<String>,
+    pub execution_policies: HashMap<String, String>,
+}
+
+/// Execution vector mode requested by caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VectorMode {
+    /// Automatically select vector path if target profile and runtime host permit.
+    Auto,
+    /// Force scalar fallback path.
+    ForcedScalar,
+    /// Force AVX2 vector path (fails closed if unavailable).
+    ForcedAvx2,
+}
+
+/// Minimum buffer length threshold where AVX2 loop overhead becomes profitable over scalar.
+pub const AVX2_CROSSOVER_THRESHOLD: usize = 8;
+
+/// Audit provenance explaining why a vector instruction set was or was not selected.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapabilityProvenance {
+    pub extension: String,
+    pub selected: bool,
+    pub reason: String,
+}
+
+impl CpuProfile {
+    /// Parses a `cpu-profile/1` S-expression string into a structured `CpuProfile`.
+    pub fn parse(source: &str) -> Result<Self, String> {
+        let exprs = parse(source).map_err(|e| format!("parse error in cpu profile: {e}"))?;
+        let root = exprs
+            .into_iter()
+            .find(|e| match e {
+                Expr::List(items) => items.first().is_some_and(|h| h.is_symbol("cpu-profile/1")),
+                _ => false,
+            })
+            .ok_or_else(|| "missing (cpu-profile/1 ...) root form".to_string())?;
+
+        let items = match root {
+            Expr::List(list) => list,
+            _ => unreachable!(),
+        };
+
+        let mut cpu = String::new();
+        let mut microarchitecture = String::new();
+        let mut isa = String::new();
+        let mut mode = String::new();
+        let mut supported_extensions = HashSet::new();
+        let mut gated_extensions = HashMap::new();
+        let mut platform_gated_extensions = HashMap::new();
+        let mut virtualization_capabilities = HashMap::new();
+        let mut unavailable_extensions = HashSet::new();
+        let mut execution_policies = HashMap::new();
+
+        for item in items.into_iter().skip(1) {
+            let Expr::List(clause) = item else {
+                continue;
+            };
+            if clause.is_empty() {
+                continue;
+            }
+            let head = match &clause[0] {
+                Expr::Symbol(s) => s.as_str(),
+                _ => continue,
+            };
+
+            match head {
+                "cpu" if clause.len() >= 2 => {
+                    if let Expr::Symbol(name) = &clause[1] {
+                        cpu = name.clone();
+                    }
+                }
+                "microarchitecture" if clause.len() >= 2 => {
+                    if let Expr::Symbol(name) = &clause[1] {
+                        microarchitecture = name.clone();
+                    }
+                }
+                "isa" if clause.len() >= 2 => {
+                    if let Expr::Symbol(name) = &clause[1] {
+                        isa = name.clone();
+                    }
+                }
+                "mode" if clause.len() >= 2 => {
+                    if let Expr::Symbol(name) = &clause[1] {
+                        mode = name.clone();
+                    }
+                }
+                "supported-extension" if clause.len() >= 2 => {
+                    if let Expr::Symbol(name) = &clause[1] {
+                        supported_extensions.insert(name.to_ascii_uppercase());
+                    }
+                }
+                "gated-extension" if clause.len() >= 3 => {
+                    if let Expr::Symbol(ext) = &clause[1] {
+                        let gate_desc = match &clause[2] {
+                            Expr::List(g) if g.len() >= 2 && g[0].is_symbol("gate") => {
+                                match &g[1] {
+                                    Expr::Symbol(s) => s.clone(),
+                                    _ => "unknown".to_string(),
+                                }
+                            }
+                            _ => "unknown".to_string(),
+                        };
+                        gated_extensions.insert(ext.to_ascii_uppercase(), gate_desc);
+                    }
+                }
+                "platform-gated-extension" if clause.len() >= 3 => {
+                    if let Expr::Symbol(ext) = &clause[1] {
+                        let gate_desc = match &clause[2] {
+                            Expr::List(g) if g.len() >= 2 && g[0].is_symbol("gate") => {
+                                match &g[1] {
+                                    Expr::Symbol(s) => s.clone(),
+                                    _ => "unknown".to_string(),
+                                }
+                            }
+                            _ => "unknown".to_string(),
+                        };
+                        platform_gated_extensions.insert(ext.to_ascii_uppercase(), gate_desc);
+                    }
+                }
+                "virtualization-capability" if clause.len() >= 3 => {
+                    if let (Expr::Symbol(feat), Expr::Symbol(status)) = (&clause[1], &clause[2]) {
+                        virtualization_capabilities
+                            .insert(feat.to_ascii_uppercase(), status.clone());
+                    }
+                }
+                "unavailable-extension" if clause.len() >= 2 => {
+                    if let Expr::Symbol(ext) = &clause[1] {
+                        unavailable_extensions.insert(ext.to_ascii_uppercase());
+                    }
+                }
+                "execution-policy" => {
+                    for policy_item in clause.into_iter().skip(1) {
+                        if let Expr::List(pair) = policy_item {
+                            if pair.len() >= 2 {
+                                if let (Expr::Symbol(k), Expr::Symbol(v)) = (&pair[0], &pair[1]) {
+                                    execution_policies.insert(k.clone(), v.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Self {
+            cpu,
+            microarchitecture,
+            isa,
+            mode,
+            supported_extensions,
+            gated_extensions,
+            platform_gated_extensions,
+            virtualization_capabilities,
+            unavailable_extensions,
+            execution_policies,
+        })
+    }
+
+    /// Loads the canonical i5-6400 profile from filesystem if available, falling back
+    /// to the embedded copy.
+    pub fn load_skylake_i5_6400() -> Result<Self, String> {
+        let candidates = [
+            "../my-lisp/lib/machine/cpu/intel-core-i5-6400.lisp",
+            "../../my-lisp/lib/machine/cpu/intel-core-i5-6400.lisp",
+            "/home/agents/GitHub/my-lisp/lib/machine/cpu/intel-core-i5-6400.lisp",
+        ];
+        for path_str in candidates {
+            let path = Path::new(path_str);
+            if path.exists() {
+                if let Ok(content) = std::fs::read_to_string(path) {
+                    return Self::parse(&content);
+                }
+            }
+        }
+        Self::parse(CANONICAL_I5_6400_PROFILE_LISP)
+    }
+
+    /// Returns whether an extension is explicitly marked unavailable (e.g. AVX-512, AMX, TSX).
+    pub fn is_unavailable(&self, extension: &str) -> bool {
+        self.unavailable_extensions
+            .contains(&extension.to_ascii_uppercase())
+    }
+
+    /// Returns whether the target profile permits AVX2.
+    pub fn profile_has_avx2(&self) -> bool {
+        !self.is_unavailable("AVX2") && self.gated_extensions.contains_key("AVX2")
+    }
+
+    /// Checks if host CPU at runtime supports AVX2 (CPUID + OSXSAVE + XGETBV).
+    #[inline]
+    pub fn runtime_host_has_avx2() -> bool {
+        #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+        {
+            std::is_x86_feature_detected!("avx2")
+        }
+        #[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
+        {
+            false
+        }
+    }
+
+    /// Evaluates eligibility for AVX2 execution, returning whether it should be used
+    /// along with a verifiable capability provenance audit record.
+    pub fn check_avx2_eligibility(
+        &self,
+        mode: VectorMode,
+        element_count: usize,
+    ) -> (bool, CapabilityProvenance) {
+        if self.is_unavailable("AVX2") {
+            return (
+                false,
+                CapabilityProvenance {
+                    extension: "AVX2".to_string(),
+                    selected: false,
+                    reason: "extension AVX2 is explicitly unavailable in target CPU profile"
+                        .to_string(),
+                },
+            );
+        }
+
+        match mode {
+            VectorMode::ForcedScalar => (
+                false,
+                CapabilityProvenance {
+                    extension: "AVX2".to_string(),
+                    selected: false,
+                    reason: "forced scalar mode requested by caller".to_string(),
+                },
+            ),
+            VectorMode::ForcedAvx2 => {
+                if !self.profile_has_avx2() {
+                    (
+                        false,
+                        CapabilityProvenance {
+                            extension: "AVX2".to_string(),
+                            selected: false,
+                            reason:
+                                "forced AVX2 requested but target profile does not advertise AVX2"
+                                    .to_string(),
+                        },
+                    )
+                } else if !Self::runtime_host_has_avx2() {
+                    (
+                        false,
+                        CapabilityProvenance {
+                            extension: "AVX2".to_string(),
+                            selected: false,
+                            reason: "forced AVX2 requested but runtime host lacks AVX2 or OSXSAVE/XGETBV support"
+                                .to_string(),
+                        },
+                    )
+                } else {
+                    (
+                        true,
+                        CapabilityProvenance {
+                            extension: "AVX2".to_string(),
+                            selected: true,
+                            reason: "forced AVX2 mode verified against target profile and host CPUID+XGETBV"
+                                .to_string(),
+                        },
+                    )
+                }
+            }
+            VectorMode::Auto => {
+                if !self.profile_has_avx2() {
+                    (
+                        false,
+                        CapabilityProvenance {
+                            extension: "AVX2".to_string(),
+                            selected: false,
+                            reason: "target profile does not advertise AVX2".to_string(),
+                        },
+                    )
+                } else if !Self::runtime_host_has_avx2() {
+                    (
+                        false,
+                        CapabilityProvenance {
+                            extension: "AVX2".to_string(),
+                            selected: false,
+                            reason: "runtime host CPUID/OSXSAVE does not support AVX2".to_string(),
+                        },
+                    )
+                } else if element_count < AVX2_CROSSOVER_THRESHOLD {
+                    (
+                        false,
+                        CapabilityProvenance {
+                            extension: "AVX2".to_string(),
+                            selected: false,
+                            reason: format!(
+                                "buffer length {element_count} is below vector crossover threshold {AVX2_CROSSOVER_THRESHOLD}"
+                            ),
+                        },
+                    )
+                } else {
+                    (
+                        true,
+                        CapabilityProvenance {
+                            extension: "AVX2".to_string(),
+                            selected: true,
+                            reason: format!(
+                                "auto AVX2 selected: profile permits AVX2, host CPUID+XGETBV verified, length {element_count} >= threshold {AVX2_CROSSOVER_THRESHOLD}"
+                            ),
+                        },
+                    )
+                }
+            }
+        }
+    }
+}

@@ -9,7 +9,7 @@
 use cml::build::{Observation, compile_and_run};
 use cml::semantic_export::{check_digest, parse_export, validate_slice1};
 
-const EXPORT: &str = include_str!("../contracts/mylisp-cml-export.wsm");
+const EXPORT: &str = include_str!("../contracts/mylisp-cml-export.lisp");
 
 /// Real producer digest (my-lisp `cml-export` binary output), vendored into
 /// `contracts/mylisp-cml-export.wsm` -- issue cml#3 item 1. This is a

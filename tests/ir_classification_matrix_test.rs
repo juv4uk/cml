@@ -201,7 +201,7 @@ fn every_ir_variant_is_classified_by_fpga_and_c_without_panic() {
 
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("evidence/semantic-ir-recovery");
     let _ = fs::create_dir_all(&dir);
-    let path = dir.join("ir-classification-matrix.my");
+    let path = dir.join("ir-classification-matrix.lisp");
     fs::write(&path, lines.join("\n") + "\n").expect("write matrix artifact");
     assert!(path.exists(), "matrix artifact must exist at {path:?}");
 }
