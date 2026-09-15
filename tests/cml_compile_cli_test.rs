@@ -47,7 +47,10 @@ fn cml_compile_x86_elf_matches_the_admitted_library_pipeline() {
         .status()
         .expect("launch cml-compile");
 
-    assert!(status.success(), "cml-compile must succeed for the admitted fixture");
+    assert!(
+        status.success(),
+        "cml-compile must succeed for the admitted fixture"
+    );
     let actual_elf = fs::read(&output_path).expect("CLI must produce requested artifact");
     let _ = fs::remove_file(&output_path);
 
