@@ -9,14 +9,17 @@
 use std::fs;
 use std::path::PathBuf;
 
-use cml::{lower, parser};
 use cml::x86_freestanding::X86FreestandingBackend;
+use cml::{lower, parser};
 
 fn upstream_corpus() -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../my-lisp/tests/fixtures/conformance.lisp");
     fs::read_to_string(&path).unwrap_or_else(|error| {
-        panic!("#116 requires the sibling my-lisp conformance corpus at {}: {error}", path.display())
+        panic!(
+            "#116 requires the sibling my-lisp conformance corpus at {}: {error}",
+            path.display()
+        )
     })
 }
 
@@ -35,13 +38,19 @@ fn cml_consumes_upstream_lisp_witness_without_own_expected_answer() {
     let corpus = upstream_corpus();
     let source = first_compiler_witness_expr(&corpus);
 
-    let expressions = parser::parse(&source)
-        .unwrap_or_else(|error| panic!("CML could not parse upstream witness `{source}`: {error:?}"));
+    let expressions = parser::parse(&source).unwrap_or_else(|error| {
+        panic!("CML could not parse upstream witness `{source}`: {error:?}")
+    });
     let program = lower::lower_program(&expressions)
         .unwrap_or_else(|error| panic!("CML could not lower upstream witness `{source}`: {error}"));
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
-        .unwrap_or_else(|error| panic!("CML could not compile upstream witness `{source}`: {error:?}"));
+        .unwrap_or_else(|error| {
+            panic!("CML could not compile upstream witness `{source}`: {error:?}")
+        });
 
-    assert!(assembly.contains(".globl wsm_entry"), "upstream witness must reach the real x86 freestanding backend");
+    assert!(
+        assembly.contains(".globl wsm_entry"),
+        "upstream witness must reach the real x86 freestanding backend"
+    );
 }
