@@ -14,13 +14,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: cml
-
-      - name: Checkout my-lisp (sibling, provides conformance fixtures)
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/my-lisp
-          ref: d4ad7e7c7717a610599875ffb90123b713ac05c7
-          path: my-lisp
+          # external/my-lisp is a real submodule now (SUBMODULE-DEPENDENCY-
+          # MODEL-2026-09-16): my-lisp is a contract dependency (cml reads
+          # its .lisp source tree directly for the encoder bridge, CPU
+          # profile, and conformance corpus), so it travels with cml's own
+          # checkout instead of a separately pinned sibling checkout below.
+          submodules: true
 
       - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
         uses: actions/checkout@v4
