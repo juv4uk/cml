@@ -456,6 +456,13 @@ pub enum MachineInst {
     /// Read Time-Stamp Counter into EDX:EAX.
     Rdtsc { provenance: Provenance },
 
+    /// Unsigned divide RDX:RAX by a 64-bit register: `divq %reg`.
+    /// Quotient is written to RAX and remainder to RDX by the x86-64 ISA.
+    DivReg {
+        divisor: X86Reg,
+        provenance: Provenance,
+    },
+
     /// Logical shift left 64-bit register by immediate 8-bit count: `shlq $imm, %reg`.
     ShlImm {
         reg: X86Reg,
@@ -645,6 +652,7 @@ impl MachineInst {
     pub fn provenance(&self) -> &Provenance {
         match self {
             Self::Rdtsc { provenance }
+            | Self::DivReg { provenance, .. }
             | Self::ShlImm { provenance, .. }
             | Self::SarImm { provenance, .. }
             | Self::ShrImm { provenance, .. }
@@ -681,6 +689,7 @@ impl MachineInst {
     pub fn print_gnu_asm(&self) -> String {
         match self {
             Self::Rdtsc { .. } => "rdtsc".to_string(),
+            Self::DivReg { divisor, .. } => format!("divq {}", divisor.name()),
             Self::ShlImm { reg, imm, .. } => format!("shlq ${imm}, {}", reg.name()),
             Self::SarImm { reg, imm, .. } => format!("sarq ${imm}, {}", reg.name()),
             Self::ShrImm { reg, imm, .. } => format!("shrq ${imm}, {}", reg.name()),
@@ -795,6 +804,14 @@ impl MachineInst {
     pub fn encode_bytes(&self) -> Vec<u8> {
         match self {
             Self::Rdtsc { .. } => vec![0x0F, 0x31],
+
+            Self::DivReg { divisor, .. } => {
+                let rex = 0x48 | if divisor.is_extended() { 0x01 } else { 0x00 };
+                let opcode = 0xF7;
+                // ModR/M: mod=11, reg=110 (/6 unsigned DIV), r/m=divisor.
+                let modrm = (0b11 << 6) | (0b110 << 3) | (divisor.number() & 0x07);
+                vec![rex, opcode, modrm]
+            }
 
             Self::ShlImm { reg, imm, .. } => {
                 let rex = 0x48 | if reg.is_extended() { 0x01 } else { 0x00 };
