@@ -12,7 +12,7 @@ fn upstream_conformance_corpus() -> String {
         .join("external/my-lisp/tests/fixtures/conformance.lisp");
     fs::read_to_string(&path).unwrap_or_else(|error| {
         panic!(
-            "#105 requires pinned upstream conformance corpus at {}: {error}",
+            "#123 requires pinned upstream conformance corpus at {}: {error}",
             path.display()
         )
     })
@@ -24,16 +24,22 @@ fn alist_string_field(row: &str, key: &str) -> Option<String> {
     Some(tail.split_once("\")")?.0.to_string())
 }
 
-fn upstream_exact_rational_compiler_witness() -> (String, String) {
-    upstream_conformance_corpus()
+fn upstream_witness_by_source(corpus: &str, required_source: &str) -> (String, String) {
+    corpus
         .lines()
-        .filter(|line| line.contains("(compiler-corpus . t)"))
         .find_map(|line| {
             let source = alist_string_field(line, "expr")?;
+            if source != required_source {
+                return None;
+            }
             let expected = alist_string_field(line, "expected")?;
-            expected.contains('/').then_some((source, expected))
+            Some((source, expected))
         })
-        .expect("#105 requires an exact-rational compiler-corpus row in pinned my-lisp")
+        .unwrap_or_else(|| {
+            panic!(
+                "#123 requires pinned Lisp-owned exact-rational witness for source {required_source:?}"
+            )
+        })
 }
 
 fn gcc_command() -> Command {
@@ -74,15 +80,31 @@ fn compile_and_run_first_class(code: &str, stem: &str) -> String {
     let run = Command::new(format!("./{bin_path}")).output().unwrap();
     let _ = fs::remove_file(c_path);
     let _ = fs::remove_file(bin_path);
-    assert!(run.status.success(), "compiled C program failed");
+    assert!(
+        run.status.success(),
+        "compiled C program failed for upstream source {code:?}: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     String::from_utf8(run.stdout).unwrap().trim().to_string()
 }
 
 #[test]
-fn c_backend_exact_rational_result_is_owned_by_upstream_lisp_witness() {
-    let (source, expected) = upstream_exact_rational_compiler_witness();
-    assert_eq!(
-        compile_and_run_first_class(&source, "upstream_exact_rational"),
-        expected
-    );
+fn c_backend_exact_rational_classes_are_owned_by_upstream_lisp_witnesses() {
+    let corpus = upstream_conformance_corpus();
+    let cases = [
+        ("add_reduction", "(+ (/ 1 3) (/ 1 3))"),
+        ("sub_int_mix", "(- 1 (/ 1 3))"),
+        ("mul_reduction", "(* (/ 2 3) (/ 9 4))"),
+        ("div_rational_intermediate", "(/ 5 6 8 7)"),
+        ("unary_minus", "(- (/ 1 3))"),
+    ];
+
+    for (stem, required_source) in cases {
+        let (source, expected) = upstream_witness_by_source(&corpus, required_source);
+        let actual = compile_and_run_first_class(&source, stem);
+        assert_eq!(
+            actual, expected,
+            "CML must not own the exact-rational answer for upstream source {source:?}"
+        );
+    }
 }
