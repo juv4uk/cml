@@ -23,13 +23,13 @@ fn upstream_corpus() -> String {
 }
 
 fn quoted_field(line: &str, key: &str) -> String {
-    let marker = format!("({key} . \\\"");
+    let marker = format!(r#"({key} . ""#);
     let tail = line
         .split_once(&marker)
         .unwrap_or_else(|| panic!("#111 upstream fixture is missing {key:?}: {line}"))
         .1;
     let end = tail
-        .find("\\\")")
+        .find(r#"")"#)
         .unwrap_or_else(|| panic!("#111 upstream fixture has malformed {key:?}: {line}"));
     tail[..end].to_string()
 }
@@ -38,7 +38,7 @@ fn first_upstream_mod_witness() -> (String, i64) {
     let corpus = upstream_corpus();
     let line = corpus
         .lines()
-        .find(|line| line.contains("((expr . \\\"(mod ") && line.contains("(expected . \\\""))
+        .find(|line| line.contains(r#"((expr . "(mod "#) && line.contains(r#"(expected . ""#))
         .expect("#111 requires at least one upstream mod fixture with an expected value");
 
     let source = quoted_field(line, "expr");
