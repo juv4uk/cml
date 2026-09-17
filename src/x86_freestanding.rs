@@ -1546,6 +1546,9 @@ impl Emitter {
                 }
             }
             Ir::Cond { branches } => self.emit_cond(branches),
+            Ir::CondMatch { .. } => Err(CompileError::UnsupportedVariant(
+                "CondMatch (explicit result matcher not yet implemented)",
+            )),
             Ir::Let { bindings, body } => {
                 // Top-level `let` binds in parallel: evaluate every value in
                 // the enclosing environment, then install the name->slot
