@@ -62,9 +62,7 @@ impl CoverageLedger {
     }
 
     pub fn row(&self, semantic_id: &str) -> Option<&SemanticCoverageRow> {
-        self.rows
-            .iter()
-            .find(|row| row.semantic_id == semantic_id)
+        self.rows.iter().find(|row| row.semantic_id == semantic_id)
     }
 
     pub fn summary(&self) -> CoverageSummary {
