@@ -426,9 +426,7 @@ fn lower_cond(branches: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     let mut shape: Option<CondShape> = None;
     for branch in branches {
         let Expr::List(parts) = branch else {
-            return Err(LowerError::invalid_form(
-                "cond expects list clauses",
-            ));
+            return Err(LowerError::invalid_form("cond expects list clauses"));
         };
 
         match (shape.take(), parts.as_slice()) {
