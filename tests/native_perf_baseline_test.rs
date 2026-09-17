@@ -139,3 +139,14 @@ fn test_report_serialization_formats() {
     assert!(sexpr.contains("(cml-commit . \"abc1234\")"));
     assert!(sexpr.contains("(workloads ."));
 }
+
+#[test]
+fn active_baseline_report_does_not_embed_semantic_answer_keys() {
+    let report = generate_baseline_report("authority-red", "test-mylisp-pin");
+    let json = report.to_json();
+
+    assert!(
+        !json.contains("\"expected_outcome\""),
+        "active CML benchmark reports must record actual outcomes and upstream verdict provenance, not a CML-owned expected Lisp answer"
+    );
+}
