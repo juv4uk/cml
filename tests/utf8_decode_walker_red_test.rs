@@ -46,6 +46,9 @@ fn contains_tail_self_call(ir: &Ir) -> bool {
         Ir::Cond { branches } => branches
             .iter()
             .any(|(test, body)| contains_tail_self_call(test) || contains_tail_self_call(body)),
+        Ir::CondMatch { branches } => branches.iter().any(|(query, _expected, body)| {
+            contains_tail_self_call(query) || contains_tail_self_call(body)
+        }),
         Ir::Let { bindings, body } => {
             bindings
                 .iter()
