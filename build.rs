@@ -20,8 +20,8 @@ const TARGET_IDS: &[&str] = &["0001", "0002", "0003", "0004", "0005", "0006", "0
 /// Callable primitives and library operations whose semantic identity must survive
 /// surface spelling changes across English, Ukrainian, Sanskrit, and symbolic forms.
 const CALLABLE_IDS: &[&str] = &[
-    "0002", "0003", "0004", "0005", "0006", "0104", "1001", "1002", "1007", "1014", "1015", "1016", "1017",
-    "1018", "1022", "1074",
+    "0002", "0003", "0004", "0005", "0006", "0104", "1001", "1002", "1007", "1014", "1015", "1016",
+    "1017", "1018", "1022", "1074",
 ];
 
 /// Retired semantic IDs that must NEVER be active or recycled (e.g. 1153 for former RDTSC attribution).
@@ -118,7 +118,7 @@ const OPERATIONS: &[OperationSpec] = &[
         backend_projections: &[
             ("fpga-lisp", "OP_CONS"),
             ("c", "mk_cons"),
-            ("x86_freestanding", "wsm_cons"),
+            ("x86_freestanding", "unsupported"),
         ],
         status: "supported",
         authority_owner: "my-lisp:language-core cml:compiler-middle-end",
@@ -644,10 +644,10 @@ fn main() {
             op.authority_owner
         ));
         generated.push_str(&format!(
-            "        provenance_witness: {:?},\n",
+            "        provenance_witness: {:?})",
             op.provenance_witness
         ));
-        generated.push_str("    },\n");
+        generated.push_str(",\n");
     }
     generated.push_str("];\n\n");
 
