@@ -118,7 +118,7 @@ const OPERATIONS: &[OperationSpec] = &[
         backend_projections: &[
             ("fpga-lisp", "OP_CONS"),
             ("c", "mk_cons"),
-            ("x86_freestanding", "unsupported"),
+            ("x86_freestanding", "wsm_cons"),
         ],
         status: "supported",
         authority_owner: "my-lisp:language-core cml:compiler-middle-end",
@@ -644,10 +644,10 @@ fn main() {
             op.authority_owner
         ));
         generated.push_str(&format!(
-            "        provenance_witness: {:?})",
+            "        provenance_witness: {:?},\n",
             op.provenance_witness
         ));
-        generated.push_str(",\n");
+        generated.push_str("    },\n");
     }
     generated.push_str("];\n\n");
 
