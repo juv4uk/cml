@@ -1,0 +1,9 @@
+[package]
+name = "cml-observed-my-lisp-filemode-probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+my-lisp = { path = "../../observed-my-lisp/crates/my-lisp" }
+my-lisp-host = { path = "../../observed-my-lisp/crates/my-lisp-host" }
