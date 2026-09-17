@@ -65,6 +65,23 @@ fn fpga_backend_routes_canonical_cond_through_private_cml_equal() {
 }
 
 #[test]
+fn fpga_backend_materializes_canon_zero_when_no_canonical_clause_matches() {
+    let source = r#"
+        (cond
+          ((quote (identity-relation distinct)) (identity-relation same)
+           (quote unreachable)))
+    "#;
+    let expressions = parser::parse(source).unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = Compiler::new().compile(&program).unwrap();
+
+    assert!(
+        assembly.contains("EQ R15 R12 R13\ncond_match_end_"),
+        "canonical no-match must materialize Canon 0 in the result register before the end label; assembly was:\n{assembly}"
+    );
+}
+
+#[test]
 fn x86_freestanding_rejects_canonical_cond_until_private_matcher_exists() {
     let program = lower_match_source();
     let error = X86FreestandingBackend::new()
