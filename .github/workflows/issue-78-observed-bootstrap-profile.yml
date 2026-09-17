@@ -19,15 +19,18 @@ jobs:
           ref: ${{ env.MY_LISP_OBSERVED_SHA }}
           path: observed-my-lisp
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: issue-78-observed-bootstrap
       - name: Record revision channel
         run: |
           echo "upstream_channel=observed-current"
           echo "my_lisp_observed_sha=$MY_LISP_OBSERVED_SHA"
           git -C observed-my-lisp rev-parse HEAD
-      - name: Measure language-owned bootstrap stages
+      - name: Measure debug bootstrap stages like PR 317
         run: |
+          echo '--- DEBUG ---'
+          cargo run \
+            --manifest-path benchmarks/observed-my-lisp-bootstrap-probe/Cargo.toml
+      - name: Measure release bootstrap stages
+        run: |
+          echo '--- RELEASE ---'
           cargo run --release \
             --manifest-path benchmarks/observed-my-lisp-bootstrap-probe/Cargo.toml
