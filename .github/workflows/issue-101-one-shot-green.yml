@@ -1,0 +1,63 @@
+name: issue-101-one-shot-green
+
+on:
+  push:
+    branches:
+      - test/101-divq-machine-inst-red
+
+permissions:
+  contents: write
+
+jobs:
+  apply-green:
+    if: contains(github.event.head_commit.message, 'stage one-time green applier')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: test/101-divq-machine-inst-red
+      - name: Apply minimal DivReg machine substrate
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/machine_inst.rs')
+          text = path.read_text()
+
+          def replace_one(old, new):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one anchor, found {count}: {old!r}')
+              text = text.replace(old, new, 1)
+
+          replace_one(
+              '    /// Read Time-Stamp Counter into EDX:EAX.\n    Rdtsc { provenance: Provenance },\n\n    /// Logical shift left 64-bit register by immediate 8-bit count: `shlq $imm, %reg`.\n',
+              '    /// Read Time-Stamp Counter into EDX:EAX.\n    Rdtsc { provenance: Provenance },\n\n    /// Unsigned divide RDX:RAX by a 64-bit register: `divq %reg`.\n    /// Quotient is written to RAX and remainder to RDX by the x86-64 ISA.\n    DivReg {\n        divisor: X86Reg,\n        provenance: Provenance,\n    },\n\n    /// Logical shift left 64-bit register by immediate 8-bit count: `shlq $imm, %reg`.\n'
+          )
+          replace_one(
+              '            Self::Rdtsc { provenance }\n            | Self::ShlImm { provenance, .. }\n',
+              '            Self::Rdtsc { provenance }\n            | Self::DivReg { provenance, .. }\n            | Self::ShlImm { provenance, .. }\n'
+          )
+          replace_one(
+              '            Self::Rdtsc { .. } => "rdtsc".to_string(),\n            Self::ShlImm { reg, imm, .. } => format!("shlq ${imm}, {}", reg.name()),\n',
+              '            Self::Rdtsc { .. } => "rdtsc".to_string(),\n            Self::DivReg { divisor, .. } => format!("divq {}", divisor.name()),\n            Self::ShlImm { reg, imm, .. } => format!("shlq ${imm}, {}", reg.name()),\n'
+          )
+          replace_one(
+              '            Self::Rdtsc { .. } => vec![0x0F, 0x31],\n\n            Self::ShlImm { reg, imm, .. } => {\n',
+              '            Self::Rdtsc { .. } => vec![0x0F, 0x31],\n\n            Self::DivReg { divisor, .. } => {\n                let rex = 0x48 | if divisor.is_extended() { 0x01 } else { 0x00 };\n                let opcode = 0xF7;\n                // ModR/M: mod=11, reg=110 (/6 unsigned DIV), r/m=divisor.\n                let modrm = (0b11 << 6) | (0b110 << 3) | (divisor.number() & 0x07);\n                vec![rex, opcode, modrm]\n            }\n\n            Self::ShlImm { reg, imm, .. } => {\n'
+          )
+
+          path.write_text(text)
+          PY
+      - name: Format
+        run: cargo fmt -p cml
+      - name: Focused RED-to-GREEN witness
+        run: cargo test --test x86_divrem_machine_inst_test
+      - name: Commit verified production patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/machine_inst.rs
+          git commit -m 'feat(#101): add semantics-neutral unsigned divq machine substrate'
+          git push origin HEAD:test/101-divq-machine-inst-red
