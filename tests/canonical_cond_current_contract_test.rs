@@ -34,11 +34,14 @@ fn canonical_and_migration_cond_models_cannot_be_mixed() {
     "#;
 
     let expressions = parser::parse(source).expect("mixed cond source must parse");
-    let error = lower::lower_program(&expressions)
-        .expect_err("canonical three-part and migration two-part clauses must fail closed when mixed");
+    let error = lower::lower_program(&expressions).expect_err(
+        "canonical three-part and migration two-part clauses must fail closed when mixed",
+    );
 
     assert!(
-        error.detail.contains("cannot mix canonical three-part clauses"),
+        error
+            .detail
+            .contains("cannot mix canonical three-part clauses"),
         "unexpected mixed-control error: {error}"
     );
 }
