@@ -1,0 +1,31 @@
+name: Issue 79 observed my-lisp UTF-8 stage profile
+
+on:
+  pull_request:
+    paths:
+      - benchmarks/observed-my-lisp-utf8-stage-probe/**
+      - .github/workflows/issue-79-observed-utf8-stage-profile.yml
+
+jobs:
+  profile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      MY_LISP_OBSERVED_SHA: ed1ef28928df1db0cc83f17ae993527635b6256d
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          repository: juv4uk/my-lisp
+          ref: ${{ env.MY_LISP_OBSERVED_SHA }}
+          path: observed-my-lisp
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Record exact upstream experiment revision
+        run: |
+          echo "upstream_channel=pr-317-head"
+          echo "my_lisp_observed_sha=$MY_LISP_OBSERVED_SHA"
+          git -C observed-my-lisp rev-parse HEAD
+      - name: Measure release UTF-8 pipeline stages
+        run: |
+          cargo run --release \
+            --manifest-path benchmarks/observed-my-lisp-utf8-stage-probe/Cargo.toml
