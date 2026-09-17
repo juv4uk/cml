@@ -118,7 +118,7 @@
          (evidence
           . ((tier-1-matrix . "c_backend_conformance_test.rs: 35 selected, 26 supported-value, 9 supported-error")
              (contract-2.1-matrix . "c_backend_conformance_test.rs: 3 selected, 3 supported")
-             (rational . "c_backend_test.rs: rational add/sub/mul/div/unary_minus/int_mix; decimal_comma_equals_dot_through_runtime; rational_literal_from_decimal_reduces")
+             (rational . "tests/exact_rational_upstream_authority_test.rs: pinned Lisp-owned add/sub/mul/div/reduction/int-mix/unary-minus C-backend execution")
              (string . "tests/string_values_test.rs: literal, quoted string, eq, and string-in-cons; tests/core_values_test.rs")
              (first-class-builtins . "c_backend_test.rs: builtin_value, builtin_shadowing, higher_order_builtin")
              (let . "c_backend_test.rs: compiles_let_to_c_and_runs_it")
