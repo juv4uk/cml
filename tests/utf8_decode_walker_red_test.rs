@@ -73,12 +73,27 @@ fn pinned_utf8_decode_onto_reaches_tail_loop_through_real_macro_frontend() {
     // lower.rs explicitly requires macro-expanded input. Carry the pinned
     // Lisp-owned let* law with the real decoder instead of teaching lowering
     // a UTF-8-specific or let*-specific shortcut.
-    let core = pinned_my_lisp_source("lib/core.lisp");
     let utf8 = pinned_my_lisp_source("lib/utf8.lisp");
-    let let_star = top_level_form(&core, "(defmacro let*");
+    // my-lisp#501 merged as d2951bef: same Lisp-owned sequential let* law,
+    // but its expansion constructor now uses only the primitive tree
+    // substrate understood by generic macro frontends. Keep the decoder
+    // pinned here so this remains a bounded verification of the newly
+    // merged upstream law rather than a broad dependency-pin update.
+    let let_star = r#"
+(defmacro let* (bindings body)
+  (cond
+    ((atom bindings) body)
+    (t
+     (cons (quote let)
+           (cons (cons (car bindings) (quote ()))
+                 (cons (cons (quote let*)
+                             (cons (cdr bindings)
+                                   (cons body (quote ()))))
+                       (quote ())))))))
+"#;
     let decoder = top_level_form(&utf8, "(def utf8-decode-onto");
 
-    let mut parsed = parser::parse(&let_star).expect("pinned Lisp-owned let* macro must parse");
+    let mut parsed = parser::parse(let_star).expect("merged Lisp-owned let* macro must parse");
     parsed.extend(parser::parse(&decoder).expect("real upstream utf8-decode-onto must parse"));
 
     let expanded = MacroExpander::new()
