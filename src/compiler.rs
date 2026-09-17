@@ -86,6 +86,11 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
             validate_ir(test)?;
             validate_ir(body)
         }),
+        Ir::CondMatch { branches } => branches.iter().try_for_each(|(query, expected, body)| {
+            validate_ir(query)?;
+            validate_quoted(expected)?;
+            validate_ir(body)
+        }),
         Ir::Let { bindings, body } => {
             bindings
                 .iter()
@@ -294,6 +299,7 @@ impl Compiler {
             Ir::Lambda { params, body } => self.compile_lambda(params, body, target_reg),
             Ir::App { func, args } => self.compile_generic_call(func, args, target_reg),
             Ir::Cond { branches } => self.compile_cond(branches, target_reg),
+            Ir::CondMatch { branches } => self.compile_cond_match(branches, target_reg),
             Ir::Let { bindings, body } => self.compile_let(bindings, body, target_reg),
             Ir::Def { name, value } => self.compile_def(name, value, target_reg),
             Ir::Prim { op, args } => self.compile_prim(*op, args, target_reg),
@@ -540,6 +546,26 @@ impl Compiler {
 
             self.emit(&format!("{}:", next_label));
         }
+        self.emit(&format!("{}:", end_label));
+    }
+
+    fn compile_cond_match(&mut self, branches: &[(Ir, Quoted, Ir)], target_reg: &str) {
+        let end_label = self.next_label("cond_match_end");
+
+        for (query, expected, body) in branches {
+            let next_label = self.next_label("cond_match_next");
+            self.compile_expr(query, "R1");
+            self.preserve_across("R1", |c| c.compile_quoted(expected, "R2"));
+            self.used_equal = true;
+            self.call_subroutine("cml_equal");
+            self.emit(&format!("JF R15 {}", next_label));
+            self.compile_expr(body, target_reg);
+            self.emit(&format!("JMP {}", end_label));
+            self.emit(&format!("{}:", next_label));
+        }
+        // Canonical control law: if no explicit query/result pair matches,
+        // the value is Canon 0 (). Matched bodies jump over this fallthrough.
+        self.compile_expr(&Ir::Nil, target_reg);
         self.emit(&format!("{}:", end_label));
     }
 

@@ -592,6 +592,7 @@ impl CBackend {
             Ir::Lambda { params, body } => self.compile_lambda(params, body, env),
             Ir::App { func, args } => self.compile_app(func, args, env),
             Ir::Cond { branches } => self.compile_cond(branches, env),
+            Ir::CondMatch { branches } => self.compile_cond_match(branches, env),
             Ir::Let { bindings, body } => {
                 let params = Params::Fixed(bindings.iter().map(|(n, _)| n.clone()).collect());
                 let args: Vec<Ir> = bindings.iter().map(|(_, v)| v.clone()).collect();
@@ -764,6 +765,32 @@ impl CBackend {
             } else {
                 out.push_str(&format!(
                     " else if (truthy({test_expr})) {{ _c = {body_expr}; }}"
+                ));
+            }
+        }
+        out.push_str(" else { _c = &NIL_V; } _c; })");
+        Ok(out)
+    }
+
+    fn compile_cond_match(
+        &mut self,
+        branches: &[(Ir, Quoted, Ir)],
+        env: &str,
+    ) -> Result<String, CompileError> {
+        let mut out = String::from("({ Value *_c;");
+        let mut first = true;
+        for (query, expected, body) in branches {
+            let query_expr = self.compile_expr(query, env)?;
+            let expected_expr = self.compile_quoted(expected)?;
+            let body_expr = self.compile_expr(body, env)?;
+            if first {
+                out.push_str(&format!(
+                    " if (v_equal_p({query_expr}, {expected_expr})) {{ _c = {body_expr}; }}"
+                ));
+                first = false;
+            } else {
+                out.push_str(&format!(
+                    " else if (v_equal_p({query_expr}, {expected_expr})) {{ _c = {body_expr}; }}"
                 ));
             }
         }

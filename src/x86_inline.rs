@@ -80,6 +80,14 @@ pub fn ir_cost(ir: &Ir) -> usize {
                 .map(|(t, b)| ir_cost(t) + ir_cost(b))
                 .sum::<usize>()
         }
+        Ir::CondMatch { branches } => {
+            // `expected` is inert quoted data, not executable IR. Count the
+            // branch structure plus executable query/body nodes only.
+            1 + branches
+                .iter()
+                .map(|(query, _expected, body)| ir_cost(query) + ir_cost(body))
+                .sum::<usize>()
+        }
         Ir::Let { bindings, body } => {
             1 + bindings.iter().map(|(_, v)| ir_cost(v)).sum::<usize>() + ir_cost(body)
         }
@@ -124,6 +132,18 @@ fn substitute_vars(ir: &Ir, mapping: &HashMap<String, String>) -> Ir {
             branches: branches
                 .iter()
                 .map(|(t, b)| (substitute_vars(t, mapping), substitute_vars(b, mapping)))
+                .collect(),
+        },
+        Ir::CondMatch { branches } => Ir::CondMatch {
+            branches: branches
+                .iter()
+                .map(|(query, expected, body)| {
+                    (
+                        substitute_vars(query, mapping),
+                        expected.clone(),
+                        substitute_vars(body, mapping),
+                    )
+                })
                 .collect(),
         },
         Ir::Let { bindings, body } => {
@@ -421,6 +441,18 @@ fn inline_expr(ir: &Ir, ctx: &mut InlineContext, depth: usize) -> Ir {
             branches: branches
                 .iter()
                 .map(|(t, b)| (inline_expr(t, ctx, depth), inline_expr(b, ctx, depth)))
+                .collect(),
+        },
+        Ir::CondMatch { branches } => Ir::CondMatch {
+            branches: branches
+                .iter()
+                .map(|(query, expected, body)| {
+                    (
+                        inline_expr(query, ctx, depth),
+                        expected.clone(),
+                        inline_expr(body, ctx, depth),
+                    )
+                })
                 .collect(),
         },
         Ir::Prim { op, args } => Ir::Prim {

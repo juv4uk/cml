@@ -86,9 +86,12 @@ pub enum Ir {
     Rational(i64, u64),
     String(String),
     Buffer(BufferLiteral),
-    /// `nil` / `()` -- the empty list / false value.
+    /// `nil` / `()` -- the empty list value. Control truth is not implied by
+    /// this representation; canonical current `cond` is carried by
+    /// `CondMatch` below.
     Nil,
-    /// `t` -- the canonical true atom.
+    /// Historical literal `t` compatibility value. Canonical current control
+    /// does not treat this IR node as semantic authority for truth.
     True,
     /// A variable reference, resolved by the backend's own env mechanism
     /// (an alist walk on fpga-lisp today; a stack slot or register for a
@@ -107,8 +110,19 @@ pub enum Ir {
         func: Box<Ir>,
         args: Vec<Ir>,
     },
+    /// Migration-only historical two-part `(test expression)` control.
+    /// Backends may still implement its compatibility truthiness while
+    /// upstream source migrates, but new canonical clauses use `CondMatch`.
     Cond {
         branches: Vec<(Ir, Ir)>,
+    },
+    /// Canonical my-lisp three-part control: `(query expected-result body)`.
+    ///
+    /// `expected` is quoted data, never executable IR. A backend must compare
+    /// the evaluated query result with this data explicitly; it must not
+    /// coerce the query result through historical truthiness.
+    CondMatch {
+        branches: Vec<(Ir, Quoted, Ir)>,
     },
     /// `(let ((n v) ...) body)`; `compiler.rs` itself lowers this to an
     /// immediately-applied lambda (`compile_let`) rather than treating it

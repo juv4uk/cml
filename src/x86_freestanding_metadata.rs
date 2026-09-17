@@ -154,6 +154,13 @@ fn collect_backend_symbol_names(ir: &Ir, out: &mut BTreeSet<String>) {
                 collect_backend_symbol_names(body, out);
             }
         }
+        Ir::CondMatch { branches } => {
+            for (query, expected, body) in branches {
+                collect_backend_symbol_names(query, out);
+                collect_quoted_symbol_names(expected, out);
+                collect_backend_symbol_names(body, out);
+            }
+        }
         Ir::Let { bindings, body } => {
             for (_, value) in bindings {
                 collect_backend_symbol_names(value, out);
