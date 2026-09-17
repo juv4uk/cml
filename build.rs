@@ -20,7 +20,7 @@ const TARGET_IDS: &[&str] = &["0001", "0002", "0003", "0004", "0005", "0006", "0
 /// Callable primitives and library operations whose semantic identity must survive
 /// surface spelling changes across English, Ukrainian, Sanskrit, and symbolic forms.
 const CALLABLE_IDS: &[&str] = &[
-    "0002", "0003", "0004", "0005", "0006", "0104", "1001", "1007", "1014", "1015", "1016", "1017",
+    "0002", "0003", "0004", "0005", "0006", "0104", "1001", "1002", "1007", "1014", "1015", "1016", "1017",
     "1018", "1022", "1074",
 ];
 
@@ -45,6 +45,7 @@ const BUILTIN_PROJECTIONS: &[(&str, &str)] = &[
     ("0006", "CDR"),
     ("0104", "+"),
     ("1001", "-"),
+    ("1002", "*"),
     ("1007", "mod"),
     ("1014", "<"),
     ("1015", ">"),
@@ -248,6 +249,20 @@ const OPERATIONS: &[OperationSpec] = &[
         status: "supported",
         authority_owner: "my-lisp:language-core cml:compiler-middle-end",
         provenance_witness: "lib/surface/semantic-registry.wsm tests/registry_driven_canon_callables_test.rs",
+    },
+    OperationSpec {
+        canonical_name: "*",
+        semantic_id: "1002",
+        formal_action: "primitive:exact-q-mul",
+        cml_ir_projection: "Ir::App(Builtin(\"*\"))",
+        backend_projections: &[
+            ("fpga-lisp", "unsupported"),
+            ("c", "unsupported"),
+            ("x86_freestanding", "unsupported"),
+        ],
+        status: "partial",
+        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.wsm tests/exact_q_mul_admission_test.rs",
     },
     OperationSpec {
         canonical_name: "mod",
