@@ -1,7 +1,8 @@
 # Third-party dependencies
 
-This repository remains MIT licensed. Cargo dependencies retain their own
-licenses; no dependency source is copied into this repository.
+This repository's author-owned work is released under [ВОЛЬНІСТЬ](../LICENSE).
+Cargo dependencies retain their own upstream licenses; no dependency source is
+copied into this repository.
 
 | Dependency | Version policy | License | Purpose | Source |
 |---|---:|---|---|---|
@@ -9,17 +10,16 @@ licenses; no dependency source is copied into this repository.
 | `pollster` | `1.0.1` | MIT OR Apache-2.0 | Blocking native entry point for the optional runtime | <https://crates.io/crates/pollster/1.0.1> |
 | `cudarc` | `0.19.9` | MIT OR Apache-2.0 | Optional CUDA Driver and NVRTC runtime backend | <https://crates.io/crates/cudarc/0.19.9> |
 
-The optional dependency was introduced only after checking the ecosystem
-license matrix. Both offered licenses are permissive and compatible with this
-repository's MIT license.
+These dependencies remain governed by the upstream licenses shown above. Their
+presence does not replace or redefine the repository's author license.
 
 ---
 
 # Сторонні залежності (Ukrainian)
 
-Цей репозиторій залишається під ліцензією MIT. Залежності Cargo зберігають 
-власні ліцензії; вихідний код жодної із залежностей не копіюється до цього 
-репозиторію.
+Авторська робота цього репозиторію поширюється під [ВОЛЬНІСТЮ](../LICENSE).
+Залежності Cargo зберігають власні upstream-ліцензії; вихідний код жодної із
+залежностей не копіюється до цього репозиторію.
 
 | Залежність | Політика версій | Ліцензія | Призначення | Джерело |
 |---|---:|---|---|---|
@@ -27,6 +27,5 @@ repository's MIT license.
 | `pollster` | `1.0.1` | MIT OR Apache-2.0 | Синхронна точка входу для опціонального середовища виконання | <https://crates.io/crates/pollster/1.0.1> |
 | `cudarc` | `0.19.9` | MIT OR Apache-2.0 | Опціональний бекенд для виконання через CUDA Driver та NVRTC | <https://crates.io/crates/cudarc/0.19.9> |
 
-Опціональна залежність була додана лише після перевірки матриці ліцензій 
-екосистеми. Обидві запропоновані ліцензії є дозволяючими (permissive) та 
-сумісними з ліцензією MIT цього репозиторію.
+Ці залежності й надалі регулюються зазначеними upstream-ліцензіями. Їхня
+наявність не замінює і не перевизначає авторську ліцензію репозиторію.
