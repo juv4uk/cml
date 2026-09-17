@@ -1,0 +1,33 @@
+name: Issue 78 observed-current bootstrap profile
+
+on:
+  pull_request:
+    paths:
+      - benchmarks/observed-my-lisp-bootstrap-probe/**
+      - .github/workflows/issue-78-observed-bootstrap-profile.yml
+
+jobs:
+  profile:
+    runs-on: ubuntu-24.04
+    env:
+      MY_LISP_OBSERVED_SHA: 50cf6d60b4c6803487c8e0165a49de49da76519f
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          repository: juv4uk/my-lisp
+          ref: ${{ env.MY_LISP_OBSERVED_SHA }}
+          path: observed-my-lisp
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: issue-78-observed-bootstrap
+      - name: Record revision channel
+        run: |
+          echo "upstream_channel=observed-current"
+          echo "my_lisp_observed_sha=$MY_LISP_OBSERVED_SHA"
+          git -C observed-my-lisp rev-parse HEAD
+      - name: Measure language-owned bootstrap stages
+        run: |
+          cargo run --release \
+            --manifest-path benchmarks/observed-my-lisp-bootstrap-probe/Cargo.toml
