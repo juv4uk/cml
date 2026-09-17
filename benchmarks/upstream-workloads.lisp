@@ -5,12 +5,17 @@
 ; `expected`, `expected-outcome`, or equivalent CML-authored semantic answer.
 ; The semantic verdict remains at the cited upstream witness/verdict source.
 ;
+; `upstream-channel` follows cml#84:
+;   observed-current = research/drift/performance intake from today's upstream;
+;   supported-pin    = the frozen compatibility revision CML claims to support.
+;
 ; Один top-level alist = один workload. Нові записи додаються без зміни старих.
 
 ((kind . cml-upstream-workload)
  (format-version . 1)
  (id . my-lisp-meta-registry-generator-317)
  (status . active)
+ (upstream-channel . observed-current)
  (upstream-repo . "juv4uk/my-lisp")
  (upstream-pr . 317)
  (upstream-ref . "ed1ef28928df1db0cc83f17ae993527635b6256d")
@@ -35,6 +40,7 @@
  (format-version . 1)
  (id . my-lisp-cli-cold-bootstrap-332)
  (status . profiling)
+ (upstream-channel . observed-current)
  (upstream-repo . "juv4uk/my-lisp")
  (upstream-issue . 332)
  (upstream-ref . "d299bd99b08f34d5297081a52f5baffb1efa44c7")
@@ -52,6 +58,7 @@
  (format-version . 1)
  (id . my-lisp-text-pipeline-333)
  (status . profiling)
+ (upstream-channel . observed-current)
  (upstream-repo . "juv4uk/my-lisp")
  (upstream-issue . 333)
  (upstream-ref . "d299bd99b08f34d5297081a52f5baffb1efa44c7")
