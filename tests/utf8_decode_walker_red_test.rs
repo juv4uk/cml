@@ -84,8 +84,9 @@ fn pinned_utf8_decode_onto_reaches_tail_loop_through_real_macro_frontend() {
     let expanded = MacroExpander::new()
         .process(&parsed)
         .expect("#89: CML frontend must expand the pinned Lisp-owned let* law before lowering");
-    let lowered = lower::lower_program_with_tail_calls(&expanded)
-        .expect("#89: expanded upstream utf8-decode-onto must lower without a UTF-8-specific opcode");
+    let lowered = lower::lower_program_with_tail_calls(&expanded).expect(
+        "#89: expanded upstream utf8-decode-onto must lower without a UTF-8-specific opcode",
+    );
 
     assert!(
         lowered.iter().any(contains_tail_self_call),
