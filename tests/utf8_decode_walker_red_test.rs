@@ -67,7 +67,7 @@ fn pinned_utf8_decode_onto_reaches_existing_tail_loop_ir() {
     let source = pinned_utf8_source();
     let form = utf8_decode_onto_form(&source);
     let parsed = parser::parse(&form).expect("real upstream utf8-decode-onto must parse");
-    let lowered = lower::lower_program(&parsed)
+    let lowered = lower::lower_program_with_tail_calls(&parsed)
         .expect("#89: real upstream utf8-decode-onto must lower without a UTF-8-specific opcode");
 
     assert!(
