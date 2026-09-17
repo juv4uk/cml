@@ -42,14 +42,22 @@ fn contains_tail_self_call(ir: &Ir) -> bool {
     match ir {
         Ir::TailSelfCall { .. } => true,
         Ir::Def { value, .. } => contains_tail_self_call(value),
-        Ir::Lambda { body, .. } => body.iter().any(contains_tail_self_call),
-        Ir::Cond { clauses } => clauses
+        Ir::Lambda { body, .. } => contains_tail_self_call(body),
+        Ir::Cond { branches } => branches
             .iter()
             .any(|(test, body)| contains_tail_self_call(test) || contains_tail_self_call(body)),
+        Ir::Let { bindings, body } => {
+            bindings
+                .iter()
+                .any(|(_, value)| contains_tail_self_call(value))
+                || contains_tail_self_call(body)
+        }
         Ir::App { func, args } => {
             contains_tail_self_call(func) || args.iter().any(contains_tail_self_call)
         }
-        Ir::Prim { args, .. } => args.iter().any(contains_tail_self_call),
+        Ir::Prim { args, .. } | Ir::MachinePrim { args, .. } => {
+            args.iter().any(contains_tail_self_call)
+        }
         _ => false,
     }
 }
