@@ -1,10 +1,43 @@
 #![cfg(all(target_os = "linux", target_arch = "x86_64"))]
 
 use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 
 use cml::c_backend::CBackend;
 use cml::{lower, parser};
+
+fn upstream_conformance_corpus() -> String {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("external/my-lisp/tests/fixtures/conformance.lisp");
+    fs::read_to_string(&path).unwrap_or_else(|error| {
+        panic!(
+            "#105 requires pinned upstream conformance corpus at {}: {error}",
+            path.display()
+        )
+    })
+}
+
+fn alist_string_field(line: &str, key: &str) -> Option<String> {
+    let marker = format!("({key} . \\\"");
+    let tail = line.split_once(&marker)?.1;
+    Some(tail.split_once("\\\")")?.0.to_string())
+}
+
+fn upstream_exact_rational_compiler_witness() -> (String, String) {
+    upstream_conformance_corpus()
+        .lines()
+        .filter(|line| !line.trim_start().starts_with(';'))
+        .find_map(|line| {
+            if !line.contains("(compiler-corpus . t)") {
+                return None;
+            }
+            let source = alist_string_field(line, "expr")?;
+            let expected = alist_string_field(line, "expected")?;
+            expected.contains('/').then_some((source, expected))
+        })
+        .expect("#105 requires an exact-rational compiler-corpus row in pinned my-lisp")
+}
 
 fn gcc_command() -> Command {
     let mut cmd = Command::new("gcc");
