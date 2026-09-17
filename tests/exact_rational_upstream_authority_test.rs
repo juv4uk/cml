@@ -19,20 +19,18 @@ fn upstream_conformance_corpus() -> String {
 }
 
 fn alist_string_field(row: &str, key: &str) -> Option<String> {
-    let marker = format!("({key} . \\\"");
+    let marker = format!("({key} . \"");
     let tail = row.split_once(&marker)?.1;
-    Some(tail.split_once("\\\")")?.0.to_string())
+    Some(tail.split_once("\")")?.0.to_string())
 }
 
 fn upstream_exact_rational_compiler_witness() -> (String, String) {
     upstream_conformance_corpus()
-        .split("\n\n")
-        .find_map(|row| {
-            if !row.contains("(compiler-corpus . t)") {
-                return None;
-            }
-            let source = alist_string_field(row, "expr")?;
-            let expected = alist_string_field(row, "expected")?;
+        .lines()
+        .filter(|line| line.contains("(compiler-corpus . t)"))
+        .find_map(|line| {
+            let source = alist_string_field(line, "expr")?;
+            let expected = alist_string_field(line, "expected")?;
             expected.contains('/').then_some((source, expected))
         })
         .expect("#105 requires an exact-rational compiler-corpus row in pinned my-lisp")
