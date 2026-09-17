@@ -36,9 +36,10 @@ impl std::error::Error for VerticalSliceError {}
 
 /// Select executable x86-64 machine items for the admitted first slice.
 ///
-/// Scope is intentionally small and fail-closed: one top-level fixnum or one
-/// binary Add/Sub over literal fixnums. This is enough to prove the physical
-/// Lisp-source -> CML -> x86-64 path without pretending the whole language is
+/// Scope is intentionally small and fail-closed: one top-level fixnum, one
+/// binary Add/Sub over literal fixnums, or the proven non-negative literal
+/// integer subset of semantic 1007 `mod`. This is enough to prove physical
+/// Lisp-source -> CML -> x86-64 paths without pretending the whole language is
 /// already self-hosted.
 pub fn select_arithmetic_slice(program: &[Ir]) -> Result<Vec<MachineItem>, VerticalSliceError> {
     if program.is_empty() {
@@ -137,6 +138,77 @@ pub fn select_arithmetic_slice(program: &[Ir]) -> Result<Vec<MachineItem>, Verti
             items.push(MachineItem::Inst(MachineInst::MovRegReg {
                 dst: X86Reg::Rax,
                 src: X86Reg::Rcx,
+                provenance: prov.clone(),
+            }));
+        }
+        Ir::App { func, args } if matches!(func.as_ref(), Ir::Builtin(name) if name == "mod") => {
+            if args.len() != 2 {
+                return Err(VerticalSliceError::InvalidArity {
+                    expected: 2,
+                    actual: args.len(),
+                });
+            }
+
+            let literal = |ir: &Ir| match ir {
+                Ir::Int(n) => Ok(*n),
+                _ => Err(VerticalSliceError::UnsupportedIrVariant(
+                    "mod specialization requires literal exact integers",
+                )),
+            };
+            let numerator = literal(&args[0])?;
+            let divisor = literal(&args[1])?;
+
+            if numerator < 0 || divisor <= 0 {
+                return Err(VerticalSliceError::UnsupportedIrVariant(
+                    "mod specialization requires numerator >= 0 and divisor > 0",
+                ));
+            }
+
+            // Prove both operands are representable target fixnums before using
+            // the unsigned hardware divide mechanism. Since remainder < divisor,
+            // this also proves the runtime remainder is representable.
+            wsm_os_target::encode_fixnum(numerator)
+                .ok_or(VerticalSliceError::FixnumOutOfRange(numerator))?;
+            wsm_os_target::encode_fixnum(divisor)
+                .ok_or(VerticalSliceError::FixnumOutOfRange(divisor))?;
+
+            // x86-64 DIV consumes RDX:RAX and writes quotient to RAX, remainder
+            // to RDX. Keep the machine instruction semantics-neutral: the Lisp
+            // identity 1007 stays upstream; this target instruction carries no
+            // semantic ID and is selected only after the bounded-domain proof.
+            items.push(MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rax,
+                imm: numerator as u64,
+                provenance: prov.clone(),
+            }));
+            items.push(MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rcx,
+                imm: divisor as u64,
+                provenance: prov.clone(),
+            }));
+            items.push(MachineItem::Inst(MachineInst::MovImm64 {
+                dst: X86Reg::Rdx,
+                imm: 0,
+                provenance: prov.clone(),
+            }));
+            items.push(MachineItem::Inst(MachineInst::DivReg {
+                divisor: X86Reg::Rcx,
+                provenance: prov.clone(),
+            }));
+            items.push(MachineItem::Inst(MachineInst::ShlImm {
+                reg: X86Reg::Rdx,
+                imm: 3,
+                provenance: prov.clone(),
+            }));
+            items.push(MachineItem::Inst(MachineInst::AluImm8 {
+                op: AluOp::Or,
+                dst: X86Reg::Rdx,
+                imm: wsm_os_target::Tag::Fixnum as i8,
+                provenance: prov.clone(),
+            }));
+            items.push(MachineItem::Inst(MachineInst::MovRegReg {
+                dst: X86Reg::Rax,
+                src: X86Reg::Rdx,
                 provenance: prov.clone(),
             }));
         }
