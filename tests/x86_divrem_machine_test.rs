@@ -9,10 +9,7 @@ fn assemble_gnu_as(text: &str) -> Vec<u8> {
         .duration_since(UNIX_EPOCH)
         .expect("system clock")
         .as_nanos();
-    let base = std::env::temp_dir().join(format!(
-        "cml-divq-test-{}-{nonce}",
-        std::process::id()
-    ));
+    let base = std::env::temp_dir().join(format!("cml-divq-test-{}-{nonce}", std::process::id()));
     let s_path = base.with_extension("s");
     let o_path = base.with_extension("o");
     let bin_path = base.with_extension("bin");
