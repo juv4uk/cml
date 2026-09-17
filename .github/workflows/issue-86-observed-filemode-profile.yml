@@ -1,0 +1,37 @@
+name: Issue 86 observed my-lisp file-mode profile
+
+on:
+  pull_request:
+    paths:
+      - benchmarks/observed-my-lisp-filemode-probe/**
+      - .github/workflows/issue-86-observed-filemode-profile.yml
+
+jobs:
+  profile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      MY_LISP_OBSERVED_SHA: ed1ef28928df1db0cc83f17ae993527635b6256d
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          repository: juv4uk/my-lisp
+          ref: ${{ env.MY_LISP_OBSERVED_SHA }}
+          path: observed-my-lisp
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Record exact upstream experiment revision
+        run: |
+          echo "upstream_channel=pr-317-head"
+          echo "my_lisp_observed_sha=$MY_LISP_OBSERVED_SHA"
+          git -C observed-my-lisp rev-parse HEAD
+      - name: Measure debug file-mode stages
+        run: |
+          echo '--- DEBUG ---'
+          cargo run \
+            --manifest-path benchmarks/observed-my-lisp-filemode-probe/Cargo.toml
+      - name: Measure release file-mode stages
+        run: |
+          echo '--- RELEASE ---'
+          cargo run --release \
+            --manifest-path benchmarks/observed-my-lisp-filemode-probe/Cargo.toml
