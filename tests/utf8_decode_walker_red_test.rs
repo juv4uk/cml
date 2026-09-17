@@ -5,8 +5,7 @@ use cml::ir::Ir;
 use cml::{lower, parser};
 
 fn pinned_utf8_source() -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("external/my-lisp/lib/utf8.lisp");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("external/my-lisp/lib/utf8.lisp");
     fs::read_to_string(&path).unwrap_or_else(|error| {
         panic!(
             "#89 requires pinned upstream UTF-8 law at {}: {error}",
