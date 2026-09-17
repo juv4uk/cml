@@ -49,9 +49,12 @@ fn canonical_and_migration_cond_clauses_cannot_be_mixed() {
           (t (quote historical)))
     "#;
     let expressions = parser::parse(source).unwrap();
-    let error = lower::lower_program(&expressions).expect_err("mixed control models must fail closed");
+    let error =
+        lower::lower_program(&expressions).expect_err("mixed control models must fail closed");
     assert!(
-        error.detail.contains("cannot mix canonical three-part clauses"),
+        error
+            .detail
+            .contains("cannot mix canonical three-part clauses"),
         "unexpected lowering error: {error}"
     );
 }
