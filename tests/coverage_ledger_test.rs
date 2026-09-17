@@ -56,3 +56,25 @@ fn summary_partitions_the_denominator() {
         summary.semantic_identities
     );
 }
+
+#[test]
+fn lisp_projection_is_deterministic_evidence_not_a_percentage_claim() {
+    let ledger = CoverageLedger::pinned_submodule();
+    let first = ledger.to_lisp();
+    let second = ledger.to_lisp();
+
+    assert_eq!(first, second);
+    assert!(first.starts_with("(cml-coverage/1\n"));
+    assert!(first.contains("  (upstream-channel pinned-submodule)\n"));
+    assert!(first.contains("  (registry-fnv1a64 "));
+    assert!(first.contains("  (semantic-identities "));
+    assert!(first.contains("  (source-admitted "));
+    assert!(first.contains("  (not-yet-admitted "));
+    assert!(first.contains("  (rows\n"));
+    assert!(first.contains("source-admitted"));
+    assert!(first.contains("not-yet-admitted"));
+    assert!(
+        !first.contains('%'),
+        "first-slice ledger must report exact counts, not a rhetoric percentage"
+    );
+}
