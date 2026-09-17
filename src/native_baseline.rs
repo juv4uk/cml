@@ -463,9 +463,7 @@ pub unsafe fn execute_native_bytes(bytes: &[u8]) -> u64 {
 }
 
 fn upstream_lisp_witness_ref(mylisp_pin: &str) -> String {
-    format!(
-        "juv4uk/my-lisp@{mylisp_pin}:tests/fixtures/conformance.lisp"
-    )
+    format!("juv4uk/my-lisp@{mylisp_pin}:tests/fixtures/conformance.lisp")
 }
 
 fn scalar_reference() -> u64 {
@@ -782,9 +780,7 @@ mod tests {
                 src: X86Reg::Rcx,
                 provenance: prov.clone(),
             }),
-            MachineItem::Inst(MachineInst::Ret {
-                provenance: prov,
-            }),
+            MachineItem::Inst(MachineInst::Ret { provenance: prov }),
         ];
 
         let metrics = StructuralMetrics::from_machine_items(&items);
