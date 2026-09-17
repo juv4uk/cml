@@ -20,7 +20,7 @@ const TARGET_IDS: &[&str] = &["0001", "0002", "0003", "0004", "0005", "0006", "0
 /// Callable primitives and library operations whose semantic identity must survive
 /// surface spelling changes across English, Ukrainian, Sanskrit, and symbolic forms.
 const CALLABLE_IDS: &[&str] = &[
-    "0002", "0003", "0004", "0005", "0006", "0104", "1001", "1022", "1074",
+    "0002", "0003", "0004", "0005", "0006", "0104", "1001", "1017", "1022", "1074",
 ];
 
 /// Retired semantic IDs that must NEVER be active or recycled (e.g. 1153 for former RDTSC attribution).
@@ -44,6 +44,7 @@ const BUILTIN_PROJECTIONS: &[(&str, &str)] = &[
     ("0006", "CDR"),
     ("0104", "+"),
     ("1001", "-"),
+    ("1017", "<="),
     ("1022", "EQUAL?"),
     ("1074", "NUMERIC-BUFFER-MAP"),
 ];
@@ -241,6 +242,20 @@ const OPERATIONS: &[OperationSpec] = &[
         status: "supported",
         authority_owner: "my-lisp:language-core cml:compiler-middle-end",
         provenance_witness: "lib/surface/semantic-registry.wsm tests/registry_driven_canon_callables_test.rs",
+    },
+    OperationSpec {
+        canonical_name: "<=",
+        semantic_id: "1017",
+        formal_action: "primitive:exact-q-less-equal",
+        cml_ir_projection: "Ir::App(Builtin(\"<=\"))",
+        backend_projections: &[
+            ("fpga-lisp", "unsupported"),
+            ("c", "unsupported"),
+            ("x86_freestanding", "unsupported"),
+        ],
+        status: "partial",
+        authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
+        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs",
     },
     OperationSpec {
         canonical_name: "equal?",
