@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: test/101-divq-machine-inst-red
+          submodules: true
       - name: Apply minimal DivReg machine substrate
         run: |
           python3 - <<'PY'
