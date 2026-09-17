@@ -1,0 +1,34 @@
+name: Issue 90 apply CondMatch phase-A patch
+
+on:
+  push:
+    branches:
+      - test/90-explicit-cond-red
+    paths:
+      - scripts/issue-90-apply-condmatch-phase-a.py
+      - .github/workflows/issue-90-apply-condmatch-phase-a.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: test/90-explicit-cond-red
+          fetch-depth: 0
+      - name: Apply exact source replacements
+        run: python3 scripts/issue-90-apply-condmatch-phase-a.py
+      - name: Format patched Rust
+        run: cargo fmt -p cml
+      - name: Commit exact patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/c_backend.rs src/compiler.rs src/x86_freestanding.rs src/x86_freestanding_metadata.rs
+          git diff --cached --check
+          git commit -m "feat(#90): route explicit cond without truthiness"
+          git push origin HEAD:test/90-explicit-cond-red
