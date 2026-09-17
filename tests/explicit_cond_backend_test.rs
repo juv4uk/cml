@@ -72,7 +72,7 @@ fn x86_freestanding_rejects_canonical_cond_until_private_matcher_exists() {
         .expect_err("x86 must fail closed instead of falling back to historical truthiness");
     assert_eq!(
         error.to_string(),
-        "unsupported IR variant: CondMatch (explicit result matcher not yet implemented)"
+        "unsupported IR in x86_64-freestanding backend: CondMatch (explicit result matcher not yet implemented)"
     );
 }
 
