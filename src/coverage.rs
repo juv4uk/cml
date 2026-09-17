@@ -79,4 +79,65 @@ impl CoverageLedger {
             not_yet_admitted,
         }
     }
+
+    pub fn to_lisp(&self) -> String {
+        let summary = self.summary();
+        let mut out = String::new();
+
+        out.push_str("(cml-coverage/1\n");
+        out.push_str("  (upstream-channel ");
+        out.push_str(self.upstream_channel);
+        out.push_str(")\n  (registry-fnv1a64 ");
+        push_lisp_string(&mut out, &format!("{:016x}", self.registry_digest_fnv1a64));
+        out.push_str(")\n  (semantic-identities ");
+        out.push_str(&summary.semantic_identities.to_string());
+        out.push_str(")\n  (source-admitted ");
+        out.push_str(&summary.source_admitted.to_string());
+        out.push_str(")\n  (not-yet-admitted ");
+        out.push_str(&summary.not_yet_admitted.to_string());
+        out.push_str(")\n  (rows\n");
+
+        for row in &self.rows {
+            out.push_str("    (");
+            push_lisp_string(&mut out, row.semantic_id);
+            match row.admission {
+                AdmissionState::SourceAdmitted => {
+                    out.push_str(" source-admitted ");
+                    push_lisp_string(
+                        &mut out,
+                        row.operation_status
+                            .expect("source-admitted row must carry operation status"),
+                    );
+                    out.push(' ');
+                    push_lisp_string(
+                        &mut out,
+                        row.evidence
+                            .expect("source-admitted row must carry provenance evidence"),
+                    );
+                }
+                AdmissionState::NotYetAdmitted => {
+                    out.push_str(" not-yet-admitted");
+                }
+            }
+            out.push_str(")\n");
+        }
+
+        out.push_str("  ))\n");
+        out
+    }
+}
+
+fn push_lisp_string(out: &mut String, value: &str) {
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            other => out.push(other),
+        }
+    }
+    out.push('"');
 }
