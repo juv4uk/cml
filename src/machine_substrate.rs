@@ -49,6 +49,9 @@ const SUBSTRATE_PROVENANCE: Provenance = Provenance::new(None, "lisp-authored as
 pub fn inst_to_sexp(inst: &MachineInst) -> String {
     match inst {
         MachineInst::Rdtsc { .. } => "(x86 rdtsc)".to_string(),
+        MachineInst::DivReg { divisor, .. } => {
+            format!("(x86 div-reg {})", divisor.raw_name())
+        }
         MachineInst::ShlImm { reg, imm, .. } => {
             format!("(x86 shl-imm {} {imm})", reg.raw_name())
         }
@@ -310,6 +313,13 @@ fn inst_from_elements(op: &str, args: &[Expr]) -> Result<MachineInst, MachineSub
         "rdtsc" => {
             expect_arity(args, 0, "(x86 rdtsc)")?;
             Ok(MachineInst::Rdtsc {
+                provenance: SUBSTRATE_PROVENANCE,
+            })
+        }
+        "div-reg" => {
+            expect_arity(args, 1, "(x86 div-reg <divisor>)")?;
+            Ok(MachineInst::DivReg {
+                divisor: parse_reg(&args[0])?,
                 provenance: SUBSTRATE_PROVENANCE,
             })
         }
