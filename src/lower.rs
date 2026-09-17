@@ -122,8 +122,8 @@ pub fn lower_program_with_tail_calls(exprs: &[Expr]) -> Result<Vec<Ir>, LowerErr
 /// whenever it appears in tail position within `ir`.
 ///
 /// "Tail position" here means: the node is the last value-producing
-/// expression — in particular, it is the result of a `Cond` branch, a `Let`
-/// body, or the lambda body itself.  Sub-expressions of `Prim` and `App`
+/// expression — in particular, it is the result of a control branch, a `Let`
+/// body, or the lambda body itself. Sub-expressions of `Prim` and `App`
 /// argument lists are *not* in tail position.
 fn mark_tail_position(ir: &Ir, self_name: &str) -> Ir {
     match ir {
@@ -136,11 +136,25 @@ fn mark_tail_position(ir: &Ir, self_name: &str) -> Ir {
             }
             ir.clone()
         }
-        // Tail position propagates through the branches of Cond.
+        // Tail position propagates through historical two-part Cond bodies.
         Ir::Cond { branches } => Ir::Cond {
             branches: branches
                 .iter()
                 .map(|(test, body)| (test.clone(), mark_tail_position(body, self_name)))
+                .collect(),
+        },
+        // Canonical three-part control keeps query/expected untouched while
+        // propagating tail position into the selected body only.
+        Ir::CondMatch { branches } => Ir::CondMatch {
+            branches: branches
+                .iter()
+                .map(|(query, expected, body)| {
+                    (
+                        query.clone(),
+                        expected.clone(),
+                        mark_tail_position(body, self_name),
+                    )
+                })
                 .collect(),
         },
         // Tail position propagates through the body of Let.
@@ -176,6 +190,18 @@ fn reify_primitive_calls(ir: Ir) -> Ir {
             branches: branches
                 .into_iter()
                 .map(|(test, body)| (reify_primitive_calls(test), reify_primitive_calls(body)))
+                .collect(),
+        },
+        Ir::CondMatch { branches } => Ir::CondMatch {
+            branches: branches
+                .into_iter()
+                .map(|(query, expected, body)| {
+                    (
+                        reify_primitive_calls(query),
+                        expected,
+                        reify_primitive_calls(body),
+                    )
+                })
                 .collect(),
         },
         Ir::Let { bindings, body } => Ir::Let {
@@ -392,24 +418,69 @@ fn lower_generic_call(func_expr: &Expr, args: &[Expr], env: &Env) -> Result<Ir, 
 }
 
 fn lower_cond(branches: &[Expr], env: &Env) -> Result<Ir, LowerError> {
-    let mut lowered = Vec::with_capacity(branches.len());
-    for branch in branches {
-        let Expr::List(pair) = branch else {
-            return Err(LowerError::invalid_form(
-                "malformed cond branch (matches compiler.rs's compile_cond)",
-            ));
-        };
-        let [test, body] = pair.as_slice() else {
-            return Err(LowerError::invalid_form(
-                "malformed cond branch (matches compiler.rs's compile_cond)",
-            ));
-        };
-        lowered.push((
-            lower_expr_admitted(test, env)?,
-            lower_expr_admitted(body, env)?,
-        ));
+    enum CondShape {
+        Compatibility(Vec<(Ir, Ir)>),
+        Canonical(Vec<(Ir, Quoted, Ir)>),
     }
-    Ok(Ir::Cond { branches: lowered })
+
+    let mut shape: Option<CondShape> = None;
+    for branch in branches {
+        let Expr::List(parts) = branch else {
+            return Err(LowerError::invalid_form(
+                "cond expects list clauses",
+            ));
+        };
+
+        match (shape.take(), parts.as_slice()) {
+            (None, [query, expected, body]) => {
+                shape = Some(CondShape::Canonical(vec![(
+                    lower_expr_admitted(query, env)?,
+                    lower_quoted(expected)?,
+                    lower_expr_admitted(body, env)?,
+                )]));
+            }
+            (Some(CondShape::Canonical(mut lowered)), [query, expected, body]) => {
+                lowered.push((
+                    lower_expr_admitted(query, env)?,
+                    lower_quoted(expected)?,
+                    lower_expr_admitted(body, env)?,
+                ));
+                shape = Some(CondShape::Canonical(lowered));
+            }
+            (None, [test, body]) => {
+                shape = Some(CondShape::Compatibility(vec![(
+                    lower_expr_admitted(test, env)?,
+                    lower_expr_admitted(body, env)?,
+                )]));
+            }
+            (Some(CondShape::Compatibility(mut lowered)), [test, body]) => {
+                lowered.push((
+                    lower_expr_admitted(test, env)?,
+                    lower_expr_admitted(body, env)?,
+                ));
+                shape = Some(CondShape::Compatibility(lowered));
+            }
+            (Some(existing), [_, _, _] | [_, _]) => {
+                let _ = existing;
+                return Err(LowerError::invalid_form(
+                    "cond cannot mix canonical three-part clauses with migration-only two-part clauses",
+                ));
+            }
+            (_, _) => {
+                return Err(LowerError::invalid_form(
+                    "cond expects canonical (query expected-result expression) clauses or migration-only (test expression) clauses",
+                ));
+            }
+        }
+    }
+
+    match shape {
+        Some(CondShape::Canonical(branches)) => Ok(Ir::CondMatch { branches }),
+        Some(CondShape::Compatibility(branches)) => Ok(Ir::Cond { branches }),
+        None => Ok(Ir::CondMatch {
+            branches: Vec::new(),
+        }),
+    }
 }
 
 fn lower_lambda(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
