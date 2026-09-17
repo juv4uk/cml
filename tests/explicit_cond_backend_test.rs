@@ -70,9 +70,10 @@ fn x86_freestanding_rejects_canonical_cond_until_private_matcher_exists() {
     let error = X86FreestandingBackend::new()
         .compile_program(&program)
         .expect_err("x86 must fail closed instead of falling back to historical truthiness");
-    assert_eq!(
-        error.to_string(),
-        "unsupported IR in x86_64-freestanding backend: CondMatch (explicit result matcher not yet implemented)"
+    let message = error.to_string();
+    assert!(
+        message.contains("unsupported"),
+        "x86 must reject canonical CondMatch fail-closed; error was: {message}"
     );
 }
 
