@@ -101,10 +101,9 @@ fn upstream_bounded_mod_reaches_native_x86_through_semantics_neutral_divreg() {
         .expect("#111 must execute native ELF witness");
     let _ = fs::remove_file(&path);
 
-    assert!(
-        output.status.success(),
-        "native mod witness failed: {output:?}"
-    );
+    // Vertical-slice executables deliberately mirror the Lisp fixnum into the
+    // process exit code, so a correct non-zero result is not `status.success()`.
+    // The semantic verdict is the exact tagged word written to stdout.
     assert_eq!(
         output.stdout.len(),
         8,
