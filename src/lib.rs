@@ -42,3 +42,4 @@ pub mod x86_isel;
 pub mod x86_lir;
 pub mod x86_opt;
 pub mod x86_regalloc;
+pub mod witness_bridge;
