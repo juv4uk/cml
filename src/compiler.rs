@@ -98,6 +98,10 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
             validate_ir(body)
         }
         Ir::Def { value, .. } => validate_ir(value),
+        Ir::Prim {
+            op: PrimOp::ExactQLe,
+            ..
+        } => Err(CompileError::UnsupportedVariant("ExactQLe")),
         Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
         Ir::MachinePrim { .. } => Err(CompileError::UnsupportedVariant("MachinePrim")),
         Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
