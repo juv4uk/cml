@@ -17,9 +17,14 @@ impl fmt::Display for WitnessBridgeError {
         match self {
             Self::Io(message) => write!(formatter, "witness bridge I/O error: {message}"),
             Self::Link(message) => write!(formatter, "witness bridge link error: {message}"),
-            Self::Execute(message) => write!(formatter, "witness bridge execution error: {message}"),
+            Self::Execute(message) => {
+                write!(formatter, "witness bridge execution error: {message}")
+            }
             Self::InvalidOutput(message) => {
-                write!(formatter, "witness bridge invalid execution output: {message}")
+                write!(
+                    formatter,
+                    "witness bridge invalid execution output: {message}"
+                )
             }
             Self::UnsupportedActual(word) => {
                 write!(
@@ -33,9 +38,7 @@ impl fmt::Display for WitnessBridgeError {
 
 impl std::error::Error for WitnessBridgeError {}
 
-pub fn canonical_actual_from_word(
-    word: wsm_os_target::Word,
-) -> Result<String, WitnessBridgeError> {
+pub fn canonical_actual_from_word(word: wsm_os_target::Word) -> Result<String, WitnessBridgeError> {
     let rendered = if word == wsm_os_target::NIL {
         "()".to_string()
     } else if word == wsm_os_target::CANONICAL_T {
@@ -54,8 +57,7 @@ pub fn execute_x86_actual(assembly: &str) -> Result<String, WitnessBridgeError> 
         .duration_since(UNIX_EPOCH)
         .map_err(|error| WitnessBridgeError::Io(error.to_string()))?
         .as_nanos();
-    let base =
-        std::env::temp_dir().join(format!("cml-witness-{}-{nonce}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("cml-witness-{}-{nonce}", std::process::id()));
     let source = base.with_extension("s");
     let launcher = base.with_extension("c");
     let executable = base.with_extension("bin");
@@ -67,8 +69,8 @@ pub fn execute_x86_actual(assembly: &str) -> Result<String, WitnessBridgeError> 
     )
     .map_err(|error| WitnessBridgeError::Io(error.to_string()))?;
 
-    let nucleus = crate::x86_freestanding::resolve_nucleus_asm_path()
-        .map_err(WitnessBridgeError::Link)?;
+    let nucleus =
+        crate::x86_freestanding::resolve_nucleus_asm_path().map_err(WitnessBridgeError::Link)?;
     let linked = Command::new("cc")
         .arg(&launcher)
         .arg(&source)
