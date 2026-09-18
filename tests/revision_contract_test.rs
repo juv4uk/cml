@@ -37,8 +37,8 @@ fn head(path: &Path) -> String {
 // boundary honest without owning a second my-lisp SHA constant.
 #[test]
 fn checked_out_dependencies_match_the_compatibility_contract() {
-    let compatibility =
-        fs::read_to_string("compatibility.lisp").expect("compatibility contract should be readable");
+    let compatibility = fs::read_to_string("compatibility.lisp")
+        .expect("compatibility contract should be readable");
 
     assert!(
         compatibility.contains("(supported-revision-channel . supported-pin)"),
@@ -99,8 +99,8 @@ fn compatibility_my_contract_version_matches_observed_current_language_contract(
     let minor = extract_field(&language_contract, "minor")
         .expect("language contract should have a (minor . N) field");
 
-    let compatibility =
-        fs::read_to_string("compatibility.lisp").expect("compatibility contract should be readable");
+    let compatibility = fs::read_to_string("compatibility.lisp")
+        .expect("compatibility contract should be readable");
     let observed = format!("(observed-upstream-contract . ({major} {minor}))");
     assert!(
         compatibility.contains(&observed),

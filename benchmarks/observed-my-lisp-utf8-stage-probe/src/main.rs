@@ -76,7 +76,7 @@ fn main() {
 
     println!(
         "((kind . cml-observed-my-lisp-utf8-stage-profile) \
-         (upstream-channel . pr-317-head) \
+         (upstream-channel . historical-workload-snapshot) \
          (my-lisp-sha . \"{observed_sha}\") \
          (file . \"{path}\") \
          (file-bytes . {file_bytes}) \
