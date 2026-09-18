@@ -1,4 +1,4 @@
-use cml::build::{compile_and_run, Observation};
+use cml::build::{Observation, compile_and_run};
 
 #[test]
 fn top_level_def_shadows_registry_callable_in_later_forms() {
