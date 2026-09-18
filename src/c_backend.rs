@@ -643,6 +643,7 @@ impl CBackend {
                 self.compile_expr(&args[1], env)?
             )),
             PrimOp::ExactQLe => Err(CompileError::UnsupportedVariant("ExactQLe primitive")),
+            PrimOp::ExactQGe => Err(CompileError::UnsupportedVariant("ExactQGe primitive")),
         }
     }
 
