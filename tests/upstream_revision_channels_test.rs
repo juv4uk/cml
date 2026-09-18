@@ -216,4 +216,12 @@ fn historical_utf8_profile_snapshot_does_not_masquerade_as_observed_current() {
         probe.contains("(upstream-channel . historical-workload-snapshot)"),
         "#84 #79 probe record must classify its fixed revision as historical workload snapshot"
     );
+    assert!(
+        probe.contains("MY_LISP_HISTORICAL_WORKLOAD_SHA"),
+        "#84 #79 probe must emit the exact historical workload SHA supplied by its workflow"
+    );
+    assert!(
+        probe.contains("(kind . cml-historical-my-lisp-utf8-stage-profile)"),
+        "#84 #79 probe record kind must not masquerade as active observed-current evidence"
+    );
 }
