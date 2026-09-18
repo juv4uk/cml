@@ -324,7 +324,7 @@ const OPERATIONS: &[OperationSpec] = &[
         canonical_name: "<=",
         semantic_id: "1017",
         formal_action: "primitive:exact-q-less-equal",
-        cml_ir_projection: "Ir::App(Builtin(\"<=\"))",
+        cml_ir_projection: "Ir::Prim(PrimOp::ExactQLe)",
         backend_projections: &[
             ("fpga-lisp", "unsupported"),
             ("c", "unsupported"),

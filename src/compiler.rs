@@ -98,6 +98,10 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
             validate_ir(body)
         }
         Ir::Def { value, .. } => validate_ir(value),
+        Ir::Prim {
+            op: PrimOp::ExactQLe,
+            ..
+        } => Err(CompileError::UnsupportedVariant("ExactQLe")),
         Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
         Ir::MachinePrim { .. } => Err(CompileError::UnsupportedVariant("MachinePrim")),
         Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
@@ -358,6 +362,7 @@ impl Compiler {
                 self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
                 self.emit(&format!("SUB {} R1 R2", target_reg));
             }
+            PrimOp::ExactQLe => unreachable!("ExactQLe rejected by validate_ir"),
         }
     }
 

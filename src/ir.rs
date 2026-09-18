@@ -50,6 +50,9 @@ pub enum PrimOp {
     Eq,
     Atom,
     EqualP,
+    /// Exact-Q numeric <= (semantic 1017), distinct from atom identity Eq.
+    /// Backends must preserve the upstream exact numeric 0/1 result domain.
+    ExactQLe,
 }
 
 /// Bounded machine-level primitives for direct physical machine access.
