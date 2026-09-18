@@ -362,6 +362,7 @@ impl Compiler {
                 self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
                 self.emit(&format!("SUB {} R1 R2", target_reg));
             }
+            PrimOp::ExactQLe => unreachable!("ExactQLe rejected by validate_ir"),
         }
     }
 
