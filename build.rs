@@ -282,15 +282,15 @@ const OPERATIONS: &[OperationSpec] = &[
         canonical_name: "<",
         semantic_id: "1014",
         formal_action: "primitive:exact-q-less-than",
-        cml_ir_projection: "Ir::App(Builtin(\"<\"))",
+        cml_ir_projection: "Ir::Prim(PrimOp::ExactQLt)",
         backend_projections: &[
             ("fpga-lisp", "unsupported"),
-            ("c", "unsupported"),
+            ("c", "v_exact_q_lt/builtin_exact_q_lt"),
             ("x86_freestanding", "unsupported"),
         ],
         status: "partial",
         authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
-        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs",
+        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs tests/exact_q_lt_encoder_consumer_test.rs",
     },
     OperationSpec {
         canonical_name: ">",
