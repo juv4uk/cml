@@ -22,8 +22,9 @@ fn test_prov() -> Provenance {
     Provenance::new(None, "lisp_encoder_bridge_test")
 }
 
-/// The `external/my-lisp` submodule's checked-out tree — the single pin
-/// (SUBMODULE-DEPENDENCY-MODEL-2026-09-16), not a sibling checkout guess.
+/// Upstream channel: supported-pin.
+/// The `external/my-lisp` gitlink owns this encoder authority; the
+/// observed-current sibling is not an encoder compatibility denominator.
 fn submodule_repo(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("external")
@@ -146,10 +147,9 @@ unsafe fn execute_bytes_as_fn(bytes: &[u8]) -> u64 {
     }
 }
 
-/// The submodule gitlink itself is the only pin (SUBMODULE-DEPENDENCY-MODEL-
-/// 2026-09-16) — there is no separate SHA constant to compare it against
-/// anymore, so this just proves the contract dependency is actually checked
-/// out and not an empty/uninitialized submodule directory.
+/// The supported-pin gitlink is the encoder compatibility dependency.
+/// There is no second encoder-authority SHA constant: this test only proves
+/// that the supported dependency is initialized rather than an empty submodule.
 #[test]
 fn test_external_my_lisp_submodule_is_checked_out() {
     let encoder_path = submodule_repo("my-lisp").join("lib/machine/encoding/x86-64.lisp");
