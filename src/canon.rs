@@ -112,6 +112,7 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
                     PrimOp::Add => "0104",
                     PrimOp::Sub => "1001",
                     PrimOp::EqualP => "1022",
+                    PrimOp::ExactQLe => "1017",
                 };
                 ids.insert(id);
                 for arg in args {
