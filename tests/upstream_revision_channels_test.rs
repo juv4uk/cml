@@ -177,3 +177,43 @@ fn observed_current_exposes_new_math_witness_without_promoting_supported_pin() {
         "#84 observed-current must expose the authoritative exact-rational sum witness"
     );
 }
+
+#[test]
+fn historical_reader_contract_workflow_is_not_an_active_my_lisp_channel() {
+    let workflow = fs::read_to_string(".github/workflows/reader-contract-4.yml")
+        .expect("Reader Contract 4 workflow should be readable");
+
+    assert!(
+        workflow.contains("submodules: true"),
+        "#84 Reader Contract 4 must initialize the supported-pin submodule required by Cargo"
+    );
+    assert!(
+        !workflow.contains("repository: juv4uk/my-lisp"),
+        "#84 Reader Contract 4 historical evidence must not create a third active my-lisp checkout"
+    );
+    assert!(
+        !workflow.contains("compatibility_my_contract_version_matches_language_contract_my"),
+        "#84 historical Reader Contract 4 workflow must not drive active revision-channel compatibility"
+    );
+}
+
+#[test]
+fn historical_utf8_profile_snapshot_does_not_masquerade_as_observed_current() {
+    let workflow = fs::read_to_string(".github/workflows/issue-79-observed-utf8-stage-profile.yml")
+        .expect("issue-79 profile workflow should be readable");
+    let probe = fs::read_to_string("benchmarks/observed-my-lisp-utf8-stage-probe/src/main.rs")
+        .expect("issue-79 probe should be readable");
+
+    assert!(
+        workflow.contains("MY_LISP_HISTORICAL_WORKLOAD_SHA"),
+        "#84 fixed #79 benchmark revision must be classified as historical workload evidence"
+    );
+    assert!(
+        workflow.contains("upstream_channel=historical-workload-snapshot"),
+        "#84 #79 workflow output must not call a fixed historical SHA observed-current"
+    );
+    assert!(
+        probe.contains("(upstream-channel . historical-workload-snapshot)"),
+        "#84 #79 probe record must classify its fixed revision as historical workload snapshot"
+    );
+}
