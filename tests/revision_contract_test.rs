@@ -2,7 +2,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const MY_LISP_SHA: &str = "5a662c0cd2372d32adc3ad7b44de043be7050026";
 const FPGA_LISP_SHA: &str = "0351a6d535504e0790f0f4e115b69518605b142e";
 
 fn sibling(name: &str) -> PathBuf {
@@ -33,65 +32,34 @@ fn head(path: &Path) -> String {
         .to_owned()
 }
 
-// This test has two genuinely different jobs that used to be muddled
-// together as one hard pass/fail:
-//
-// 1. Self-consistency: do the SHAs this file's own constants name match
-//    what compatibility.my (the actual contract) declares? A real bug --
-//    catches "updated one but forgot the other" -- kept as a hard
-//    assertion below.
-// 2. Is the checked-out sibling repo still sitting exactly at that pinned
-//    commit? In a live multi-agent ecosystem where my-lisp/fpga-lisp
-//    advance independently and constantly (see docs/abi.md's revision-
-//    drift history -- every single run of this suite for most of this
-//    project's active-development period hit this), that's routine, not
-//    a defect: it says time has passed since the pin was last bumped,
-//    which conformance_test.rs already re-verifies dynamically against
-//    whatever's actually checked out. Hard-failing on it made this test
-//    fail on almost every run regardless of whether anything was
-//    actually broken -- pure noise pointing at a signal
-//    (checked_out_dependencies_match_the_compatibility_contract's own
-//    real job, #1) that a different test already covers better. Demoted
-//    to an informational eprintln so it stays visible without being
-//    load-bearing.
-//
-// The ISA-contract content checks (#3 below) are neither of these: they
-// read whatever fpga-lisp commit is actually checked out right now and
-// verify its *content* still honors the axioms cml depends on,
-// independent of which exact SHA that happens to be -- a real,
-// non-noisy check, unchanged.
+// my-lisp revision identity is owned by upstream-revisions.lisp and checked by
+// upstream_revision_channels_test.rs. This test keeps the language/ISA contract
+// boundary honest without owning a second my-lisp SHA constant.
 #[test]
 fn checked_out_dependencies_match_the_compatibility_contract() {
-    let compat_path = if std::path::Path::new("compatibility.lisp").exists() {
-        "compatibility.lisp"
-    } else {
-        "compatibility.my"
-    };
     let compatibility =
-        fs::read_to_string(compat_path).expect("compatibility contract should be readable");
+        fs::read_to_string("compatibility.lisp").expect("compatibility contract should be readable");
+
     assert!(
-        compatibility.contains(&format!("(tested-sha . \"{MY_LISP_SHA}\")")),
-        "this file's MY_LISP_SHA constant doesn't match compatibility contract -- update one or the other"
+        compatibility.contains("(supported-revision-channel . supported-pin)"),
+        "compatibility must name the canonical supported revision channel"
+    );
+    assert!(
+        compatibility.contains("(observed-revision-channel . observed-current)"),
+        "compatibility must name the canonical observed revision channel"
     );
     assert!(
         compatibility.contains(&format!("(tested-sha . \"{FPGA_LISP_SHA}\")")),
-        "this file's FPGA_LISP_SHA constant doesn't match compatibility contract -- update one or the other"
+        "FPGA_LISP_SHA constant does not match the compatibility contract"
     );
     assert!(compatibility.contains("(isa . (1 1))"));
 
-    let my_lisp = sibling("my-lisp");
     let fpga_lisp = sibling("fpga-lisp");
-    let my_lisp_head = head(&my_lisp);
     let fpga_lisp_head = head(&fpga_lisp);
-
-    if my_lisp_head != MY_LISP_SHA {
-        eprintln!(
-            "note: my-lisp has moved since compatibility contract was last verified/pinned (pinned {MY_LISP_SHA}, checked out {my_lisp_head}) -- routine in this ecosystem, not a failure; re-verify+bump the pin when convenient, don't chase it every run"
-        );
-    }
     if fpga_lisp_head != FPGA_LISP_SHA {
         eprintln!(
-            "note: fpga-lisp has moved since compatibility contract was last verified/pinned (pinned {FPGA_LISP_SHA}, checked out {fpga_lisp_head}) -- routine in this ecosystem, not a failure; re-verify+bump the pin when convenient, don't chase it every run"
+            "note: fpga-lisp has moved since compatibility contract was last verified/pinned \
+             (pinned {FPGA_LISP_SHA}, checked out {fpga_lisp_head})"
         );
     }
 
@@ -113,17 +81,10 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
     );
 }
 
-/// CML-AUTO-CHECK-CONTRACT-VERSION-CLAIM: keep the compiler's supported
-/// contract separate from the newest contract observed upstream.
-///
-/// A previous version required `(contract . ...)` to equal my-lisp HEAD.
-/// That made an upstream bump impossible to represent honestly: CML either
-/// stayed on its actually-supported version and CI failed, or changed the
-/// number before implementing the semantics and made a false compatibility
-/// claim. `contract` now remains the supported boundary; the independently
-/// recorded `observed-upstream-contract` must track live upstream instead.
+/// Keep CML's supported contract separate from the contract observed through
+/// the explicit observed-current revision channel.
 #[test]
-fn compatibility_my_contract_version_matches_language_contract_my() {
+fn compatibility_my_contract_version_matches_observed_current_language_contract() {
     let my_lisp = sibling("my-lisp");
     let lang_file = if my_lisp.join("language-contract.lisp").exists() {
         my_lisp.join("language-contract.lisp")
@@ -131,31 +92,25 @@ fn compatibility_my_contract_version_matches_language_contract_my() {
         my_lisp.join("language-contract.my")
     };
     let language_contract =
-        fs::read_to_string(lang_file).expect("my-lisp's language contract should be readable");
+        fs::read_to_string(lang_file).expect("my-lisp language contract should be readable");
 
     let major = extract_field(&language_contract, "major")
         .expect("language contract should have a (major . N) field");
     let minor = extract_field(&language_contract, "minor")
         .expect("language contract should have a (minor . N) field");
 
-    let compat_path = if std::path::Path::new("compatibility.lisp").exists() {
-        "compatibility.lisp"
-    } else {
-        "compatibility.my"
-    };
     let compatibility =
-        fs::read_to_string(compat_path).expect("compatibility contract should be readable");
+        fs::read_to_string("compatibility.lisp").expect("compatibility contract should be readable");
     let observed = format!("(observed-upstream-contract . ({major} {minor}))");
     assert!(
         compatibility.contains(&observed),
-        "compatibility's observed upstream contract doesn't match my-lisp's actual language contract \
-         (major . {major}) (minor . {minor}). Update `observed-upstream-contract`; do not change the supported \
-         `(contract . ...)` field until CML has implemented and verified the new semantics."
+        "compatibility observed upstream contract does not match observed-current my-lisp: \
+         expected (major . {major}) (minor . {minor})"
     );
 
     assert!(
         compatibility.contains("(contract . (2 0))"),
-        "CML's supported contract changed without updating this executable boundary"
+        "CML supported contract changed without updating this executable boundary"
     );
     assert!(
         compatibility.contains("(status . upgrade-required)"),
@@ -163,12 +118,6 @@ fn compatibility_my_contract_version_matches_language_contract_my() {
     );
 }
 
-/// Extracts the integer value of a `(name . N)` field from a `.my`
-/// alist's raw text -- deliberately not a full s-expression parser
-/// (this repo already has one in `src/parser.rs`, but pulling it into a
-/// test binary for one field isn't worth the coupling); good enough for
-/// the flat, single-line fields `language-contract.my`/`compatibility.my`
-/// actually use.
 fn extract_field(text: &str, name: &str) -> Option<i64> {
     let marker = format!("({name} . ");
     let start = text.find(&marker)? + marker.len();
