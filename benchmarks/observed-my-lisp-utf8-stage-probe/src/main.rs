@@ -72,10 +72,10 @@ fn main() {
     );
 
     let staged_total_ns = byte_list_ns + validate_ns + decode_ns + materialize_ns;
-    let observed_sha = std::env::var("MY_LISP_OBSERVED_SHA").unwrap_or_else(|_| "unknown".into());
+    let observed_sha = std::env::var("MY_LISP_HISTORICAL_WORKLOAD_SHA").unwrap_or_else(|_| "unknown".into());
 
     println!(
-        "((kind . cml-observed-my-lisp-utf8-stage-profile) \
+        "((kind . cml-historical-my-lisp-utf8-stage-profile) \
          (upstream-channel . historical-workload-snapshot) \
          (my-lisp-sha . \"{observed_sha}\") \
          (file . \"{path}\") \
