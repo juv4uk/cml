@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use cml::witness_bridge::execute_x86_actual;
 use cml::x86_freestanding::X86FreestandingBackend;
 use cml::{lower, parser};
-use my_lisp::{eval_program, load_core_library, Session};
+use my_lisp::{Session, eval_program, load_core_library};
 
 fn upstream_path(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -63,9 +63,7 @@ fn lisp_owned_verdict_passes(row: &str, actual: &str) {
     eval_program(&runner, &mut session).expect("pinned witness-runner.lisp must load");
 
     let verdict = eval_program(
-        &format!(
-            "(witness-pass? (witness-verdict (quote {row}) (quote {actual})))"
-        ),
+        &format!("(witness-pass? (witness-verdict (quote {row}) (quote {actual})))"),
         &mut session,
     )
     .expect("Lisp-owned witness verdict must execute")
