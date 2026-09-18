@@ -1288,6 +1288,7 @@ fn primitive_contract(operation: PrimOp) -> Result<(&'static str, usize), Compil
         PrimOp::Add => Ok(("add", 2)),
         PrimOp::Sub => Ok(("sub", 2)),
         PrimOp::EqualP => Err(CompileError::UnsupportedVariant("equal? primitive")),
+        PrimOp::ExactQLe => Err(CompileError::UnsupportedVariant("exact-Q <= primitive")),
     }
 }
 
