@@ -9,7 +9,7 @@
 //! - Generates `canon_spellings.rs` for `src/canon.rs`.
 //! - Generates `contracts/cml-operations.my` machine-readable table.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -460,6 +460,38 @@ fn list(sexp: &Sexp) -> &[Sexp] {
     }
 }
 
+fn collect_semantic_ids(root: &[Sexp]) -> Vec<String> {
+    let mut ids = Vec::with_capacity(root.len());
+    let mut seen = BTreeSet::new();
+
+    for row in root {
+        let Sexp::List(items) = row else {
+            panic!("cml#106: semantic-registry row must be a list");
+        };
+        let Some(Sexp::Atom(id)) = items.first() else {
+            panic!("cml#106: semantic-registry row must begin with an opaque semantic ID");
+        };
+        if id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
+            panic!("cml#106: semantic ID must contain ASCII digits only: {id:?}");
+        }
+        if !seen.insert(id.clone()) {
+            panic!("cml#106: duplicate semantic ID {id}");
+        }
+        ids.push(id.clone());
+    }
+
+    ids
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
 fn collect_surfaces_detailed(root: &[Sexp], id: &str) -> Vec<(String, String)> {
     if RETIRED_SEMANTIC_IDS.contains(&id) {
         panic!(
@@ -566,6 +598,18 @@ fn main() {
             panic!("cml#14: no top-level (sr/1 ...) form found in semantic-registry.wsm")
         });
 
+    let semantic_ids = collect_semantic_ids(root);
+    let semantic_id_set: BTreeSet<&str> = semantic_ids.iter().map(String::as_str).collect();
+    for op in OPERATIONS {
+        if !semantic_id_set.contains(op.semantic_id) {
+            panic!(
+                "cml#106: admitted operation {} references semantic ID {} absent from upstream registry",
+                op.canonical_name, op.semantic_id
+            );
+        }
+    }
+    let registry_digest = fnv1a64(source.as_bytes());
+
     // Fail-closed collision detection across all admitted operations
     let mut seen_upper: HashMap<String, &str> = HashMap::new();
     let mut seen_exact: HashMap<String, &str> = HashMap::new();
@@ -650,6 +694,15 @@ fn main() {
         generated.push_str("    },\n");
     }
     generated.push_str("];\n\n");
+
+    generated.push_str("pub const CANON_UPSTREAM_SEMANTIC_IDS: &[&str] = &[\n");
+    for id in &semantic_ids {
+        generated.push_str(&format!("    {id:?},\n"));
+    }
+    generated.push_str("];\n\n");
+    generated.push_str(&format!(
+        "pub const CANON_UPSTREAM_REGISTRY_FNV1A64: u64 = 0x{registry_digest:016x};\n\n"
+    ));
 
     generated.push_str("pub const CANON_BUILTIN_NAMES: &[(&str, &str)] = &[\n");
     for (id, name) in BUILTIN_PROJECTIONS {
