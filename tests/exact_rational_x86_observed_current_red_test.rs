@@ -74,8 +74,7 @@ fn observed_current_exact_rational_sum_source() -> String {
         .find(|block| block.contains("(case . exact-rational-sum)"))
         .expect("#105 observed-current must expose the exact-rational-sum witness");
 
-    quoted_field(block, "expr")
-        .expect("#105 exact-rational-sum witness must contain an expr field")
+    quoted_field(block, "expr").expect("#105 exact-rational-sum witness must contain an expr field")
 }
 
 #[test]
