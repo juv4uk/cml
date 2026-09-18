@@ -16,9 +16,9 @@ wgpu = { version = "30.0.0", default-features = false, features = ["std", "wgsl"
 wsm-os-target = { git = "https://github.com/juv4uk/wsm-target-contract.git", rev = "90fa2cf324d05d8a7baafcac620eb5360f05e5b3" }
 
 [dev-dependencies]
-# Single-channel pin (ecosystem docs/SUBMODULE-DEPENDENCY-MODEL-2026-09-16):
+# #84 supported-pin channel:
 # cml's tests read my-lisp's own .lisp source tree directly (the encoder
 # bridge triple-oracle check, CPU profile contracts, conformance fixtures)
-# in addition to its Rust API, so this is a contract dependency — the
-# external/my-lisp submodule is the only pin, not a sibling checkout path.
+# in addition to its Rust API. This contract dependency is resolved from
+# external/my-lisp; observed-current is evidence/drift input, not Cargo authority.
 my-lisp = { path = "external/my-lisp/crates/my-lisp" }
