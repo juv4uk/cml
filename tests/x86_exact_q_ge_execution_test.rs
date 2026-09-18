@@ -12,16 +12,13 @@ fn assert_x86_ge(source: &str, expected_numeric: i64) {
         .compile_program(&program)
         .expect("semantic 1018 ExactQGe must compile on the x86 backend");
 
-    let expected =
-        wsm_os_target::encode_fixnum(expected_numeric).expect("0/1 are target fixnums");
+    let expected = wsm_os_target::encode_fixnum(expected_numeric).expect("0/1 are target fixnums");
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock must be after epoch")
         .as_nanos();
-    let base = std::env::temp_dir().join(format!(
-        "cml-x86-exact-q-ge-{}-{nonce}",
-        std::process::id()
-    ));
+    let base =
+        std::env::temp_dir().join(format!("cml-x86-exact-q-ge-{}-{nonce}", std::process::id()));
     let asm_path = base.with_extension("s");
     let c_path = base.with_extension("c");
     let exe_path = base.with_extension("bin");
