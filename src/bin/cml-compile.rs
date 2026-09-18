@@ -54,7 +54,8 @@ fn run() -> Result<(), String> {
 
     let source_text = fs::read_to_string(source_path)
         .map_err(|error| format!("could not read {}: {error}", source_path.display()))?;
-    let expressions = parser::parse(&source_text).map_err(|error| error.to_string())?;
+    let expressions =
+        parser::parse(&source_text).map_err(|error| parse_diagnostic(source_path, &error))?;
     let expanded = MacroExpander::new()
         .process(&expressions)
         .map_err(|error| error.to_string())?;
@@ -67,4 +68,22 @@ fn run() -> Result<(), String> {
         .map_err(|error| format!("could not write {}: {error}", Path::new(&output).display()))?;
 
     Ok(())
+}
+
+fn parse_diagnostic(path: &Path, error: &parser::ParseError) -> String {
+    let line = error.line().unwrap_or(0);
+    let column = error.column().unwrap_or(0);
+    format!(
+        "CML-DIAGNOSTIC\tstage=parse\tpath={}\tline={line}\tcolumn={column}\tmessage={}",
+        escape_diagnostic_field(&path.to_string_lossy()),
+        escape_diagnostic_field(&error.to_string())
+    )
+}
+
+fn escape_diagnostic_field(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('\t', "\\t")
+        .replace('\r', "\\r")
+        .replace('\n', "\\n")
 }
