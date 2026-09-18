@@ -367,6 +367,7 @@ impl Compiler {
                 self.emit(&format!("SUB {} R1 R2", target_reg));
             }
             PrimOp::ExactQLe => unreachable!("ExactQLe rejected by validate_ir"),
+            PrimOp::ExactQGe => unreachable!("ExactQGe rejected by validate_ir"),
         }
     }
 
