@@ -58,8 +58,8 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         .expect("#84 manifest must declare supported-pin-sha");
     let observed = quoted_field(&manifest, "observed-current-sha")
         .expect("#84 manifest must declare observed-current-sha");
-    assert_eq!(supported.len(), 40, "supported-pin-sha must be a full git SHA");
-    assert_eq!(observed.len(), 40, "observed-current-sha must be a full git SHA");
+    assert_eq!(\n        supported.len(),\n        40,\n        "supported-pin-sha must be a full git SHA"\n    );
+    assert_eq!(\n        observed.len(),\n        40,\n        "observed-current-sha must be a full git SHA"\n    );
 
     let supported_checkout = Path::new(env!("CARGO_MANIFEST_DIR")).join("external/my-lisp");
     assert_eq!(
@@ -99,7 +99,7 @@ fn every_upstream_workload_names_its_observed_current_channel_and_exact_revision
     let exact_refs =
         workloads.matches("(upstream-ref . \"").count() + workloads.matches("(observed-ref . \"").count();
 
-    assert!(records > 0, "expected at least one upstream workload record");
+    assert!(\n        records > 0,\n        "expected at least one upstream workload record"\n    );
     assert_eq!(
         channels, records,
         "#84 every #80 workload record must name upstream-channel=observed-current"
