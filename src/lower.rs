@@ -56,13 +56,44 @@ impl fmt::Display for LowerError {
     }
 }
 
+fn top_level_definition_name(expr: &Expr) -> Option<String> {
+    use crate::canon::{CANON_DEFINE_EXACT, CANON_DEFINE_UPPER, is_canon_form};
+
+    let Expr::List(items) = expr else {
+        return None;
+    };
+    let [Expr::Symbol(form), Expr::Symbol(name), _] = items.as_slice() else {
+        return None;
+    };
+
+    is_canon_form(form, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT).then(|| name.to_uppercase())
+}
+
 pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
     let folded: Vec<Expr> = exprs
         .iter()
         .map(crate::pratyahara::fold_constants)
         .collect();
     semantic::analyze_program(&folded).map_err(LowerError::semantic)?;
-    folded.iter().map(lower_expr).collect()
+
+    // Contract 2.1: top-level definitions are ordinary bindings too. Mirror
+    // the backends' declaration pass so a definition can shadow a registry
+    // callable in its own body and in later/peer top-level forms. This is only
+    // name resolution; the backend still owns its existing closure/letrec
+    // mechanism and may fail closed for an unsupported executable shape.
+    let mut env = Env::default();
+    for expr in &folded {
+        if let Some(name) = top_level_definition_name(expr) {
+            if !env.is_bound(&name) {
+                env.bound.push(name);
+            }
+        }
+    }
+
+    folded
+        .iter()
+        .map(|expr| lower_expr_admitted(expr, &env))
+        .collect()
 }
 
 /// Contract-2.1 lowering for backends that represent builtins as ordinary
