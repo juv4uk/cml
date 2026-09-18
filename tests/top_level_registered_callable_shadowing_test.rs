@@ -14,12 +14,12 @@ fn top_level_def_shadows_registry_callable_in_later_forms() {
 #[test]
 fn top_level_registered_callable_self_reference_uses_the_definition() {
     let source = r#"
-        (def quotient
+        (def mod
           (lambda (a b)
             (cond
               ((eq a 0) 0)
-              (t (quotient (- a 1) b)))))
-        (quotient 3 99)
+              (t (mod (- a 1) b)))))
+        (mod 3 99)
     "#;
 
     let observed = compile_and_run(source).expect("recursive C backend build/run should complete");
