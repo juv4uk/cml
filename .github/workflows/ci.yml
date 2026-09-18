@@ -21,18 +21,48 @@ jobs:
           # checkout instead of a separately pinned sibling checkout.
           submodules: true
 
-      # revision_contract_test.rs deliberately checks against a frozen,
-      # independently-pinned historical my-lisp snapshot (MY_LISP_SHA) for
-      # the Reader Contract 4 compatibility record — a different, intentionally
-      # versioned concern from the external/my-lisp submodule above (which
-      # always tracks cml's own current contract dependency). Both my-lisp
-      # checkouts coexisting here is correct, not duplication.
-      - name: Checkout my-lisp (sibling, frozen snapshot for revision_contract_test)
+      - name: Resolve my-lisp revision channels
+        id: upstream_revisions
+        working-directory: cml
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="upstream-revisions.lisp"
+          field() {
+            local name="$1"
+            grep -F "(${name} . \"" "$manifest" | head -n 1 | cut -d'"' -f2
+          }
+          supported_pin_sha="$(field supported-pin-sha)"
+          observed_current_sha="$(field observed-current-sha)"
+          test "${#supported_pin_sha}" -eq 40
+          test "${#observed_current_sha}" -eq 40
+          actual_supported_sha="$(git -C external/my-lisp rev-parse HEAD)"
+          if [[ "$supported_pin_sha" != "$actual_supported_sha" ]]; then
+            echo "supported-pin mismatch: manifest=$supported_pin_sha gitlink=$actual_supported_sha" >&2
+            exit 1
+          fi
+          echo "supported_pin_sha=$supported_pin_sha" >> "$GITHUB_OUTPUT"
+          echo "observed_current_sha=$observed_current_sha" >> "$GITHUB_OUTPUT"
+          echo "upstream-channel supported-pin sha=$supported_pin_sha"
+          echo "upstream-channel observed-current sha=$observed_current_sha"
+
+      - name: Checkout my-lisp (observed-current)
         uses: actions/checkout@v4
         with:
           repository: juv4uk/my-lisp
-          ref: d4ad7e7c7717a610599875ffb90123b713ac05c7
+          ref: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
           path: my-lisp
+
+      - name: Report my-lisp revision drift
+        working-directory: cml
+        shell: bash
+        run: |
+          set -euo pipefail
+          supported_math=absent
+          observed_math=absent
+          [[ -f external/my-lisp/tests/fixtures/mathematical-result-v1.lisp ]] && supported_math=present
+          [[ -f ../my-lisp/tests/fixtures/mathematical-result-v1.lisp ]] && observed_math=present
+          echo "((kind . cml-upstream-revision-drift) (supported-pin-sha . \"${{ steps.upstream_revisions.outputs.supported_pin_sha }}\") (observed-current-sha . \"${{ steps.upstream_revisions.outputs.observed_current_sha }}\") (mathematical-result-v1 . ((supported-pin . ${supported_math}) (observed-current . ${observed_math})))))"
 
       - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
         uses: actions/checkout@v4

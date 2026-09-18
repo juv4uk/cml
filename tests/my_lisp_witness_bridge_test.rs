@@ -1,7 +1,8 @@
 //! #116 cross-repo witness bridge.
 //!
-//! CML consumes the committed my-lisp conformance corpus as input.  This
-//! adapter deliberately does not contain an expected value: semantic truth
+//! Upstream channel: supported-pin.
+//! CML consumes the committed my-lisp conformance corpus from external/my-lisp.
+//! This adapter deliberately does not contain an expected value: semantic truth
 //! stays in my-lisp's Lisp-authored witness row.
 
 #![cfg(all(target_os = "linux", target_arch = "x86_64"))]

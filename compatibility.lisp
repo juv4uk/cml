@@ -11,9 +11,9 @@
               ; detected upstream bump cannot be "fixed" by making a false
               ; compatibility claim.
               (contract . (2 0))
-              (tested-sha . "5a662c0cd2372d32adc3ad7b44de043be7050026")
+              (supported-revision-channel . supported-pin)
               (observed-upstream-contract . (6 0))
-              (observed-upstream-sha . "bd390e5")
+              (observed-revision-channel . observed-current)
               (status . upgrade-required)
               (contract-3.0-gap . ((status . unsupported)
                                    (required-error-kinds . (DivisionByZero NumericOverflow Parse))

@@ -524,8 +524,8 @@ fn collect_surfaces(root: &[Sexp], ids: &[&str]) -> (Vec<String>, Vec<String>) {
 
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set");
-    // Single-channel pin (SUBMODULE-DEPENDENCY-MODEL-2026-09-16): reads the
-    // external/my-lisp submodule, not a sibling checkout guess.
+    // #84 supported-pin channel: semantic build inputs come from the
+    // external/my-lisp gitlink, never from the observed-current sibling checkout.
     let mut registry_path = PathBuf::from(&manifest_dir)
         .join("external")
         .join("my-lisp")
