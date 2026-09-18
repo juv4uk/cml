@@ -229,6 +229,7 @@ fn primitive_name(op: PrimOp) -> &'static str {
         PrimOp::Eq => "EQ",
         PrimOp::Atom => "ATOM",
         PrimOp::EqualP => "EQUAL?",
+        PrimOp::ExactQLe => "<=",
     }
 }
 
