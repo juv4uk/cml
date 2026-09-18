@@ -13,7 +13,7 @@ gpu-cuda = ["dep:cudarc"]
 cudarc = { version = "0.19.9", default-features = false, features = ["std", "driver", "nvrtc", "dynamic-loading", "cuda-12000"], optional = true }
 pollster = { version = "1.0.1", optional = true }
 wgpu = { version = "30.0.0", default-features = false, features = ["std", "wgsl", "vulkan", "gles"], optional = true }
-wsm-os-target = { git = "https://github.com/juv4uk/wsm-target-contract.git", rev = "90fa2cf324d05d8a7baafcac620eb5360f05e5b3" }
+wsm-os-target = { git = "https://github.com/juv4uk/wsm-target-contract.git", rev = "7b47a8dcc2da8e05d60b0ed1177ef6f9e55c081d" }
 
 [dev-dependencies]
 # #84 supported-pin channel:
