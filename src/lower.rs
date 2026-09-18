@@ -57,9 +57,7 @@ impl fmt::Display for LowerError {
 }
 
 fn top_level_definition_name(expr: &Expr) -> Option<String> {
-    use crate::canon::{
-        CANON_DEFINE_EXACT, CANON_DEFINE_UPPER, is_canon_form,
-    };
+    use crate::canon::{CANON_DEFINE_EXACT, CANON_DEFINE_UPPER, is_canon_form};
 
     let Expr::List(items) = expr else {
         return None;
@@ -68,8 +66,7 @@ fn top_level_definition_name(expr: &Expr) -> Option<String> {
         return None;
     };
 
-    is_canon_form(form, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT)
-        .then(|| name.to_uppercase())
+    is_canon_form(form, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT).then(|| name.to_uppercase())
 }
 
 pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
