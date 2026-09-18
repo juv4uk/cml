@@ -5,8 +5,8 @@ use cml::{canon, lower, parser};
 fn exact_q_compare_family_is_admitted_by_distinct_semantic_identity() {
     // Upstream authority: my-lisp contracts/exact-q-binary-contract.lisp.
     // The family remains distinct from semantic 0003 atom identity. #92's
-    // first GREEN slice promotes only 1017 (<=) to explicit comparison IR;
-    // the remaining identities stay admitted-but-partial generic Apps.
+    // first two GREEN slices promote 1017 (<=) and 1018 (>=) to explicit
+    // comparison IR; 1014/1015/1016 remain admitted-but-partial generic Apps.
     let cases = [
         ("<", "1014"),
         (">", "1015"),
@@ -42,6 +42,15 @@ fn exact_q_compare_family_is_admitted_by_distinct_semantic_identity() {
                 node,
                 Ir::Prim {
                     op: PrimOp::ExactQLe,
+                    args
+                } if args == &[Ir::Int(128), Ir::Int(191)]
+            ));
+        } else if semantic_id == "1018" {
+            assert_eq!(operation.cml_ir_projection, "Ir::Prim(PrimOp::ExactQGe)");
+            assert!(matches!(
+                node,
+                Ir::Prim {
+                    op: PrimOp::ExactQGe,
                     args
                 } if args == &[Ir::Int(128), Ir::Int(191)]
             ));
