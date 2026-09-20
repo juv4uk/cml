@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
       - name: Reproduce multiplication inside compiled lambda
         run: cargo test --test c_backend_test c_backend_multiplies_inside_a_compiled_lambda -- --nocapture
