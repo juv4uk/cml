@@ -217,7 +217,7 @@ pub fn validate_slice1(export: &SemanticExport) -> Result<(), ExportError> {
 /// Fail-closed: issue cml#3 item 2 removed the earlier soft bypass that
 /// treated `"pending-producer-byte-pin"` as an automatic match now that
 /// `contracts/mylisp-cml-export.wsm` vendors a real producer digest
-/// (`dfc880e5e5ae80f9`, from my-lisp's `cml-export` binary). Any drift
+/// (`22f673f2d2bc3d28`, from the complete registry export). Any drift
 /// between the vendored file and the pin below must fail the build, not
 /// silently pass.
 pub fn check_digest(export: &SemanticExport, expected: &str) -> Result<(), ExportError> {

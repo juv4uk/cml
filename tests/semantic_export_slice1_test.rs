@@ -15,7 +15,7 @@ const EXPORT: &str = include_str!("../contracts/mylisp-cml-export.lisp");
 /// `contracts/mylisp-cml-export.wsm` -- issue cml#3 item 1. This is a
 /// separate constant, not read off the file itself, so a drifted vendor
 /// copy actually fails this test instead of trivially agreeing with itself.
-const EXPECTED_PRODUCER_DIGEST: &str = "dfc880e5e5ae80f9";
+const EXPECTED_PRODUCER_DIGEST: &str = "22f673f2d2bc3d28";
 
 #[test]
 fn export_slice1_validates() {
