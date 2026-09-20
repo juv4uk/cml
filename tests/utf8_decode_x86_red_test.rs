@@ -62,6 +62,10 @@ fn real_utf8_decode_onto_reaches_x86_tail_loop_backend() {
     let decoder = top_level_form(&utf8, "(def utf8-decode-onto");
 
     let mut source = String::from(let_star);
+    // The decoder is a real library slice and returns two-field records via
+    // the Lisp `list` helper. Keep that dependency explicit in the witness;
+    // the x86 backend must admit the named call rather than inventing it.
+    source.push_str("\n(def list (lambda (a b) (cons a (cons b (quote ())))))\n");
     source.push('\n');
     source.push_str(&decoder);
     source.push_str("\n(utf8-decode-onto (quote (65)) (quote ()))\n");
