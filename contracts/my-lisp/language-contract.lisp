@@ -1,5 +1,5 @@
 ; language-contract.my — the machine-readable semantic-contract version
-; for my-lisp, covering exactly Level 1 (CORE SEMANTICS: seven primitives,
+; for my-lisp, covering Level 1 (CORE SEMANTICS: Canon 0, stable McCarthy-7 root,
 ; lambda, truth/NIL, symbols, pairs) and Level 2 (LANGUAGE CONTRACT:
 ; exactness, def/defmacro, errors, read/eval) from
 ; docs/language-core-axioms.md — deliberately NOT Level 3 (ECOSYSTEM
@@ -25,18 +25,23 @@
 ; my-lisp, що покриває рівно Рівень 1 (СЕМАНТИКА ЯДРА) і Рівень 2
 ; (КОНТРАКТ МОВИ) з docs/language-core-axioms.md — свідомо НЕ Рівень 3.
 ;
-; Контракт 6.0 ратифіковано 2026-09-08. Це breaking-зміна: раніше
-; lexical shadowing дозволяло перевизначити surface spelling Canon-примітива,
-; тепер скінченна множина Canon 0+7 names є зарезервованою й резолвиться
-; раніше за звичайне lexical Environment.
-((major . 6) (minor . 0)
- (note . "RATIFIED by owner 2026-09-08. Contract 6.0 makes Canon 0+7 program resolution genuinely immutable. Every surface spelling present in the immutable Canon registry (historical/English-facing, Ukrainian, Sanskrit, symbolic shorthand) is reserved: Canon resolution happens before ordinary lexical Environment lookup; define/def and lambda binders must reject those names as InvalidForm; language-owned let/let*/macro binding inherits the same prohibition through its lowering path. Callable Canon spellings resolve to one stable first-class handle per canonical identity; PRIM_QUOTE and PRIM_COND remain syntax-only. This intentionally breaks Contract 5.0 programs that shadowed names such as car/перше/ādi. Lexical shadowing remains ALLOWED for non-Canon builtins and ordinary values. Contract 5.0 decimal-separator semantics, Contract 4.0 apostrophe semantics, and Contract 3.0 error classifications remain unchanged. · Контракт 6.0 робить резолюцію Канону 0+7 справді незмінною: усі канонічні EN/UK/SA/символьні написання зарезервовані, мають пріоритет над lexical Environment і не можуть бути binder-іменами. Решта неканонічних builtin-ів і далі можуть затінюватися.")
+; Контракт 7.0 ратифіковано 2026-09-19. Це breaking архітектурна зміна:
+; Canon 0 + McCarthy-7 лишаються стабільним історичним/мінімальним коренем,
+; але множина semantic primitives більше не є назавжди замкненою на семи.
+; Нові identities можуть бути прийняті за evidence-based admission rule ADR-005.
+; Правило Contract 6.0 про незатінюваність Canon 0+7 spellings зберігається.
+((major . 7) (minor . 0)
+ (note . "RATIFIED by owner 2026-09-19. Contract 7.0 supersedes only the permanent primitive-count closure of Contract 6.0/ADR-004. Canon 0 remains the ground object and the McCarthy-7 identities remain stable, reserved and unshadowable, but they are no longer the maximum possible primitive set. New semantic identities may be admitted under ADR-005 when executable evidence shows that the distinction is externally observable, compositionally necessary, or cannot be represented honestly as ordinary data/derived behavior. One experimental 8-bit SID space remains the shared identity budget. Execution kernels (Common Lisp, Prolog, Datalog, CLIPS and future peers) own native mechanisms/results but do not own SID meaning. Contract 6.0 shadowing rules, Contract 5.0 decimal-separator semantics, Contract 4.0 apostrophe semantics, and Contract 3.0 error classifications remain unchanged.")
  (covers . (G1 G2 G3 G4 G5 G6 G7 G8 S1 S2 S3))
  (invariants
    . ((shadowing
        . "Contract 6.0. Lexical shadowing is ALLOWED for ordinary bindings and non-Canon builtins, but the finite Canon 0+7 surface-name set is RESERVED and unshadowable. Any language binder that attempts to bind a Canon spelling fails as InvalidForm. Canon resolution precedes Environment lookup, so even a pre-existing same-text Environment binding cannot replace canonical semantics. This supersedes the owner decision of 2026-08-23/2026-09-06 only for Canon 0+7 names; no general protected namespace or prefix is introduced.")
       (canon-immutability
-       . "Contract 6.0. CANON_EMPTY_LIST plus exactly PRIM_QUOTE PRIM_ATOM PRIM_EQ PRIM_CONS PRIM_CAR PRIM_CDR PRIM_COND form the immutable Canon. CANON_EMPTY_LIST is a ground value, not an eighth primitive operation. Historical/English-facing, Ukrainian, Sanskrit and symbolic spellings in the Canon registry resolve directly to these identities before lexical lookup. Callable identities share one stable first-class handle per identity across surfaces; PRIM_QUOTE and PRIM_COND are syntax-only and never become callable values.")
+       . "Contract 7.0. CANON_EMPTY_LIST plus PRIM_QUOTE PRIM_ATOM PRIM_EQ PRIM_CONS PRIM_CAR PRIM_CDR PRIM_COND remain stable canonical identities and their registered Canon spellings remain reserved/unshadowable. This is a stable historical/minimal root, not a permanent upper bound on primitive admission. Additional semantic identities may be admitted only through the evidence discipline of ADR-005 and must not arise accidentally from runtime helpers, kernel internals, ABI functions or hardware opcodes.")
+      (primitive-admission
+       . "Contract 7.0. Primitive count is not predetermined. A new primitive identity requires executable evidence that its distinction is externally observable, compositionally necessary, shared by independent witnesses, or cannot be represented honestly by existing identities plus ordinary data. One 8-bit semantic-ID space remains the active experimental budget; kernel-private ontologies do not automatically consume IDs.")
+      (kernel-archipelago
+       . "Contract 7.0. my-lisp owns semantic identity, Canon, surfaces and laws. Common Lisp, Prolog, Datalog, CLIPS and future kernels may own their native execution/search/fixpoint/rule mechanisms and native result multiplicity. A kernel may witness zero or more semantic identities; one semantic identity may have zero or more execution witnesses. Kernel execution never redefines SID meaning.")
       (special-forms-boundary
         . "quote cond lambda def defmacro are NOT callable values. They are syntactic evaluation rules and remain outside the callable namespace. Canon 6.0 additionally reserves all registered surface spellings of quote and cond against binding.")
       (reader-apostrophe
