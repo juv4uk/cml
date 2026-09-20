@@ -14,6 +14,10 @@
     (machine-form my-lisp)
     (encoding my-lisp)
     (selection-optimization cml))
+  (mechanism-classification
+    (cml-direct-byte differential-bootstrap)
+    (gnu-as differential-oracle)
+    (upstream-admission-encoder normative-machine-contract))
   (policy
     (drift fail-closed)
     (raw-byte-authority cml-forbidden)
