@@ -621,6 +621,22 @@ fn preflight_env(
         }
         Ir::Lambda { .. } => return Err(CompileError::UnsupportedVariant("lambda")),
         Ir::App { func, args } => {
+            if let Ir::Builtin(name) = func.as_ref() {
+                if name == "mod" {
+                    if args.len() != 2 {
+                        return Err(CompileError::InvalidArity {
+                            operation: "mod",
+                            expected: 2,
+                            actual: args.len(),
+                        });
+                    }
+                    for argument in args {
+                        preflight_env(argument, bindings, symbols, def_arities, slots)?;
+                    }
+                    *slots += 2;
+                    return Ok(());
+                }
+            }
             if let Some((operation, expected, _)) = platform_call_contract(func) {
                 if args.len() != expected {
                     return Err(CompileError::InvalidArity {
@@ -874,6 +890,22 @@ fn preflight_lambda_body(
             Ok(())
         }
         Ir::App { func, args } => {
+            if let Ir::Builtin(name) = func.as_ref() {
+                if name == "mod" {
+                    if args.len() != 2 {
+                        return Err(CompileError::InvalidArity {
+                            operation: "mod",
+                            expected: 2,
+                            actual: args.len(),
+                        });
+                    }
+                    for argument in args {
+                        preflight_lambda_body(argument, bindings, symbols, slots)?;
+                    }
+                    *slots += 2;
+                    return Ok(());
+                }
+            }
             if let Some((operation, expected, _)) = platform_call_contract(func) {
                 if !matches!(func.as_ref(), Ir::Var(name) if bindings.contains(name)) {
                     if args.len() != expected {
@@ -1048,6 +1080,22 @@ fn preflight_def_body(
             Ok(())
         }
         Ir::App { func, args } => {
+            if let Ir::Builtin(name) = func.as_ref() {
+                if name == "mod" {
+                    if args.len() != 2 {
+                        return Err(CompileError::InvalidArity {
+                            operation: "mod",
+                            expected: 2,
+                            actual: args.len(),
+                        });
+                    }
+                    for argument in args {
+                        preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+                    }
+                    *slots += 2;
+                    return Ok(());
+                }
+            }
             if let Some((operation, expected, _)) = platform_call_contract(func) {
                 if !matches!(func.as_ref(), Ir::Var(name) if bindings.contains(name)) {
                     if args.len() != expected {
@@ -1409,6 +1457,11 @@ impl Emitter {
                 "Lambda (variadic/all-rest)",
             )),
             Ir::App { func, args } => {
+                if let Ir::Builtin(name) = func.as_ref() {
+                    if name == "mod" {
+                        return self.emit_mod(args);
+                    }
+                }
                 if platform_call_contract(func).is_some()
                     && !matches!(func.as_ref(), Ir::Var(name) if self.env.contains_key(name))
                 {
@@ -2296,6 +2349,78 @@ impl Emitter {
         self.line("    call wsm_fail");
 
         self.line(&format!(".Larith_ok_{ok_label}:"));
+        Ok(())
+    }
+
+    /// Inline non-negative integer mod through hardware divq.
+    fn emit_mod(&mut self, args: &[Ir]) -> Result<(), CompileError> {
+        let ok_label = self.allocate_label();
+        let fail_label = self.allocate_label();
+
+        self.emit_ir(&args[0])?;
+        let slot0 = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(slot0)
+        ));
+
+        self.emit_ir(&args[1])?;
+        let slot1 = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(slot1)
+        ));
+
+        self.line(&format!(
+            "    movq {}(%rsp), %rax",
+            Self::slot_offset(slot0)
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(slot1)
+        ));
+
+        // Untag fixnums
+        self.line("    sarq $3, %rax");
+        self.line("    sarq $3, %rcx");
+
+        // Fail-closed checks per upstream contract: divisor > 0, numerator >= 0
+        self.line("    testq %rcx, %rcx");
+        self.line(&format!("    jle .Lmod_fail_{fail_label}"));
+        self.line("    testq %rax, %rax");
+        self.line(&format!("    js .Lmod_fail_{fail_label}"));
+
+        // x86 unsigned division: RDX:RAX / RCX -> RAX = quotient, RDX = remainder
+        self.line("    xorq %rdx, %rdx");
+        self.line("    divq %rcx");
+
+        // Retag remainder in RDX as fixnum
+        self.line("    shlq $3, %rdx");
+        self.line(&format!(
+            "    orq ${}, %rdx",
+            wsm_os_target::Tag::Fixnum as u64
+        ));
+        self.line("    movq %rdx, %rax");
+        self.line(&format!("    jmp .Lmod_ok_{ok_label}"));
+
+        // Fail path
+        self.line(&format!(".Lmod_fail_{fail_label}:"));
+        self.line("    movq %r12, %rdi");
+        self.line(&format!(
+            "    movl ${}, %esi",
+            wsm_os_target::ErrorCode::Type as u32
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rdx",
+            Self::slot_offset(slot0)
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(slot1)
+        ));
+        self.line("    call wsm_fail");
+
+        self.line(&format!(".Lmod_ok_{ok_label}:"));
         Ok(())
     }
 
