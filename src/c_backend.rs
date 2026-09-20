@@ -216,16 +216,28 @@ static Value *v_cdr(Value *v) { return v->u.cons.cdr; }
 static int is_atom(Value *v) { return v->tag != TAG_CONS; }
 static int truthy(Value *v) { return v->tag != TAG_NIL; }
 
+static Value *identity_relation(int same) {
+    return mk_cons(
+        mk_sym("IDENTITY-RELATION"),
+        mk_cons(mk_sym(same ? "SAME" : "DISTINCT"), &NIL_V)
+    );
+}
+
 static Value *v_eq(Value *a, Value *b) {
-    if (a->tag != b->tag) return &NIL_V;
+    if (a->tag != b->tag) return identity_relation(0);
+    int same = 0;
     switch (a->tag) {
-        case TAG_NIL: return &TRUE_V;
-        case TAG_INT: return a->u.i == b->u.i ? &TRUE_V : &NIL_V;
-        case TAG_RATIONAL: return rational_checked_mul(a->u.rat.num, b->u.rat.den) == rational_checked_mul(b->u.rat.num, a->u.rat.den) ? &TRUE_V : &NIL_V;
-        case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0 ? &TRUE_V : &NIL_V;
-        case TAG_STRING: return strcmp(a->u.str, b->u.str) == 0 ? &TRUE_V : &NIL_V;
-        default: return a == b ? &TRUE_V : &NIL_V;
+        case TAG_NIL: same = 1; break;
+        case TAG_INT: same = a->u.i == b->u.i; break;
+        case TAG_RATIONAL:
+            same = rational_checked_mul(a->u.rat.num, b->u.rat.den)
+                == rational_checked_mul(b->u.rat.num, a->u.rat.den);
+            break;
+        case TAG_SYM: same = strcmp(a->u.sym, b->u.sym) == 0; break;
+        case TAG_STRING: same = strcmp(a->u.str, b->u.str) == 0; break;
+        default: same = a == b; break;
     }
+    return identity_relation(same);
 }
 
 static int v_equal_p(Value *a, Value *b) {
