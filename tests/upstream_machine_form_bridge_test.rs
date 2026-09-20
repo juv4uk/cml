@@ -16,8 +16,12 @@ fn load_source(relative: &str, session: &mut Session) {
     let path = upstream_path(relative);
     let source = fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("{} must exist: {error}", path.display()));
-    eval_program(&source, session)
-        .unwrap_or_else(|error| panic!("{} must load as ordinary my-lisp: {error:?}", path.display()));
+    eval_program(&source, session).unwrap_or_else(|error| {
+        panic!(
+            "{} must load as ordinary my-lisp: {error:?}",
+            path.display()
+        )
+    });
 }
 
 fn prov() -> Provenance {
