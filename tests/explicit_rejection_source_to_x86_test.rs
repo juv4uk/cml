@@ -2,10 +2,12 @@ use cml::x86_freestanding::{CompileError, X86FreestandingBackend};
 use cml::{lower, parser};
 
 fn assert_explicit_rejection(source: &str, expected_reason: &'static str) {
-    let parsed = parser::parse(source)
-        .unwrap_or_else(|error| panic!("source must parse before target rejection: {source}: {error:?}"));
-    let lowered = lower::lower_program(&parsed)
-        .unwrap_or_else(|error| panic!("source must lower before target rejection: {source}: {error:?}"));
+    let parsed = parser::parse(source).unwrap_or_else(|error| {
+        panic!("source must parse before target rejection: {source}: {error:?}")
+    });
+    let lowered = lower::lower_program(&parsed).unwrap_or_else(|error| {
+        panic!("source must lower before target rejection: {source}: {error:?}")
+    });
 
     assert_eq!(
         lowered.len(),
@@ -22,9 +24,7 @@ fn assert_explicit_rejection(source: &str, expected_reason: &'static str) {
             reason, expected_reason,
             "target rejection must remain named and inspectable for {source}"
         ),
-        other => panic!(
-            "expected typed UnsupportedVariant for {source}, got {other:?}"
-        ),
+        other => panic!("expected typed UnsupportedVariant for {source}, got {other:?}"),
     }
 }
 
