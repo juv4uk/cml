@@ -260,6 +260,7 @@ fn primitive_name(op: PrimOp) -> &'static str {
         PrimOp::Eq => "EQ",
         PrimOp::Atom => "ATOM",
         PrimOp::EqualP => "EQUAL?",
+        PrimOp::ExactQLt => "<",
         PrimOp::ExactQLe => "<=",
         PrimOp::ExactQGe => ">=",
     }
@@ -410,6 +411,7 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
                 ("0104", 2) => return lower_prim(PrimOp::Add, args, env),
                 ("1001", 2) => return lower_prim(PrimOp::Sub, args, env),
                 ("1022", 2) => return lower_prim(PrimOp::EqualP, args, env),
+                ("1014", 2) => return lower_prim(PrimOp::ExactQLt, args, env),
                 ("1017", 2) => return lower_prim(PrimOp::ExactQLe, args, env),
                 ("1018", 2) => return lower_prim(PrimOp::ExactQGe, args, env),
                 ("1074", 2) => {

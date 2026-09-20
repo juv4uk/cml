@@ -99,6 +99,10 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
         }
         Ir::Def { value, .. } => validate_ir(value),
         Ir::Prim {
+            op: PrimOp::ExactQLt,
+            ..
+        } => Err(CompileError::UnsupportedVariant("ExactQLt")),
+        Ir::Prim {
             op: PrimOp::ExactQLe,
             ..
         } => Err(CompileError::UnsupportedVariant("ExactQLe")),
@@ -366,6 +370,7 @@ impl Compiler {
                 self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
                 self.emit(&format!("SUB {} R1 R2", target_reg));
             }
+            PrimOp::ExactQLt => unreachable!("ExactQLt rejected by validate_ir"),
             PrimOp::ExactQLe => unreachable!("ExactQLe rejected by validate_ir"),
             PrimOp::ExactQGe => unreachable!("ExactQGe rejected by validate_ir"),
         }

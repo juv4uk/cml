@@ -251,6 +251,23 @@ static Value *to_rational(Value *v) {
     if (v->tag == TAG_INT) return mk_rational(v->u.i, 1);
     return NULL;
 }
+
+// Backend mechanism for semantic 1014. The semantic identity/result domain
+// remains upstream-owned; this projection returns exact numeric 0/1 rather
+// than C truth or Lisp t/nil. Cross multiplication preserves exact rational
+// ordering within this backend's existing checked-long representation.
+static Value *v_exact_q_lt(Value *a, Value *b) {
+    if ((a->tag != TAG_INT && a->tag != TAG_RATIONAL) ||
+        (b->tag != TAG_INT && b->tag != TAG_RATIONAL))
+        runtime_error("Type", "<");
+    long a_num = a->tag == TAG_INT ? a->u.i : a->u.rat.num;
+    long a_den = a->tag == TAG_INT ? 1 : a->u.rat.den;
+    long b_num = b->tag == TAG_INT ? b->u.i : b->u.rat.num;
+    long b_den = b->tag == TAG_INT ? 1 : b->u.rat.den;
+    long left = rational_checked_mul(a_num, b_den);
+    long right = rational_checked_mul(b_num, a_den);
+    return mk_int(left < right ? 1 : 0);
+}
 static long checked_long_add(long a, long b) {
     if ((b > 0 && a > LONG_MAX - b) || (b < 0 && a < LONG_MIN - b))
         runtime_error("NumericOverflow", "integer addition overflow");
@@ -377,6 +394,13 @@ static Value *builtin_eq(Value *args, Value *env) {
 }
 static Value *builtin_atom(Value *args, Value *env) { (void)env; require_arity(args, 1, "atom"); return is_atom(arg_at(args, 0)) ? &TRUE_V : &NIL_V; }
 static Value *builtin_equal_p(Value *args, Value *env) { (void)env; require_arity(args, 2, "equal?"); return v_equal_p(arg_at(args, 0), arg_at(args, 1)) ? &TRUE_V : &NIL_V; }
+static Value *builtin_exact_q_lt(Value *args, Value *env) {
+    (void)env;
+    require_arity(args, 2, "<");
+    require_number(arg_at(args, 0), "<");
+    require_number(arg_at(args, 1), "<");
+    return v_exact_q_lt(arg_at(args, 0), arg_at(args, 1));
+}
 
 static Value *v_apply(Value *callable, Value *args) {
     if (callable->tag == TAG_CLOSURE) return callable->u.closure.fn(args, callable->u.closure.env);
@@ -435,6 +459,7 @@ static void bootstrap_builtins(void) {
     bind_global("EQ", mk_builtin("eq", builtin_eq));
     bind_global("ATOM", mk_builtin("atom", builtin_atom));
     bind_global("EQUAL?", mk_builtin("equal?", builtin_equal_p));
+    bind_global("<", mk_builtin("<", builtin_exact_q_lt));
 }
 
 // Standard Lisp list printing (`(a b c)`, `(a b . c)` for a genuine
@@ -639,6 +664,11 @@ impl CBackend {
             )),
             PrimOp::EqualP => Ok(format!(
                 "(v_equal_p({}, {}) ? &TRUE_V : &NIL_V)",
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            )),
+            PrimOp::ExactQLt => Ok(format!(
+                "v_exact_q_lt({}, {})",
                 self.compile_expr(&args[0], env)?,
                 self.compile_expr(&args[1], env)?
             )),
