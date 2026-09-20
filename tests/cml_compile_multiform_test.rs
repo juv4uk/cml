@@ -12,11 +12,8 @@ fn cml_compile_x86_elf_accepts_supported_multi_form_programs() {
     let source_path = base.with_extension("lisp");
     let output_path = base.with_extension("elf");
 
-    fs::write(
-        &source_path,
-        "(def id (lambda (x) x))\n(id 42)\n",
-    )
-    .expect("write multi-form Lisp fixture");
+    fs::write(&source_path, "(def id (lambda (x) x))\n(id 42)\n")
+        .expect("write multi-form Lisp fixture");
 
     let status = Command::new(env!("CARGO_BIN_EXE_cml-compile"))
         .arg("x86-elf")
