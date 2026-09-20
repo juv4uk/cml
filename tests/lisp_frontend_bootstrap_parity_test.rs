@@ -1,6 +1,6 @@
 use cml::ir::{Ir, PrimOp};
 use cml::{lower, parser};
-use my_lisp::{eval_program, load_core_library, Session};
+use my_lisp::{Session, eval_program, load_core_library};
 use std::fs;
 use std::path::PathBuf;
 
@@ -19,10 +19,12 @@ fn rust_lowering_envelope(source: &str) -> String {
     let parsed = parser::parse(source).expect("CML source must parse");
     let lowered = lower::lower_program(&parsed).expect("CML source must lower");
 
-    let [Ir::Prim {
-        op: PrimOp::Add,
-        args,
-    }] = lowered.as_slice()
+    let [
+        Ir::Prim {
+            op: PrimOp::Add,
+            args,
+        },
+    ] = lowered.as_slice()
     else {
         panic!("bounded bootstrap witness must lower to one Prim(Add): {lowered:?}");
     };
@@ -31,9 +33,7 @@ fn rust_lowering_envelope(source: &str) -> String {
         panic!("bounded bootstrap witness must preserve exact integer operands: {args:?}");
     };
 
-    format!(
-        "(cml-ir-bootstrap-v0 (prim + (literal {left}) (literal {right})))"
-    )
+    format!("(cml-ir-bootstrap-v0 (prim + (literal {left}) (literal {right})))")
 }
 
 #[test]
@@ -45,13 +45,10 @@ fn lisp_authored_frontend_and_existing_cml_lowering_agree_on_bounded_add() {
     eval_program(&frontend, &mut session)
         .expect("observed-current Lisp frontend must execute under the supported evaluator");
 
-    let lisp_envelope = eval_program(
-        "(cml-bootstrap-lower-add (quote (+ 1 2)))",
-        &mut session,
-    )
-    .expect("Lisp-authored frontend witness must execute")
-    .value
-    .to_string();
+    let lisp_envelope = eval_program("(cml-bootstrap-lower-add (quote (+ 1 2)))", &mut session)
+        .expect("Lisp-authored frontend witness must execute")
+        .value
+        .to_string();
 
     let rust_envelope = rust_lowering_envelope("(+ 1 2)");
 
