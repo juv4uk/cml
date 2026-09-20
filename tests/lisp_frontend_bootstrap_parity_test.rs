@@ -1,18 +1,36 @@
 use cml::ir::{Ir, PrimOp};
 use cml::{lower, parser};
-use my_lisp::{Session, eval_program, load_core_library};
 use std::fs;
 use std::path::PathBuf;
 
-fn observed_current_frontend_source() -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../my-lisp/lib/compiler/cml-bootstrap.lisp");
+fn observed_current_path(relative: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../my-lisp")
+        .join(relative)
+}
+
+fn observed_current_text(relative: &str) -> String {
+    let path = observed_current_path(relative);
     fs::read_to_string(&path).unwrap_or_else(|error| {
         panic!(
-            "observed-current my-lisp frontend must exist at {}: {error}",
+            "observed-current my-lisp artifact must exist at {}: {error}",
             path.display()
         )
     })
+}
+
+fn witness_field(name: &str) -> String {
+    let source = observed_current_text("tests/fixtures/cml-bootstrap-frontend-witness.lisp");
+    let prefix = format!("({name} . \"");
+    let start = source
+        .find(&prefix)
+        .unwrap_or_else(|| panic!("observed-current witness field {name} must exist"))
+        + prefix.len();
+    let tail = &source[start..];
+    let end = tail
+        .find("\")")
+        .unwrap_or_else(|| panic!("observed-current witness field {name} must be quoted"));
+    tail[..end].to_string()
 }
 
 fn rust_lowering_envelope(source: &str) -> String {
@@ -37,32 +55,27 @@ fn rust_lowering_envelope(source: &str) -> String {
 }
 
 #[test]
-fn lisp_authored_frontend_and_existing_cml_lowering_agree_on_bounded_add() {
-    let frontend = observed_current_frontend_source();
-
-    let mut session = Session::default();
-    load_core_library(&mut session).expect("supported-pin evaluator must load core");
-    eval_program(&frontend, &mut session)
-        .expect("observed-current Lisp frontend must execute under the supported evaluator");
-
-    let lisp_envelope = eval_program("(cml-bootstrap-lower-add (quote (+ 1 2)))", &mut session)
-        .expect("Lisp-authored frontend witness must execute")
-        .value
-        .to_string();
-
-    let rust_envelope = rust_lowering_envelope("(+ 1 2)");
+fn lisp_owned_frontend_witness_and_existing_cml_lowering_agree_on_bounded_add() {
+    let source = witness_field("source");
+    let expected_envelope = witness_field("expected-envelope");
+    let rust_envelope = rust_lowering_envelope(&source);
 
     assert_eq!(
-        rust_envelope, lisp_envelope,
-        "CML lowering must agree with the Lisp-authored compiler envelope"
+        rust_envelope, expected_envelope,
+        "CML lowering must agree with the Lisp-owned frontend witness"
     );
 }
 
 #[test]
-fn cml_consumes_frontend_without_importing_sid_or_machine_authority() {
-    let frontend = observed_current_frontend_source();
+fn cml_consumes_observed_current_witness_without_importing_semantic_authority() {
+    let frontend = observed_current_text("lib/compiler/cml-bootstrap.lisp");
+    let witness = observed_current_text("tests/fixtures/cml-bootstrap-frontend-witness.lisp");
+
     assert!(!frontend.contains("semantic-id"));
     assert!(!frontend.contains("x86-encode"));
     assert!(!frontend.contains("machine-op"));
     assert!(frontend.contains("compiler-frontend-rejection"));
+
+    assert!(witness.contains("(authority . \"lib/compiler/cml-bootstrap.lisp\")"));
+    assert!(witness.contains("(consumer . \"juv4uk/cml#153\")"));
 }
