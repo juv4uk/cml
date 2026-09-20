@@ -8,6 +8,7 @@ use std::{env, fs, path::Path, process::ExitCode};
 use cml::{
     elf64::Elf64Executable, lisp_asm_vertical::select_arithmetic_slice, lower,
     machine_inst::assemble_program, macros::MacroExpander, parser,
+    x86_freestanding::X86FreestandingBackend,
 };
 
 fn main() -> ExitCode {
@@ -60,12 +61,20 @@ fn run() -> Result<(), String> {
         .process(&expressions)
         .map_err(|error| error.to_string())?;
     let ir = lower::lower_program(&expanded).map_err(|error| error.to_string())?;
-    let machine_items = select_arithmetic_slice(&ir).map_err(|error| error.to_string())?;
-    let bytes = assemble_program(&machine_items).map_err(|error| error.to_string())?;
+    if let Ok(machine_items) = select_arithmetic_slice(&ir) {
+        let bytes = assemble_program(&machine_items).map_err(|error| error.to_string())?;
+        Elf64Executable::new(bytes)
+            .write_executable(&output)
+            .map_err(|error| {
+                format!("could not write {}: {error}", Path::new(&output).display())
+            })?;
+        return Ok(());
+    }
 
-    Elf64Executable::new(bytes)
-        .write_executable(&output)
-        .map_err(|error| format!("could not write {}: {error}", Path::new(&output).display()))?;
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&ir)
+        .map_err(|error| error.to_string())?;
+    cml::x86_elf::link_x86_elf(&assembly, Path::new(&output))?;
 
     Ok(())
 }
