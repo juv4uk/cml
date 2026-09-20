@@ -1337,7 +1337,7 @@ fn primitive_contract(operation: PrimOp) -> Result<(&'static str, usize), Compil
         PrimOp::Sub => Ok(("sub", 2)),
         PrimOp::EqualP => Err(CompileError::UnsupportedVariant("equal? primitive")),
         PrimOp::ExactQLt => Err(CompileError::UnsupportedVariant("exact-Q < primitive")),
-        PrimOp::ExactQLe => Err(CompileError::UnsupportedVariant("exact-Q <= primitive")),
+        PrimOp::ExactQLe => Ok(("exact-Q <=", 2)),
         PrimOp::ExactQGe => Ok(("exact-Q >=", 2)),
     }
 }
@@ -2256,6 +2256,9 @@ impl Emitter {
         if matches!(operation, PrimOp::ExactQGe) {
             return self.emit_exact_q_ge(args);
         }
+        if matches!(operation, PrimOp::ExactQLe) {
+            return self.emit_exact_q_le(args);
+        }
 
         let slots: Vec<usize> = args
             .iter()
@@ -2287,6 +2290,65 @@ impl Emitter {
             _ => unreachable!("arithmetic handled above; equal? excluded by preflight"),
         };
         self.line(&format!("    call {runtime}"));
+        Ok(())
+    }
+
+    /// Execute semantic 1017 (exact-Q <=) for the bounded fixnum domain.
+    fn emit_exact_q_le(&mut self, args: &[Ir]) -> Result<(), CompileError> {
+        debug_assert_eq!(args.len(), 2);
+        self.emit_ir(&args[0])?;
+        let left_slot = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(left_slot)
+        ));
+        self.emit_ir(&args[1])?;
+        let right_slot = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(right_slot)
+        ));
+        let type_error = self.allocate_label();
+        let done = self.allocate_label();
+        for slot in [left_slot, right_slot] {
+            self.line(&format!("    movq {}(%rsp), %rcx", Self::slot_offset(slot)));
+            self.line("    movq %rcx, %rax");
+            self.line("    andq $7, %rax");
+            self.line(&format!(
+                "    cmpq ${}, %rax",
+                wsm_os_target::Tag::Fixnum as u64
+            ));
+            self.line(&format!("    jne .Lexact_q_le_type_{type_error}"));
+        }
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(left_slot)
+        ));
+        self.line("    sarq $3, %rcx");
+        self.line(&format!(
+            "    movq {}(%rsp), %rdx",
+            Self::slot_offset(right_slot)
+        ));
+        self.line("    sarq $3, %rdx");
+        self.line("    cmpq %rdx, %rcx");
+        self.line("    setle %al");
+        self.line("    movzbq %al, %rax");
+        self.line("    shlq $3, %rax");
+        self.line(&format!(
+            "    orq ${}, %rax",
+            wsm_os_target::Tag::Fixnum as u64
+        ));
+        self.line(&format!("    jmp .Lexact_q_le_done_{done}"));
+        self.line(&format!(".Lexact_q_le_type_{type_error}:"));
+        self.line("    movq %r12, %rdi");
+        self.line(&format!(
+            "    movl ${}, %esi",
+            wsm_os_target::ErrorCode::Type as u32
+        ));
+        self.line("    xorl %edx, %edx");
+        self.line("    xorl %ecx, %ecx");
+        self.line("    call wsm_fail");
+        self.line(&format!(".Lexact_q_le_done_{done}:"));
         Ok(())
     }
 
