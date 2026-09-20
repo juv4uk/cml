@@ -38,6 +38,7 @@ pub mod witness_bridge;
 pub mod x86_avx2;
 pub mod x86_freestanding;
 pub mod x86_freestanding_metadata;
+pub mod x86_elf;
 pub mod x86_inline;
 pub mod x86_isel;
 pub mod x86_lir;
