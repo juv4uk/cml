@@ -13,13 +13,16 @@ use std::fmt;
 pub const SCHEMA: &str = "cml-export/1";
 
 /// Semantic IDs required by vertical slice 1 (named def + recursion).
-pub const SLICE_1_FORM_IDS: &[&str] = &["0001", "0003", "0007", "0010", "0011", "1001"];
+pub const SLICE_1_FORM_IDS: &[&str] = &[
+    "00000001", "00000011", "00000111", "00001000", "00001001", "00001101",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Role {
     Syntax,
     Primitive,
     Library,
+    Registry,
     Other(String),
 }
 
@@ -80,6 +83,7 @@ fn parse_role(s: &str) -> Role {
         "syntax" => Role::Syntax,
         "primitive" => Role::Primitive,
         "library" => Role::Library,
+        "registry" => Role::Registry,
         other => Role::Other(other.to_string()),
     }
 }
@@ -99,25 +103,34 @@ pub fn parse_export(text: &str) -> Result<SemanticExport, ExportError> {
     let forms_region = &text[forms_start..];
 
     let mut forms = Vec::new();
-    // Match form rows: (NNNN (surfaces ...) (role R) (callable C))
-    for id in ["0001", "0003", "0007", "0010", "0011", "1001"] {
-        let marker = format!("({id} ");
-        if let Some(idx) = forms_region.find(&marker) {
-            let row = &forms_region[idx..];
-            let role = extract_symbol_field(row, "role")
-                .map(|s| parse_role(&s))
-                .unwrap_or(Role::Other("?".into()));
-            let callable = extract_symbol_field(row, "callable")
-                .map(|s| s == "t")
-                .unwrap_or(false);
-            let surfaces = extract_surfaces(row);
-            forms.push(Form {
-                id: id.into(),
-                role,
-                callable,
-                surfaces,
-            });
+    // Parse every canonical 8-bit row; the registry, not this consumer,
+    // decides which rows exist. Rows are one-per-line in cml-export/1.
+    for line in forms_region.lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix('(') else {
+            continue;
+        };
+        let Some(id) = rest
+            .get(..8)
+            .filter(|s| s.chars().all(|c| c == '0' || c == '1'))
+        else {
+            continue;
+        };
+        if !rest.as_bytes().get(8).is_some_and(|b| *b == b' ') {
+            continue;
         }
+        let role = extract_symbol_field(rest, "role")
+            .map(|s| parse_role(&s))
+            .unwrap_or(Role::Other("?".into()));
+        let callable = extract_symbol_field(rest, "callable")
+            .map(|s| s == "t")
+            .unwrap_or(false);
+        forms.push(Form {
+            id: id.into(),
+            role,
+            callable,
+            surfaces: extract_surfaces(rest),
+        });
     }
 
     if forms.is_empty() {
@@ -204,7 +217,7 @@ pub fn validate_slice1(export: &SemanticExport) -> Result<(), ExportError> {
 /// Fail-closed: issue cml#3 item 2 removed the earlier soft bypass that
 /// treated `"pending-producer-byte-pin"` as an automatic match now that
 /// `contracts/mylisp-cml-export.wsm` vendors a real producer digest
-/// (`dfc880e5e5ae80f9`, from my-lisp's `cml-export` binary). Any drift
+/// (`22f673f2d2bc3d28`, from the complete registry export). Any drift
 /// between the vendored file and the pin below must fail the build, not
 /// silently pass.
 pub fn check_digest(export: &SemanticExport, expected: &str) -> Result<(), ExportError> {
@@ -227,14 +240,15 @@ mod tests {
     fn parses_vendored_export() {
         let export = parse_export(VENDORED).expect("parse");
         assert_eq!(export.contract_major, 6);
-        assert_eq!(export.forms.len(), 6);
+        assert_eq!(export.forms.len(), 170);
+        assert!(export.forms.iter().any(|f| f.id == "00000000"));
         validate_slice1(&export).expect("slice1");
     }
 
     #[test]
     fn syntax_forms_are_not_callable() {
         let export = parse_export(VENDORED).unwrap();
-        for id in ["0001", "0007", "0010", "0011"] {
+        for id in ["00000001", "00000111", "00001000", "00001001"] {
             let f = export.forms.iter().find(|f| f.id == id).unwrap();
             assert!(!f.callable, "{id} must not be callable");
             assert_eq!(f.role, Role::Syntax);
@@ -244,9 +258,9 @@ mod tests {
     #[test]
     fn eq_and_sub_are_callable() {
         let export = parse_export(VENDORED).unwrap();
-        let eq = export.forms.iter().find(|f| f.id == "0003").unwrap();
+        let eq = export.forms.iter().find(|f| f.id == "00000011").unwrap();
         assert!(eq.callable);
-        let sub = export.forms.iter().find(|f| f.id == "1001").unwrap();
+        let sub = export.forms.iter().find(|f| f.id == "00001101").unwrap();
         assert!(sub.callable);
     }
 
