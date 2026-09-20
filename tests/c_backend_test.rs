@@ -138,6 +138,17 @@ fn c_backend_lexically_shadows_an_ordinary_builtin() {
 }
 
 #[test]
+fn c_backend_multiplies_inside_a_compiled_lambda() {
+    assert_eq!(
+        compile_and_run_first_class(
+            "(def scale (lambda (w) (* w 8))) (scale 1)",
+            "builtin_mul_inside_lambda",
+        ),
+        "8"
+    );
+}
+
+#[test]
 fn c_backend_passes_a_builtin_as_a_higher_order_argument() {
     let code = "((lambda (f) (f 2 3)) +)";
     assert_eq!(
