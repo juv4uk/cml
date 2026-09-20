@@ -622,7 +622,7 @@ fn preflight_env(
         Ir::Lambda { .. } => return Err(CompileError::UnsupportedVariant("lambda")),
         Ir::App { func, args } => {
             if let Ir::Builtin(name) = func.as_ref() {
-                if name == "mod" {
+                if name == "mod" || name == "quotient" {
                     if args.len() != 2 {
                         return Err(CompileError::InvalidArity {
                             operation: "mod",
@@ -891,7 +891,7 @@ fn preflight_lambda_body(
         }
         Ir::App { func, args } => {
             if let Ir::Builtin(name) = func.as_ref() {
-                if name == "mod" {
+                if name == "mod" || name == "quotient" {
                     if args.len() != 2 {
                         return Err(CompileError::InvalidArity {
                             operation: "mod",
@@ -1081,7 +1081,7 @@ fn preflight_def_body(
         }
         Ir::App { func, args } => {
             if let Ir::Builtin(name) = func.as_ref() {
-                if name == "mod" {
+                if name == "mod" || name == "quotient" {
                     if args.len() != 2 {
                         return Err(CompileError::InvalidArity {
                             operation: "mod",
@@ -1460,6 +1460,9 @@ impl Emitter {
                 if let Ir::Builtin(name) = func.as_ref() {
                     if name == "mod" {
                         return self.emit_mod(args);
+                    }
+                    if name == "quotient" {
+                        return self.emit_quotient(args);
                     }
                 }
                 if platform_call_contract(func).is_some()
@@ -2349,6 +2352,62 @@ impl Emitter {
         self.line("    call wsm_fail");
 
         self.line(&format!(".Larith_ok_{ok_label}:"));
+        Ok(())
+    }
+
+    /// Inline non-negative integer quotient through hardware divq.
+    fn emit_quotient(&mut self, args: &[Ir]) -> Result<(), CompileError> {
+        let fail_label = self.allocate_label();
+        self.emit_ir(&args[0])?;
+        let slot0 = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(slot0)
+        ));
+        self.emit_ir(&args[1])?;
+        let slot1 = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(slot1)
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rax",
+            Self::slot_offset(slot0)
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(slot1)
+        ));
+        self.line("    sarq $3, %rax");
+        self.line("    sarq $3, %rcx");
+        self.line("    testq %rcx, %rcx");
+        self.line(&format!("    jle .Lquotient_fail_{fail_label}"));
+        self.line("    testq %rax, %rax");
+        self.line(&format!("    js .Lquotient_fail_{fail_label}"));
+        self.line("    xorq %rdx, %rdx");
+        self.line("    divq %rcx");
+        self.line("    shlq $3, %rax");
+        self.line(&format!(
+            "    orq ${}, %rax",
+            wsm_os_target::Tag::Fixnum as u64
+        ));
+        self.line(&format!("    jmp .Lquotient_ok_{fail_label}"));
+        self.line(&format!(".Lquotient_fail_{fail_label}:"));
+        self.line("    movq %r12, %rdi");
+        self.line(&format!(
+            "    movl ${}, %esi",
+            wsm_os_target::ErrorCode::Type as u32
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rdx",
+            Self::slot_offset(slot0)
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(slot1)
+        ));
+        self.line("    call wsm_fail");
+        self.line(&format!(".Lquotient_ok_{fail_label}:"));
         Ok(())
     }
 
