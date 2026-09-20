@@ -8,7 +8,8 @@ fn honest_c_vs_lisp_benchmark() {
     let n: i64 = 10_000_000;
 
     // 1. C Implementation
-    let c_source = format!(r#"
+    let c_source = format!(
+        r#"
 #include <stdint.h>
 #include <stdio.h>
 #include <time.h>
@@ -31,7 +32,8 @@ int main() {{
     printf("  Time: %.6f s (%.2f ns/iter)\n", dt, (dt / {n}.0) * 1e9);
     return 0;
 }}
-"#);
+"#
+    );
     fs::write("/tmp/c_bench.c", &c_source).unwrap();
 
     // Compile C with -O3
@@ -47,14 +49,16 @@ int main() {{
         .unwrap();
 
     // 2. Lisp compiled via CML
-    let lisp_source = format!(r#"
+    let lisp_source = format!(
+        r#"
       (def countdown
         (lambda (n)
           (cond
             ((eq n 0) 42)
             (t (countdown (- n 1))))))
       (countdown {n})
-    "#);
+    "#
+    );
 
     let expressions = parser::parse(&lisp_source).expect("parse");
     let program = lower::lower_program_with_tail_calls(&expressions).expect("lower");
@@ -64,7 +68,8 @@ int main() {{
 
     fs::write("/tmp/lisp_count.s", &assembly).unwrap();
 
-    let harness = format!(r#"
+    let harness = format!(
+        r#"
 #include <stdint.h>
 #include <stdio.h>
 #include <time.h>
@@ -80,12 +85,20 @@ int main() {{
     printf("  Time: %.6f s (%.2f ns/iter)\n", dt, (dt / {n}.0) * 1e9);
     return 0;
 }}
-"#);
+"#
+    );
     fs::write("/tmp/harness.c", &harness).unwrap();
 
     let nucleus_path = cml::x86_freestanding::resolve_nucleus_asm_path().unwrap();
     let status = Command::new("cc")
-        .args(&["-O3", "/tmp/harness.c", "/tmp/lisp_count.s", nucleus_path.to_str().unwrap(), "-o", "/tmp/lisp_bench"])
+        .args(&[
+            "-O3",
+            "/tmp/harness.c",
+            "/tmp/lisp_count.s",
+            nucleus_path.to_str().unwrap(),
+            "-o",
+            "/tmp/lisp_bench",
+        ])
         .status()
         .unwrap();
     assert!(status.success());

@@ -18,7 +18,10 @@ fn simple_tail_recursive_list_walker_compiles_to_native_loop() {
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
         .expect("x86 freestanding must compile list walker");
-    println!("=== GENERATED X86 ASSEMBLY ===\n{}\n==============================", assembly);
+    println!(
+        "=== GENERATED X86 ASSEMBLY ===\n{}\n==============================",
+        assembly
+    );
 
     assert!(
         assembly.contains("jmp .Ltcloop_"),
@@ -34,8 +37,8 @@ fn simple_tail_recursive_list_walker_compiles_to_native_loop() {
     let harness = base.with_extension("c");
     let executable = base.with_extension("bin");
 
-    let canonical_t = wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX)
-        .expect("canonical t symbol");
+    let canonical_t =
+        wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX).expect("canonical t symbol");
 
     std::fs::write(&source, &assembly).unwrap();
     std::fs::write(
@@ -133,8 +136,8 @@ fn tail_recursive_list_walker_with_item_predicate() {
     let harness = base.with_extension("c");
     let executable = base.with_extension("bin");
 
-    let canonical_t = wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX)
-        .expect("canonical t symbol");
+    let canonical_t =
+        wsm_os_target::encode_symbol(wsm_os_target::SYMBOL_ID_MAX).expect("canonical t symbol");
 
     std::fs::write(&source, &assembly).unwrap();
     std::fs::write(
@@ -184,6 +187,3 @@ int main(void) {{
         "native all-even (with mod and multi-def calls) must return canonical t!"
     );
 }
-
-
-
