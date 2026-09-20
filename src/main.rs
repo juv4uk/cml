@@ -7,8 +7,6 @@ use cml::x86_freestanding::X86FreestandingBackend;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn usage() -> ! {
     eprintln!(
@@ -65,7 +63,8 @@ fn main() {
                 std::process::exit(1);
             });
         if let Some(output) = output {
-            link_x86_elf(&assembly, output);
+            cml::x86_elf::link_x86_elf(&assembly, std::path::Path::new(output))
+                .unwrap_or_else(|err| fatal(&err));
         } else {
             print!("{assembly}");
         }
@@ -134,40 +133,6 @@ fn run_build(args: &[String]) {
         std::process::exit(1);
     }
     eprintln!("wrote {}", output.display());
-}
-
-fn link_x86_elf(assembly: &str, output: &str) {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let base = env::temp_dir().join(format!("cml-x86-elf-{}-{nonce}", std::process::id()));
-    let source = base.with_extension("s");
-    let launcher = base.with_extension("c");
-    fs::write(&source, assembly).unwrap_or_else(|err| fatal(&format!("writing assembly: {err}")));
-    fs::write(
-        &launcher,
-        "#include <stdint.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { (void)wsm_entry(0); return 0; }\n",
-    )
-    .unwrap_or_else(|err| fatal(&format!("writing launcher: {err}")));
-    let nucleus_path =
-        cml::x86_freestanding::resolve_nucleus_asm_path().unwrap_or_else(|err| fatal(&err));
-    let linked = Command::new("cc")
-        .arg(&launcher)
-        .arg(&source)
-        .arg(&nucleus_path)
-        .arg("-o")
-        .arg(output)
-        .output()
-        .unwrap_or_else(|err| fatal(&format!("starting linker: {err}")));
-    let _ = fs::remove_file(source);
-    let _ = fs::remove_file(launcher);
-    if !linked.status.success() {
-        fatal(&format!(
-            "x86 ELF link failed: {}",
-            String::from_utf8_lossy(&linked.stderr)
-        ));
-    }
 }
 
 fn fatal(message: &str) -> ! {
