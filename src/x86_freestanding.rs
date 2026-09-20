@@ -579,6 +579,9 @@ fn preflight_env(
         Ir::Int(value) => {
             wsm_os_target::encode_fixnum(*value).ok_or(CompileError::FixnumOutOfRange(*value))?;
         }
+        Ir::Float(_) => return Err(CompileError::UnsupportedVariant("Float")),
+        Ir::Rational(_, _) => return Err(CompileError::UnsupportedVariant("Rational")),
+        Ir::String(_) => return Err(CompileError::UnsupportedVariant("String")),
         Ir::Nil | Ir::True => {}
         Ir::Quote(value) => preflight_quoted(value, symbols, slots)?,
         Ir::Prim { op, args } => {
