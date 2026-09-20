@@ -69,6 +69,51 @@ pub fn reg64_to_lisp_symbol(reg: X86Reg) -> Result<&'static str, BridgeError> {
     }
 }
 
+
+/// Projects one admitted CML machine instruction back to the upstream
+/// Lisp-owned structured machine-form vocabulary. This is a mechanism bridge:
+/// it does not define instruction meaning or encoding.
+pub fn inst_to_lisp_machine_form(inst: &MachineInst) -> Result<String, BridgeError> {
+    match inst {
+        MachineInst::MovImm64 { dst, imm, .. } => {
+            let reg = reg64_to_lisp_symbol(*dst)?;
+            Ok(format!("(mov-r64-imm64 {reg} {imm})"))
+        }
+        MachineInst::AluRegReg {
+            op: AluOp::Add,
+            dst,
+            src,
+            ..
+        } => {
+            let dst = reg64_to_lisp_symbol(*dst)?;
+            let src = reg64_to_lisp_symbol(*src)?;
+            Ok(format!("(add-r64-r64 {dst} {src})"))
+        }
+        MachineInst::Ret { .. } => Ok("(ret)".to_string()),
+        other => Err(BridgeError::UnsupportedInstruction(format!(
+            "instruction {:?} is not admitted in the #74 upstream machine-form bridge",
+            other
+        ))),
+    }
+}
+
+/// Projects an admitted instruction-only sequence into one Lisp list of
+/// structured machine forms. Non-instruction items fail closed.
+pub fn items_to_lisp_machine_forms(items: &[MachineItem]) -> Result<String, BridgeError> {
+    let mut forms = Vec::with_capacity(items.len());
+    for (idx, item) in items.iter().enumerate() {
+        match item {
+            MachineItem::Inst(inst) => forms.push(inst_to_lisp_machine_form(inst)?),
+            other => {
+                return Err(BridgeError::InvalidProgram(format!(
+                    "item at index {idx} ({other:?}) is not an admitted upstream machine form"
+                )));
+            }
+        }
+    }
+    Ok(format!("({})", forms.join(" ")))
+}
+
 /// Converts an admitted scalar [`MachineInst`] to a Lisp encoder expression.
 ///
 /// Admitted scalar subset in slice #52:
