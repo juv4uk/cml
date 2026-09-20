@@ -138,6 +138,46 @@ fn c_backend_lexically_shadows_an_ordinary_builtin() {
 }
 
 #[test]
+fn c_backend_eq_returns_identity_relation_records() {
+    assert_eq!(
+        compile_and_run_first_class("(eq 3 3)", "eq_identity_same"),
+        "(identity-relation same)"
+    );
+    assert_eq!(
+        compile_and_run_first_class("(eq 3 4)", "eq_identity_distinct"),
+        "(identity-relation distinct)"
+    );
+}
+
+#[test]
+fn c_backend_current_eq_domain_drives_canonical_cond_in_quotient_slice() {
+    let code = r#"
+      (def largest-chunk
+        (lambda (a b chunk mult)
+          (cond
+            ((< a (+ chunk chunk)) 1 (cons chunk mult))
+            ((< a (+ chunk chunk)) 0
+             (largest-chunk a b (+ chunk chunk) (+ mult mult))))))
+      (def quotient
+        (lambda (a b)
+          (cond
+            ((eq b 0) (identity-relation same) (/ a b))
+            ((eq b 0) (identity-relation distinct)
+             (cond
+               ((< a b) 1 0)
+               ((< a b) 0
+                (let ((chunk+mult (largest-chunk a b b 1)))
+                  (+ (cdr chunk+mult)
+                     (quotient (- a (car chunk+mult)) b)))))))))
+      (quotient 0 8)
+    "#;
+    assert_eq!(
+        compile_and_run_first_class(code, "quotient_eq_domain"),
+        "0"
+    );
+}
+
+#[test]
 fn c_backend_multiplies_inside_a_compiled_lambda() {
     assert_eq!(
         compile_and_run_first_class(
