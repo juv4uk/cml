@@ -65,7 +65,9 @@ fn run() -> Result<(), String> {
         let bytes = assemble_program(&machine_items).map_err(|error| error.to_string())?;
         Elf64Executable::new(bytes)
             .write_executable(&output)
-            .map_err(|error| format!("could not write {}: {error}", Path::new(&output).display()))?;
+            .map_err(|error| {
+                format!("could not write {}: {error}", Path::new(&output).display())
+            })?;
         return Ok(());
     }
 
