@@ -83,7 +83,6 @@ fn upstream_machine_form_projection_fails_closed_on_non_form_items() {
     );
 }
 
-
 #[test]
 fn stale_or_unadmitted_machine_instruction_fails_closed_before_upstream_encoding() {
     let stale = vec![MachineItem::Inst(MachineInst::AluRegReg {
