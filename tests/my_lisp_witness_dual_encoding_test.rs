@@ -85,7 +85,9 @@ fn execute_direct(items: &[MachineItem], nonce: u128) -> String {
         .write_executable(&path)
         .expect("direct ELF writer must succeed");
 
-    let output = Command::new(&path).output().expect("execute direct-byte ELF");
+    let output = Command::new(&path)
+        .output()
+        .expect("execute direct-byte ELF");
     let _ = fs::remove_file(&path);
     assert!(
         output.status.success() || output.status.code().is_some(),
@@ -150,9 +152,7 @@ fn assert_lisp_owned_verdict(row: &str, actual: &str) {
     eval_program(&runner, &mut session).expect("pinned witness-runner.lisp must load");
 
     let verdict = eval_program(
-        &format!(
-            "(witness-pass? (witness-verdict (quote {row}) (quote {actual})))"
-        ),
+        &format!("(witness-pass? (witness-verdict (quote {row}) (quote {actual})))"),
         &mut session,
     )
     .expect("Lisp-owned witness verdict must execute")
