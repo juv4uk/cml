@@ -55,10 +55,8 @@ fn upstream_machine_form_bridge_pin_and_blob_fail_closed_on_drift() {
         "#74 machine lowering contract drift must fail closed"
     );
 
-    let lowering = fs::read_to_string(
-        upstream.join("lib/machine/lowering/semantic-x86-64.lisp"),
-    )
-    .expect("pinned upstream lowering contract must be readable");
+    let lowering = fs::read_to_string(upstream.join("lib/machine/lowering/semantic-x86-64.lisp"))
+        .expect("pinned upstream lowering contract must be readable");
 
     assert!(lowering.contains("(def x86-lower-add-u64-forms"));
     assert!(
