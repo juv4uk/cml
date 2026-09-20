@@ -69,7 +69,6 @@ pub fn reg64_to_lisp_symbol(reg: X86Reg) -> Result<&'static str, BridgeError> {
     }
 }
 
-
 /// Projects one admitted CML machine instruction back to the upstream
 /// Lisp-owned structured machine-form vocabulary. This is a mechanism bridge:
 /// it does not define instruction meaning or encoding.
