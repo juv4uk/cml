@@ -3,11 +3,10 @@
 //! This binary is mechanism only: it reuses the already admitted CML pipeline
 //! and owns no Lisp expected semantic answers.
 
-use std::{env, fs, path::Path, process::ExitCode};
+use std::{env, fs, path::Path, process::{Command, ExitCode}};
 
 use cml::{
-    elf64::Elf64Executable, lisp_asm_vertical::select_arithmetic_slice, lower,
-    machine_inst::assemble_program, macros::MacroExpander, parser,
+    lower, macros::MacroExpander, parser, x86_freestanding::X86FreestandingBackend,
 };
 
 fn main() -> ExitCode {
@@ -59,12 +58,19 @@ fn run() -> Result<(), String> {
         .process(&expressions)
         .map_err(|error| error.to_string())?;
     let ir = lower::lower_program(&expanded).map_err(|error| error.to_string())?;
-    let machine_items = select_arithmetic_slice(&ir).map_err(|error| error.to_string())?;
-    let bytes = assemble_program(&machine_items).map_err(|error| error.to_string())?;
-
-    Elf64Executable::new(bytes)
-        .write_executable(&output)
-        .map_err(|error| format!("could not write {}: {error}", Path::new(&output).display()))?;
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&ir)
+        .map_err(|error| error.to_string())?;
+    let base = std::env::temp_dir().join(format!("cml-compile-{}", std::process::id()));
+    let source = base.with_extension("s");
+    let launcher = base.with_extension("c");
+    fs::write(&source, assembly).map_err(|error| error.to_string())?;
+    fs::write(&launcher, "#include <stdint.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { (void)wsm_entry(0); return 0; }\n").map_err(|error| error.to_string())?;
+    let nucleus = cml::x86_freestanding::resolve_nucleus_asm_path()?;
+    let linked = Command::new("cc").arg(&launcher).arg(&source).arg(nucleus).arg("-o").arg(&output).output().map_err(|error| error.to_string())?;
+    let _ = fs::remove_file(&source);
+    let _ = fs::remove_file(&launcher);
+    if !linked.status.success() { return Err(format!("x86 ELF link failed: {}", String::from_utf8_lossy(&linked.stderr))); }
 
     Ok(())
 }
