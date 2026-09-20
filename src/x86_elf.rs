@@ -8,10 +8,7 @@ pub fn link_x86_elf(assembly: &str, output: &Path) -> Result<(), String> {
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("system clock before unix epoch: {error}"))?
         .as_nanos();
-    let base = std::env::temp_dir().join(format!(
-        "cml-x86-elf-{}-{nonce}",
-        std::process::id()
-    ));
+    let base = std::env::temp_dir().join(format!("cml-x86-elf-{}-{nonce}", std::process::id()));
     let source = base.with_extension("s");
     let launcher = base.with_extension("c");
 
