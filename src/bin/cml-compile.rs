@@ -3,11 +3,13 @@
 //! This binary is mechanism only: it reuses the already admitted CML pipeline
 //! and owns no Lisp expected semantic answers.
 
-use std::{env, fs, path::Path, process::{Command, ExitCode}};
-
-use cml::{
-    lower, macros::MacroExpander, parser, x86_freestanding::X86FreestandingBackend,
+use std::{
+    env, fs,
+    path::Path,
+    process::{Command, ExitCode},
 };
+
+use cml::{lower, macros::MacroExpander, parser, x86_freestanding::X86FreestandingBackend};
 
 fn main() -> ExitCode {
     match run() {
@@ -68,10 +70,22 @@ fn run() -> Result<(), String> {
     fs::write(&source, assembly).map_err(|error| error.to_string())?;
     fs::write(&launcher, "#include <stdint.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { (void)wsm_entry(0); return 0; }\n").map_err(|error| error.to_string())?;
     let nucleus = cml::x86_freestanding::resolve_nucleus_asm_path()?;
-    let linked = Command::new("cc").arg(&launcher).arg(&source).arg(nucleus).arg("-o").arg(&output).output().map_err(|error| error.to_string())?;
+    let linked = Command::new("cc")
+        .arg(&launcher)
+        .arg(&source)
+        .arg(nucleus)
+        .arg("-o")
+        .arg(&output)
+        .output()
+        .map_err(|error| error.to_string())?;
     let _ = fs::remove_file(&source);
     let _ = fs::remove_file(&launcher);
-    if !linked.status.success() { return Err(format!("x86 ELF link failed: {}", String::from_utf8_lossy(&linked.stderr))); }
+    if !linked.status.success() {
+        return Err(format!(
+            "x86 ELF link failed: {}",
+            String::from_utf8_lossy(&linked.stderr)
+        ));
+    }
 
     Ok(())
 }
