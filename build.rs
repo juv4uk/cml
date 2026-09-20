@@ -342,7 +342,7 @@ const OPERATIONS: &[OperationSpec] = &[
         backend_projections: &[
             ("fpga-lisp", "unsupported"),
             ("c", "unsupported"),
-            ("x86_freestanding", "unsupported"),
+            ("x86_freestanding", "bounded-fixnum/numeric-0-or-1"),
         ],
         status: "partial",
         authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
