@@ -171,10 +171,7 @@ fn c_backend_current_eq_domain_drives_canonical_cond_in_quotient_slice() {
                      (quotient (- a (car chunk+mult)) b)))))))))
       (quotient 0 8)
     "#;
-    assert_eq!(
-        compile_and_run_first_class(code, "quotient_eq_domain"),
-        "0"
-    );
+    assert_eq!(compile_and_run_first_class(code, "quotient_eq_domain"), "0");
 }
 
 #[test]
