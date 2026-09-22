@@ -104,6 +104,36 @@ impl std::fmt::Display for BridgeError {
 
 impl std::error::Error for BridgeError {}
 
+/// Rewrites all function call sites (symbols in call position) that are
+/// registry-admitted to their Lisp-owned SID keys. Non-admitted symbols
+/// (local functions, special forms, variables) are left unchanged.
+pub fn rewrite_calls_to_sid(expr: &mut CExpr) {
+    use my_lisp::semantic_registry_export::semantic_id_for_admitted_surface;
+    
+    fn walk(expr: &mut CExpr) {
+        match expr {
+            CExpr::Symbol(name) => {
+                if let Some(sid) = semantic_id_for_admitted_surface(name) {
+                    *name = address_of(sid);
+                }
+            }
+            CExpr::List(items) => {
+                for item in items.iter_mut() {
+                    walk(item);
+                }
+            }
+            CExpr::DottedList(items, tail) => {
+                for item in items.iter_mut() {
+                    walk(item);
+                }
+                walk(tail);
+            }
+            _ => {}
+        }
+    }
+    walk(expr);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
