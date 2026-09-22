@@ -20,16 +20,11 @@ fn main() {
 
     println!("schema\tcml-coverage/1");
     println!("upstream-channel\t{}", ledger.upstream_channel);
-    println!(
-        "registry-fnv1a64\t{:016x}",
-        ledger.registry_digest_fnv1a64
-    );
+    println!("registry-fnv1a64\t{:016x}", ledger.registry_digest_fnv1a64);
     println!("semantic-identities\t{}", summary.semantic_identities);
     println!("source-admitted\t{}", summary.source_admitted);
     println!("not-yet-admitted\t{}", summary.not_yet_admitted);
-    println!(
-        "columns\tsemantic-id\tadmission\toperation-status\tevidence\tbackend-evidence"
-    );
+    println!("columns\tsemantic-id\tadmission\toperation-status\tevidence\tbackend-evidence");
 
     for row in &ledger.rows {
         let admission = match row.admission {
