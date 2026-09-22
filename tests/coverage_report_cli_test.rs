@@ -40,6 +40,10 @@ fn report_is_deterministic_and_matches_the_merged_ledger() {
         "\nx86-assembly-witness-only\t{}\n",
         summary.x86_assembly_witness_only
     )));
+    assert!(text.contains(&format!(
+        "\nx86-representation-limited\t{}\n",
+        summary.x86_representation_limited
+    )));
 
     let row_lines: Vec<_> = text
         .lines()
@@ -71,7 +75,20 @@ fn report_is_deterministic_and_matches_the_merged_ledger() {
         .iter()
         .filter(|line| line.contains("\tx86-freestanding:assembly-witness:"))
         .count();
+    let x86_representation_limited = row_lines
+        .iter()
+        .filter(|line| line.contains("\tx86-freestanding:executable-representation-limited:"))
+        .count();
     assert_eq!(x86_executable, summary.x86_executable);
     assert_eq!(x86_assembly, summary.x86_assembly_witness_only);
-    assert_eq!(x86_executable + x86_assembly, 7);
+    assert_eq!(
+        x86_representation_limited,
+        summary.x86_representation_limited
+    );
+    assert_eq!(x86_executable + x86_assembly + x86_representation_limited, 9);
+    assert!(
+        row_lines.iter().filter(|line| line.contains(
+            "\tx86-freestanding:executable-representation-limited:"
+        )).all(|line| line.contains("target-fixnum-only"))
+    );
 }
