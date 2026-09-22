@@ -91,7 +91,6 @@ fn runtime_unary_closure_value_application_executes() {
     );
 }
 
-
 /// cml#180: the same runtime-selected callable path must not collapse back to
 /// the historical unary-only gate.  The callee is produced as a closure value
 /// and applied later with two arguments; a direct lambda call would not prove
@@ -104,7 +103,8 @@ fn runtime_binary_closure_value_application_executes() {
     "#;
 
     let expressions = parser::parse(source).expect("binary runtime-closure witness must parse");
-    let program = lower::lower_program(&expressions).expect("binary runtime-closure witness must lower");
+    let program =
+        lower::lower_program(&expressions).expect("binary runtime-closure witness must lower");
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
         .expect("bounded binary closure value application must compile");
@@ -180,7 +180,8 @@ fn runtime_named_binary_function_value_application_executes() {
     "#;
 
     let expressions = parser::parse(source).expect("named binary callable witness must parse");
-    let program = lower::lower_program(&expressions).expect("named binary callable witness must lower");
+    let program =
+        lower::lower_program(&expressions).expect("named binary callable witness must lower");
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
         .expect("named binary function value must compile through closure dispatch");
