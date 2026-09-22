@@ -4,7 +4,10 @@ use cml::coverage::{BackendEvidenceState, CoverageLedger};
 
 const LIMITED: &[(&str, &str)] = &[
     ("0104", "named_definition_uses_a_lexical_let_binding"),
-    ("1001", "out_of_line_named_self_tail_recursion_reuses_its_native_frame"),
+    (
+        "1001",
+        "out_of_line_named_self_tail_recursion_reuses_its_native_frame",
+    ),
 ];
 
 fn read(path: &str) -> String {
@@ -59,10 +62,7 @@ fn x86_add_and_sub_are_executable_but_fixnum_representation_limited() {
         );
         let operation_key = if *semantic_id == "0104" { "add" } else { "sub" };
         assert!(
-            x86.contains(&format!(
-                "({operation_key} . {:?})",
-                evidence.evidence
-            )),
+            x86.contains(&format!("({operation_key} . {:?})", evidence.evidence)),
             "x86 matrix evidence must exactly match ledger evidence for {semantic_id}"
         );
         assert!(
