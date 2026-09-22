@@ -1,0 +1,28 @@
+name: Issue 190 SID body hygiene
+
+on:
+  pull_request:
+    paths:
+      - "tests/upstream_sid_body_hygiene_test.rs"
+      - ".github/workflows/issue-190-sid-body-hygiene.yml"
+      - "src/upstream_sid_bridge.rs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    name: SID body rewrite hygiene
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout CML with pinned my-lisp
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run focused hygiene witness
+        run: cargo test --test upstream_sid_body_hygiene_test -- --nocapture
