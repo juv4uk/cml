@@ -11,18 +11,31 @@ fn read(path: &str) -> String {
     fs::read_to_string(path).unwrap_or_else(|error| panic!("must read {path}: {error}"))
 }
 
+fn x86_section(matrix: &str) -> &str {
+    let start = matrix
+        .find("(x86-freestanding")
+        .expect("capability matrix must contain x86-freestanding");
+    let tail = &matrix[start..];
+    let end = tail
+        .find("\n\n\n ; Global")
+        .or_else(|| tail.find("\n\n ; Global"))
+        .expect("x86 section must end before global admission");
+    &tail[..end]
+}
+
 #[test]
 fn x86_add_and_sub_are_executable_but_fixnum_representation_limited() {
     let ledger = CoverageLedger::supported_pin();
     let matrix = read("capability-matrix.lisp");
+    let x86 = x86_section(&matrix);
     let witnesses = read("tests/x86_freestanding_test.rs");
 
     assert!(
-        matrix.contains("(integer . supported)"),
+        x86.contains("(integer . supported)"),
         "x86 integer mechanism must remain explicitly supported"
     );
     assert!(
-        matrix.contains("(rational . unsupported)"),
+        x86.contains("(rational . unsupported)"),
         "x86 exact rational representation must remain explicitly unsupported"
     );
 
@@ -44,6 +57,14 @@ fn x86_add_and_sub_are_executable_but_fixnum_representation_limited() {
             evidence.evidence.contains(runtime_witness),
             "{semantic_id} must name its runtime witness"
         );
+        let operation_key = if *semantic_id == "0104" { "add" } else { "sub" };
+        assert!(
+            x86.contains(&format!(
+                "({operation_key} . {:?})",
+                evidence.evidence
+            )),
+            "x86 matrix evidence must exactly match ledger evidence for {semantic_id}"
+        );
         assert!(
             witnesses.contains(&format!("fn {runtime_witness}(")),
             "runtime witness {runtime_witness} must exist in pushed test source"
@@ -58,12 +79,12 @@ fn x86_add_and_sub_are_executable_but_fixnum_representation_limited() {
     }
 
     assert!(
-        matrix.contains("(add . \"x86_freestanding_test.rs:"),
-        "matrix must carry concrete add evidence"
+        x86.contains("(add . \"x86_freestanding_test.rs:"),
+        "x86 matrix must carry concrete add evidence"
     );
     assert!(
-        matrix.contains("(sub . \"x86_freestanding_test.rs:"),
-        "matrix must carry concrete sub evidence"
+        x86.contains("(sub . \"x86_freestanding_test.rs:"),
+        "x86 matrix must carry concrete sub evidence"
     );
 }
 
