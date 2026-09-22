@@ -20,6 +20,7 @@ pub enum AdmissionState {
 pub enum BackendEvidenceState {
     AssemblyWitness,
     Executable,
+    ExecutableRepresentationLimited,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +28,7 @@ pub struct BackendEvidence {
     pub backend: &'static str,
     pub state: BackendEvidenceState,
     pub evidence: &'static str,
+    pub representation_limit: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +47,7 @@ pub struct CoverageSummary {
     pub not_yet_admitted: usize,
     pub x86_executable: usize,
     pub x86_assembly_witness_only: usize,
+    pub x86_representation_limited: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,6 +94,28 @@ fn x86_canon_evidence(semantic_id: &str) -> Vec<BackendEvidence> {
         backend: "x86-freestanding",
         state,
         evidence,
+        representation_limit: None,
+    }]
+}
+
+fn x86_fixnum_arithmetic_evidence(semantic_id: &str) -> Vec<BackendEvidence> {
+    let evidence = match semantic_id {
+        "0104" => {
+            "x86_freestanding_test.rs: named_definition_uses_a_lexical_let_binding; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract"
+        }
+        "1001" => {
+            "x86_freestanding_test.rs: out_of_line_named_self_tail_recursion_reuses_its_native_frame; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract"
+        }
+        _ => return Vec::new(),
+    };
+
+    vec![BackendEvidence {
+        backend: "x86-freestanding",
+        state: BackendEvidenceState::ExecutableRepresentationLimited,
+        evidence,
+        representation_limit: Some(
+            "target-fixnum-only; exact-rational x86 representation remains blocked by #105/#137",
+        ),
     }]
 }
 
@@ -106,7 +131,11 @@ impl CoverageLedger {
                         admission: AdmissionState::SourceAdmitted,
                         operation_status: Some(operation.status),
                         evidence: Some(operation.provenance_witness),
-                        backend_evidence: x86_canon_evidence(semantic_id),
+                        backend_evidence: {
+                            let mut evidence = x86_canon_evidence(semantic_id);
+                            evidence.extend(x86_fixnum_arithmetic_evidence(semantic_id));
+                            evidence
+                        },
                     }
                 } else {
                     SemanticCoverageRow {
@@ -156,6 +185,15 @@ impl CoverageLedger {
                     && evidence.state == BackendEvidenceState::AssemblyWitness
             })
             .count();
+        let x86_representation_limited = self
+            .rows
+            .iter()
+            .flat_map(|row| row.backend_evidence.iter())
+            .filter(|evidence| {
+                evidence.backend == "x86-freestanding"
+                    && evidence.state == BackendEvidenceState::ExecutableRepresentationLimited
+            })
+            .count();
 
         CoverageSummary {
             semantic_identities: self.rows.len(),
@@ -163,6 +201,7 @@ impl CoverageLedger {
             not_yet_admitted,
             x86_executable,
             x86_assembly_witness_only,
+            x86_representation_limited,
         }
     }
 }
