@@ -536,25 +536,34 @@ int main(int argc, char **argv) {
     uint64_t arena_begin = strtoull(argv[1], NULL, 0);
     uint64_t arena_next_ptr = strtoull(argv[2], NULL, 0);
     uint64_t arena_end_ptr = strtoull(argv[3], NULL, 0);
-    uint64_t arena_next = *(uint64_t *)(uintptr_t)arena_next_ptr;
     uint64_t arena_end = *(uint64_t *)(uintptr_t)arena_end_ptr;
 
-    if (arena_begin == 0 || arena_next < arena_begin || arena_end < arena_begin ||
-        arena_next > arena_end || (arena_begin % CONS_ALIGNMENT) != 0 ||
+    if (arena_begin == 0 || arena_end < arena_begin ||
+        (arena_begin % CONS_ALIGNMENT) != 0 ||
         ((arena_end - arena_begin) % 16) != 0) {
         fprintf(stderr, "invalid arena metadata\n");
         return 95;
     }
 
     uint64_t root = wsm_entry(0);
+
+    // wsm_entry owns the allocation side effects; snapshot the arena cursor
+    // only after execution so every reachable cell is inside the captured
+    // [arena_begin, arena_next) region.
+    uint64_t arena_next = *(uint64_t *)(uintptr_t)arena_next_ptr;
+    if (arena_next < arena_begin || arena_next > arena_end ||
+        ((arena_next - arena_begin) % 16) != 0) {
+        fprintf(stderr, "invalid post-execution arena cursor\n");
+        return 95;
+    }
+
     printf("root 0x%" PRIx64 "\n", root);
 
     if (dump_cons(root, arena_begin, arena_next, arena_end, 0) != 0) {
         return 96;
     }
     return 0;
-}
-"#
+}"#
 }
 
 #[cfg(test)]
