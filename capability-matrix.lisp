@@ -169,7 +169,10 @@
              (error-kind-parse . unsupported)
              (error-kind-invalidform . supported)))
          (evidence
-          . ((quote . "x86_freestanding_test.rs: compiler_corpus_quote_radio_returns_the_interned_symbol")
+          . ((integer . "x86_freestanding_test.rs: fixnum_range_is_owned_by_the_target_contract")
+             (add . "x86_freestanding_test.rs: named_definition_uses_a_lexical_let_binding; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract")
+             (sub . "x86_freestanding_test.rs: out_of_line_named_self_tail_recursion_reuses_its_native_frame; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract")
+             (quote . "x86_freestanding_test.rs: compiler_corpus_quote_radio_returns_the_interned_symbol")
              (atom . "x86_freestanding_test.rs: primitive_slice_uses_only_ratified_runtime_imports")
              (eq . "x86_freestanding_test.rs: compiler_corpus_eq_on_matching_and_differing_quoted_symbols")
              (cons . "x86_freestanding_test.rs: frozen_cons_fixture_is_deterministic_and_assembles; named_definition_allocates_a_list_through_the_asm_nucleus")
