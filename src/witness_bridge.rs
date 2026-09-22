@@ -84,11 +84,64 @@ pub fn canonical_actual_from_word(word: wsm_os_target::Word) -> Result<String, W
 /// composite values remain explicitly unsupported unless compiler-owned symbol
 /// metadata is provided through execute_x86_actual_with_metadata.
 pub fn execute_x86_actual(assembly: &str) -> Result<String, WitnessBridgeError> {
-    let capture = execute_x86_graph(assembly)?;
-    if !capture.cells.is_empty() {
-        return Err(WitnessBridgeError::UnsupportedActual(capture.root));
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| WitnessBridgeError::Io(error.to_string()))?
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!("cml-witness-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let launcher = base.with_extension("c");
+    let executable = base.with_extension("bin");
+
+    fs::write(&source, assembly).map_err(|error| WitnessBridgeError::Io(error.to_string()))?;
+    fs::write(
+        &launcher,
+        "#include <stdint.h>\n#include <stdio.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { printf(\"%llu\\n\", (unsigned long long)wsm_entry(0)); return 0; }\n",
+    )
+    .map_err(|error| WitnessBridgeError::Io(error.to_string()))?;
+
+    let nucleus =
+        crate::x86_freestanding::resolve_nucleus_asm_path().map_err(WitnessBridgeError::Link)?;
+    let linked = Command::new("cc")
+        .arg(&launcher)
+        .arg(&source)
+        .arg(&nucleus)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .map_err(|error| WitnessBridgeError::Link(error.to_string()))?;
+
+    let _ = fs::remove_file(&source);
+    let _ = fs::remove_file(&launcher);
+
+    if !linked.status.success() {
+        let _ = fs::remove_file(&executable);
+        return Err(WitnessBridgeError::Link(
+            String::from_utf8_lossy(&linked.stderr).into_owned(),
+        ));
     }
-    canonical_actual_from_word(capture.root)
+
+    let output = Command::new(&executable)
+        .output()
+        .map_err(|error| WitnessBridgeError::Execute(error.to_string()))?;
+    let _ = fs::remove_file(&executable);
+
+    if !output.status.success() {
+        return Err(WitnessBridgeError::Execute(format!(
+            "exit status {}; stderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|error| WitnessBridgeError::InvalidOutput(error.to_string()))?;
+    let word = stdout
+        .trim()
+        .parse::<wsm_os_target::Word>()
+        .map_err(|error| WitnessBridgeError::InvalidOutput(error.to_string()))?;
+
+    canonical_actual_from_word(word)
 }
 
 /// Execute an x86 witness and canonicalize proper/dotted composites using
