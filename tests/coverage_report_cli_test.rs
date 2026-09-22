@@ -85,10 +85,14 @@ fn report_is_deterministic_and_matches_the_merged_ledger() {
         x86_representation_limited,
         summary.x86_representation_limited
     );
-    assert_eq!(x86_executable + x86_assembly + x86_representation_limited, 9);
+    assert_eq!(
+        x86_executable + x86_assembly + x86_representation_limited,
+        9
+    );
     assert!(
-        row_lines.iter().filter(|line| line.contains(
-            "\tx86-freestanding:executable-representation-limited:"
-        )).all(|line| line.contains("target-fixnum-only"))
+        row_lines
+            .iter()
+            .filter(|line| line.contains("\tx86-freestanding:executable-representation-limited:"))
+            .all(|line| line.contains("target-fixnum-only"))
     );
 }
