@@ -35,10 +35,7 @@ fn report_is_deterministic_and_matches_the_merged_ledger() {
         "\nnot-yet-admitted\t{}\n",
         summary.not_yet_admitted
     )));
-    assert!(text.contains(&format!(
-        "\nx86-executable\t{}\n",
-        summary.x86_executable
-    )));
+    assert!(text.contains(&format!("\nx86-executable\t{}\n", summary.x86_executable)));
     assert!(text.contains(&format!(
         "\nx86-assembly-witness-only\t{}\n",
         summary.x86_assembly_witness_only
