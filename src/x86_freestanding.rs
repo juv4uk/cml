@@ -258,7 +258,9 @@ impl X86FreestandingBackend {
         for name in first_class_named_functions {
             let arity = match def_arities.get(&name) {
                 Some(DefArity::Fixed(arity)) if *arity <= 5 => *arity,
-                _ => unreachable!("first-class named function collection admitted a non-fixed/bounded def"),
+                _ => unreachable!(
+                    "first-class named function collection admitted a non-fixed/bounded def"
+                ),
             };
             let definition_id = emitter.allocate_label() + 1;
             emitter.closure_labels.insert(definition_id, arity);
@@ -2022,8 +2024,7 @@ impl Emitter {
         debug_assert!(parameters.len() <= 5);
         let captures = self.env.clone();
         let definition_id = self.allocate_label() + 1;
-        self.closure_labels
-            .insert(definition_id, parameters.len());
+        self.closure_labels.insert(definition_id, parameters.len());
 
         self.emit_immediate(wsm_os_target::NIL);
         for (_, slot) in captures.iter().rev() {
@@ -2155,10 +2156,7 @@ impl Emitter {
         for argument in arguments {
             self.emit_ir(argument)?;
             let slot = self.allocate_slot();
-            self.line(&format!(
-                "    movq %rax, {}(%rsp)",
-                Self::slot_offset(slot)
-            ));
+            self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
             argument_slots.push(slot);
         }
 
