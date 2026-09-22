@@ -1,4 +1,4 @@
-use cml::coverage::{AdmissionState, CoverageLedger};
+use cml::coverage::{AdmissionState, BackendEvidenceState, CoverageLedger};
 
 fn field(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
@@ -14,6 +14,13 @@ fn field(value: &str) -> String {
     out
 }
 
+fn backend_state(state: BackendEvidenceState) -> &'static str {
+    match state {
+        BackendEvidenceState::AssemblyWitness => "assembly-witness",
+        BackendEvidenceState::Executable => "executable",
+    }
+}
+
 fn main() {
     let ledger = CoverageLedger::supported_pin();
     let summary = ledger.summary();
@@ -24,6 +31,11 @@ fn main() {
     println!("semantic-identities\t{}", summary.semantic_identities);
     println!("source-admitted\t{}", summary.source_admitted);
     println!("not-yet-admitted\t{}", summary.not_yet_admitted);
+    println!("x86-executable\t{}", summary.x86_executable);
+    println!(
+        "x86-assembly-witness-only\t{}",
+        summary.x86_assembly_witness_only
+    );
     println!("columns\tsemantic-id\tadmission\toperation-status\tevidence\tbackend-evidence");
 
     for row in &ledger.rows {
@@ -33,10 +45,22 @@ fn main() {
         };
         let operation_status = row.operation_status.unwrap_or("-");
         let evidence = row.evidence.map(field).unwrap_or_else(|| "-".to_string());
-        let backend_evidence = row
-            .backend_evidence
-            .map(field)
-            .unwrap_or_else(|| "-".to_string());
+        let backend_evidence = if row.backend_evidence.is_empty() {
+            "-".to_string()
+        } else {
+            row.backend_evidence
+                .iter()
+                .map(|evidence| {
+                    format!(
+                        "{}:{}:{}",
+                        field(evidence.backend),
+                        backend_state(evidence.state),
+                        field(evidence.evidence)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("|")
+        };
 
         println!(
             "row\t{}\t{}\t{}\t{}\t{}",
