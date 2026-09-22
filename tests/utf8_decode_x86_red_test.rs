@@ -1,8 +1,10 @@
 use std::fs;
 use std::path::PathBuf;
 
+use cml::ast::Expr as CExpr;
 use cml::ir::Ir;
 use cml::macros::MacroExpander;
+use cml::upstream_sid_bridge::{convert_lisp_expr, key_definition_by_sid};
 use cml::x86_freestanding::X86FreestandingBackend;
 use cml::{lower, parser};
 
@@ -58,6 +60,33 @@ fn pinned_lisp_source(relative: &str) -> String {
             path.display()
         )
     })
+}
+
+fn lisp_owned_define(source: &str, name: &str) -> Vec<CExpr> {
+    // core.lisp speaks byte-SID for library-defined functions (list,
+    // reverse-onto, reverse...): (00001001 <name> <value>). Those rows are
+    // consumed through the Lisp-owned reader + SID bridge, never by
+    // reconstructing a classic spelling that the pin no longer contains.
+    let parsed = my_lisp::parse(source).expect("pinned core.lisp must parse");
+    let mut out = Vec::new();
+    for expr in parsed {
+        if let my_lisp::ExprKind::List(items) = &expr.kind {
+            let is_define = matches!(
+                items.first().map(|h| &h.kind),
+                Some(my_lisp::ExprKind::Sid(s)) if s.to_string() == "00001001"
+            );
+            let named = matches!(
+                items.get(1).map(|n| &n.kind),
+                Some(my_lisp::ExprKind::Symbol(s)) if s.as_ref() == name
+            );
+            if is_define && named {
+                out.push(key_definition_by_sid(
+                    convert_lisp_expr(&expr).expect("byte-SID row must project"),
+                ));
+            }
+        }
+    }
+    out
 }
 
 fn top_level_form(source: &str, marker: &str) -> String {
@@ -147,32 +176,34 @@ fn real_utf8_decode_onto_reaches_x86_tail_loop_backend() {
     let core = pinned_lisp_source("lib/core.lisp");
     let utf8 = pinned_lisp_source("lib/utf8.lisp");
 
-    let dependencies = [
-        top_level_form(&core, "(def list "),
-        top_level_form(&core, "(def not"),
-        top_level_form(&core, "(def reverse-onto"),
-        top_level_form(&core, "(def reverse\n"),
-        top_level_form(&utf8, "(def utf8-continuation-byte?"),
-    ];
-    let decoder = top_level_form(&utf8, "(def utf8-decode-onto");
+    // Bootstrap macros are replayed from their merged upstream portability
+    // commits while external/my-lisp remains the frozen compatibility pin.
+    let mut forms: Vec<CExpr> = Vec::new();
+    forms.extend(parser::parse(MERGED_LET_STAR).expect("merged LET* rerun must parse"));
+    forms.extend(parser::parse(MERGED_AND_OR).expect("merged AND/OR rerun must parse"));
 
-    let mut source = String::new();
-    source.push_str(MERGED_LET_STAR);
-    source.push('\n');
-    source.push_str(MERGED_AND_OR);
-    source.push('\n');
-    for dependency in dependencies {
-        source.push_str(&dependency);
-        source.push('\n');
+    // core.lisp speaks byte-SID for library-defined functions (list,
+    // reverse-onto, reverse...); consume those rows through the Lisp-owned
+    // reader + SID bridge rather than re-spelling the machine law.
+    for name in ["list", "reverse-onto", "reverse", "not", "truthy?"] {
+        forms.extend(lisp_owned_define(&core, name));
     }
-    source.push_str(&decoder);
-    source.push_str("\n(utf8-decode-onto (quote (65)) (quote ()))\n");
 
-    let parsed = parser::parse(&source).expect("real decoder dependency closure must parse");
-    let expanded = MacroExpander::new()
-        .process(&parsed)
-        .expect("merged Lisp-owned bootstrap macros must expand before x86 lowering");
-    let lowered = lower::lower_program_with_tail_calls(&expanded)
+    // The decoder and its exact-Q helpers stay classic-first in utf8.lisp.
+    forms.extend(
+        parser::parse(&top_level_form(&utf8, "(def utf8-decode-onto"))
+            .expect("classic decoder def must parse"),
+    );
+    forms.push(
+        parser::parse(&top_level_form(&utf8, "(def utf8-in-range?\n"))
+            .expect("classic utf8-in-range? face must parse")
+            .remove(0),
+    );
+
+    let parsed = MacroExpander::new()
+        .process(&forms)
+        .expect("real decoder dependency closure must macro-expand");
+    let lowered = lower::lower_program_with_tail_calls(&parsed)
         .expect("real decoder dependency closure must reach backend-neutral IR");
 
     let mut residual_apps = Vec::new();
