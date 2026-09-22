@@ -18,6 +18,7 @@ fn backend_state(state: BackendEvidenceState) -> &'static str {
     match state {
         BackendEvidenceState::AssemblyWitness => "assembly-witness",
         BackendEvidenceState::Executable => "executable",
+        BackendEvidenceState::ExecutableRepresentationLimited => "executable-representation-limited",
     }
 }
 
@@ -36,6 +37,10 @@ fn main() {
         "x86-assembly-witness-only\t{}",
         summary.x86_assembly_witness_only
     );
+    println!(
+        "x86-representation-limited\t{}",
+        summary.x86_representation_limited
+    );
     println!("columns\tsemantic-id\tadmission\toperation-status\tevidence\tbackend-evidence");
 
     for row in &ledger.rows {
@@ -51,11 +56,16 @@ fn main() {
             row.backend_evidence
                 .iter()
                 .map(|evidence| {
+                    let limit = evidence
+                        .representation_limit
+                        .map(field)
+                        .unwrap_or_else(|| "-".to_string());
                     format!(
-                        "{}:{}:{}",
+                        "{}:{}:{}:{}",
                         field(evidence.backend),
                         backend_state(evidence.state),
-                        field(evidence.evidence)
+                        field(evidence.evidence),
+                        limit
                     )
                 })
                 .collect::<Vec<_>>()
