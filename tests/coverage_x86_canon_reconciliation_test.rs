@@ -95,7 +95,11 @@ fn x86_canon_evidence_reconciles_matrix_ledger_and_pushed_witnesses() {
                 .any(|e| e.backend == "x86-freestanding")
         })
         .count();
-    assert_eq!(actual_x86_rows, x86_rows);
+    assert_eq!(x86_rows, EXPECTED.len());
+    assert!(
+        actual_x86_rows >= x86_rows,
+        "later evidence-backed x86 slices may add rows, but must not remove the seven Canon-core rows"
+    );
 }
 
 #[test]
