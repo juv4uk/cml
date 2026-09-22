@@ -66,7 +66,7 @@ fn quoted_registry_spelling_remains_inert_data() {
 }
 
 #[test]
-fn lexical_callable_named_like_registry_surface_wins_over_global_sid() {
+fn lexical_parameter_named_like_registry_surface_is_not_rewritten() {
     let mut form = parse_one("(def lexical-list (lambda (list) (list)))");
     rewrite_calls_in_body(&mut form);
 
@@ -76,15 +76,32 @@ fn lexical_callable_named_like_registry_surface_wins_over_global_sid() {
     let Expr::List(lambda) = &def[2] else {
         panic!("expected lambda value");
     };
-
     let Expr::List(params) = &lambda[1] else {
         panic!("expected lambda parameter list");
     };
-    assert_eq!(params, &[Expr::Symbol("list".into())]);
 
+    assert_eq!(
+        params,
+        &[Expr::Symbol("list".into())],
+        "lambda binder is lexical identity, not a global registry call site"
+    );
+}
+
+#[test]
+fn lexical_callable_call_wins_over_global_sid() {
+    let mut form = parse_one("(def lexical-list (lambda (list) (list)))");
+    rewrite_calls_in_body(&mut form);
+
+    let Expr::List(def) = form else {
+        panic!("expected def form");
+    };
+    let Expr::List(lambda) = &def[2] else {
+        panic!("expected lambda value");
+    };
     let Expr::List(call) = &lambda[2] else {
         panic!("expected lexical call");
     };
+
     assert_eq!(
         call[0],
         Expr::Symbol("list".into()),
