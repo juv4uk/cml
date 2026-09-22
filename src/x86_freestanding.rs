@@ -473,8 +473,8 @@ fn contains_tail_self_call(ir: &Ir) -> bool {
     }
 }
 
-/// Find top-level unary definitions that are read as values rather than used
-/// only in direct call position. This keeps closure allocation demand tied to
+/// Find top-level bounded fixed-arity definitions that are read as values
+/// rather than used only in direct call position. This keeps closure allocation demand tied to
 /// an actual first-class use instead of allocating descriptors for every def.
 fn collect_first_class_named_functions(
     program: &[Ir],
@@ -499,7 +499,7 @@ fn collect_first_class_named_refs(
         Ir::Var(name) if !callee_position && !bound.contains(name) => {
             // cml#8: a data-only def (Data) is an ordinary value read, not a
             // first-class-function-value attempt -- only a real function
-            // entry is subject to the arity-1 gate below.
+            // entry is subject to the bounded fixed-arity gate below.
             match def_arities.get(name) {
                 Some(DefArity::Fixed(arity)) if *arity <= 5 => {
                     out.insert(name.clone());
@@ -756,7 +756,9 @@ fn preflight_env(
                 ));
             }
             preflight_env(func, bindings, symbols, def_arities, slots)?;
-            preflight_env(&args[0], bindings, symbols, def_arities, slots)?;
+            for argument in args {
+                preflight_env(argument, bindings, symbols, def_arities, slots)?;
+            }
         }
         Ir::Cond { branches } => {
             for (test, expr) in branches {
@@ -977,7 +979,10 @@ fn preflight_lambda_body(
                 ));
             }
             preflight_lambda_body(func, bindings, symbols, slots)?;
-            preflight_lambda_body(&args[0], bindings, symbols, slots)
+            for argument in args {
+                preflight_lambda_body(argument, bindings, symbols, slots)?;
+            }
+            Ok(())
         }
         Ir::Lambda {
             params: Params::Fixed(params),
@@ -1258,7 +1263,10 @@ fn preflight_def_body(
                 ));
             }
             preflight_def_body(func, bindings, symbols, def_arities, slots)?;
-            preflight_def_body(&args[0], bindings, symbols, def_arities, slots)
+            for argument in args {
+                preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+            }
+            Ok(())
         }
         Ir::Lambda {
             params: Params::Fixed(params),
@@ -1465,7 +1473,7 @@ impl Emitter {
                 params: Params::Fixed(_),
                 ..
             } => Err(CompileError::UnsupportedVariant(
-                "Lambda (fixed, arity != 1)",
+                "Lambda (fixed, arity > 5)",
             )),
             Ir::Lambda {
                 params: Params::Variadic { .. },
