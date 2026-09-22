@@ -6,8 +6,7 @@
 //! not infer backend executability from source admission.
 
 use crate::canon::{
-    CANON_SUPPORTED_PIN_REGISTRY_FNV1A64, CANON_SUPPORTED_PIN_SEMANTIC_IDS,
-    find_operation_by_id,
+    CANON_SUPPORTED_PIN_REGISTRY_FNV1A64, CANON_SUPPORTED_PIN_SEMANTIC_IDS, find_operation_by_id,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,9 +74,7 @@ impl CoverageLedger {
     }
 
     pub fn row(&self, semantic_id: &str) -> Option<&SemanticCoverageRow> {
-        self.rows
-            .iter()
-            .find(|row| row.semantic_id == semantic_id)
+        self.rows.iter().find(|row| row.semantic_id == semantic_id)
     }
 
     pub fn summary(&self) -> CoverageSummary {
