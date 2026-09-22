@@ -88,7 +88,7 @@ fn full_decoder_closure_state_is_recorded_honestly() {
         .expect("#168 requires the pinned external/my-lisp submodule utf8.lisp");
 
     let mut program_forms = Vec::new();
-    for name in ["list", "reverse", "reverse-onto", "not"] {
+    for name in ["list", "reverse", "reverse-onto", "not", "truthy?"] {
         program_forms.extend(lisp_owned_define(&core, name).unwrap_or_default());
     }
 

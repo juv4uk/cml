@@ -1291,6 +1291,14 @@ fn preflight_def_body(
             }
             Ok(())
         }
+        Ir::CondMatch { branches } => {
+            for (query, expected, body) in branches {
+                preflight_def_body(query, bindings, symbols, def_arities, slots)?;
+                preflight_quoted(expected, symbols, slots)?;
+                preflight_def_body(body, bindings, symbols, def_arities, slots)?;
+            }
+            Ok(())
+        }
         Ir::Let {
             bindings: let_bindings,
             body,
@@ -1360,14 +1368,16 @@ fn primitive_contract(operation: PrimOp) -> Result<(&'static str, usize), Compil
         PrimOp::Atom => Ok(("atom", 1)),
         PrimOp::Add => Ok(("add", 2)),
         PrimOp::Sub => Ok(("sub", 2)),
-        PrimOp::EqualP => Err(CompileError::UnsupportedVariant("equal? primitive")),
-        PrimOp::ExactQLt => Err(CompileError::UnsupportedVariant("exact-Q < primitive")),
+        // EqualP is used for exact-Q numeric equality (=) in the decoder closure.
+        // For fixnum operands, word equality (wsm_eq) is sufficient.
+        PrimOp::EqualP => Ok(("eq", 2)),
+        PrimOp::ExactQLt => Ok(("exact-Q <", 2)),
         PrimOp::ExactQLe => Ok(("exact-Q <=", 2)),
         PrimOp::ExactQGe => Ok(("exact-Q >=", 2)),
     }
 }
 
-fn machine_primitive_contract(operation: MachineOp) -> Result<(&'static str, usize), CompileError> {
+    fn machine_primitive_contract(operation: MachineOp) -> Result<(&'static str, usize), CompileError> {
     match operation {
         MachineOp::Rdtsc => Ok(("rdtsc", 0)),
     }
@@ -1630,9 +1640,7 @@ impl Emitter {
                 }
             }
             Ir::Cond { branches } => self.emit_cond(branches),
-            Ir::CondMatch { .. } => Err(CompileError::UnsupportedVariant(
-                "CondMatch (explicit result matcher not yet implemented)",
-            )),
+            Ir::CondMatch { branches } => self.emit_cond_match(branches),
             Ir::Let { bindings, body } => {
                 // Top-level `let` binds in parallel: evaluate every value in
                 // the enclosing environment, then install the name->slot
@@ -2257,6 +2265,68 @@ impl Emitter {
         Ok(())
     }
 
+    fn emit_cond_match(
+        &mut self,
+        branches: &[(Ir, Quoted, Ir)],
+    ) -> Result<(), CompileError> {
+        let end_label = self.allocate_label();
+        let mut next_branch_label = self.allocate_label();
+
+        for (query, expected, body) in branches {
+            self.line(&format!(".Lcm_branch_{}:", next_branch_label));
+
+            // Emit query and save result
+            self.emit_ir(query)?;
+            let query_slot = self.allocate_slot();
+            self.line(&format!(
+                "    movq %rax, {}(%rsp)",
+                Self::slot_offset(query_slot)
+            ));
+
+            // Emit expected (quoted constant) and save result
+            self.emit_quoted(expected)?;
+            let expected_slot = self.allocate_slot();
+            self.line(&format!(
+                "    movq %rax, {}(%rsp)",
+                Self::slot_offset(expected_slot)
+            ));
+
+            // Compare query and expected using wsm_eq
+            self.line("    movq %r12, %rdi");
+            self.line(&format!(
+                "    movq {}(%rsp), %rsi",
+                Self::slot_offset(query_slot)
+            ));
+            self.line(&format!(
+                "    movq {}(%rsp), %rdx",
+                Self::slot_offset(expected_slot)
+            ));
+            self.line("    call wsm_eq");
+
+            next_branch_label = self.allocate_label();
+
+            // If equal (result is canonical T), jump to body
+            self.line(&format!("    movabsq ${}, %rcx", wsm_os_target::CANONICAL_T));
+            self.line("    cmpq %rcx, %rax");
+            self.line(&format!("    je .Lcm_body_{}", next_branch_label));
+
+            // Not equal, continue to next branch
+            self.line(&format!("    jmp .Lcm_branch_{}", next_branch_label));
+
+            // Body label - emit body and jump to end
+            self.line(&format!(".Lcm_body_{}:", next_branch_label));
+            self.emit_ir(body)?;
+            self.line(&format!("    jmp .Lcm_end_{}", end_label));
+        }
+
+        // No branch matched - emit NIL
+        self.line(&format!(".Lcm_branch_{}:", next_branch_label));
+        self.emit_immediate(wsm_os_target::NIL);
+
+        self.line(&format!(".Lcm_end_{}:", end_label));
+        Ok(())
+    }
+
     fn emit_quoted(&mut self, quoted: &Quoted) -> Result<(), CompileError> {
         match quoted {
             Quoted::Int(value) => {
@@ -2342,6 +2412,9 @@ impl Emitter {
         }
         if matches!(operation, PrimOp::ExactQLe) {
             return self.emit_exact_q_le(args);
+        }
+        if matches!(operation, PrimOp::ExactQLt) {
+            return self.emit_exact_q_lt(args);
         }
 
         let slots: Vec<usize> = args
@@ -2433,6 +2506,65 @@ impl Emitter {
         self.line("    xorl %ecx, %ecx");
         self.line("    call wsm_fail");
         self.line(&format!(".Lexact_q_le_done_{done}:"));
+        Ok(())
+    }
+
+    /// Execute semantic 1019 (exact-Q <) for the bounded fixnum domain.
+    fn emit_exact_q_lt(&mut self, args: &[Ir]) -> Result<(), CompileError> {
+        debug_assert_eq!(args.len(), 2);
+        self.emit_ir(&args[0])?;
+        let left_slot = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(left_slot)
+        ));
+        self.emit_ir(&args[1])?;
+        let right_slot = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(right_slot)
+        ));
+        let type_error = self.allocate_label();
+        let done = self.allocate_label();
+        for slot in [left_slot, right_slot] {
+            self.line(&format!("    movq {}(%rsp), %rcx", Self::slot_offset(slot)));
+            self.line("    movq %rcx, %rax");
+            self.line("    andq $7, %rax");
+            self.line(&format!(
+                "    cmpq ${}, %rax",
+                wsm_os_target::Tag::Fixnum as u64
+            ));
+            self.line(&format!("    jne .Lexact_q_lt_type_{type_error}"));
+        }
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(left_slot)
+        ));
+        self.line("    sarq $3, %rcx");
+        self.line(&format!(
+            "    movq {}(%rsp), %rdx",
+            Self::slot_offset(right_slot)
+        ));
+        self.line("    sarq $3, %rdx");
+        self.line("    cmpq %rdx, %rcx");
+        self.line("    setl %al");
+        self.line("    movzbq %al, %rax");
+        self.line("    shlq $3, %rax");
+        self.line(&format!(
+            "    orq ${}, %rax",
+            wsm_os_target::Tag::Fixnum as u64
+        ));
+        self.line(&format!("    jmp .Lexact_q_lt_done_{done}"));
+        self.line(&format!(".Lexact_q_lt_type_{type_error}:"));
+        self.line("    movq %r12, %rdi");
+        self.line(&format!(
+            "    movl ${}, %esi",
+            wsm_os_target::ErrorCode::Type as u32
+        ));
+        self.line("    xorl %edx, %edx");
+        self.line("    xorl %ecx, %ecx");
+        self.line("    call wsm_fail");
+        self.line(&format!(".Lexact_q_lt_done_{done}:"));
         Ok(())
     }
 
