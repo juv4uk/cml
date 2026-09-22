@@ -88,3 +88,18 @@ fn core_profile_parse_is_explicit_and_fail_closed() {
     assert!("historical".parse::<CoreProfile>().is_err());
     assert!("".parse::<CoreProfile>().is_err());
 }
+
+
+#[test]
+fn core_profile_roundtrip_is_byte_stable_for_artifact_metadata() {
+    for profile in [
+        CoreProfile::Core1,
+        CoreProfile::Core2,
+        CoreProfile::Core3,
+        CoreProfile::Core4,
+    ] {
+        let text = profile.to_string();
+        assert_eq!(text.parse::<CoreProfile>().unwrap(), profile);
+        assert_eq!(profile.as_str(), text);
+    }
+}
