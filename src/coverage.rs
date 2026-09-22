@@ -46,6 +46,7 @@ impl CoverageLedger {
         let rows = CANON_SUPPORTED_PIN_SEMANTIC_IDS
             .iter()
             .map(|semantic_id| {
+                let semantic_id = *semantic_id;
                 if let Some(operation) = find_operation_by_id(semantic_id) {
                     SemanticCoverageRow {
                         semantic_id,
