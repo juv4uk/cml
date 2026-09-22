@@ -9,7 +9,7 @@
 //! - Generates `canon_spellings.rs` for `src/canon.rs`.
 //! - Generates `contracts/cml-operations.my` machine-readable table.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -460,6 +460,44 @@ fn list(sexp: &Sexp) -> &[Sexp] {
     }
 }
 
+/// #106: collect the complete supported-pin semantic denominator from the
+/// same upstream registry parse already used to generate CML's admitted
+/// operation table. IDs remain opaque numeric strings; this does not assign
+/// meaning or backend support to rows that CML has not admitted.
+fn collect_supported_pin_semantic_ids(root: &[Sexp]) -> Vec<String> {
+    let mut ids = Vec::with_capacity(root.len());
+    let mut seen = BTreeSet::new();
+
+    for row in root {
+        let Sexp::List(items) = row else {
+            panic!("cml#106: semantic-registry row must be a list");
+        };
+        let Some(Sexp::Atom(id)) = items.first() else {
+            panic!("cml#106: semantic-registry row must begin with an opaque semantic ID");
+        };
+        if id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
+            panic!("cml#106: semantic ID must contain ASCII digits only: {id:?}");
+        }
+        if !seen.insert(id.clone()) {
+            panic!("cml#106: duplicate semantic ID {id}");
+        }
+        ids.push(id.clone());
+    }
+
+    ids
+}
+
+/// Deterministic drift fingerprint for the exact supported-pin registry bytes.
+/// This is evidence metadata only, not a semantic identity or security hash.
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
 fn collect_surfaces_detailed(root: &[Sexp], id: &str) -> Vec<(String, String)> {
     if RETIRED_SEMANTIC_IDS.contains(&id) {
         panic!(
@@ -566,6 +604,21 @@ fn main() {
             panic!("cml#14: no top-level (sr/1 ...) form found in semantic-registry.wsm")
         });
 
+    let supported_pin_semantic_ids = collect_supported_pin_semantic_ids(root);
+    let supported_pin_semantic_id_set: BTreeSet<&str> = supported_pin_semantic_ids
+        .iter()
+        .map(String::as_str)
+        .collect();
+    for operation in OPERATIONS {
+        if !supported_pin_semantic_id_set.contains(operation.semantic_id) {
+            panic!(
+                "cml#106: admitted operation {} references semantic ID {} absent from the supported-pin registry",
+                operation.canonical_name, operation.semantic_id
+            );
+        }
+    }
+    let supported_pin_registry_digest = fnv1a64(source.as_bytes());
+
     // Fail-closed collision detection across all admitted operations
     let mut seen_upper: HashMap<String, &str> = HashMap::new();
     let mut seen_exact: HashMap<String, &str> = HashMap::new();
@@ -650,6 +703,15 @@ fn main() {
         generated.push_str("    },\n");
     }
     generated.push_str("];\n\n");
+
+    generated.push_str("pub const CANON_SUPPORTED_PIN_SEMANTIC_IDS: &[&str] = &[\n");
+    for id in &supported_pin_semantic_ids {
+        generated.push_str(&format!("    {id:?},\n"));
+    }
+    generated.push_str("];\n\n");
+    generated.push_str(&format!(
+        "pub const CANON_SUPPORTED_PIN_REGISTRY_FNV1A64: u64 = 0x{supported_pin_registry_digest:016x};\n\n"
+    ));
 
     generated.push_str("pub const CANON_BUILTIN_NAMES: &[(&str, &str)] = &[\n");
     for (id, name) in BUILTIN_PROJECTIONS {
