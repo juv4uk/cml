@@ -138,6 +138,20 @@ fn c_backend_lexically_shadows_an_ordinary_builtin() {
 }
 
 #[test]
+fn c_backend_top_level_def_shadows_registry_callable() {
+    // Contract 2.1 / my-lisp#507: a top-level definition named like a
+    // registry-admitted callable (semantic 1007 `mod`) must resolve to the
+    // lexical binding, not to the registry builtin projection.
+    assert_eq!(
+        compile_and_run_first_class(
+            "(def mod (lambda (a b) 123)) (mod 17 5)",
+            "def_shadows_registry_mod"
+        ),
+        "123"
+    );
+}
+
+#[test]
 fn c_backend_passes_a_builtin_as_a_higher_order_argument() {
     let code = "((lambda (f) (f 2 3)) +)";
     assert_eq!(
