@@ -557,20 +557,31 @@ mod tests {
 
     #[test]
     fn graph_decoder_rejects_missing_cell() {
+        let root = 0x1000;
         let graph = ActualGraph {
-            root: wsm_os_target::encode_symbol(1).unwrap(),
+            root,
             cells: BTreeMap::new(),
         };
-        let backend = X86FreestandingBackend::new();
-        let program = [Ir::Quote(quoted_symbol("A"))];
-        let compiled = backend.compile_program_with_metadata(&program).unwrap();
+        let compiled = X86FreestandingBackend::new()
+            .compile_program_with_metadata(&[Ir::Quote(quoted_symbol("A"))])
+            .unwrap();
 
-        let malformed = ActualGraph {
-            root: wsm_os_target::encode_symbol(1).unwrap() | 0,
-            cells: graph.cells,
+        let error = render_actual(&graph, &compiled).unwrap_err();
+        assert!(matches!(error, WitnessBridgeError::InvalidComposite(_)));
+    }
+
+    #[test]
+    fn graph_decoder_rejects_unknown_symbol() {
+        let graph = ActualGraph {
+            root: wsm_os_target::encode_symbol(999).unwrap(),
+            cells: BTreeMap::new(),
         };
-        let error = render_actual(&malformed, &compiled).unwrap();
-        assert_eq!(error, "A");
+        let compiled = X86FreestandingBackend::new()
+            .compile_program_with_metadata(&[Ir::Quote(quoted_symbol("A"))])
+            .unwrap();
+
+        let error = render_actual(&graph, &compiled).unwrap_err();
+        assert!(matches!(error, WitnessBridgeError::InvalidComposite(_)));
     }
 
     #[test]
