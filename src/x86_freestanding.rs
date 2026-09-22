@@ -210,7 +210,7 @@ impl X86FreestandingBackend {
             env: BTreeMap::new(),
             next_slot: 0,
             next_label: 0,
-            closure_labels: Vec::new(),
+            closure_labels: BTreeMap::new(),
             named_closure_definitions: BTreeMap::new(),
             functions: BTreeMap::new(),
             function_arities: def_arities.clone(),
@@ -247,16 +247,21 @@ impl X86FreestandingBackend {
             let definition_id = emitter.allocate_label();
             emitter.data_defs.insert(name.clone(), definition_id);
         }
-        // Stage2: only top-level unary defs that are actually read as values
-        // receive a closure identity. Direct calls stay direct `.Lfn_N` calls.
+        // Only top-level fixed-arity defs (0..=5) that are actually read as
+        // values receive a closure identity. Direct calls stay direct
+        // `.Lfn_N` calls.
         // One descriptor is allocated at wsm_entry startup and re-read from a
         // generated word slot, so two reads of the same binding preserve `eq`
         // identity. This is the exact machine property meta-eval's provenance
         // tokens require; allocating a fresh descriptor per Var read would be
         // semantically wrong even if definition/environment payloads matched.
         for name in first_class_named_functions {
+            let arity = match def_arities.get(&name) {
+                Some(DefArity::Fixed(arity)) if *arity <= 5 => *arity,
+                _ => unreachable!("first-class named function collection admitted a non-fixed/bounded def"),
+            };
             let definition_id = emitter.allocate_label() + 1;
-            emitter.closure_labels.push(definition_id);
+            emitter.closure_labels.insert(definition_id, arity);
             emitter
                 .named_closure_definitions
                 .insert(name, definition_id);
@@ -316,10 +321,11 @@ impl X86FreestandingBackend {
                 }
             }
         }
-        // A first-class named unary function reuses its ordinary named body.
-        // The closure dispatcher supplies argument in %rsi and environment in
-        // %rdx; top-level named closures have NIL environment and need only
-        // restore the context register before entering the regular `.Lfn_N`.
+        // A first-class named fixed-arity function reuses its ordinary named
+        // body. The closure dispatcher supplies user arguments in %rsi..%r9
+        // and the captured environment in %r10. Top-level named closures have
+        // NIL environment, so the wrapper only restores the context register
+        // before entering the regular `.Lfn_N`.
         let named_closure_wrappers: Vec<(usize, usize)> = emitter
             .named_closure_definitions
             .iter()
@@ -407,7 +413,7 @@ impl X86FreestandingBackend {
             // Body gets slots starting after the param slots.
             next_slot: param_count,
             next_label: 0,
-            closure_labels: Vec::new(),
+            closure_labels: BTreeMap::new(),
             named_closure_definitions: BTreeMap::new(),
             functions: BTreeMap::new(),
             function_arities: BTreeMap::new(),
@@ -495,12 +501,12 @@ fn collect_first_class_named_refs(
             // first-class-function-value attempt -- only a real function
             // entry is subject to the arity-1 gate below.
             match def_arities.get(name) {
-                Some(DefArity::Fixed(1)) => {
+                Some(DefArity::Fixed(arity)) if *arity <= 5 => {
                     out.insert(name.clone());
                 }
                 Some(DefArity::Fixed(_)) => {
                     return Err(CompileError::UnsupportedVariant(
-                        "first-class named function (arity != 1)",
+                        "first-class named function (arity > 5)",
                     ));
                 }
                 Some(DefArity::Variadic { .. }) | Some(DefArity::AllRest) => {
@@ -617,7 +623,7 @@ fn preflight_env(
         Ir::Lambda {
             params: Params::Fixed(params),
             body,
-        } if params.len() == 1 => {
+        } if params.len() <= 5 => {
             let mut nested_bindings = bindings.clone();
             nested_bindings.extend(params.iter().cloned());
             preflight_lambda_body(body, &nested_bindings, symbols, slots)?;
@@ -744,8 +750,10 @@ fn preflight_env(
                     None => {}
                 }
             }
-            if args.len() != 1 {
-                return Err(CompileError::UnsupportedVariant("application"));
+            if args.len() > 5 {
+                return Err(CompileError::UnsupportedVariant(
+                    "application (more than 5 runtime arguments)",
+                ));
             }
             preflight_env(func, bindings, symbols, def_arities, slots)?;
             preflight_env(&args[0], bindings, symbols, def_arities, slots)?;
@@ -963,8 +971,10 @@ fn preflight_lambda_body(
                     _ => {}
                 }
             }
-            if args.len() != 1 {
-                return Err(CompileError::UnsupportedVariant("application"));
+            if args.len() > 5 {
+                return Err(CompileError::UnsupportedVariant(
+                    "application (more than 5 runtime arguments)",
+                ));
             }
             preflight_lambda_body(func, bindings, symbols, slots)?;
             preflight_lambda_body(&args[0], bindings, symbols, slots)
@@ -972,9 +982,9 @@ fn preflight_lambda_body(
         Ir::Lambda {
             params: Params::Fixed(params),
             body,
-        } if params.len() == 1 => {
+        } if params.len() <= 5 => {
             let mut nested_bindings = bindings.clone();
-            nested_bindings.insert(params[0].clone());
+            nested_bindings.extend(params.iter().cloned());
             preflight_lambda_body(body, &nested_bindings, symbols, slots)
         }
         Ir::Let {
@@ -1037,9 +1047,9 @@ fn preflight_def_body(
     match ir {
         Ir::Var(name) if bindings.contains(name) => Ok(()),
         Ir::Var(name) => match def_arities.get(name) {
-            Some(DefArity::Fixed(1)) => Ok(()),
+            Some(DefArity::Fixed(arity)) if *arity <= 5 => Ok(()),
             Some(DefArity::Fixed(_)) => Err(CompileError::UnsupportedVariant(
-                "first-class named function (arity != 1)",
+                "first-class named function (arity > 5)",
             )),
             Some(DefArity::Variadic { .. }) | Some(DefArity::AllRest) => Err(
                 CompileError::UnsupportedVariant("first-class named function (variadic)"),
@@ -1242,8 +1252,10 @@ fn preflight_def_body(
                     _ => {}
                 }
             }
-            if args.len() != 1 {
-                return Err(CompileError::UnsupportedVariant("application"));
+            if args.len() > 5 {
+                return Err(CompileError::UnsupportedVariant(
+                    "application (more than 5 runtime arguments)",
+                ));
             }
             preflight_def_body(func, bindings, symbols, def_arities, slots)?;
             preflight_def_body(&args[0], bindings, symbols, def_arities, slots)
@@ -1251,9 +1263,9 @@ fn preflight_def_body(
         Ir::Lambda {
             params: Params::Fixed(params),
             body,
-        } if params.len() == 1 => {
+        } if params.len() <= 5 => {
             let mut nested_bindings = bindings.clone();
-            nested_bindings.insert(params[0].clone());
+            nested_bindings.extend(params.iter().cloned());
             preflight_def_body(body, &nested_bindings, symbols, def_arities, slots)
         }
         Ir::TailSelfCall { args } => {
@@ -1371,7 +1383,10 @@ struct Emitter {
     env: BTreeMap<String, usize>,
     next_slot: usize,
     next_label: usize,
-    closure_labels: Vec<usize>,
+    // definition_id -> fixed arity. Runtime closure objects stay unchanged
+    // (definition_id + environment); arity is compiler-owned dispatch metadata
+    // used to make dynamic calls fail closed on a mismatched call shape.
+    closure_labels: BTreeMap<usize, usize>,
     named_closure_definitions: BTreeMap<String, usize>,
     functions: BTreeMap<String, usize>,
     function_arities: BTreeMap<String, DefArity>,
@@ -1445,7 +1460,7 @@ impl Emitter {
             Ir::Lambda {
                 params: Params::Fixed(params),
                 body,
-            } if params.len() == 1 => self.emit_single_argument_closure_value(&params[0], body),
+            } if params.len() <= 5 => self.emit_fixed_arity_closure_value(params, body),
             Ir::Lambda {
                 params: Params::Fixed(_),
                 ..
@@ -1595,13 +1610,13 @@ impl Emitter {
                                 self.line(&format!("    call .Lfn_{label}"));
                                 Ok(())
                             }
-                            _ => self.emit_single_argument_closure_call(func, &args[0]),
+                            _ => self.emit_fixed_arity_closure_call(func, args),
                         }
                     } else {
-                        self.emit_single_argument_closure_call(func, &args[0])
+                        self.emit_fixed_arity_closure_call(func, args)
                     }
                 } else {
-                    self.emit_single_argument_closure_call(func, &args[0])
+                    self.emit_fixed_arity_closure_call(func, args)
                 }
             }
             Ir::Cond { branches } => self.emit_cond(branches),
@@ -1818,8 +1833,8 @@ impl Emitter {
     /// real machine call with its own lexical frame. `%rdi` remains the runtime
     /// context register. Existing lexical bindings are closure-converted by
     /// passing the parent frame pointer in `%r10` and copying bounded captures
-    /// into the callee frame. First-class closure values remain handled by
-    /// `emit_single_argument_closure_value`.
+    /// into the callee frame. First-class closure values use the same bounded
+    /// fixed-arity register convention via `emit_fixed_arity_closure_value`.
     fn emit_direct_lambda_call(
         &mut self,
         params: &[String],
@@ -1981,17 +1996,26 @@ impl Emitter {
         Ok(())
     }
 
-    /// Materialize a unary closure in the runtime-owned closure arena. The
-    /// captured environment is a WSM list allocated in the ordinary cons heap,
-    /// so it outlives the defining native frame.
-    fn emit_single_argument_closure_value(
+    /// Materialize a fixed-arity (0..=5) closure in the runtime-owned closure
+    /// arena. The runtime object format remains exactly definition_id +
+    /// environment; fixed arity is compiler-owned metadata attached to the
+    /// definition id and checked by each dynamic call site.
+    ///
+    /// User arguments follow the same bounded register convention as named
+    /// functions (%rsi, %rdx, %rcx, %r8, %r9). The captured environment is
+    /// passed separately in %r10, so it never consumes a user-argument
+    /// register. The environment itself is a WSM list in the ordinary cons
+    /// heap, therefore it outlives the native frame that created the closure.
+    fn emit_fixed_arity_closure_value(
         &mut self,
-        parameter: &str,
+        parameters: &[String],
         body: &Ir,
     ) -> Result<(), CompileError> {
+        debug_assert!(parameters.len() <= 5);
         let captures = self.env.clone();
         let definition_id = self.allocate_label() + 1;
-        self.closure_labels.push(definition_id);
+        self.closure_labels
+            .insert(definition_id, parameters.len());
 
         self.emit_immediate(wsm_os_target::NIL);
         for (_, slot) in captures.iter().rev() {
@@ -2022,10 +2046,15 @@ impl Emitter {
 
         let mut ignored_symbols = BTreeSet::new();
         let mut body_slots = 0;
-        let mut bindings = BTreeSet::from([parameter.to_string()]);
+        let mut bindings: BTreeSet<String> = parameters.iter().cloned().collect();
         bindings.extend(captures.keys().cloned());
         preflight_lambda_body(body, &bindings, &mut ignored_symbols, &mut body_slots)?;
-        let required_slots = 2 + captures.len() + body_slots;
+
+        // A native call enters with rsp == 8 (mod 16). Keep an odd number of
+        // 8-byte slots so helper calls from the closure body see rsp == 0
+        // (mod 16), matching the existing SysV alignment discipline.
+        let environment_slot = parameters.len();
+        let required_slots = parameters.len() + 1 + captures.len() + body_slots;
         let frame_slots = if required_slots % 2 == 1 {
             required_slots
         } else {
@@ -2033,29 +2062,52 @@ impl Emitter {
         };
         let frame_bytes = frame_slots * 8;
         self.line(&format!("    subq ${frame_bytes}, %rsp"));
-        self.line("    movq %rsi, 0(%rsp)");
-        self.line("    movq %rdx, 8(%rsp)");
+
+        let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+        for (index, register) in regs[..parameters.len()].iter().enumerate() {
+            self.line(&format!(
+                "    movq {register}, {}(%rsp)",
+                Self::slot_offset(index)
+            ));
+        }
+        self.line(&format!(
+            "    movq %r10, {}(%rsp)",
+            Self::slot_offset(environment_slot)
+        ));
 
         let saved_env = core::mem::take(&mut self.env);
         let saved_next_slot = self.next_slot;
-        self.env.insert(parameter.to_string(), 0);
-        self.next_slot = 2;
+        for (index, parameter) in parameters.iter().enumerate() {
+            self.env.insert(parameter.clone(), index);
+        }
+        self.next_slot = environment_slot + 1;
+
         for name in captures.keys() {
             let local_slot = self.next_slot;
             self.next_slot += 1;
             self.line("    movq %r12, %rdi");
-            self.line("    movq 8(%rsp), %rsi");
+            self.line(&format!(
+                "    movq {}(%rsp), %rsi",
+                Self::slot_offset(environment_slot)
+            ));
             self.line("    call wsm_car");
             self.line(&format!(
                 "    movq %rax, {}(%rsp)",
                 Self::slot_offset(local_slot)
             ));
             self.line("    movq %r12, %rdi");
-            self.line("    movq 8(%rsp), %rsi");
+            self.line(&format!(
+                "    movq {}(%rsp), %rsi",
+                Self::slot_offset(environment_slot)
+            ));
             self.line("    call wsm_cdr");
-            self.line("    movq %rax, 8(%rsp)");
+            self.line(&format!(
+                "    movq %rax, {}(%rsp)",
+                Self::slot_offset(environment_slot)
+            ));
             self.env.insert(name.clone(), local_slot);
         }
+
         self.emit_ir(body)?;
         self.env = saved_env;
         self.next_slot = saved_next_slot;
@@ -2065,31 +2117,42 @@ impl Emitter {
         Ok(())
     }
 
-    /// Dispatches an escaping single-argument closure call.
+    /// Dispatch an escaping fixed-arity closure call.
     ///
-    /// Emits a linear `cmpl $definition_id, %eax` / `jne` chain against
-    /// *every* closure definition compiled into this unit so far, falling
-    /// through to `wsm_fail(AbiViolation)` on no match -- correct and
-    /// honestly fail-closed, but O(n) machine instructions executed per call
-    /// site, where n = total closures compiled into the unit, not just ones
-    /// reachable from this call site. Fine at current bounded-fixture scale.
-    fn emit_single_argument_closure_call(
+    /// Closure objects still expose only definition id + environment through
+    /// the ratified runtime ABI. Arity stays compiler-owned: this call site
+    /// compares only against definition ids whose recorded fixed arity equals
+    /// arguments.len(). A closure with a different arity therefore reaches
+    /// wsm_fail(AbiViolation) rather than being invoked with a guessed ABI.
+    ///
+    /// Dispatch remains a linear chain over matching closure definitions.
+    fn emit_fixed_arity_closure_call(
         &mut self,
         function: &Ir,
-        argument: &Ir,
+        arguments: &[Ir],
     ) -> Result<(), CompileError> {
+        debug_assert!(arguments.len() <= 5);
+
+        // my-lisp application order is operator first, then arguments
+        // left-to-right. Preserve it explicitly before any runtime metadata
+        // lookup for the closure object.
         self.emit_ir(function)?;
         let closure_slot = self.allocate_slot();
         self.line(&format!(
             "    movq %rax, {}(%rsp)",
             Self::slot_offset(closure_slot)
         ));
-        self.emit_ir(argument)?;
-        let argument_slot = self.allocate_slot();
-        self.line(&format!(
-            "    movq %rax, {}(%rsp)",
-            Self::slot_offset(argument_slot)
-        ));
+
+        let mut argument_slots = Vec::with_capacity(arguments.len());
+        for argument in arguments {
+            self.emit_ir(argument)?;
+            let slot = self.allocate_slot();
+            self.line(&format!(
+                "    movq %rax, {}(%rsp)",
+                Self::slot_offset(slot)
+            ));
+            argument_slots.push(slot);
+        }
 
         self.line("    movq %r12, %rdi");
         self.line(&format!(
@@ -2102,6 +2165,7 @@ impl Emitter {
             "    movq %rax, {}(%rsp)",
             Self::slot_offset(environment_slot)
         ));
+
         self.line("    movq %r12, %rdi");
         self.line(&format!(
             "    movq {}(%rsp), %rsi",
@@ -2109,24 +2173,35 @@ impl Emitter {
         ));
         self.line("    call wsm_closure_definition");
 
-        let known_labels = self.closure_labels.clone();
+        let known_labels: Vec<usize> = self
+            .closure_labels
+            .iter()
+            .filter_map(|(definition_id, arity)| {
+                (*arity == arguments.len()).then_some(*definition_id)
+            })
+            .collect();
         let end_label = self.allocate_label();
         for definition_id in known_labels {
             let next_label = self.allocate_label();
             self.line(&format!("    cmpl ${definition_id}, %eax"));
             self.line(&format!("    jne .Lclosure_dispatch_{next_label}"));
+
+            let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+            for (slot, register) in argument_slots.iter().zip(regs.iter()) {
+                self.line(&format!(
+                    "    movq {}(%rsp), {register}",
+                    Self::slot_offset(*slot)
+                ));
+            }
             self.line(&format!(
-                "    movq {}(%rsp), %rsi",
-                Self::slot_offset(argument_slot)
-            ));
-            self.line(&format!(
-                "    movq {}(%rsp), %rdx",
+                "    movq {}(%rsp), %r10",
                 Self::slot_offset(environment_slot)
             ));
             self.line(&format!("    call .Lclosure_{definition_id}"));
             self.line(&format!("    jmp .Lclosure_call_end_{end_label}"));
             self.line(&format!(".Lclosure_dispatch_{next_label}:"));
         }
+
         self.line("    movq %r12, %rdi");
         self.line(&format!(
             "    movl ${}, %esi",
@@ -2136,7 +2211,7 @@ impl Emitter {
             "    movq {}(%rsp), %rdx",
             Self::slot_offset(closure_slot)
         ));
-        self.line("    xorl %ecx, %ecx");
+        self.line(&format!("    movq ${}, %rcx", arguments.len()));
         self.line("    call wsm_fail");
         self.line(&format!(".Lclosure_call_end_{end_label}:"));
         Ok(())
