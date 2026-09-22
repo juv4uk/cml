@@ -30,16 +30,16 @@ fn report_is_deterministic_and_matches_the_merged_ledger() {
         "\nsemantic-identities\t{}\n",
         summary.semantic_identities
     )));
-    assert!(text.contains(&format!(
-        "\nsource-admitted\t{}\n",
-        summary.source_admitted
-    )));
+    assert!(text.contains(&format!("\nsource-admitted\t{}\n", summary.source_admitted)));
     assert!(text.contains(&format!(
         "\nnot-yet-admitted\t{}\n",
         summary.not_yet_admitted
     )));
 
-    let row_lines: Vec<_> = text.lines().filter(|line| line.starts_with("row\t")).collect();
+    let row_lines: Vec<_> = text
+        .lines()
+        .filter(|line| line.starts_with("row\t"))
+        .collect();
     assert_eq!(row_lines.len(), ledger.rows.len());
 
     for line in &row_lines {
