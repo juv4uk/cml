@@ -1,16 +1,17 @@
+use my_lisp::Sid8;
 use std::fs;
 
 use cml::canon::find_operation_by_id;
 use cml::coverage::{BackendEvidenceState, CoverageLedger};
 
-const EXPECTED: &[(&str, BackendEvidenceState)] = &[
-    ("0001", BackendEvidenceState::Executable),
-    ("0002", BackendEvidenceState::AssemblyWitness),
-    ("0003", BackendEvidenceState::Executable),
-    ("0004", BackendEvidenceState::Executable),
-    ("0005", BackendEvidenceState::AssemblyWitness),
-    ("0006", BackendEvidenceState::AssemblyWitness),
-    ("0007", BackendEvidenceState::Executable),
+const EXPECTED: &[(my_lisp::Sid8, BackendEvidenceState)] = &[
+    (my_lisp::sid!(00000001), BackendEvidenceState::Executable),
+    (my_lisp::sid!(00000010), BackendEvidenceState::AssemblyWitness),
+    (my_lisp::sid!(00000011), BackendEvidenceState::Executable),
+    (my_lisp::sid!(00000100), BackendEvidenceState::Executable),
+    (my_lisp::sid!(00000101), BackendEvidenceState::AssemblyWitness),
+    (my_lisp::sid!(00000110), BackendEvidenceState::AssemblyWitness),
+    (my_lisp::sid!(00000111), BackendEvidenceState::Executable),
 ];
 
 fn read_repo(path: &str) -> String {
@@ -38,7 +39,7 @@ fn x86_canon_evidence_reconciles_matrix_ledger_and_pushed_witnesses() {
 
     let mut x86_rows = 0usize;
     for (semantic_id, expected_state) in EXPECTED {
-        let operation = find_operation_by_id(semantic_id)
+        let operation = find_operation_by_id(*semantic_id)
             .unwrap_or_else(|| panic!("Canon operation {semantic_id} must exist"));
         assert!(
             x86.contains(&format!("({} . supported)", operation.canonical_name)),
@@ -47,7 +48,7 @@ fn x86_canon_evidence_reconciles_matrix_ledger_and_pushed_witnesses() {
         );
 
         let row = ledger
-            .row(semantic_id)
+            .row(*semantic_id)
             .unwrap_or_else(|| panic!("ledger row {semantic_id} must exist"));
         let evidence: Vec<_> = row
             .backend_evidence

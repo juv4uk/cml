@@ -15,13 +15,14 @@ use std::fs;
 use std::path::PathBuf;
 
 /// IDs whose surfaces feed `is_reserved_canon_surface` (Canon 0+7).
-const TARGET_IDS: &[&str] = &["0001", "0002", "0003", "0004", "0005", "0006", "0007"];
+const TARGET_IDS: &[&str] = &["00000001", "00000010", "00000011", "00000100", "00000101", "00000110", "00000111"];
 
 /// Callable primitives and library operations whose semantic identity must survive
 /// surface spelling changes across English, Ukrainian, Sanskrit, and symbolic forms.
 const CALLABLE_IDS: &[&str] = &[
-    "0002", "0003", "0004", "0005", "0006", "0104", "1001", "1002", "1007", "1014", "1015", "1016",
-    "1017", "1018", "1022", "1074",
+    "00000010", "00000011", "00000100", "00000101", "00000110", "00001100", "00001101",
+    "00001110", "00010011", "00011010", "00011011", "00011100", "00011101", "00011110",
+    "00100010", "01011001",
 ];
 
 /// Retired semantic IDs that must NEVER be active or recycled (e.g. 1153 for former RDTSC attribution).
@@ -29,36 +30,35 @@ const RETIRED_SEMANTIC_IDS: &[&str] = &["1153"];
 
 /// Special-form dispatch sets: form name prefix -> registry IDs.
 const DISPATCH_FORMS: &[(&str, &[&str])] = &[
-    ("QUOTE", &["0001"]),
-    ("COND", &["0007"]),
-    ("LAMBDA", &["0010"]),
-    ("DEFINE", &["0011", "1000"]),
-    ("DEFMACRO", &["0012"]),
+    ("QUOTE", &["00000001"]),
+    ("COND", &["00000111"]),
+    ("LAMBDA", &["00001000"]),
+    ("DEFINE", &["00001001", "00001011"]),
+    ("DEFMACRO", &["00001010"]),
 ];
 
 /// Canonical target builtin names for first-class values.
 const BUILTIN_PROJECTIONS: &[(&str, &str)] = &[
-    ("0002", "ATOM"),
-    ("0003", "EQ"),
-    ("0004", "CONS"),
-    ("0005", "CAR"),
-    ("0006", "CDR"),
-    ("0104", "+"),
-    ("1001", "-"),
-    ("1002", "*"),
-    ("1007", "mod"),
-    ("1014", "<"),
-    ("1015", ">"),
-    ("1016", "="),
-    ("1017", "<="),
-    ("1018", ">="),
-    ("1022", "EQUAL?"),
-    ("1074", "NUMERIC-BUFFER-MAP"),
+    ("00000010", "ATOM"),
+    ("00000011", "EQ"),
+    ("00000100", "CONS"),
+    ("00000101", "CAR"),
+    ("00000110", "CDR"),
+    ("00001100", "+"),
+    ("00001101", "-"),
+    ("00001110", "*"),
+    ("00010011", "mod"),
+    ("00011010", "<"),
+    ("00011011", ">"),
+    ("00011100", "="),
+    ("00011101", "<="),
+    ("00011110", ">="),
+    ("00100010", "EQUAL?"),
+    ("01011001", "NUMERIC-BUFFER-MAP"),
 ];
 
 struct OperationSpec {
     canonical_name: &'static str,
-    semantic_id: &'static str,
     formal_action: &'static str,
     cml_ir_projection: &'static str,
     backend_projections: &'static [(&'static str, &'static str)],
@@ -70,7 +70,6 @@ struct OperationSpec {
 const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "quote",
-        semantic_id: "0001",
         formal_action: "syntax:quote",
         cml_ir_projection: "Ir::Quote",
         backend_projections: &[
@@ -84,7 +83,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "atom",
-        semantic_id: "0002",
         formal_action: "primitive:atom",
         cml_ir_projection: "Ir::Prim(PrimOp::Atom)",
         backend_projections: &[
@@ -98,7 +96,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "eq",
-        semantic_id: "0003",
         formal_action: "primitive:eq",
         cml_ir_projection: "Ir::Prim(PrimOp::Eq)",
         backend_projections: &[
@@ -112,7 +109,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "cons",
-        semantic_id: "0004",
         formal_action: "primitive:cons",
         cml_ir_projection: "Ir::Prim(PrimOp::Cons)",
         backend_projections: &[
@@ -126,7 +122,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "car",
-        semantic_id: "0005",
         formal_action: "primitive:car",
         cml_ir_projection: "Ir::Prim(PrimOp::Car)",
         backend_projections: &[
@@ -140,7 +135,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "cdr",
-        semantic_id: "0006",
         formal_action: "primitive:cdr",
         cml_ir_projection: "Ir::Prim(PrimOp::Cdr)",
         backend_projections: &[
@@ -154,7 +148,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "cond",
-        semantic_id: "0007",
         formal_action: "syntax:cond",
         cml_ir_projection: "Ir::Cond",
         backend_projections: &[
@@ -168,7 +161,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "lambda",
-        semantic_id: "0010",
         formal_action: "syntax:lambda",
         cml_ir_projection: "Ir::Lambda",
         backend_projections: &[
@@ -182,7 +174,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "define",
-        semantic_id: "0011",
         formal_action: "syntax:define",
         cml_ir_projection: "Ir::Def",
         backend_projections: &[
@@ -196,7 +187,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "def",
-        semantic_id: "1000",
         formal_action: "compatibility:def",
         cml_ir_projection: "Ir::Def",
         backend_projections: &[
@@ -210,7 +200,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "defmacro",
-        semantic_id: "0012",
         formal_action: "syntax:defmacro",
         cml_ir_projection: "macro_expansion",
         backend_projections: &[
@@ -224,7 +213,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "+",
-        semantic_id: "0104",
         formal_action: "primitive:add",
         cml_ir_projection: "Ir::Prim(PrimOp::Add)",
         backend_projections: &[
@@ -238,7 +226,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "-",
-        semantic_id: "1001",
         formal_action: "primitive:sub",
         cml_ir_projection: "Ir::Prim(PrimOp::Sub)",
         backend_projections: &[
@@ -252,7 +239,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "*",
-        semantic_id: "1002",
         formal_action: "primitive:exact-q-mul",
         cml_ir_projection: "Ir::App(Builtin(\"*\"))",
         backend_projections: &[
@@ -266,7 +252,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "mod",
-        semantic_id: "1007",
         formal_action: "primitive:exact-q-mod",
         cml_ir_projection: "Ir::App(Builtin(\"mod\"))",
         backend_projections: &[
@@ -280,7 +265,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "<",
-        semantic_id: "1014",
         formal_action: "primitive:exact-q-less-than",
         cml_ir_projection: "Ir::Prim(PrimOp::ExactQLt)",
         backend_projections: &[
@@ -294,7 +278,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: ">",
-        semantic_id: "1015",
         formal_action: "primitive:exact-q-greater-than",
         cml_ir_projection: "Ir::App(Builtin(\">\"))",
         backend_projections: &[
@@ -308,7 +291,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "=",
-        semantic_id: "1016",
         formal_action: "primitive:exact-q-equal",
         cml_ir_projection: "Ir::App(Builtin(\"=\"))",
         backend_projections: &[
@@ -322,7 +304,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "<=",
-        semantic_id: "1017",
         formal_action: "primitive:exact-q-less-equal",
         cml_ir_projection: "Ir::Prim(PrimOp::ExactQLe)",
         backend_projections: &[
@@ -336,7 +317,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: ">=",
-        semantic_id: "1018",
         formal_action: "primitive:exact-q-greater-equal",
         cml_ir_projection: "Ir::Prim(PrimOp::ExactQGe)",
         backend_projections: &[
@@ -350,7 +330,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "equal?",
-        semantic_id: "1022",
         formal_action: "primitive:equalp",
         cml_ir_projection: "Ir::Prim(PrimOp::EqualP)",
         backend_projections: &[
@@ -364,7 +343,6 @@ const OPERATIONS: &[OperationSpec] = &[
     },
     OperationSpec {
         canonical_name: "numeric-buffer-map",
-        semantic_id: "1074",
         formal_action: "library:numeric-buffer-map",
         cml_ir_projection: "Ir::App(Builtin(\"NUMERIC-BUFFER-MAP\"))",
         backend_projections: &[
@@ -460,11 +438,16 @@ fn list(sexp: &Sexp) -> &[Sexp] {
     }
 }
 
+/// Opaque semantic ID: an 8-bit binary token rendered as eight ASCII digits.
+fn is_semantic_id(token: &str) -> bool {
+    token.len() == 8 && token.chars().all(|c| c == '0' || c == '1')
+}
+
 /// #106: collect the complete supported-pin semantic denominator from the
 /// same upstream registry parse already used to generate CML's admitted
 /// operation table. IDs remain opaque numeric strings; this does not assign
 /// meaning or backend support to rows that CML has not admitted.
-fn collect_supported_pin_semantic_ids(root: &[Sexp]) -> Vec<String> {
+fn collect_supported_pin_semantic_ids(root: &[Sexp]) -> Vec<u8> {
     let mut ids = Vec::with_capacity(root.len());
     let mut seen = BTreeSet::new();
 
@@ -475,13 +458,16 @@ fn collect_supported_pin_semantic_ids(root: &[Sexp]) -> Vec<String> {
         let Some(Sexp::Atom(id)) = items.first() else {
             panic!("cml#106: semantic-registry row must begin with an opaque semantic ID");
         };
-        if id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
-            panic!("cml#106: semantic ID must contain ASCII digits only: {id:?}");
+        if !is_semantic_id(id) {
+            panic!("cml#106: semantic ID must be an 8-bit binary token: {id:?}");
         }
-        if !seen.insert(id.clone()) {
+        let numeric = u8::from_str_radix(id, 2).unwrap_or_else(|_| {
+            panic!("cml#106: semantic ID must fit in u8: {id:?}")
+        });
+        if !seen.insert(numeric) {
             panic!("cml#106: duplicate semantic ID {id}");
         }
-        ids.push(id.clone());
+        ids.push(numeric);
     }
 
     ids
@@ -520,6 +506,10 @@ fn collect_surfaces_detailed(root: &[Sexp], id: &str) -> Vec<(String, String)> {
             continue;
         }
         let lang = atom(&parts[0]);
+        // Current registry marks absent surfaces with ().
+        if matches!(&parts[1], Sexp::List(items) if items.is_empty()) {
+            continue;
+        }
         let word = atom(&parts[1]);
         let status = if parts.len() >= 3 {
             atom(&parts[2])
@@ -538,6 +528,53 @@ fn collect_surfaces_detailed(root: &[Sexp], id: &str) -> Vec<(String, String)> {
     surfaces
 }
 
+
+/// Resolve each admitted operation's canonical name to the exact 8-bit SID
+/// owned by the upstream registry. The canonical name matches either the `en`
+/// surface or, when `en` is absent, the `sym` surface of the row.
+fn resolve_operation_semantic_ids(root: &[Sexp]) -> HashMap<String, u8> {
+    let mut map = HashMap::new();
+    for row in root {
+        let Sexp::List(items) = row else { continue };
+        let (first, fields) = match items.split_first() {
+            Some(pair) => pair,
+            None => continue,
+        };
+        let Sexp::Atom(id_text) = first else { continue };
+        if !is_semantic_id(id_text) {
+            continue;
+        }
+        let id = u8::from_str_radix(id_text, 2).unwrap();
+
+        let mut en_name: Option<String> = None;
+        let mut sym_name: Option<String> = None;
+        for field in fields {
+            let Sexp::List(parts) = field else { continue };
+            if parts.len() < 2 {
+                continue;
+            }
+            let Sexp::Atom(marker) = &parts[0] else { continue };
+            let value = &parts[1];
+            if matches!(value, Sexp::List(items) if items.is_empty()) {
+                continue;
+            }
+            if marker == "en" {
+                if let Sexp::Atom(word) = value {
+                    en_name = Some(word.clone());
+                }
+            } else if marker == "sym" {
+                if let Sexp::Atom(word) = value {
+                    sym_name = Some(word.clone());
+                }
+            }
+        }
+        if let Some(name) = en_name.or(sym_name) {
+            map.insert(name, id);
+        }
+    }
+    map
+}
+
 fn collect_surfaces(root: &[Sexp], ids: &[&str]) -> (Vec<String>, Vec<String>) {
     let mut upper_surfaces: Vec<String> = Vec::new();
     let mut exact_surfaces: Vec<String> = Vec::new();
@@ -547,7 +584,7 @@ fn collect_surfaces(root: &[Sexp], ids: &[&str]) -> (Vec<String>, Vec<String>) {
         for (lang, word) in surfaces {
             match lang.as_str() {
                 "en" | "sym" => upper_surfaces.push(word.to_uppercase()),
-                "uk" | "ukr" | "sa" => exact_surfaces.push(word),
+                "uk" | "ук" | "ukr" | "укр" | "sa" => exact_surfaces.push(word),
                 other => panic!("cml#14: unknown surface language {other:?} for id {id}"),
             }
         }
@@ -590,59 +627,75 @@ fn main() {
     });
 
     let forms = parse_all(&source);
-    let root = forms
+    let root: &[Sexp] = forms
         .iter()
         .find_map(|form| match form {
+            // Legacy schema: (sr/1 (id ...) ...)
             Sexp::List(items)
                 if !items.is_empty() && matches!(&items[0], Sexp::Atom(a) if a == "sr/1") =>
             {
                 Some(&items[1..])
             }
+            // Current schema: rows start directly with an opaque 8-bit semantic ID.
+            Sexp::List(items)
+                if !items.is_empty()
+                    && matches!(&items[0], Sexp::List(first)
+                        if matches!(&first.first(), Some(Sexp::Atom(id))
+                            if is_semantic_id(id))) =>
+            {
+                Some(items.as_slice())
+            }
             _ => None,
         })
         .unwrap_or_else(|| {
-            panic!("cml#14: no top-level (sr/1 ...) form found in semantic-registry.wsm")
+            panic!("cml#14: no top-level (sr/1 ...) or headerless row list found in semantic-registry")
         });
 
     let supported_pin_semantic_ids = collect_supported_pin_semantic_ids(root);
-    let supported_pin_semantic_id_set: BTreeSet<&str> = supported_pin_semantic_ids
-        .iter()
-        .map(String::as_str)
-        .collect();
-    for operation in OPERATIONS {
-        if !supported_pin_semantic_id_set.contains(operation.semantic_id) {
+    let supported_pin_semantic_id_set: BTreeSet<u8> = supported_pin_semantic_ids.iter().copied().collect();
+    let name_to_sid = resolve_operation_semantic_ids(root);
+
+    let mut operation_ids: Vec<(usize, u8)> = Vec::with_capacity(OPERATIONS.len());
+    for (index, operation) in OPERATIONS.iter().enumerate() {
+        let id = *name_to_sid.get(operation.canonical_name).unwrap_or_else(|| {
             panic!(
-                "cml#106: admitted operation {} references semantic ID {} absent from the supported-pin registry",
-                operation.canonical_name, operation.semantic_id
+                "cml#106: admitted operation {} has no SID in the supported-pin registry",
+                operation.canonical_name
+            );
+        });
+        if !supported_pin_semantic_id_set.contains(&id) {
+            panic!(
+                "cml#106: admitted operation {} references semantic ID {:08b} absent from the supported-pin registry",
+                operation.canonical_name, id
             );
         }
+        operation_ids.push((index, id));
     }
     let supported_pin_registry_digest = fnv1a64(source.as_bytes());
 
     // Fail-closed collision detection across all admitted operations
-    let mut seen_upper: HashMap<String, &str> = HashMap::new();
-    let mut seen_exact: HashMap<String, &str> = HashMap::new();
-    for op in OPERATIONS {
-        let surfaces = collect_surfaces_detailed(root, op.semantic_id);
+    let mut seen_upper: HashMap<String, String> = HashMap::new();
+    let mut seen_exact: HashMap<String, String> = HashMap::new();
+    for (index, id) in &operation_ids {
+        let op = &OPERATIONS[*index];
+        let sid_text = format!("{:08b}", id);
+        let surfaces = collect_surfaces_detailed(root, &sid_text);
         for (lang, word) in &surfaces {
             if lang == "en" || lang == "sym" {
                 let folded = word.to_uppercase();
-                if let Some(prev) = seen_upper.insert(folded.clone(), op.semantic_id) {
-                    if prev != op.semantic_id && !(op.semantic_id == "1000" && prev == "0011") {
+                if let Some(prev) = seen_upper.insert(folded.clone(), sid_text.clone()) {
+                    if prev != sid_text {
                         panic!(
                             "cml#14: collision on upper surface {folded:?} between {prev} and {}",
-                            op.semantic_id
+                            sid_text
                         );
                     }
                 }
-            } else if let Some(prev) = seen_exact.insert(word.clone(), op.semantic_id) {
-                if prev != op.semantic_id
-                    && !(op.semantic_id == "1000" && prev == "0011")
-                    && !(op.semantic_id == "0011" && prev == "1000")
-                {
+            } else if let Some(prev) = seen_exact.insert(word.clone(), sid_text.clone()) {
+                if prev != sid_text {
                     panic!(
                         "cml#14: collision on exact surface {word:?} between {prev} and {}",
-                        op.semantic_id
+                        sid_text
                     );
                 }
             }
@@ -654,10 +707,11 @@ fn main() {
     let mut generated = String::new();
     generated.push_str("// @generated by build.rs from my-lisp/lib/surface/semantic-registry.wsm (cml#14). Do not edit by hand.\n\n");
 
+    generated.push_str("use my_lisp::Sid8;\n\n");
     generated.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
     generated.push_str("pub struct CanonOperation {\n");
     generated.push_str("    pub canonical_name: &'static str,\n");
-    generated.push_str("    pub semantic_id: &'static str,\n");
+    generated.push_str("    pub semantic_id: Sid8,\n");
     generated.push_str("    pub formal_action: &'static str,\n");
     generated.push_str("    pub surfaces: &'static [(&'static str, &'static str)],\n");
     generated.push_str("    pub cml_ir_projection: &'static str,\n");
@@ -668,14 +722,16 @@ fn main() {
     generated.push_str("}\n\n");
 
     generated.push_str("pub const CANON_OPERATIONS_TABLE: &[CanonOperation] = &[\n");
-    for op in OPERATIONS {
-        let surfaces = collect_surfaces_detailed(root, op.semantic_id);
+    for (index, id) in &operation_ids {
+        let op = &OPERATIONS[*index];
+        let sid_text = format!("{:08b}", id);
+        let surfaces = collect_surfaces_detailed(root, &sid_text);
         generated.push_str("    CanonOperation {\n");
         generated.push_str(&format!(
             "        canonical_name: {:?},\n",
             op.canonical_name
         ));
-        generated.push_str(&format!("        semantic_id: {:?},\n", op.semantic_id));
+        generated.push_str(&format!("        semantic_id: my_lisp::sid!({}),\n", sid_text));
         generated.push_str(&format!("        formal_action: {:?},\n", op.formal_action));
         generated.push_str("        surfaces: &[\n");
         for (lang, word) in &surfaces {
@@ -704,18 +760,18 @@ fn main() {
     }
     generated.push_str("];\n\n");
 
-    generated.push_str("pub const CANON_SUPPORTED_PIN_SEMANTIC_IDS: &[&str] = &[\n");
+    generated.push_str("pub const CANON_SUPPORTED_PIN_SEMANTIC_IDS: &[Sid8] = &[\n");
     for id in &supported_pin_semantic_ids {
-        generated.push_str(&format!("    {id:?},\n"));
+        generated.push_str(&format!("    my_lisp::sid!({:08b}),\n", id));
     }
     generated.push_str("];\n\n");
     generated.push_str(&format!(
         "pub const CANON_SUPPORTED_PIN_REGISTRY_FNV1A64: u64 = 0x{supported_pin_registry_digest:016x};\n\n"
     ));
 
-    generated.push_str("pub const CANON_BUILTIN_NAMES: &[(&str, &str)] = &[\n");
+    generated.push_str("pub const CANON_BUILTIN_NAMES: &[(Sid8, &str)] = &[\n");
     for (id, name) in BUILTIN_PROJECTIONS {
-        generated.push_str(&format!("    ({id:?}, {name:?}),\n"));
+        generated.push_str(&format!("    (my_lisp::sid!({id}), {name:?}),\n"));
     }
     generated.push_str("];\n\n");
 
@@ -730,21 +786,21 @@ fn main() {
     }
     generated.push_str("];\n\n");
 
-    generated.push_str("pub const CANON_CALLABLE_UPPER: &[(&str, &str)] = &[\n");
+    generated.push_str("pub const CANON_CALLABLE_UPPER: &[(Sid8, &str)] = &[\n");
     let mut callable_exact = Vec::new();
     for id in CALLABLE_IDS {
         let (upper, exact) = collect_surfaces(root, &[*id]);
         for surface in upper {
-            generated.push_str(&format!("    ({surface:?}, {id:?}),\n"));
+            generated.push_str(&format!("    (my_lisp::sid!({id}), {surface:?}),\n"));
         }
         for surface in exact {
             callable_exact.push((surface, *id));
         }
     }
     generated.push_str("];\n");
-    generated.push_str("pub const CANON_CALLABLE_EXACT: &[(&str, &str)] = &[\n");
+    generated.push_str("pub const CANON_CALLABLE_EXACT: &[(Sid8, &str)] = &[\n");
     for (surface, id) in callable_exact {
-        generated.push_str(&format!("    ({surface:?}, {id:?}),\n"));
+        generated.push_str(&format!("    (my_lisp::sid!({id}), {surface:?}),\n"));
     }
     generated.push_str("];\n\n");
 
@@ -778,13 +834,15 @@ fn main() {
     s_expr.push_str(" (authority . ((language . juv4uk/my-lisp)\n");
     s_expr.push_str("               (compiler . juv4uk/cml)))\n");
     s_expr.push_str(" (operations\n  . (");
-    for (i, op) in OPERATIONS.iter().enumerate() {
-        let surfaces = collect_surfaces_detailed(root, op.semantic_id);
+    for (i, (index, id)) in operation_ids.iter().enumerate() {
+        let op = &OPERATIONS[*index];
+        let sid_text = format!("{:08b}", id);
+        let surfaces = collect_surfaces_detailed(root, &sid_text);
         if i > 0 {
             s_expr.push_str("\n     ");
         }
         s_expr.push_str(&format!("((canonical-name . {:?})\n", op.canonical_name));
-        s_expr.push_str(&format!("      (semantic-id . {:?})\n", op.semantic_id));
+        s_expr.push_str(&format!("      (semantic-id . {:?})\n", sid_text));
         s_expr.push_str(&format!("      (formal-action . {:?})\n", op.formal_action));
         s_expr.push_str("      (surfaces . (");
         for (j, (lang, word)) in surfaces.iter().enumerate() {

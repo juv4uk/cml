@@ -1,3 +1,4 @@
+use my_lisp::Sid8;
 use std::collections::BTreeSet;
 use std::fs;
 use std::process::Command;
@@ -1648,12 +1649,12 @@ fn retired_semantic_id_1153_is_not_an_active_language_callable() {
         "rdtsc must not exist as an active canonical callable builtin"
     );
     assert_eq!(
-        cml::canon::canonical_builtin_name("1153"),
+        cml::canon::canonical_builtin_name(my_lisp::sid!(11111111)),
         None,
         "1153 must not map to any canonical builtin name"
     );
     assert!(
-        cml::canon::find_operation_by_id("1153").is_none(),
+        cml::canon::find_operation_by_id(my_lisp::sid!(11111111)).is_none(),
         "semantic ID 1153 is retired and MUST NOT appear in CANON_OPERATIONS_TABLE"
     );
 }

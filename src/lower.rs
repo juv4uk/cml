@@ -402,31 +402,50 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
         // below is only the compiler's finite mechanism projection from an
         // opaque semantic ID to the IR operation it can implement.
         if let Some(semantic_id) = callable_semantic_id(func) {
-            match (semantic_id, args.len()) {
-                ("0002", 1) => return lower_prim(PrimOp::Atom, args, env),
-                ("0003", 2) => return lower_prim(PrimOp::Eq, args, env),
-                ("0004", 2) => return lower_prim(PrimOp::Cons, args, env),
-                ("0005", 1) => return lower_prim(PrimOp::Car, args, env),
-                ("0006", 1) => return lower_prim(PrimOp::Cdr, args, env),
-                ("0104", 2) => return lower_prim(PrimOp::Add, args, env),
-                ("1001", 2) => return lower_prim(PrimOp::Sub, args, env),
-                ("1022", 2) => return lower_prim(PrimOp::EqualP, args, env),
-                ("1014", 2) => return lower_prim(PrimOp::ExactQLt, args, env),
-                ("1017", 2) => return lower_prim(PrimOp::ExactQLe, args, env),
-                ("1018", 2) => return lower_prim(PrimOp::ExactQGe, args, env),
-                ("1074", 2) => {
+            if semantic_id == my_lisp::sid!(00000010) && args.len() == 1 {
+                return lower_prim(PrimOp::Atom, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00000011) && args.len() == 2 {
+                return lower_prim(PrimOp::Eq, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00000100) && args.len() == 2 {
+                return lower_prim(PrimOp::Cons, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00000101) && args.len() == 1 {
+                return lower_prim(PrimOp::Car, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00000110) && args.len() == 1 {
+                return lower_prim(PrimOp::Cdr, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00001100) && args.len() == 2 {
+                return lower_prim(PrimOp::Add, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00001101) && args.len() == 2 {
+                return lower_prim(PrimOp::Sub, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00100010) && args.len() == 2 {
+                return lower_prim(PrimOp::EqualP, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00011010) && args.len() == 2 {
+                return lower_prim(PrimOp::ExactQLt, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00011101) && args.len() == 2 {
+                return lower_prim(PrimOp::ExactQLe, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00011110) && args.len() == 2 {
+                return lower_prim(PrimOp::ExactQGe, args, env);
+            }
+            if semantic_id == my_lisp::sid!(01011001) {
+                if args.len() == 2 {
                     return lower_generic_call(
                         &Expr::Symbol("NUMERIC-BUFFER-MAP".to_string()),
                         args,
                         env,
                     );
                 }
-                ("1074", _) => {
-                    return Err(LowerError::arity(
-                        "numeric-buffer-map expects exactly two arguments",
-                    ));
-                }
-                _ => {}
+                return Err(LowerError::arity(
+                    "numeric-buffer-map expects exactly two arguments",
+                ));
             }
         }
     }

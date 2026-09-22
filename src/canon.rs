@@ -23,20 +23,20 @@ pub fn is_canon_form(name: &str, upper: &[&str], exact: &[&str]) -> bool {
 /// generated from my-lisp's authoritative registry. The compiler may choose
 /// a mechanism for a known ID, but it does not get to invent identity from a
 /// human-facing spelling.
-pub fn callable_semantic_id(name: &str) -> Option<&'static str> {
+pub fn callable_semantic_id(name: &str) -> Option<Sid8> {
     let folded = name.to_uppercase();
     CANON_CALLABLE_UPPER
         .iter()
-        .find_map(|(surface, id)| (*surface == folded).then_some(*id))
+        .find_map(|(id, surface)| (*surface == folded).then_some(*id))
         .or_else(|| {
             CANON_CALLABLE_EXACT
                 .iter()
-                .find_map(|(surface, id)| (*surface == name).then_some(*id))
+                .find_map(|(id, surface)| (*surface == name).then_some(*id))
         })
 }
 
 /// Map an admitted semantic ID to its canonical uppercase target builtin name.
-pub fn canonical_builtin_name(semantic_id: &str) -> Option<&'static str> {
+pub fn canonical_builtin_name(semantic_id: Sid8) -> Option<&'static str> {
     CANON_BUILTIN_NAMES
         .iter()
         .find_map(|(id, name)| (*id == semantic_id).then_some(*name))
@@ -46,15 +46,15 @@ pub fn canonical_builtin_name(semantic_id: &str) -> Option<&'static str> {
 pub fn find_operation_by_surface(name: &str) -> Option<&'static CanonOperation> {
     let id = callable_semantic_id(name).or_else(|| {
         if is_canon_form(name, CANON_QUOTE_UPPER, CANON_QUOTE_EXACT) {
-            Some("0001")
+            Some(my_lisp::sid!(00000001))
         } else if is_canon_form(name, CANON_COND_UPPER, CANON_COND_EXACT) {
-            Some("0007")
+            Some(my_lisp::sid!(00000111))
         } else if is_canon_form(name, CANON_LAMBDA_UPPER, CANON_LAMBDA_EXACT) {
-            Some("0010")
+            Some(my_lisp::sid!(00001000))
         } else if is_canon_form(name, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT) {
-            Some("0011")
+            Some(my_lisp::sid!(00001001))
         } else if is_canon_form(name, CANON_DEFMACRO_UPPER, CANON_DEFMACRO_EXACT) {
-            Some("0012")
+            Some(my_lisp::sid!(00001010))
         } else {
             None
         }
@@ -63,7 +63,7 @@ pub fn find_operation_by_surface(name: &str) -> Option<&'static CanonOperation> 
 }
 
 /// Find the full machine-readable Canon operation entry by semantic ID.
-pub fn find_operation_by_id(semantic_id: &str) -> Option<&'static CanonOperation> {
+pub fn find_operation_by_id(semantic_id: Sid8) -> Option<&'static CanonOperation> {
     CANON_OPERATIONS_TABLE
         .iter()
         .find(|op| op.semantic_id == semantic_id)
@@ -76,24 +76,24 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
 
     let mut ids = BTreeSet::new();
 
-    fn walk(ir: &Ir, ids: &mut BTreeSet<&'static str>) {
+    fn walk(ir: &Ir, ids: &mut BTreeSet<Sid8>) {
         match ir {
             Ir::Quote(_) => {
-                ids.insert("0001");
+                ids.insert(my_lisp::sid!(00000001));
             }
             Ir::Cond { branches } => {
-                ids.insert("0007");
+                ids.insert(my_lisp::sid!(00000111));
                 for (test, body) in branches {
                     walk(test, ids);
                     walk(body, ids);
                 }
             }
             Ir::Lambda { body, .. } => {
-                ids.insert("0010");
+                ids.insert(my_lisp::sid!(00001000));
                 walk(body, ids);
             }
             Ir::Def { value, .. } => {
-                ids.insert("0011");
+                ids.insert(my_lisp::sid!(00001001));
                 walk(value, ids);
             }
             Ir::Let { bindings, body } => {
@@ -104,17 +104,17 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
             }
             Ir::Prim { op, args } => {
                 let id = match op {
-                    PrimOp::Atom => "0002",
-                    PrimOp::Eq => "0003",
-                    PrimOp::Cons => "0004",
-                    PrimOp::Car => "0005",
-                    PrimOp::Cdr => "0006",
-                    PrimOp::Add => "0104",
-                    PrimOp::Sub => "1001",
-                    PrimOp::EqualP => "1022",
-                    PrimOp::ExactQLt => "1014",
-                    PrimOp::ExactQLe => "1017",
-                    PrimOp::ExactQGe => "1018",
+                    PrimOp::Atom => my_lisp::sid!(00000010),
+                    PrimOp::Eq => my_lisp::sid!(00000011),
+                    PrimOp::Cons => my_lisp::sid!(00000100),
+                    PrimOp::Car => my_lisp::sid!(00000101),
+                    PrimOp::Cdr => my_lisp::sid!(00000110),
+                    PrimOp::Add => my_lisp::sid!(00001100),
+                    PrimOp::Sub => my_lisp::sid!(00001101),
+                    PrimOp::EqualP => my_lisp::sid!(00100010),
+                    PrimOp::ExactQLt => my_lisp::sid!(00011010),
+                    PrimOp::ExactQLe => my_lisp::sid!(00011101),
+                    PrimOp::ExactQGe => my_lisp::sid!(00011110),
                 };
                 ids.insert(id);
                 for arg in args {

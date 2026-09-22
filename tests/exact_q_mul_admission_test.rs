@@ -6,14 +6,14 @@ fn exact_q_mul_is_admitted_by_upstream_semantic_identity_1002() {
     for surface in ["*", "помножити", "guṇana"] {
         assert_eq!(
             canon::callable_semantic_id(surface),
-            Some("1002"),
+            Some(my_lisp::sid!(00001110)),
             "stable upstream multiplication surface {surface:?} must resolve through semantic identity 1002"
         );
     }
 
-    let operation = canon::find_operation_by_id("1002")
+    let operation = canon::find_operation_by_id(my_lisp::sid!(00001110))
         .expect("admitted exact-Q multiplication identity must have compiler operation metadata");
-    assert_eq!(operation.semantic_id, "1002");
+    assert_eq!(operation.semantic_id, my_lisp::sid!(00001110));
     assert_eq!(operation.canonical_name, "*");
     assert_eq!(operation.cml_ir_projection, "Ir::App(Builtin(\"*\"))");
     assert_eq!(operation.status, "partial");

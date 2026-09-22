@@ -6,6 +6,7 @@
 //! compiler target facts. It never derives backend execution from source
 //! admission alone.
 
+use my_lisp::Sid8;
 use crate::canon::{
     CANON_SUPPORTED_PIN_REGISTRY_FNV1A64, CANON_SUPPORTED_PIN_SEMANTIC_IDS, find_operation_by_id,
 };
@@ -33,7 +34,7 @@ pub struct BackendEvidence {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemanticCoverageRow {
-    pub semantic_id: &'static str,
+    pub semantic_id: Sid8,
     pub admission: AdmissionState,
     pub operation_status: Option<&'static str>,
     pub evidence: Option<&'static str>,
@@ -57,37 +58,44 @@ pub struct CoverageLedger {
     pub rows: Vec<SemanticCoverageRow>,
 }
 
-fn x86_canon_evidence(semantic_id: &str) -> Vec<BackendEvidence> {
-    let (state, evidence) = match semantic_id {
-        "0001" => (
+fn x86_canon_evidence(semantic_id: Sid8) -> Vec<BackendEvidence> {
+    let (state, evidence) = if semantic_id == my_lisp::sid!(00000001) {
+        (
             BackendEvidenceState::Executable,
             "x86_freestanding_test.rs: compiler_corpus_quote_radio_returns_the_interned_symbol",
-        ),
-        "0002" => (
+        )
+    } else if semantic_id == my_lisp::sid!(00000010) {
+        (
             BackendEvidenceState::AssemblyWitness,
             "x86_freestanding_test.rs: primitive_slice_uses_only_ratified_runtime_imports",
-        ),
-        "0003" => (
+        )
+    } else if semantic_id == my_lisp::sid!(00000011) {
+        (
             BackendEvidenceState::Executable,
             "x86_freestanding_test.rs: compiler_corpus_eq_on_matching_and_differing_quoted_symbols",
-        ),
-        "0004" => (
+        )
+    } else if semantic_id == my_lisp::sid!(00000100) {
+        (
             BackendEvidenceState::Executable,
             "x86_freestanding_test.rs: frozen_cons_fixture_is_deterministic_and_assembles; named_definition_allocates_a_list_through_the_asm_nucleus",
-        ),
-        "0005" => (
+        )
+    } else if semantic_id == my_lisp::sid!(00000101) {
+        (
             BackendEvidenceState::AssemblyWitness,
             "x86_freestanding_test.rs: primitive_slice_uses_only_ratified_runtime_imports",
-        ),
-        "0006" => (
+        )
+    } else if semantic_id == my_lisp::sid!(00000110) {
+        (
             BackendEvidenceState::AssemblyWitness,
             "x86_freestanding_test.rs: primitive_slice_uses_only_ratified_runtime_imports",
-        ),
-        "0007" => (
+        )
+    } else if semantic_id == my_lisp::sid!(00000111) {
+        (
             BackendEvidenceState::Executable,
             "x86_freestanding_test.rs: standalone_cond_true_false_branch_selection_witness",
-        ),
-        _ => return Vec::new(),
+        )
+    } else {
+        return Vec::new();
     };
 
     vec![BackendEvidence {
@@ -98,15 +106,13 @@ fn x86_canon_evidence(semantic_id: &str) -> Vec<BackendEvidence> {
     }]
 }
 
-fn x86_fixnum_arithmetic_evidence(semantic_id: &str) -> Vec<BackendEvidence> {
-    let evidence = match semantic_id {
-        "0104" => {
-            "x86_freestanding_test.rs: named_definition_uses_a_lexical_let_binding; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract"
-        }
-        "1001" => {
-            "x86_freestanding_test.rs: out_of_line_named_self_tail_recursion_reuses_its_native_frame; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract"
-        }
-        _ => return Vec::new(),
+fn x86_fixnum_arithmetic_evidence(semantic_id: Sid8) -> Vec<BackendEvidence> {
+    let evidence = if semantic_id == my_lisp::sid!(00001100) {
+        "x86_freestanding_test.rs: named_definition_uses_a_lexical_let_binding; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract"
+    } else if semantic_id == my_lisp::sid!(00001101) {
+        "x86_freestanding_test.rs: out_of_line_named_self_tail_recursion_reuses_its_native_frame; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract"
+    } else {
+        return Vec::new();
     };
 
     vec![BackendEvidence {
@@ -156,7 +162,7 @@ impl CoverageLedger {
         }
     }
 
-    pub fn row(&self, semantic_id: &str) -> Option<&SemanticCoverageRow> {
+    pub fn row(&self, semantic_id: Sid8) -> Option<&SemanticCoverageRow> {
         self.rows.iter().find(|row| row.semantic_id == semantic_id)
     }
 

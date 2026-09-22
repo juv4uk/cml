@@ -10,16 +10,16 @@ fn exact_q_mod_is_admitted_by_upstream_semantic_identity_1007() {
     // operation rather than a free variable or an alias of /, quotient, or %.
     assert_eq!(
         canon::callable_semantic_id("mod"),
-        Some("1007"),
+        Some(my_lisp::sid!(00010011)),
         "stable upstream `mod` must resolve through semantic identity 1007"
     );
     assert_eq!(
         canon::callable_semantic_id("остача"),
-        Some("1007"),
+        Some(my_lisp::sid!(00010011)),
         "Ukrainian peer surface must resolve to the same semantic identity"
     );
 
-    let operation = canon::find_operation_by_id("1007")
+    let operation = canon::find_operation_by_id(my_lisp::sid!(00010011))
         .expect("admitted semantic 1007 must have compiler operation metadata");
     assert_eq!(operation.canonical_name, "mod");
     assert_eq!(operation.cml_ir_projection, "Ir::App(Builtin(\"mod\"))");

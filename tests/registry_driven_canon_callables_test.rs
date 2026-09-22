@@ -1,3 +1,4 @@
+use my_lisp::Sid8;
 use cml::canon::{CANON_OPERATIONS_TABLE, find_operation_by_id, find_operation_by_surface};
 use cml::ir::Ir;
 use cml::{lower, parser};
@@ -14,21 +15,21 @@ fn every_admitted_canon_callable_surface_lowers_to_one_semantic_operation() {
     // Registry-driven Canon dispatch:
     // These peer spellings are the stable surfaces of semantic IDs 0002..0006, 0104, 1001, 1022
     // in my-lisp/lib/surface/semantic-registry.wsm.
-    let cases: &[(&str, &str, &str, &[&str])] = &[
-        ("0002", "atom", "1", &["атом?", "aṇu", ".?"]),
-        ("0003", "eq", "1 1", &["тотожне?", "abheda", "=?"]),
+    let cases: &[(my_lisp::Sid8, &str, &str, &[&str])] = &[
+        (my_lisp::sid!(00000010), "atom", "1", &["атом?", "aṇu", ".?"]),
+        (my_lisp::sid!(00000011), "eq", "1 1", &["тотожне?", "abheda", "=?"]),
         (
-            "0004",
+            my_lisp::sid!(00000100),
             "cons",
             "1 (quote ())",
             &["сполучити", "saṃyuj", ":"],
         ),
-        ("0005", "car", "(quote (1 2))", &["перше", "ādi", ":п"]),
-        ("0006", "cdr", "(quote (1 2))", &["решта", "śeṣa", ":р"]),
-        ("0104", "+", "1 2", &["додати", "yoga"]),
-        ("1001", "-", "3 1", &["відняти", "viyoga"]),
+        (my_lisp::sid!(00000101), "car", "(quote (1 2))", &["перше", "ādi", ":п"]),
+        (my_lisp::sid!(00000110), "cdr", "(quote (1 2))", &["решта", "śeṣa", ":р"]),
+        (my_lisp::sid!(00001100), "+", "1 2", &["додати", "yoga"]),
+        (my_lisp::sid!(00001101), "-", "3 1", &["відняти", "viyoga"]),
         (
-            "1022",
+            my_lisp::sid!(00100010),
             "equal?",
             "(quote (1 2)) (quote (1 2))",
             &["однакові?", "tulya?"],
@@ -52,15 +53,15 @@ fn every_admitted_canon_callable_surface_is_the_same_first_class_value() {
     // Call-position identity is not enough: Canon callables are first-class.
     // A peer surface used as a value must therefore lower to the same builtin
     // identity as its English peer instead of becoming a spelling-named Var.
-    let cases: &[(&str, &str, &[&str])] = &[
-        ("0002", "atom", &["атом?", "aṇu", ".?"]),
-        ("0003", "eq", &["тотожне?", "abheda", "=?"]),
-        ("0004", "cons", &["сполучити", "saṃyuj", ":"]),
-        ("0005", "car", &["перше", "ādi", ":п"]),
-        ("0006", "cdr", &["решта", "śeṣa", ":р"]),
-        ("0104", "+", &["додати", "yoga"]),
-        ("1001", "-", &["відняти", "viyoga"]),
-        ("1022", "equal?", &["однакові?", "tulya?"]),
+    let cases: &[(my_lisp::Sid8, &str, &[&str])] = &[
+        (my_lisp::sid!(00000010), "atom", &["атом?", "aṇu", ".?"]),
+        (my_lisp::sid!(00000011), "eq", &["тотожне?", "abheda", "=?"]),
+        (my_lisp::sid!(00000100), "cons", &["сполучити", "saṃyuj", ":"]),
+        (my_lisp::sid!(00000101), "car", &["перше", "ādi", ":п"]),
+        (my_lisp::sid!(00000110), "cdr", &["решта", "śeṣa", ":р"]),
+        (my_lisp::sid!(00001100), "+", &["додати", "yoga"]),
+        (my_lisp::sid!(00001101), "-", &["відняти", "viyoga"]),
+        (my_lisp::sid!(00100010), "equal?", &["однакові?", "tulya?"]),
     ];
 
     for (semantic_id, english, peers) in cases {
@@ -83,7 +84,7 @@ fn canon_operations_table_is_fully_populated_and_queryable() {
     );
 
     // Verify lookup by ID and by surface
-    let add_op = find_operation_by_id("0104").expect("0104 (+) must exist in operations table");
+    let add_op = find_operation_by_id(my_lisp::sid!(00001100)).expect("0104 (+) must exist in operations table");
     assert_eq!(add_op.canonical_name, "+");
     assert_eq!(add_op.formal_action, "primitive:add");
     assert_eq!(
@@ -103,7 +104,7 @@ fn canon_operations_table_is_fully_populated_and_queryable() {
     );
 
     let equal_op =
-        find_operation_by_id("1022").expect("1022 (equal?) must exist in operations table");
+        find_operation_by_id(my_lisp::sid!(00100010)).expect("1022 (equal?) must exist in operations table");
     assert_eq!(equal_op.canonical_name, "equal?");
     assert_eq!(
         find_operation_by_surface("однакові?"),
@@ -221,8 +222,8 @@ fn lookup_policy_vs_quoted_data_identity_separation() {
 
 #[test]
 fn unknown_canon_operations_fail_closed() {
-    assert_eq!(find_operation_by_id("9999"), None);
+    assert_eq!(find_operation_by_id(my_lisp::sid!(11111111)), None);
     assert_eq!(find_operation_by_surface("nonexistent-function-xyz"), None);
-    assert_eq!(cml::canon::canonical_builtin_name("9999"), None);
+    assert_eq!(cml::canon::canonical_builtin_name(my_lisp::sid!(11111111)), None);
     assert_eq!(cml::canon::callable_semantic_id("unknown-op"), None);
 }
