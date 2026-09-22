@@ -52,7 +52,7 @@ fn upstream_known_does_not_collapse_into_supported() {
 }
 
 #[test]
-fn summary_partitions_the_supported_pin_denominator_without_backend_claims() {
+fn summary_partitions_the_supported_pin_denominator_and_keeps_backend_evidence_bounded() {
     let ledger = CoverageLedger::supported_pin();
     let summary = ledger.summary();
 
@@ -61,10 +61,16 @@ fn summary_partitions_the_supported_pin_denominator_without_backend_claims() {
         summary.source_admitted + summary.not_yet_admitted,
         summary.semantic_identities
     );
+    assert_eq!(summary.x86_executable, 4);
+    assert_eq!(summary.x86_assembly_witness_only, 3);
 
     assert!(
-        ledger.rows.iter().all(|row| row.backend_evidence.is_none()),
-        "backend execution evidence must be populated only by later evidence-backed slices"
+        ledger
+            .rows
+            .iter()
+            .filter(|row| row.admission == AdmissionState::NotYetAdmitted)
+            .all(|row| row.backend_evidence.is_empty()),
+        "not-yet-admitted identities must never receive backend evidence"
     );
 }
 
