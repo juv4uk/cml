@@ -82,3 +82,32 @@ fn upstream_machine_form_projection_fails_closed_on_non_form_items() {
         "labels/unresolved control items are outside the first #74 form bridge"
     );
 }
+
+#[test]
+fn stale_or_unadmitted_machine_instruction_fails_closed_before_upstream_encoding() {
+    let stale = vec![MachineItem::Inst(MachineInst::AluRegReg {
+        op: AluOp::Sub,
+        dst: X86Reg::Rax,
+        src: X86Reg::Rcx,
+        provenance: prov(),
+    })];
+
+    assert!(
+        items_to_lisp_machine_forms(&stale).is_err(),
+        "an instruction outside the pinned #74 form slice must not silently become upstream machine truth"
+    );
+}
+
+#[test]
+fn direct_byte_and_gnu_paths_are_recorded_as_differential_not_normative() {
+    let contract = fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("contracts/upstream-machine-form-bridge.lisp"),
+    )
+    .expect("#74 authority classification contract must exist");
+
+    assert!(contract.contains("(cml-direct-byte differential-bootstrap)"));
+    assert!(contract.contains("(gnu-as differential-oracle)"));
+    assert!(contract.contains("(upstream-admission-encoder normative-machine-contract)"));
+    assert!(contract.contains("(raw-byte-authority cml-forbidden)"));
+}
