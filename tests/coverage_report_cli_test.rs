@@ -35,6 +35,11 @@ fn report_is_deterministic_and_matches_the_merged_ledger() {
         "\nnot-yet-admitted\t{}\n",
         summary.not_yet_admitted
     )));
+    assert!(text.contains(&format!("\nx86-executable\t{}\n", summary.x86_executable)));
+    assert!(text.contains(&format!(
+        "\nx86-assembly-witness-only\t{}\n",
+        summary.x86_assembly_witness_only
+    )));
 
     let row_lines: Vec<_> = text
         .lines()
@@ -57,8 +62,16 @@ fn report_is_deterministic_and_matches_the_merged_ledger() {
             .any(|line| line.contains("\tnot-yet-admitted\t")),
         "report must preserve unsupported upstream identities"
     );
-    assert!(
-        row_lines.iter().all(|line| line.ends_with("\t-")),
-        "foundation report must not fabricate backend evidence"
-    );
+
+    let x86_executable = row_lines
+        .iter()
+        .filter(|line| line.contains("\tx86-freestanding:executable:"))
+        .count();
+    let x86_assembly = row_lines
+        .iter()
+        .filter(|line| line.contains("\tx86-freestanding:assembly-witness:"))
+        .count();
+    assert_eq!(x86_executable, summary.x86_executable);
+    assert_eq!(x86_assembly, summary.x86_assembly_witness_only);
+    assert_eq!(x86_executable + x86_assembly, 7);
 }
