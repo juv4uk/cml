@@ -51,6 +51,63 @@
      (core4-failure . UnsatisfiedConditional)
      (migration-note . "Two-part cond remains a bounded compatibility bridge in Core4; Core2 is the native semantics.")))
 
+  (legacy-truth-and-nil
+    ; Dedicated witnesses for the historical truth/NIL model (my-lisp#1133
+    ; acceptance: "characterize legacy T/NIL ... with dedicated witnesses").
+    ;
+    ; PROVENANCE:
+    ; - SOURCE-DERIVED: pinned commit 35c8814, crates/my-lisp/src/value.rs:
+    ;   `Value::truth(holds)` returns `Symbol("t")` for true and `Nil` for
+    ;   false; `is_truthy()` is `!matches!(self, Value::Nil | Value::Bool(false))`
+    ;   -- so in Core2 every non-NIL value (including the fixnum 0) is truthy.
+    ; - LIVE-VERIFIED: the `cond`/`t`/`()` rows below were re-run against the
+    ;   current Core4 evaluator, which still preserves the two-part cond
+    ;   migration bridge and self-evaluating `t`; the `0` row confirms numeric
+    ;   0 remains truthy in the truthy path.
+    ((witness-programs .
+       (((expr . "t")
+         (expected . "t")
+         (provenance . "live-verified"))
+        ((expr . "()")
+         (expected . "()")
+         (provenance . "live-verified"))
+        ((expr . "(eq t t)")                    ; Core2: t/t; Core4: (identity-relation same)
+         (expected-core2 . "t")
+         (expected-core4 . "(identity-relation same)")
+         (provenance . "source-derived"))
+        ((expr . "(atom (quote radio))")
+         (expected-core2 . "t")
+         (expected-core4 . "(structural-kind atom)")
+         (provenance . "source-derived"))))))
+
+  (legacy-two-part-cond
+    ; Dedicated witnesses for the historical two-part COND truthy path
+    ; (my-lisp#1133 acceptance: "characterize legacy ... two-part COND
+    ; behavior with dedicated witnesses").
+    ;
+    ; Source provenance: pinned 35c8814, crates/my-lisp/src/eval/special_forms/core.rs,
+    ; `evaluate_cond` clause match on `parts.len()`:
+    ; - 3-part (#217 canonical): explicit `actual == expected` result dispatch;
+    ; - 2-part (migration-only): `if evaluate(test)?.is_truthy()` selects the value
+    ;   expression -- exactly the classic truthiness rule, no `Value -> bool`
+    ;   conversion on the match path.
+    ;
+    ; All rows below are LIVE-VERIFIED against the current Core4 evaluator,
+    ; which retains the two-part bridge with the same truthiness rule.
+    ((witness-programs .
+       (((expr . "(cond (t 41))")                 ; classic truth: t is the truth value itself
+         (expected . "41")
+         (provenance . "live-verified"))
+        ((expr . "(cond ((quote radio) 42))")    ; any non-NIL atom is truthy
+         (expected . "42")
+         (provenance . "live-verified"))
+        ((expr . "(cond (() 1) (t 2))")           ; NIL clause skipped, t selects
+         (expected . "2")
+         (provenance . "live-verified"))
+        ((expr . "(cond (0 41) (t 9))")           ; numeric 0 is truthy in Core2
+         (expected . "41")
+         (provenance . "live-verified"))))))
+
   (compatibility-projection-to-core4
     ; Conceptual wrappers that project Core2 source onto Core4 semantics.
     ; A real implementation would provide these as macros or compiler passes.
