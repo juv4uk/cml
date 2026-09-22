@@ -335,7 +335,7 @@ fn parse_graph_capture(stdout: &str) -> Result<ActualGraph, WitnessBridgeError> 
             Some(other) => {
                 return Err(WitnessBridgeError::InvalidOutput(format!(
                     "unknown graph record {other:?}"
-                )))
+                )));
             }
         }
     }
@@ -453,13 +453,7 @@ fn render_cons(
             continue;
         }
 
-        let tail = render_value(
-            graph,
-            *cdr,
-            compiled,
-            depth + chain.len(),
-            active,
-        )?;
+        let tail = render_value(graph, *cdr, compiled, depth + chain.len(), active)?;
         for address in &chain {
             active.remove(address);
         }
