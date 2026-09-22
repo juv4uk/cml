@@ -18,7 +18,9 @@ fn backend_state(state: BackendEvidenceState) -> &'static str {
     match state {
         BackendEvidenceState::AssemblyWitness => "assembly-witness",
         BackendEvidenceState::Executable => "executable",
-        BackendEvidenceState::ExecutableRepresentationLimited => "executable-representation-limited",
+        BackendEvidenceState::ExecutableRepresentationLimited => {
+            "executable-representation-limited"
+        }
     }
 }
 
