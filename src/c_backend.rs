@@ -213,6 +213,7 @@ static Value *v_rat_div(Value *a, Value *b) {
 
 static Value *v_car(Value *v) { return v->u.cons.car; }
 static Value *v_cdr(Value *v) { return v->u.cons.cdr; }
+static int is_atom(Value *v) { return v->tag != TAG_CONS; }
 static int truthy(Value *v) { return v->tag != TAG_NIL; }
 
 static Value *relation_record(const char *kind, const char *value) {
@@ -221,7 +222,7 @@ static Value *relation_record(const char *kind, const char *value) {
 
 static Value *v_structural_kind(Value *v) {
     if (v->tag == TAG_NIL) return relation_record("STRUCTURAL-KIND", "EMPTY-LIST");
-    if (v->tag == TAG_CONS) return relation_record("STRUCTURAL-KIND", "PAIR");
+    if (!is_atom(v)) return relation_record("STRUCTURAL-KIND", "PAIR");
     return relation_record("STRUCTURAL-KIND", "ATOM");
 }
 
