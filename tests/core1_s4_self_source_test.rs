@@ -28,10 +28,7 @@ fn collect_symbols(expr: &Expr, out: &mut BTreeSet<String>) {
     }
 }
 
-fn symbol_word(
-    compiled: &cml::x86_freestanding_metadata::X86CompiledProgram,
-    name: &str,
-) -> u64 {
+fn symbol_word(compiled: &cml::x86_freestanding_metadata::X86CompiledProgram, name: &str) -> u64 {
     compiled
         .symbols
         .iter()
@@ -41,10 +38,12 @@ fn symbol_word(
 }
 
 fn list(items: Vec<X86InputValue>) -> X86InputValue {
-    items.into_iter().rev().fold(
-        X86InputValue::word(wsm_os_target::NIL),
-        |cdr, car| X86InputValue::cons(car, cdr),
-    )
+    items
+        .into_iter()
+        .rev()
+        .fold(X86InputValue::word(wsm_os_target::NIL), |cdr, car| {
+            X86InputValue::cons(car, cdr)
+        })
 }
 
 fn encode_expr(
@@ -63,10 +62,12 @@ fn encode_expr(
                 .map(|item| encode_expr(item, compiled))
                 .collect(),
         ),
-        Expr::DottedList(items, tail) => items.iter().rev().fold(
-            encode_expr(tail, compiled),
-            |cdr, car| X86InputValue::cons(encode_expr(car, compiled), cdr),
-        ),
+        Expr::DottedList(items, tail) => items
+            .iter()
+            .rev()
+            .fold(encode_expr(tail, compiled), |cdr, car| {
+                X86InputValue::cons(encode_expr(car, compiled), cdr)
+            }),
         Expr::Rational(_, _) | Expr::String(_) | Expr::NumericBuffer(_) => {
             panic!("S4 Core1 compiler source fixture must use only target-data AST nodes")
         }
