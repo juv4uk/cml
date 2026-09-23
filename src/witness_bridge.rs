@@ -64,6 +64,26 @@ struct ActualGraph {
     cells: BTreeMap<wsm_os_target::Word, (wsm_os_target::Word, wsm_os_target::Word)>,
 }
 
+/// A semantics-blind recipe for constructing one target input value inside
+/// the witness process. `Word` is already target-encoded; `Cons` only asks
+/// the pinned runtime ABI to allocate a pair. No Lisp spelling or evaluation
+/// exists in this transport layer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum X86InputValue {
+    Word(wsm_os_target::Word),
+    Cons(Box<X86InputValue>, Box<X86InputValue>),
+}
+
+impl X86InputValue {
+    pub fn word(word: wsm_os_target::Word) -> Self {
+        Self::Word(word)
+    }
+
+    pub fn cons(car: X86InputValue, cdr: X86InputValue) -> Self {
+        Self::Cons(Box::new(car), Box::new(cdr))
+    }
+}
+
 pub fn canonical_actual_from_word(word: wsm_os_target::Word) -> Result<String, WitnessBridgeError> {
     let rendered = if word == wsm_os_target::NIL {
         "()".to_string()
@@ -161,6 +181,38 @@ pub fn execute_x86_actual_with_metadata(
     Ok(format!("(value \"{rendered}\")"))
 }
 
+/// Link one compiled input-entry artifact once, then invoke that exact
+/// executable once per low-level input graph. Each invocation is a fresh
+/// process (therefore a fresh bounded arena), but no recompilation or relink
+/// occurs between inputs.
+///
+/// Host work is restricted to target-value transport: raw words and `wsm_cons`
+/// allocation. The native Lisp artifact alone computes the output.
+pub fn execute_x86_actuals_with_metadata_and_inputs(
+    compiled: &X86CompiledProgram,
+    inputs: &[X86InputValue],
+) -> Result<Vec<String>, WitnessBridgeError> {
+    if inputs.is_empty() {
+        return Err(WitnessBridgeError::InvalidComposite(
+            "input graph list must not be empty".to_string(),
+        ));
+    }
+    if !compiled.validate_symbol_metadata() {
+        return Err(WitnessBridgeError::InvalidComposite(
+            "compiler-owned symbol metadata failed validation".to_string(),
+        ));
+    }
+
+    let captures = execute_x86_graphs_with_inputs(&compiled.assembly, inputs)?;
+    captures
+        .iter()
+        .map(|capture| {
+            let rendered = render_actual(capture, compiled)?;
+            Ok(format!("(value \"{rendered}\")"))
+        })
+        .collect()
+}
+
 fn execute_x86_graph(assembly: &str) -> Result<ActualGraph, WitnessBridgeError> {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -218,6 +270,188 @@ fn execute_x86_graph(assembly: &str) -> Result<ActualGraph, WitnessBridgeError> 
     let stdout = String::from_utf8(output.stdout)
         .map_err(|error| WitnessBridgeError::InvalidOutput(error.to_string()))?;
     parse_graph_capture(&stdout)
+}
+
+fn execute_x86_graphs_with_inputs(
+    assembly: &str,
+    inputs: &[X86InputValue],
+) -> Result<Vec<ActualGraph>, WitnessBridgeError> {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| WitnessBridgeError::Io(error.to_string()))?
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!(
+        "cml-input-witness-{}-{nonce}",
+        std::process::id()
+    ));
+    let source = base.with_extension("s");
+    let launcher = base.with_extension("c");
+    let executable = base.with_extension("bin");
+
+    fs::write(&source, assembly).map_err(|error| WitnessBridgeError::Io(error.to_string()))?;
+    fs::write(&launcher, input_graph_launcher_source(inputs))
+        .map_err(|error| WitnessBridgeError::Io(error.to_string()))?;
+
+    let nucleus =
+        crate::x86_freestanding::resolve_nucleus_asm_path().map_err(WitnessBridgeError::Link)?;
+    let linked = Command::new("cc")
+        .arg("-no-pie")
+        .arg(&launcher)
+        .arg(&source)
+        .arg(&nucleus)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .map_err(|error| WitnessBridgeError::Link(error.to_string()))?;
+
+    let _ = fs::remove_file(&source);
+    let _ = fs::remove_file(&launcher);
+
+    if !linked.status.success() {
+        let _ = fs::remove_file(&executable);
+        return Err(WitnessBridgeError::Link(
+            String::from_utf8_lossy(&linked.stderr).into_owned(),
+        ));
+    }
+
+    let arena = resolve_arena_symbols(&executable)?;
+    let mut captures = Vec::with_capacity(inputs.len());
+    for index in 0..inputs.len() {
+        let output = Command::new(&executable)
+            .arg(format!("0x{:x}", arena.begin))
+            .arg(format!("0x{:x}", arena.next_ptr))
+            .arg(format!("0x{:x}", arena.end_ptr))
+            .arg(index.to_string())
+            .output()
+            .map_err(|error| WitnessBridgeError::Execute(error.to_string()))?;
+
+        if !output.status.success() {
+            let _ = fs::remove_file(&executable);
+            return Err(WitnessBridgeError::Execute(format!(
+                "input {index} exited with {}; stderr: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )));
+        }
+
+        let stdout = String::from_utf8(output.stdout)
+            .map_err(|error| WitnessBridgeError::InvalidOutput(error.to_string()))?;
+        captures.push(parse_graph_capture(&stdout)?);
+    }
+
+    let _ = fs::remove_file(&executable);
+    Ok(captures)
+}
+
+fn input_graph_launcher_source(inputs: &[X86InputValue]) -> String {
+    fn emit_value(
+        value: &X86InputValue,
+        lines: &mut String,
+        next_id: &mut usize,
+    ) -> String {
+        let id = *next_id;
+        *next_id += 1;
+        let name = format!("v{id}");
+        match value {
+            X86InputValue::Word(word) => {
+                lines.push_str(&format!(
+                    "    uint64_t {name} = 0x{word:016x}ULL;\n"
+                ));
+            }
+            X86InputValue::Cons(car, cdr) => {
+                let car_name = emit_value(car, lines, next_id);
+                let cdr_name = emit_value(cdr, lines, next_id);
+                lines.push_str(&format!(
+                    "    uint64_t {name} = wsm_cons(0, {car_name}, {cdr_name});\n"
+                ));
+            }
+        }
+        name
+    }
+
+    let mut builders = String::new();
+    for (index, input) in inputs.iter().enumerate() {
+        let mut lines = String::new();
+        let mut next_id = 0;
+        let root = emit_value(input, &mut lines, &mut next_id);
+        builders.push_str(&format!(
+            "static uint64_t build_input_{index}(void) {{\n{lines}    return {root};\n}}\n\n"
+        ));
+    }
+
+    let mut cases = String::new();
+    for index in 0..inputs.len() {
+        cases.push_str(&format!(
+            "        case {index}: input = build_input_{index}(); break;\n"
+        ));
+    }
+
+    format!(
+        r#"#include <inttypes.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+extern uint64_t wsm_entry_with_input(void *, uint64_t);
+extern uint64_t wsm_cons(void *, uint64_t, uint64_t);
+
+#define MAX_SEEN 256
+#define CONS_ALIGNMENT 16
+#define TAG_MASK 7
+
+static uint64_t seen[MAX_SEEN];
+static size_t seen_len;
+
+static int seen_before(uint64_t word) {{
+    for (size_t i = 0; i < seen_len; ++i) {{
+        if (seen[i] == word) return 1;
+    }}
+    return 0;
+}}
+
+static int dump_cons(uint64_t word, uint64_t arena_begin, uint64_t arena_next,
+                     uint64_t arena_end, size_t depth) {{
+    if (depth > MAX_SEEN) return -1;
+    if (word == 0 || (word & TAG_MASK) != 0) return 0;
+    if ((word % CONS_ALIGNMENT) != 0 || word < arena_begin ||
+        word >= arena_next || word > arena_end - 16) return -1;
+    if (seen_before(word)) return 0;
+    if (seen_len == MAX_SEEN) return -1;
+    seen[seen_len++] = word;
+
+    uint64_t car = *(uint64_t *)(uintptr_t)word;
+    uint64_t cdr = *(uint64_t *)(uintptr_t)(word + 8);
+    printf("cell 0x%" PRIx64 " 0x%" PRIx64 " 0x%" PRIx64 "\n",
+           word, car, cdr);
+    if (dump_cons(car, arena_begin, arena_next, arena_end, depth + 1) != 0) return -1;
+    return dump_cons(cdr, arena_begin, arena_next, arena_end, depth + 1);
+}}
+
+{builders}
+int main(int argc, char **argv) {{
+    if (argc != 5) return 95;
+    uint64_t arena_begin = strtoull(argv[1], NULL, 0);
+    uint64_t arena_next_ptr = strtoull(argv[2], NULL, 0);
+    uint64_t arena_end_ptr = strtoull(argv[3], NULL, 0);
+    size_t input_index = (size_t)strtoull(argv[4], NULL, 10);
+    uint64_t arena_end = *(uint64_t *)(uintptr_t)arena_end_ptr;
+
+    uint64_t input = 0;
+    switch (input_index) {{
+{cases}        default: return 94;
+    }}
+
+    uint64_t root = wsm_entry_with_input(0, input);
+    uint64_t arena_next = *(uint64_t *)(uintptr_t)arena_next_ptr;
+    if (arena_next < arena_begin || arena_next > arena_end ||
+        ((arena_next - arena_begin) % 16) != 0) return 95;
+
+    printf("root 0x%" PRIx64 "\n", root);
+    if (dump_cons(root, arena_begin, arena_next, arena_end, 0) != 0) return 96;
+    return 0;
+}}
+"#
+    )
 }
 
 fn resolve_arena_symbols(executable: &std::path::Path) -> Result<ArenaSymbols, WitnessBridgeError> {
