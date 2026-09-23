@@ -48,7 +48,7 @@ fn first_class_lambda_as_argument() {
 #[test]
 fn self_recursive_def_via_letrec_placeholder() {
     assert_eq!(
-        value("(def count (lambda (n) (cond ((eq n 0) 0) (t (+ 1 (count (- n 1))))))) (count 5)"),
+        value("(def count (lambda (n) (cond ((eq n 0) (identity-relation same) 0) ((eq n 0) (identity-relation distinct) (+ 1 (count (- n 1))))))) (count 5)"),
         "5"
     );
 }
@@ -78,8 +78,8 @@ fn nested_let_acts_as_lambda_binding() {
 /// so mutual recursion resolves through the shared global_env chain.
 #[test]
 fn mutual_recursion_even_odd() {
-    let source = r#"(def even (lambda (n) (cond ((eq n 0) t) (t (odd (- n 1))))))
-(def odd (lambda (n) (cond ((eq n 0) ()) (t (even (- n 1))))))
+    let source = r#"(def even (lambda (n) (cond ((eq n 0) (identity-relation same) t) ((eq n 0) (identity-relation distinct) (odd (- n 1))))))
+(def odd (lambda (n) (cond ((eq n 0) (identity-relation same) ()) ((eq n 0) (identity-relation distinct) (even (- n 1))))))
 (even 4)"#;
     let v = match compile_and_run(source).expect("compile_and_run") {
         Observation::Value(v) => v,
