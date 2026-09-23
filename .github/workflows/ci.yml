@@ -32,19 +32,30 @@ jobs:
             local name="$1"
             grep -F "(${name} . \"" "$manifest" | head -n 1 | cut -d'"' -f2
           }
+          build_source_sha="$(field build-source-sha)"
           supported_pin_sha="$(field supported-pin-sha)"
           observed_current_sha="$(field observed-current-sha)"
-          test "${#supported_pin_sha}" -eq 40
-          test "${#observed_current_sha}" -eq 40
-          actual_supported_sha="$(git -C external/my-lisp rev-parse HEAD)"
-          if [[ "$supported_pin_sha" != "$actual_supported_sha" ]]; then
-            echo "supported-pin mismatch: manifest=$supported_pin_sha gitlink=$actual_supported_sha" >&2
+          bootstrap_core1_sha="$(field bootstrap-core1-source-sha)"
+
+          for sha in "$build_source_sha" "$supported_pin_sha" "$observed_current_sha" "$bootstrap_core1_sha"; do
+            test "${#sha}" -eq 40
+          done
+
+          actual_build_sha="$(git -C external/my-lisp rev-parse HEAD)"
+          if [[ "$build_source_sha" != "$actual_build_sha" ]]; then
+            echo "build-source mismatch: manifest=$build_source_sha gitlink=$actual_build_sha" >&2
             exit 1
           fi
+
+          echo "build_source_sha=$build_source_sha" >> "$GITHUB_OUTPUT"
           echo "supported_pin_sha=$supported_pin_sha" >> "$GITHUB_OUTPUT"
           echo "observed_current_sha=$observed_current_sha" >> "$GITHUB_OUTPUT"
+          echo "bootstrap_core1_sha=$bootstrap_core1_sha" >> "$GITHUB_OUTPUT"
+
+          echo "upstream-channel build-source sha=$build_source_sha"
           echo "upstream-channel supported-pin sha=$supported_pin_sha"
           echo "upstream-channel observed-current sha=$observed_current_sha"
+          echo "upstream-channel bootstrap-core1-source sha=$bootstrap_core1_sha"
 
       - name: Checkout my-lisp (observed-current)
         uses: actions/checkout@v4
@@ -53,16 +64,35 @@ jobs:
           ref: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
           path: my-lisp
 
+      - name: Checkout my-lisp (Core1 bootstrap source)
+        uses: actions/checkout@v4
+        with:
+          repository: juv4uk/my-lisp
+          ref: ${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}
+          path: my-lisp-bootstrap
+
+      - name: Validate Core1 bootstrap source
+        working-directory: cml
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f ../my-lisp-bootstrap/lib/core1-compiler-prelude.lisp
+          test -f ../my-lisp-bootstrap/contracts/core1-historical-sid-map.lisp
+          echo "bootstrap-core1-source sha=${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}"
+          echo "bootstrap-core1-prelude blob=$(git -C ../my-lisp-bootstrap hash-object lib/core1-compiler-prelude.lisp)"
+
       - name: Report my-lisp revision drift
         working-directory: cml
         shell: bash
         run: |
           set -euo pipefail
-          supported_math=absent
+          build_math=absent
           observed_math=absent
-          [[ -f external/my-lisp/tests/fixtures/mathematical-result-v1.lisp ]] && supported_math=present
+          bootstrap_prelude=absent
+          [[ -f external/my-lisp/tests/fixtures/mathematical-result-v1.lisp ]] && build_math=present
           [[ -f ../my-lisp/tests/fixtures/mathematical-result-v1.lisp ]] && observed_math=present
-          echo "((kind . cml-upstream-revision-drift) (supported-pin-sha . \"${{ steps.upstream_revisions.outputs.supported_pin_sha }}\") (observed-current-sha . \"${{ steps.upstream_revisions.outputs.observed_current_sha }}\") (mathematical-result-v1 . ((supported-pin . ${supported_math}) (observed-current . ${observed_math})))))"
+          [[ -f ../my-lisp-bootstrap/lib/core1-compiler-prelude.lisp ]] && bootstrap_prelude=present
+          echo "((kind . cml-upstream-revision-drift) (build-source-sha . \"${{ steps.upstream_revisions.outputs.build_source_sha }}\") (supported-pin-sha . \"${{ steps.upstream_revisions.outputs.supported_pin_sha }}\") (observed-current-sha . \"${{ steps.upstream_revisions.outputs.observed_current_sha }}\") (bootstrap-core1-source-sha . \"${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}\") (bootstrap-core1-prelude . ${bootstrap_prelude}) (mathematical-result-v1 . ((build-source . ${build_math}) (observed-current . ${observed_math})))))"
 
       - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
         uses: actions/checkout@v4
