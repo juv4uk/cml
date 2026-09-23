@@ -157,8 +157,18 @@ impl X86FreestandingBackend {
         assembly.push_str(".type wsm_entry_with_input, @function\n");
         assembly.push_str("wsm_entry_with_input:\n");
         assembly.push_str("    pushq %r12\n");
+        assembly.push_str("    subq $16, %rsp\n");
         assembly.push_str("    movq %rdi, %r12\n");
+        assembly.push_str("    movq %rsi, 0(%rsp)\n");
+        // Reuse the generated program entry for its one-time-per-invocation
+        // startup mechanics: named first-class closure slots and data defs
+        // must be initialized before a selected definition can observe them.
+        // Preserve the post-compile input across that ordinary program entry.
+        assembly.push_str("    call wsm_entry\n");
+        assembly.push_str("    movq 0(%rsp), %rsi\n");
+        assembly.push_str("    movq %r12, %rdi\n");
         assembly.push_str(&format!("    call .Lfn_{selected_label}\n"));
+        assembly.push_str("    addq $16, %rsp\n");
         assembly.push_str("    popq %r12\n");
         assembly.push_str("    ret\n");
         assembly.push_str(".size wsm_entry_with_input, .-wsm_entry_with_input\n");

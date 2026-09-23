@@ -68,3 +68,73 @@ int main(void) {
         String::from_utf8_lossy(&run.stderr)
     );
 }
+
+
+#[test]
+fn s3b_input_entry_initializes_first_class_named_function_slots() {
+    let expressions = parser::parse(
+        "(def apply-one (lambda (fn x) (fn x)))
+         (def identity (lambda (x) x))
+         (def bootstrap-entry (lambda (input) (apply-one identity input)))",
+    )
+    .expect("first-class startup fixture must parse");
+    let program = lower::lower_program(&expressions).expect("first-class startup fixture must lower");
+    let assembly = X86FreestandingBackend::new()
+        .compile_program_with_input_entry(&program, "BOOTSTRAP-ENTRY")
+        .expect("input entry with first-class named function must compile");
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base =
+        std::env::temp_dir().join(format!("cml-s3b-startup-{}-{nonce}", std::process::id()));
+    let source = base.with_extension("s");
+    let harness = base.with_extension("c");
+    let executable = base.with_extension("bin");
+
+    fs::write(&source, assembly).unwrap();
+    fs::write(
+        &harness,
+        r#"#include <stdint.h>
+extern uint64_t wsm_entry_with_input(void *ctx, uint64_t input_word);
+
+int main(void) {
+    uint64_t value = wsm_entry_with_input(0, 339); /* fixnum 42 */
+    return value == 339 ? 0 : 1;
+}
+"#,
+    )
+    .unwrap();
+
+    let nucleus =
+        cml::x86_freestanding::resolve_nucleus_asm_path().expect("resolve pinned nucleus");
+    let linked = Command::new("cc")
+        .arg("-no-pie")
+        .arg(&harness)
+        .arg(&source)
+        .arg(&nucleus)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+
+    let _ = fs::remove_file(&source);
+    let _ = fs::remove_file(&harness);
+
+    assert!(
+        linked.status.success(),
+        "startup fixture must link; stderr={}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+
+    let run = Command::new(&executable).output().unwrap();
+    let _ = fs::remove_file(&executable);
+
+    assert!(
+        run.status.success(),
+        "explicit input entry must initialize first-class named closure slots before selected call; stdout={} stderr={}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+}
