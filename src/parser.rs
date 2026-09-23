@@ -514,7 +514,6 @@ mod comment_tests {
     }
 }
 
-
 #[cfg(test)]
 mod sid8_identity_tests {
     use super::*;
