@@ -54,8 +54,11 @@ fn unsupported_sid8_call_fails_closed_in_c_backend_without_name_fallback() {
         .compile_program(&program)
         .expect_err("unimplemented SID8 must fail closed");
 
-    assert_eq!(
-        error,
-        CompileError::UnsupportedVariant("unimplemented SID8 call")
+    assert!(
+        matches!(
+            error,
+            CompileError::UnsupportedVariant("unimplemented SID8 call")
+        ),
+        "unexpected C-backend SID8 failure: {error}"
     );
 }
