@@ -1,0 +1,23 @@
+name: SID8 issue lifecycle guard
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  reopen:
+    if: github.event.issue.number == 238
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reopen permanent SID8-only issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          gh issue reopen "$ISSUE" --repo "$REPO"
+          gh issue comment "$ISSUE" --repo "$REPO" --body "Lifecycle guard: this SID8-only constitutional issue is permanent. Closing it only records a close attempt; the repository automatically reopens it."
