@@ -652,12 +652,14 @@ fn preflight_env(
         Ir::Quote(value) => preflight_quoted(value, symbols, slots)?,
         Ir::Prim { op, args } => {
             let (name, expected) = primitive_contract(*op)?;
-            if args.len() != expected {
-                return Err(CompileError::InvalidArity {
-                    operation: name,
-                    expected,
-                    actual: args.len(),
-                });
+            if let Some(expected) = expected {
+                if args.len() != expected {
+                    return Err(CompileError::InvalidArity {
+                        operation: name,
+                        expected,
+                        actual: args.len(),
+                    });
+                }
             }
             for argument in args {
                 preflight_env(argument, bindings, symbols, def_arities, slots)?;
@@ -666,12 +668,14 @@ fn preflight_env(
         }
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
-            if args.len() != expected {
-                return Err(CompileError::InvalidArity {
-                    operation: name,
-                    expected,
-                    actual: args.len(),
-                });
+            if let Some(expected) = expected {
+                if args.len() != expected {
+                    return Err(CompileError::InvalidArity {
+                        operation: name,
+                        expected,
+                        actual: args.len(),
+                    });
+                }
             }
             for argument in args {
                 preflight_env(argument, bindings, symbols, def_arities, slots)?;
@@ -929,12 +933,14 @@ fn preflight_lambda_body(
         Ir::Quote(value) => preflight_quoted(value, symbols, slots),
         Ir::Prim { op, args } => {
             let (name, expected) = primitive_contract(*op)?;
-            if args.len() != expected {
-                return Err(CompileError::InvalidArity {
-                    operation: name,
-                    expected,
-                    actual: args.len(),
-                });
+            if let Some(expected) = expected {
+                if args.len() != expected {
+                    return Err(CompileError::InvalidArity {
+                        operation: name,
+                        expected,
+                        actual: args.len(),
+                    });
+                }
             }
             for argument in args {
                 preflight_lambda_body(argument, bindings, symbols, slots)?;
@@ -943,12 +949,14 @@ fn preflight_lambda_body(
         }
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
-            if args.len() != expected {
-                return Err(CompileError::InvalidArity {
-                    operation: name,
-                    expected,
-                    actual: args.len(),
-                });
+            if let Some(expected) = expected {
+                if args.len() != expected {
+                    return Err(CompileError::InvalidArity {
+                        operation: name,
+                        expected,
+                        actual: args.len(),
+                    });
+                }
             }
             for argument in args {
                 preflight_lambda_body(argument, bindings, symbols, slots)?;
@@ -1131,12 +1139,14 @@ fn preflight_def_body(
         Ir::Quote(value) => preflight_quoted(value, symbols, slots),
         Ir::Prim { op, args } => {
             let (name, expected) = primitive_contract(*op)?;
-            if args.len() != expected {
-                return Err(CompileError::InvalidArity {
-                    operation: name,
-                    expected,
-                    actual: args.len(),
-                });
+            if let Some(expected) = expected {
+                if args.len() != expected {
+                    return Err(CompileError::InvalidArity {
+                        operation: name,
+                        expected,
+                        actual: args.len(),
+                    });
+                }
             }
             for argument in args {
                 preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
@@ -1145,12 +1155,14 @@ fn preflight_def_body(
         }
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
-            if args.len() != expected {
-                return Err(CompileError::InvalidArity {
-                    operation: name,
-                    expected,
-                    actual: args.len(),
-                });
+            if let Some(expected) = expected {
+                if args.len() != expected {
+                    return Err(CompileError::InvalidArity {
+                        operation: name,
+                        expected,
+                        actual: args.len(),
+                    });
+                }
             }
             for argument in args {
                 preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
@@ -1417,27 +1429,29 @@ fn preflight_quoted(
     Ok(())
 }
 
-fn primitive_contract(operation: PrimOp) -> Result<(&'static str, usize), CompileError> {
+fn primitive_contract(
+    operation: PrimOp,
+) -> Result<(&'static str, Option<usize>), CompileError> {
     match operation {
-        PrimOp::Cons => Ok(("cons", 2)),
-        PrimOp::List => Ok(("list", 0)), // variadic, min 0 args
-        PrimOp::Car => Ok(("car", 1)),
-        PrimOp::Cdr => Ok(("cdr", 1)),
-        PrimOp::Eq => Ok(("eq", 2)),
-        PrimOp::Atom => Ok(("atom", 1)),
-        PrimOp::Add => Ok(("add", 2)),
-        PrimOp::Sub => Ok(("sub", 2)),
+        PrimOp::Cons => Ok(("cons", Some(2))),
+        PrimOp::List => Ok(("list", None)),
+        PrimOp::Car => Ok(("car", Some(1))),
+        PrimOp::Cdr => Ok(("cdr", Some(1))),
+        PrimOp::Eq => Ok(("eq", Some(2))),
+        PrimOp::Atom => Ok(("atom", Some(1))),
+        PrimOp::Add => Ok(("add", Some(2))),
+        PrimOp::Sub => Ok(("sub", Some(2))),
         // EqualP is used for exact-Q numeric equality (=) in the decoder closure.
         // For fixnum operands, word equality (wsm_eq) is sufficient.
-        PrimOp::EqualP => Ok(("eq", 2)),
-        PrimOp::ExactQLt => Ok(("exact-Q <", 2)),
-        PrimOp::ExactQLe => Ok(("exact-Q <=", 2)),
-        PrimOp::Cddr => Ok(("cddr", 1)),
-        PrimOp::Cadddr => Ok(("cadddr", 1)),
-        PrimOp::Caar => Ok(("caar", 1)),
-        PrimOp::Cadr => Ok(("cadr", 1)),
-        PrimOp::Caddr => Ok(("caddr", 1)),
-        PrimOp::ExactQGe => Ok(("exact-Q >=", 2)),
+        PrimOp::EqualP => Ok(("eq", Some(2))),
+        PrimOp::ExactQLt => Ok(("exact-Q <", Some(2))),
+        PrimOp::ExactQLe => Ok(("exact-Q <=", Some(2))),
+        PrimOp::Cddr => Ok(("cddr", Some(1))),
+        PrimOp::Cadddr => Ok(("cadddr", Some(1))),
+        PrimOp::Caar => Ok(("caar", Some(1))),
+        PrimOp::Cadr => Ok(("cadr", Some(1))),
+        PrimOp::Caddr => Ok(("caddr", Some(1))),
+        PrimOp::ExactQGe => Ok(("exact-Q >=", Some(2))),
     }
 }
 
@@ -2465,7 +2479,12 @@ impl Emitter {
 
     fn emit_primitive(&mut self, operation: PrimOp, args: &[Ir]) -> Result<(), CompileError> {
         let (name, expected) = primitive_contract(operation)?;
-        debug_assert_eq!(args.len(), expected, "preflight checked {name} arity");
+        if let Some(expected) = expected {
+            debug_assert_eq!(args.len(), expected, "preflight checked {name} arity");
+        }
+        if operation == PrimOp::List {
+            return self.emit_primitive_list(args);
+        }
 
         // Arithmetic is inline — no runtime call, checked for 61-bit overflow.
         if matches!(operation, PrimOp::Add | PrimOp::Sub) {
@@ -2536,7 +2555,10 @@ impl Emitter {
         // Start with NIL
         self.emit_immediate(wsm_os_target::NIL);
         for slot in slots.iter().rev() {
-            // NIL/prev in %rax, next element in slot
+            // Preserve the current tail from %rax as the cdr argument before
+            // loading the next car. wsm_cons(ctx, car, cdr) returns the new
+            // pair in %rax, which becomes the tail for the next iteration.
+            self.line("    movq %rax, %rdx");
             self.line(&format!(
                 "    movq {}(%rsp), %rsi",
                 Self::slot_offset(*slot)
