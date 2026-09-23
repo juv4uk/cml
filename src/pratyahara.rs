@@ -157,7 +157,6 @@ pub fn fold_constants(expr: &Expr) -> Expr {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
