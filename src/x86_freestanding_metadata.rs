@@ -92,45 +92,66 @@ impl X86FreestandingBackend {
         program: &[Ir],
     ) -> Result<X86CompiledProgram, CompileError> {
         let assembly = self.compile_program(program)?;
-
-        let mut names = BTreeSet::new();
-        for expression in program {
-            collect_backend_symbol_names(expression, &mut names);
-        }
-
-        // SYMBOL_ID_MAX is reserved for canonical `t`, so ordinary image-local
-        // symbols may use IDs 1..SYMBOL_ID_MAX-1 only. This projection fails
-        // closed even if a legacy caller reaches the older assembly-only API.
-        if names.len() as u64 >= wsm_os_target::SYMBOL_ID_MAX {
-            return Err(CompileError::TooManySymbols);
-        }
-
-        let symbols = names
-            .into_iter()
-            .enumerate()
-            .map(|(index, name)| {
-                let id = index as u64 + 1;
-                let encoded_word =
-                    wsm_os_target::encode_symbol(id).ok_or(CompileError::TooManySymbols)?;
-                Ok(X86SymbolMetadata {
-                    name,
-                    id,
-                    encoded_word,
-                })
-            })
-            .collect::<Result<Vec<_>, CompileError>>()?;
-
-        let operations = collect_program_operations(program);
-        let output = X86CompiledProgram {
-            assembly,
-            symbols,
-            operations,
-        };
-        if !output.validate_symbol_metadata() || !output.validate_operation_metadata() {
-            return Err(CompileError::TooManySymbols);
-        }
-        Ok(output)
+        compiled_program_metadata(program, assembly)
     }
+
+    /// Compile through the explicit post-compilation input-entry ABI while
+    /// preserving the exact same compiler-owned symbol/operation metadata used
+    /// by ordinary x86 witnesses.
+    ///
+    /// The selected entry name is a mechanism choice supplied by the caller;
+    /// metadata remains a read-only projection and does not admit semantics.
+    pub fn compile_program_with_metadata_and_input_entry(
+        &self,
+        program: &[Ir],
+        entry_name: &str,
+    ) -> Result<X86CompiledProgram, CompileError> {
+        let assembly = self.compile_program_with_input_entry(program, entry_name)?;
+        compiled_program_metadata(program, assembly)
+    }
+}
+
+fn compiled_program_metadata(
+    program: &[Ir],
+    assembly: String,
+) -> Result<X86CompiledProgram, CompileError> {
+    let mut names = BTreeSet::new();
+    for expression in program {
+        collect_backend_symbol_names(expression, &mut names);
+    }
+
+    // SYMBOL_ID_MAX is reserved for canonical `t`, so ordinary image-local
+    // symbols may use IDs 1..SYMBOL_ID_MAX-1 only. This projection fails
+    // closed even if a legacy caller reaches the older assembly-only API.
+    if names.len() as u64 >= wsm_os_target::SYMBOL_ID_MAX {
+        return Err(CompileError::TooManySymbols);
+    }
+
+    let symbols = names
+        .into_iter()
+        .enumerate()
+        .map(|(index, name)| {
+            let id = index as u64 + 1;
+            let encoded_word =
+                wsm_os_target::encode_symbol(id).ok_or(CompileError::TooManySymbols)?;
+            Ok(X86SymbolMetadata {
+                name,
+                id,
+                encoded_word,
+            })
+        })
+        .collect::<Result<Vec<_>, CompileError>>()?;
+
+    let operations = collect_program_operations(program);
+    let output = X86CompiledProgram {
+        assembly,
+        symbols,
+        operations,
+    };
+    if !output.validate_symbol_metadata() || !output.validate_operation_metadata() {
+        return Err(CompileError::TooManySymbols);
+    }
+    Ok(output)
 }
 
 /// Mirror the x86 backend's existing *mechanical* symbol-set projection after
