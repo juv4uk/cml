@@ -280,10 +280,8 @@ fn execute_x86_graphs_with_inputs(
         .duration_since(UNIX_EPOCH)
         .map_err(|error| WitnessBridgeError::Io(error.to_string()))?
         .as_nanos();
-    let base = std::env::temp_dir().join(format!(
-        "cml-input-witness-{}-{nonce}",
-        std::process::id()
-    ));
+    let base =
+        std::env::temp_dir().join(format!("cml-input-witness-{}-{nonce}", std::process::id()));
     let source = base.with_extension("s");
     let launcher = base.with_extension("c");
     let executable = base.with_extension("bin");
@@ -344,19 +342,13 @@ fn execute_x86_graphs_with_inputs(
 }
 
 fn input_graph_launcher_source(inputs: &[X86InputValue]) -> String {
-    fn emit_value(
-        value: &X86InputValue,
-        lines: &mut String,
-        next_id: &mut usize,
-    ) -> String {
+    fn emit_value(value: &X86InputValue, lines: &mut String, next_id: &mut usize) -> String {
         let id = *next_id;
         *next_id += 1;
         let name = format!("v{id}");
         match value {
             X86InputValue::Word(word) => {
-                lines.push_str(&format!(
-                    "    uint64_t {name} = 0x{word:016x}ULL;\n"
-                ));
+                lines.push_str(&format!("    uint64_t {name} = 0x{word:016x}ULL;\n"));
             }
             X86InputValue::Cons(car, cdr) => {
                 let car_name = emit_value(car, lines, next_id);
