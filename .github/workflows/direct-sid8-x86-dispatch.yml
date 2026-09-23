@@ -1,5 +1,9 @@
 name: Direct SID8 backend dispatch
 
+permissions:
+  contents: read
+  pull-requests: write
+
 on:
   pull_request:
     paths:
@@ -29,7 +33,22 @@ jobs:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
       - name: Rustfmt changed SID8 files
-        run: rustfmt --edition 2024 --check src/c_backend.rs tests/direct_sid8_c_backend_dispatch_test.rs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2024 src/c_backend.rs tests/direct_sid8_c_backend_dispatch_test.rs
+          if ! git diff --quiet -- src/c_backend.rs tests/direct_sid8_c_backend_dispatch_test.rs; then
+            {
+              printf '%s\n' 'Exact rustfmt diff for #238 SID8 slice:'
+              printf '%s\n' '\`\`\`diff'
+              git diff -- src/c_backend.rs tests/direct_sid8_c_backend_dispatch_test.rs
+              printf '%s\n' '\`\`\`'
+            } > /tmp/rustfmt-comment.md
+            gh pr comment "$PR_NUMBER" --body-file /tmp/rustfmt-comment.md
+            exit 1
+          fi
       - name: Exact direct SID8 C-backend dispatch witness
         run: cargo test --test direct_sid8_c_backend_dispatch_test -- --nocapture
       - name: Existing C backend regression suite
