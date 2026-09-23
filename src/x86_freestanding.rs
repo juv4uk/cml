@@ -108,6 +108,64 @@ impl X86FreestandingBackend {
         Self
     }
 
+    /// Compile a complete program and expose one explicitly selected top-level
+    /// unary definition as a post-compilation native value-input entry.
+    ///
+    /// This is an ABI/mechanism projection only. The caller names the already
+    /// admitted Lisp definition; CML does not choose language meaning here.
+    /// The wrapper follows the existing named-function convention:
+    ///   %rdi = runtime context, %rsi = one target value input.
+    pub fn compile_program_with_input_entry(
+        &self,
+        program: &[Ir],
+        entry_name: &str,
+    ) -> Result<String, CompileError> {
+        let requested = entry_name.to_uppercase();
+        let mut function_label = 0_usize;
+        let mut selected_label = None;
+
+        for expression in program {
+            let Ir::Def { name, value } = expression else {
+                continue;
+            };
+            let Ir::Lambda { params, .. } = value.as_ref() else {
+                continue;
+            };
+
+            if name == &requested {
+                match params {
+                    Params::Fixed(names) if names.len() == 1 => {
+                        selected_label = Some(function_label);
+                    }
+                    _ => {
+                        return Err(CompileError::UnsupportedVariant(
+                            "native input entry must be a fixed unary top-level definition",
+                        ));
+                    }
+                }
+            }
+            function_label += 1;
+        }
+
+        let selected_label = selected_label.ok_or(CompileError::UnsupportedVariant(
+            "requested native input entry is not a top-level unary definition",
+        ))?;
+
+        let mut assembly = self.compile_program(program)?;
+        assembly.push_str("\n.text\n");
+        assembly.push_str(".globl wsm_entry_with_input\n");
+        assembly.push_str(".type wsm_entry_with_input, @function\n");
+        assembly.push_str("wsm_entry_with_input:\n");
+        assembly.push_str("    pushq %r12\n");
+        assembly.push_str("    movq %rdi, %r12\n");
+        assembly.push_str(&format!("    call .Lfn_{selected_label}\n"));
+        assembly.push_str("    popq %r12\n");
+        assembly.push_str("    ret\n");
+        assembly.push_str(".size wsm_entry_with_input, .-wsm_entry_with_input\n");
+        assembly.push_str(".section .note.GNU-stack,\"\",@progbits\n");
+        Ok(assembly)
+    }
+
     /// Compile a complete program. Validation and symbol assignment finish
     /// before the output buffer is created, so every error is fail-closed.
     pub fn compile_program(&self, program: &[Ir]) -> Result<String, CompileError> {
