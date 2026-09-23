@@ -1,0 +1,28 @@
+name: Issue 190 x86 variadic LIST
+
+on:
+  pull_request:
+    paths:
+      - "src/x86_freestanding.rs"
+      - "tests/x86_list_variadic_test.rs"
+      - ".github/workflows/issue-190-x86-list-variadic.yml"
+  workflow_dispatch:
+
+jobs:
+  x86-list-variadic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CML with build-source submodule
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run native LIST witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --test x86_list_variadic_test -- --nocapture
