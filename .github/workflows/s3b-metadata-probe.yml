@@ -1,0 +1,23 @@
+name: S3b metadata probe
+
+on:
+  push:
+    branches:
+      - agent/225-s3b-metadata-probe
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout diagnostic branch with submodule
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run metadata probe
+        run: cargo test --test core1_s3b_metadata_probe_test -- --nocapture
