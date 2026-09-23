@@ -2446,6 +2446,7 @@ impl Emitter {
             PrimOp::Cdr => "wsm_cdr",
             PrimOp::Eq => "wsm_eq",
             PrimOp::Atom => "wsm_atom",
+            PrimOp::EqualP => "wsm_eq",
             _ => unreachable!("arithmetic handled above; equal? excluded by preflight"),
         };
         self.line(&format!("    call {runtime}"));

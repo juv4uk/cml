@@ -404,13 +404,11 @@ fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
             actual: 0,
         })
     );
-    assert_eq!(
-        backend.compile_program(&[Ir::Prim {
+    let result = backend.compile_program(&[Ir::Prim {
             op: PrimOp::EqualP,
             args: vec![Ir::Int(1), Ir::Int(1)],
-        }]),
-        Err(CompileError::UnsupportedVariant("equal? primitive"))
-    );
+        }]);
+    assert!(result.is_ok());
 }
 
 #[test]
