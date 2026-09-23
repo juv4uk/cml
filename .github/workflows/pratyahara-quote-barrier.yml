@@ -1,0 +1,23 @@
+name: Pratyahara quote barrier
+
+on:
+  push:
+    branches:
+      - fix/225-pratyahara-quote-barrier
+  pull_request:
+    paths:
+      - "src/pratyahara.rs"
+      - ".github/workflows/pratyahara-quote-barrier.yml"
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Focused pratyahara tests
+        run: cargo test pratyahara -- --nocapture
+      - name: Lowering quote barrier regression
+        run: cargo test --test canon_reservation_test quoted_canon_shaped_data_is_not_treated_as_binding -- --nocapture
