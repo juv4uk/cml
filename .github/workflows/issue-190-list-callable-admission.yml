@@ -1,0 +1,28 @@
+name: Issue 190 LIST callable admission
+
+on:
+  pull_request:
+    paths:
+      - "build.rs"
+      - "tests/registry_driven_canon_callables_test.rs"
+      - ".github/workflows/issue-190-list-callable-admission.yml"
+  workflow_dispatch:
+
+jobs:
+  list-callable-admission:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CML with build-source submodule
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Prove LIST SID callable admission and lowering
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --test registry_driven_canon_callables_test list_sid_is_generated_as_a_callable_and_lowers_through_sid_identity -- --nocapture
