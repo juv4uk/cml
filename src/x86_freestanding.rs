@@ -1543,6 +1543,7 @@ fn primitive_contract(operation: PrimOp) -> Result<(&'static str, Option<usize>)
         PrimOp::Cadr => Ok(("cadr", Some(1))),
         PrimOp::Caddr => Ok(("caddr", Some(1))),
         PrimOp::ExactQGe => Ok(("exact-Q >=", Some(2))),
+        PrimOp::Quotient => Ok(("quotient", Some(2))),
     }
 }
 
@@ -2642,6 +2643,9 @@ impl Emitter {
         if matches!(operation, PrimOp::ExactQLt) {
             return self.emit_exact_q_lt(args);
         }
+        if matches!(operation, PrimOp::Quotient) {
+            return self.emit_quotient(args);
+        }
 
         let slots: Vec<usize> = args
             .iter()
@@ -2990,6 +2994,84 @@ impl Emitter {
         self.line("    call wsm_fail");
 
         self.line(&format!(".Larith_ok_{ok_label}:"));
+        Ok(())
+    }
+
+    /// Inline signed integer quotient through hardware idivq.
+    fn emit_quotient(&mut self, args: &[Ir]) -> Result<(), CompileError> {
+        let ok_label = self.allocate_label();
+        let fail_label = self.allocate_label();
+
+        self.emit_ir(&args[0])?;
+        let slot0 = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(slot0)
+        ));
+
+        self.emit_ir(&args[1])?;
+        let slot1 = self.allocate_slot();
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(slot1)
+        ));
+
+        self.line(&format!(
+            "    movq {}(%rsp), %rax",
+            Self::slot_offset(slot0)
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(slot1)
+        ));
+
+        // Untag fixnums.
+        self.line("    sarq $3, %rax");
+        self.line("    sarq $3, %rcx");
+
+        // Fail closed on divisor == 0 and on MIN / -1 overflow.
+        self.line("    testq %rcx, %rcx");
+        self.line(&format!("    je .Lquotient_fail_{fail_label}"));
+        self.line(&format!(
+            "    movabsq ${}, %rdx",
+            wsm_os_target::FIXNUM_MIN >> 3
+        ));
+        self.line("    cmpq %rdx, %rax");
+        self.line(&format!("    jne .Lquotient_no_overflow_{fail_label}"));
+        self.line("    cmpq $-1, %rcx");
+        self.line(&format!("    je .Lquotient_fail_{fail_label}"));
+        self.line(&format!(".Lquotient_no_overflow_{fail_label}:"));
+
+        // Signed division: RAX / RCX -> RAX = quotient, RDX = remainder.
+        self.line("    cqto");
+        self.line("    idivq %rcx");
+
+        // Retag quotient in RAX as fixnum.
+        self.line("    shlq $3, %rax");
+        self.line(&format!(
+            "    orq ${}, %rax",
+            wsm_os_target::Tag::Fixnum as u64
+        ));
+        self.line(&format!("    jmp .Lquotient_ok_{ok_label}"));
+
+        // Fail path.
+        self.line(&format!(".Lquotient_fail_{fail_label}:"));
+        self.line("    movq %r12, %rdi");
+        self.line(&format!(
+            "    movl ${}, %esi",
+            wsm_os_target::ErrorCode::Type as u32
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rdx",
+            Self::slot_offset(slot0)
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(slot1)
+        ));
+        self.line("    call wsm_fail");
+
+        self.line(&format!(".Lquotient_ok_{ok_label}:"));
         Ok(())
     }
 

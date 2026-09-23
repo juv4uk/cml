@@ -418,6 +418,7 @@ impl Compiler {
             PrimOp::ExactQLt => unreachable!("ExactQLt rejected by validate_ir"),
             PrimOp::ExactQLe => unreachable!("ExactQLe rejected by validate_ir"),
             PrimOp::ExactQGe => unreachable!("ExactQGe rejected by validate_ir"),
+            PrimOp::Quotient => unreachable!("Quotient rejected by validate_ir"),
         }
     }
 

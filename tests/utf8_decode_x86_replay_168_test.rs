@@ -13,9 +13,12 @@
 //! Стан після cml#238 (call-side SID-резолв user-def + backend dispatch):
 //! залежності `reverse`/`not` з name-keyed викликів utf8.lisp тепер
 //! резолвляться як typed `App(Sid(...))` і знаходять SID-keyed defs з
-//! core.lisp; наступний блокер — upstream machine SID-виклики всередині
-//! utf8.lisp (напр. 10011101, 00111010, 01000000, 01000100, 01000101,
-//! 00010100), які ще не підтримує x86 freestanding backend.
+//! core.lisp. Після додавання `let*` (SID 10011101) та `quotient`
+//! (SID 00010100) як примітивів у lowering/x86 backend, наступний блокер —
+//! строкові мости utf8.lisp: `string-append`, `string-first`, `string-rest`,
+//! `codepoint->string`, `string->codepoint`. Вони потребують runtime-підтримки
+//! рядків у wsm-os-target, якої ще немає в пінованому contract (немає String
+//! tag і відповідних wsm_* runtime-функцій).
 
 #![cfg(all(target_os = "linux", target_arch = "x86_64"))]
 

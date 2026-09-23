@@ -321,6 +321,7 @@ fn primitive_name(op: PrimOp) -> &'static str {
         PrimOp::Cadr => "CADR",
         PrimOp::Caddr => "CADDR",
         PrimOp::List => "LIST",
+        PrimOp::Quotient => "QUOTIENT",
     }
 }
 
@@ -462,6 +463,12 @@ fn lower_sid_head(sid: my_lisp::Sid8, args: &[Expr], env: &Env) -> Result<Ir, Lo
     if (sid == my_lisp::sid!(00001001) || sid == my_lisp::sid!(00001011)) && args.len() == 2 {
         return lower_def(args, env);
     }
+    if sid == my_lisp::sid!(10011101) && args.len() == 2 {
+        return lower_let_star(args, env);
+    }
+    if sid == my_lisp::sid!(00010100) && args.len() == 2 {
+        return lower_prim(PrimOp::Quotient, args, env);
+    }
     if sid == my_lisp::sid!(00001010) {
         return Err(LowerError::invalid_form(
             "defmacro must be expanded before IR lowering",
@@ -492,6 +499,9 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     }
     if func == "let" && args.len() == 2 {
         return lower_let(args, env);
+    }
+    if func == "let*" && args.len() == 2 {
+        return lower_let_star(args, env);
     }
     if is_canon_form(func, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT) && args.len() == 2 {
         return lower_def(args, env);
@@ -593,6 +603,14 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
         {
             if crate::canon::canonical_builtin_name(sid).is_none() && env.has_sid_keyed_def(sid) {
                 return lower_generic_call(&Expr::Sid(sid), args, env);
+            }
+        }
+        // Other admitted callables that are primitive operations but not in
+        // the Canon callable table (e.g. `quotient`) lower directly to PrimOp.
+        if let Some(sid) = my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(func)
+        {
+            if sid == my_lisp::sid!(00010100) && args.len() == 2 {
+                return lower_prim(PrimOp::Quotient, args, env);
             }
         }
     }
@@ -756,6 +774,55 @@ fn lower_let(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
         bindings: lowered_bindings,
         body: Box::new(body),
     })
+}
+
+/// Sequential `let*`: each binding sees the previous ones.
+/// `(let* ((n1 v1) (n2 v2) ...) body)` expands to nested parallel `let`s:
+/// `(let ((n1 v1)) (let ((n2 v2)) ... body))`.
+fn lower_let_star(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
+    let [bindings_expr, body_expr] = args else {
+        return Err(LowerError::arity("let* expects exactly two arguments"));
+    };
+    let Expr::List(bindings) = bindings_expr else {
+        return Err(LowerError::invalid_form("let* expects a binding list"));
+    };
+    if bindings.is_empty() {
+        return lower_expr_admitted(body_expr, env);
+    }
+    let mut iter = bindings.iter();
+    let first = iter.next().unwrap();
+    let rest: Vec<Expr> = iter.cloned().collect();
+    let Expr::List(pair) = first else {
+        return Err(LowerError::invalid_form("let* binding must be a list"));
+    };
+    let [name_expr, value_expr] = pair.as_slice() else {
+        return Err(LowerError::invalid_form(
+            "let* binding must be (name value)",
+        ));
+    };
+    let Expr::Symbol(name) = name_expr else {
+        return Err(LowerError::invalid_form(
+            "let* binding name must be a symbol",
+        ));
+    };
+    let inner_body = if rest.is_empty() {
+        body_expr.clone()
+    } else {
+        Expr::List(vec![
+            Expr::Symbol("let*".to_string()),
+            Expr::List(rest),
+            body_expr.clone(),
+        ])
+    };
+    let expanded = Expr::List(vec![
+        Expr::Symbol("let".to_string()),
+        Expr::List(vec![Expr::List(vec![
+            Expr::Symbol(name.to_string()),
+            value_expr.clone(),
+        ])]),
+        inner_body,
+    ]);
+    lower_expr_admitted(&expanded, env)
 }
 
 fn lower_def(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
@@ -939,5 +1006,79 @@ mod sid_head_tests {
             }
             other => panic!("expected Builtin App, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn let_star_expands_to_nested_parallel_let() {
+        // `(let* ((x 1) (y (+ x 1))) y)` -> nested Ir::Let.
+        let expr = Expr::List(vec![
+            Expr::Symbol("let*".into()),
+            Expr::List(vec![
+                Expr::List(vec![Expr::Symbol("x".into()), Expr::Integer(1)]),
+                Expr::List(vec![
+                    Expr::Symbol("y".into()),
+                    Expr::List(vec![
+                        Expr::Symbol("+".into()),
+                        Expr::Symbol("x".into()),
+                        Expr::Integer(1),
+                    ]),
+                ]),
+            ]),
+            Expr::Symbol("y".into()),
+        ]);
+        let ir = lower_expr_admitted(&expr, &Env::default()).expect("let* lowers");
+        match ir {
+            Ir::Let {
+                bindings: outer_bindings,
+                body,
+            } => {
+                assert_eq!(outer_bindings.len(), 1);
+                assert_eq!(outer_bindings[0].0, "X");
+                match body.as_ref() {
+                    Ir::Let {
+                        bindings: inner_bindings,
+                        body: inner_body,
+                    } => {
+                        assert_eq!(inner_bindings.len(), 1);
+                        assert_eq!(inner_bindings[0].0, "Y");
+                        assert!(matches!(inner_body.as_ref(), Ir::Var(name) if name == "Y"));
+                    }
+                    other => panic!("expected nested let, got {other:?}"),
+                }
+            }
+            other => panic!("expected Ir::Let, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn quotient_call_lowers_to_primop() {
+        // Both surface `quotient` and SID 00010100 lower to PrimOp::Quotient.
+        let surface = Expr::List(vec![
+            Expr::Symbol("quotient".into()),
+            Expr::Integer(7),
+            Expr::Integer(2),
+        ]);
+        let ir = lower_expr_admitted(&surface, &Env::default()).expect("quotient lowers");
+        assert!(matches!(
+            ir,
+            Ir::Prim {
+                op: PrimOp::Quotient,
+                args
+            } if args.len() == 2
+        ));
+
+        let sid_call = Expr::List(vec![
+            Expr::Sid(my_lisp::sid!(00010100)),
+            Expr::Integer(7),
+            Expr::Integer(2),
+        ]);
+        let ir = lower_expr_admitted(&sid_call, &Env::default()).expect("SID quotient lowers");
+        assert!(matches!(
+            ir,
+            Ir::Prim {
+                op: PrimOp::Quotient,
+                args
+            } if args.len() == 2
+        ));
     }
 }

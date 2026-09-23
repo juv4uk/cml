@@ -700,6 +700,7 @@ impl CBackend {
             )),
             PrimOp::ExactQLe => Err(CompileError::UnsupportedVariant("ExactQLe primitive")),
             PrimOp::ExactQGe => Err(CompileError::UnsupportedVariant("ExactQGe primitive")),
+            PrimOp::Quotient => Err(CompileError::UnsupportedVariant("Quotient primitive")),
         }
     }
 

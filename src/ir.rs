@@ -65,6 +65,9 @@ pub enum PrimOp {
     /// Exact-Q numeric >= (semantic 1018), distinct from atom identity Eq.
     /// Backends must preserve the upstream exact numeric 0/1 result domain.
     ExactQGe,
+    /// Integer quotient (truncate toward zero). Distinct from `/` which may
+    /// return rationals; quotient always returns an exact integer.
+    Quotient,
 }
 
 /// Bounded machine-level primitives for direct physical machine access.
