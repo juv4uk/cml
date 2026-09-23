@@ -55,6 +55,9 @@ jobs:
           test "$(git -C wsm-my-lisp rev-parse HEAD)" = "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947"
           test "$(git -C wsm-my-lisp hash-object lib/compiler.lisp)" = "d708d22f03e0095211399e83474a5e6df11e614d"
 
+      - name: Run metadata-only vocabulary probe
+        run: cargo test --test core1_s3b_metadata_probe_test -- --nocapture
+
       - name: Run real composite S3b witness
         env:
           WSM_NUCLEUS_ASM: ${{ github.workspace }}/wsm-my-lisp/asm/nucleus.s
