@@ -1,14 +1,14 @@
 use std::collections::BTreeSet;
 
-use cml::canon::{CANON_OPERATIONS_TABLE, CANON_SUPPORTED_PIN_SEMANTIC_IDS};
+use cml::canon::{CANON_OPERATIONS_TABLE, CANON_BUILD_SOURCE_SEMANTIC_IDS};
 use cml::coverage::{AdmissionState, CoverageLedger};
 
 #[test]
-fn supported_pin_ledger_covers_every_upstream_identity_once() {
-    let ledger = CoverageLedger::supported_pin();
+fn build_source_ledger_covers_every_upstream_identity_once() {
+    let ledger = CoverageLedger::build_source();
 
-    assert_eq!(ledger.upstream_channel, "supported-pin");
-    assert_eq!(ledger.rows.len(), CANON_SUPPORTED_PIN_SEMANTIC_IDS.len());
+    assert_eq!(ledger.upstream_channel, "build-source");
+    assert_eq!(ledger.rows.len(), CANON_BUILD_SOURCE_SEMANTIC_IDS.len());
     assert!(
         ledger.rows.len() > CANON_OPERATIONS_TABLE.len(),
         "the upstream denominator must remain larger than CML's admitted operation slice"
@@ -21,18 +21,18 @@ fn supported_pin_ledger_covers_every_upstream_identity_once() {
             let spelling = id.to_string();
             spelling.len() == 8 && spelling.chars().all(|c| c == '0' || c == '1')
         }),
-        "supported-pin semantic identities remain opaque 8-bit binary spellings"
+        "build-source semantic identities remain opaque 8-bit binary spellings"
     );
 }
 
 #[test]
 fn every_cml_operation_is_joined_to_the_upstream_denominator_with_existing_evidence() {
-    let ledger = CoverageLedger::supported_pin();
+    let ledger = CoverageLedger::build_source();
 
     for operation in CANON_OPERATIONS_TABLE {
         let row = ledger
             .row(operation.semantic_id)
-            .expect("every admitted CML operation must exist in the supported-pin denominator");
+            .expect("every admitted CML operation must exist in the build-source denominator");
 
         assert_eq!(row.admission, AdmissionState::SourceAdmitted);
         assert_eq!(row.operation_status, Some(operation.status));
@@ -42,7 +42,7 @@ fn every_cml_operation_is_joined_to_the_upstream_denominator_with_existing_evide
 
 #[test]
 fn upstream_known_does_not_collapse_into_supported() {
-    let ledger = CoverageLedger::supported_pin();
+    let ledger = CoverageLedger::build_source();
 
     assert!(
         ledger
@@ -54,8 +54,8 @@ fn upstream_known_does_not_collapse_into_supported() {
 }
 
 #[test]
-fn summary_partitions_the_supported_pin_denominator_and_keeps_backend_evidence_bounded() {
-    let ledger = CoverageLedger::supported_pin();
+fn summary_partitions_the_build_source_denominator_and_keeps_backend_evidence_bounded() {
+    let ledger = CoverageLedger::build_source();
     let summary = ledger.summary();
 
     assert_eq!(summary.semantic_identities, ledger.rows.len());
@@ -77,7 +77,7 @@ fn summary_partitions_the_supported_pin_denominator_and_keeps_backend_evidence_b
 }
 
 #[test]
-fn ledger_records_a_nonzero_digest_of_the_exact_supported_pin_registry_input() {
-    let ledger = CoverageLedger::supported_pin();
+fn ledger_records_a_nonzero_digest_of_the_exact_build_source_registry_input() {
+    let ledger = CoverageLedger::build_source();
     assert_ne!(ledger.registry_digest_fnv1a64, 0);
 }
