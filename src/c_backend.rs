@@ -830,7 +830,9 @@ impl CBackend {
 
         if sid == my_lisp::sid!(00000100) {
             if args.len() != 2 {
-                return Err(CompileError::UnsupportedVariant("SID8 call arity mismatch"));
+                return Err(CompileError::UnsupportedVariant(
+                    "SID8 call arity mismatch",
+                ));
             }
             return Ok(format!(
                 "mk_cons({}, {})",
