@@ -1,0 +1,55 @@
+name: Core1 S4 self-source RED witness
+
+on:
+  pull_request:
+    paths:
+      - "tests/core1_s4_self_source_test.rs"
+      - ".github/workflows/core1-s4-self-source.yml"
+      - "src/witness_bridge.rs"
+      - "src/x86_freestanding.rs"
+      - "src/x86_freestanding_metadata.rs"
+
+jobs:
+  s4-self-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CML
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Checkout exact Core1 bootstrap source
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/my-lisp
+          ref: d359c4885e0609a6c8350daf45de157b40cf48f3
+          path: upstream-my-lisp
+          fetch-depth: 1
+
+      - name: Checkout exact S2 compiler source and nucleus
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: 5591eca48bfd32aa1a1e9e159ad205afdb3475c2
+          path: wsm-my-lisp
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Record exact S4 provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C upstream-my-lisp rev-parse HEAD)" = "d359c4885e0609a6c8350daf45de157b40cf48f3"
+          test "$(git -C upstream-my-lisp hash-object lib/core1-compiler-prelude.lisp)" = "dfc8f0074464f9f1d2b71a97a9ab4184925ca3a1"
+          test "$(git -C wsm-my-lisp rev-parse HEAD)" = "5591eca48bfd32aa1a1e9e159ad205afdb3475c2"
+          test "$(git -C wsm-my-lisp hash-object lib/compiler.lisp)" = "8015a4b96040e2c9bf6dd889a91527f5d6b2f9bc"
+
+      - name: Run native S4 self-source witness
+        env:
+          WSM_NUCLEUS_ASM: ${{ github.workspace }}/wsm-my-lisp/asm/nucleus.s
+          WSM_MY_LISP_CORE1_PRELUDE_SOURCE: ${{ github.workspace }}/upstream-my-lisp/lib/core1-compiler-prelude.lisp
+          WSM_MY_LISP_COMPILER_SOURCE: ${{ github.workspace }}/wsm-my-lisp/lib/compiler.lisp
+        run: cargo test --test core1_s4_self_source_test -- --nocapture
