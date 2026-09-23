@@ -62,11 +62,25 @@ fn top_level_definition_name(expr: &Expr) -> Option<String> {
     let Expr::List(items) = expr else {
         return None;
     };
-    let [Expr::Symbol(form), Expr::Symbol(name), _] = items.as_slice() else {
+    let [head, name, _] = items.as_slice() else {
         return None;
     };
-
-    is_canon_form(form, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT).then(|| name.to_uppercase())
+    let is_define_head = match head {
+        Expr::Symbol(form) => is_canon_form(form, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT),
+        Expr::Sid(sid) => *sid == my_lisp::sid!(00001001) || *sid == my_lisp::sid!(00001011),
+        _ => false,
+    };
+    if !is_define_head {
+        return None;
+    }
+    match name {
+        Expr::Symbol(s) => Some(s.to_uppercase()),
+        // A SID-keyed define (key_definition_by_sid after #239) uses the
+        // typed Sid8's own bit pattern as the def's internal key -- no
+        // surface/registry lookup.
+        Expr::Sid(sid) => Some(sid.to_string()),
+        _ => None,
+    }
 }
 
 pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
@@ -375,9 +389,42 @@ fn lower_list(list: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     }
     if let Expr::Symbol(func) = &list[0] {
         lower_call(func, &list[1..], env)
+    } else if let Expr::Sid(sid) = &list[0] {
+        lower_sid_head(*sid, &list[1..], env)
     } else {
         lower_generic_call(&list[0], &list[1..], env)
     }
+}
+
+/// Typed SID-head routing for the special forms, mirroring `lower_call`'s
+/// Canon-surface dispatch so byte-SID-authored source (pinned `core.lisp`
+/// rows such as `(00001000 args args)`) lowers through the same mechanism
+/// as the surface spellings. Only the special-form SIDs are intercepted
+/// here; every other SID remains a first-class call value and keeps
+/// `Ir::App { func: Ir::Sid(sid), .. }` for the direct-SID8 dispatch
+/// (#238), never a SID-to-name fallback.
+fn lower_sid_head(sid: my_lisp::Sid8, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
+    if sid == my_lisp::sid!(00000001) {
+        return match args {
+            [single] => Ok(Ir::Quote(lower_quoted(single)?)),
+            _ => Err(LowerError::arity("quote expects exactly one argument")),
+        };
+    }
+    if sid == my_lisp::sid!(00000111) {
+        return lower_cond(args, env);
+    }
+    if sid == my_lisp::sid!(00001000) && args.len() >= 2 {
+        return lower_lambda(args, env);
+    }
+    if (sid == my_lisp::sid!(00001001) || sid == my_lisp::sid!(00001011)) && args.len() == 2 {
+        return lower_def(args, env);
+    }
+    if sid == my_lisp::sid!(00001010) {
+        return Err(LowerError::invalid_form(
+            "defmacro must be expanded before IR lowering",
+        ));
+    }
+    lower_generic_call(&Expr::Sid(sid), args, env)
 }
 
 fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
@@ -656,14 +703,20 @@ fn lower_let(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 }
 
 fn lower_def(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
-    let Expr::Symbol(name) = &args[0] else {
-        return Err(LowerError::invalid_form(
-            "def expects a symbol name (matches compiler.rs's compile_def)",
-        ));
+    let name = match &args[0] {
+        Expr::Symbol(name) => name.to_uppercase(),
+        // A SID-keyed define uses the typed Sid8's own bit pattern as the
+        // def key (key_definition_by_sid, #239) -- no surface registry.
+        Expr::Sid(sid) => sid.to_string(),
+        _ => {
+            return Err(LowerError::invalid_form(
+                "def expects a symbol or SID8 name",
+            ));
+        }
     };
     let value = lower_expr_admitted(&args[1], env)?;
     Ok(Ir::Def {
-        name: name.to_uppercase(),
+        name,
         value: Box::new(value),
     })
 }
@@ -701,5 +754,85 @@ fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
         Expr::NumericBuffer(_) => Err(LowerError::invalid_form(
             "numeric buffers are self-evaluating values and must not be quoted",
         )),
+    }
+}
+
+#[cfg(test)]
+mod sid_head_tests {
+    use super::*;
+
+    #[test]
+    fn sid_headed_lambda_lowers_like_surface_lambda() {
+        let expr = Expr::List(vec![
+            Expr::Sid(my_lisp::sid!(00001000)),
+            Expr::Symbol("args".into()),
+            Expr::Symbol("args".into()),
+        ]);
+        let ir = lower_expr_admitted(&expr, &Env::default()).expect("SID lambda lowers");
+        assert!(matches!(
+            ir,
+            Ir::Lambda {
+                params: Params::AllRest(ref rest),
+                ..
+            } if rest == "ARGS"
+        ));
+    }
+
+    #[test]
+    fn sid_headed_quote_lowers_to_quote() {
+        let expr = Expr::List(vec![Expr::Sid(my_lisp::sid!(00000001)), Expr::List(vec![])]);
+        let ir = lower_expr_admitted(&expr, &Env::default()).expect("SID quote lowers");
+        assert!(matches!(ir, Ir::Quote(Quoted::Nil)));
+    }
+
+    #[test]
+    fn sid_headed_define_row_keys_def_by_typed_sid_bits() {
+        let expr = Expr::List(vec![
+            Expr::Sid(my_lisp::sid!(00001001)),
+            Expr::Sid(my_lisp::sid!(00100111)),
+            Expr::List(vec![
+                Expr::Sid(my_lisp::sid!(00001000)),
+                Expr::Symbol("args".into()),
+                Expr::Symbol("args".into()),
+            ]),
+        ]);
+        let ir = lower_expr_admitted(&expr, &Env::default()).expect("SID define row lowers");
+        match ir {
+            Ir::Def { name, value } => {
+                assert_eq!(name, "00100111");
+                assert!(matches!(
+                    *value,
+                    Ir::Lambda {
+                        params: Params::AllRest(_),
+                        ..
+                    }
+                ));
+            }
+            other => panic!("expected Ir::Def, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn top_level_sid_define_registers_env_binding() {
+        let expr = Expr::List(vec![
+            Expr::Sid(my_lisp::sid!(00001001)),
+            Expr::Sid(my_lisp::sid!(00100111)),
+            Expr::List(vec![]),
+        ]);
+        assert_eq!(
+            top_level_definition_name(&expr),
+            Some("00100111".to_string())
+        );
+    }
+
+    #[test]
+    fn non_special_sid_head_stays_a_direct_call_value() {
+        let expr = Expr::List(vec![Expr::Sid(my_lisp::sid!(00000101)), Expr::List(vec![])]);
+        let ir = lower_expr_admitted(&expr, &Env::default()).expect("SID call lowers");
+        assert!(matches!(
+            ir,
+            Ir::App { ref func, .. }
+                if matches!(func.as_ref(), Ir::Sid(s) if *s == my_lisp::sid!(00000101))
+        ));
     }
 }
