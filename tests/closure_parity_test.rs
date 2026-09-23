@@ -48,7 +48,9 @@ fn first_class_lambda_as_argument() {
 #[test]
 fn self_recursive_def_via_letrec_placeholder() {
     assert_eq!(
-        value("(def count (lambda (n) (cond ((eq n 0) (identity-relation same) 0) ((eq n 0) (identity-relation distinct) (+ 1 (count (- n 1))))))) (count 5)"),
+        value(
+            "(def count (lambda (n) (cond ((eq n 0) (identity-relation same) 0) ((eq n 0) (identity-relation distinct) (+ 1 (count (- n 1))))))) (count 5)"
+        ),
         "5"
     );
 }
