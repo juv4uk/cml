@@ -9,8 +9,11 @@ on:
     paths:
       - "src/x86_freestanding.rs"
       - "src/c_backend.rs"
+      - "src/lower.rs"
+      - "src/ir.rs"
       - "tests/direct_sid8_x86_dispatch_test.rs"
       - "tests/direct_sid8_c_backend_dispatch_test.rs"
+      - "tests/sid8_ir_identity_test.rs"
       - ".github/workflows/direct-sid8-x86-dispatch.yml"
   workflow_dispatch:
 
@@ -57,3 +60,13 @@ jobs:
         run: cargo test --test explicit_cond_backend_test -- --nocapture
       - name: Existing typed buffer C backend suite
         run: cargo test --test typed_buffer_ir_test -- --nocapture
+
+  sid8-ir-identity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Exact SID8-only IR identity witness
+        run: cargo test --test sid8_ir_identity_test -- --nocapture
