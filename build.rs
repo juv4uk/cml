@@ -444,11 +444,11 @@ fn is_semantic_id(token: &str) -> bool {
     token.len() == 8 && token.chars().all(|c| c == '0' || c == '1')
 }
 
-/// #106: collect the complete supported-pin semantic denominator from the
+/// #106: collect the complete build-source semantic denominator from the
 /// same upstream registry parse already used to generate CML's admitted
 /// operation table. IDs remain opaque numeric strings; this does not assign
 /// meaning or backend support to rows that CML has not admitted.
-fn collect_supported_pin_semantic_ids(root: &[Sexp]) -> Vec<u8> {
+fn collect_build_source_semantic_ids(root: &[Sexp]) -> Vec<u8> {
     let mut ids = Vec::with_capacity(root.len());
     let mut seen = BTreeSet::new();
 
@@ -473,7 +473,7 @@ fn collect_supported_pin_semantic_ids(root: &[Sexp]) -> Vec<u8> {
     ids
 }
 
-/// Deterministic drift fingerprint for the exact supported-pin registry bytes.
+/// Deterministic drift fingerprint for the exact build-source registry bytes.
 /// This is evidence metadata only, not a semantic identity or security hash.
 fn fnv1a64(bytes: &[u8]) -> u64 {
     let mut hash = 0xcbf29ce484222325u64;
@@ -600,7 +600,7 @@ fn collect_surfaces(root: &[Sexp], ids: &[&str]) -> (Vec<String>, Vec<String>) {
 
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set");
-    // #84 supported-pin channel: semantic build inputs come from the
+    // #84 build-source channel: semantic build inputs come from the
     // external/my-lisp gitlink, never from the observed-current sibling checkout.
     let mut registry_path = PathBuf::from(&manifest_dir)
         .join("external")
@@ -654,9 +654,9 @@ fn main() {
             )
         });
 
-    let supported_pin_semantic_ids = collect_supported_pin_semantic_ids(root);
-    let supported_pin_semantic_id_set: BTreeSet<u8> =
-        supported_pin_semantic_ids.iter().copied().collect();
+    let build_source_semantic_ids = collect_build_source_semantic_ids(root);
+    let build_source_semantic_id_set: BTreeSet<u8> =
+        build_source_semantic_ids.iter().copied().collect();
     let name_to_sid = resolve_operation_semantic_ids(root);
 
     let mut operation_ids: Vec<(usize, u8)> = Vec::with_capacity(OPERATIONS.len());
@@ -665,19 +665,19 @@ fn main() {
             .get(operation.canonical_name)
             .unwrap_or_else(|| {
                 panic!(
-                    "cml#106: admitted operation {} has no SID in the supported-pin registry",
+                    "cml#106: admitted operation {} has no SID in the build-source registry",
                     operation.canonical_name
                 );
             });
-        if !supported_pin_semantic_id_set.contains(&id) {
+        if !build_source_semantic_id_set.contains(&id) {
             panic!(
-                "cml#106: admitted operation {} references semantic ID {:08b} absent from the supported-pin registry",
+                "cml#106: admitted operation {} references semantic ID {:08b} absent from the build-source registry",
                 operation.canonical_name, id
             );
         }
         operation_ids.push((index, id));
     }
-    let supported_pin_registry_digest = fnv1a64(source.as_bytes());
+    let build_source_registry_digest = fnv1a64(source.as_bytes());
 
     // Fail-closed collision detection across all admitted operations
     let mut seen_upper: HashMap<String, String> = HashMap::new();
@@ -769,13 +769,13 @@ fn main() {
     }
     generated.push_str("];\n\n");
 
-    generated.push_str("pub const CANON_SUPPORTED_PIN_SEMANTIC_IDS: &[Sid8] = &[\n");
-    for id in &supported_pin_semantic_ids {
+    generated.push_str("pub const CANON_BUILD_SOURCE_SEMANTIC_IDS: &[Sid8] = &[\n");
+    for id in &build_source_semantic_ids {
         generated.push_str(&format!("    my_lisp::sid!({:08b}),\n", id));
     }
     generated.push_str("];\n\n");
     generated.push_str(&format!(
-        "pub const CANON_SUPPORTED_PIN_REGISTRY_FNV1A64: u64 = 0x{supported_pin_registry_digest:016x};\n\n"
+        "pub const CANON_BUILD_SOURCE_REGISTRY_FNV1A64: u64 = 0x{build_source_registry_digest:016x};\n\n"
     ));
 
     generated.push_str("pub const CANON_BUILTIN_NAMES: &[(Sid8, &str)] = &[\n");
