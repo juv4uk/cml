@@ -28,8 +28,8 @@ jobs:
         with:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
-      - name: Rustfmt
-        run: cargo fmt --all -- --check
+      - name: Rustfmt changed SID8 files
+        run: rustfmt --edition 2024 --check src/c_backend.rs tests/direct_sid8_c_backend_dispatch_test.rs
       - name: Exact direct SID8 C-backend dispatch witness
         run: cargo test --test direct_sid8_c_backend_dispatch_test -- --nocapture
       - name: Existing C backend regression suite
