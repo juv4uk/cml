@@ -68,7 +68,7 @@ fn corpus() -> Vec<Row> {
         },
         Row {
             id: "t1-cond",
-            source: "(cond ((eq 0 1) 1) (t 2))",
+            source: "(cond ((eq 0 1) (identity-relation same) 1) ((eq 0 1) (identity-relation distinct) 2))",
             expect: Expect::ValueExact("2"),
         },
         Row {
@@ -78,12 +78,12 @@ fn corpus() -> Vec<Row> {
         },
         Row {
             id: "t1-self-rec",
-            source: "(def count (lambda (n) (cond ((eq n 0) 0) (t (+ 1 (count (- n 1))))))) (count 3)",
+            source: "(def count (lambda (n) (cond ((eq n 0) (identity-relation same) 0) ((eq n 0) (identity-relation distinct) (+ 1 (count (- n 1))))))) (count 3)",
             expect: Expect::ValueExact("3"),
         },
         Row {
             id: "t1-mutual",
-            source: "(def even (lambda (n) (cond ((eq n 0) t) (t (odd (- n 1)))))) (def odd (lambda (n) (cond ((eq n 0) ()) (t (even (- n 1)))))) (even 2)",
+            source: "(def even (lambda (n) (cond ((eq n 0) (identity-relation same) t) ((eq n 0) (identity-relation distinct) (odd (- n 1)))))) (def odd (lambda (n) (cond ((eq n 0) (identity-relation same) ()) ((eq n 0) (identity-relation distinct) (even (- n 1)))))) (even 2)",
             expect: Expect::ValueExact("T"),
         },
         Row {
@@ -123,23 +123,23 @@ fn corpus() -> Vec<Row> {
         },
         Row {
             id: "t1-length-lib",
-            source: "(def length-onto (lambda (x acc) (cond ((atom x) acc) (t (length-onto (cdr x) (+ acc 1)))))) (def length (lambda (x) (length-onto x 0))) (length (quote (a b c)))",
+            source: "(def length-onto (lambda (x acc) (cond ((atom x) (structural-kind empty-list) acc) ((atom x) (structural-kind atom) acc) ((atom x) (structural-kind pair) (length-onto (cdr x) (+ acc 1)))))) (def length (lambda (x) (length-onto x 0))) (length (quote (a b c)))",
             expect: Expect::ValueExact("3"),
         },
         // CP-DISPATCH-CORPUS
         Row {
             id: "cp-dispatch-weapon",
-            source: "(def dispatch (lambda (event) (cond ((eq (car event) (quote give-weapon)) (car (cdr event))) (t (quote unknown-event))))) (dispatch (cons (quote give-weapon) (cons (quote pistol) (quote ()))))",
+            source: "(def dispatch (lambda (event) (cond ((eq (car event) (quote give-weapon)) (identity-relation same) (car (cdr event))) ((eq (car event) (quote give-weapon)) (identity-relation distinct) (quote unknown-event))))) (dispatch (cons (quote give-weapon) (cons (quote pistol) (quote ()))))",
             expect: Expect::ValueExact("pistol"),
         },
         Row {
             id: "cp-dispatch-unknown",
-            source: "(def dispatch (lambda (event) (cond ((eq (car event) (quote give-weapon)) (car (cdr event))) (t (quote unknown-event))))) (dispatch (cons (quote boom) (cons 1 (quote ()))))",
+            source: "(def dispatch (lambda (event) (cond ((eq (car event) (quote give-weapon)) (identity-relation same) (car (cdr event))) ((eq (car event) (quote give-weapon)) (identity-relation distinct) (quote unknown-event))))) (dispatch (cons (quote boom) (cons 1 (quote ()))))",
             expect: Expect::ValueExact("unknown-event"),
         },
         Row {
             id: "cp-count-down",
-            source: "(def count-down (lambda (n) (cond ((eq n 0) (quote done)) (t (count-down (- n 1)))))) (count-down 3)",
+            source: "(def count-down (lambda (n) (cond ((eq n 0) (identity-relation same) (quote done)) ((eq n 0) (identity-relation distinct) (count-down (- n 1)))))) (count-down 3)",
             expect: Expect::ValueExact("done"),
         },
     ]
