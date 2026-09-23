@@ -1216,22 +1216,34 @@ fn preflight_def_body(
         }
         Ir::App { func, args } => {
             if let Ir::Sid(sid) = func.as_ref() {
-                let Some((expected, _runtime)) = sid8_call_contract(*sid) else {
-                    return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
-                };
-                if let Some(expected) = expected {
-                    if args.len() != expected {
-                        return Err(CompileError::InvalidArity {
-                            operation: "SID8",
-                            expected,
-                            actual: args.len(),
-                        });
+                if let Some((expected, _runtime)) = sid8_call_contract(*sid) {
+                    if let Some(expected) = expected {
+                        if args.len() != expected {
+                            return Err(CompileError::InvalidArity {
+                                operation: "SID8",
+                                expected,
+                                actual: args.len(),
+                            });
+                        }
                     }
+                    for argument in args {
+                        preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+                    }
+                    return Ok(());
                 }
-                for argument in args {
-                    preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+                // Typed user-def call (#238): the definition is registered
+                // under this same 8-bit pattern (key_definition_by_sid). Treat
+                // the pattern as the def's name and reuse the exact named-call
+                // validation (arity, slots, errors).
+                let key = sid.to_string();
+                if def_arities.contains_key(&key) {
+                    let named = Ir::App {
+                        func: Box::new(Ir::Var(key)),
+                        args: args.to_vec(),
+                    };
+                    return preflight_def_body(&named, bindings, symbols, def_arities, slots);
                 }
-                return Ok(());
+                return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
             }
             if let Ir::Builtin(name) = func.as_ref() {
                 if name == "mod" {
@@ -1657,7 +1669,19 @@ impl Emitter {
             )),
             Ir::App { func, args } => {
                 if let Ir::Sid(sid) = func.as_ref() {
-                    return self.emit_sid8_call(*sid, args);
+                    if sid8_call_contract(*sid).is_some() {
+                        return self.emit_sid8_call(*sid, args);
+                    }
+                    // Typed user-def call (#238): the def is registered under
+                    // this same 8-bit pattern (key_definition_by_sid). Dispatch
+                    // it exactly like a named function whose name is the
+                    // pattern; the 8-bit pattern is that name in the registry.
+                    let key = sid.to_string();
+                    if self.functions.contains_key(&key) || self.data_defs.contains_key(&key) {
+                        let named = Ir::Var(key.clone());
+                        return self.emit_named_def_call(&named, &key, args);
+                    }
+                    return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
                 }
                 if let Ir::Builtin(name) = func.as_ref() {
                     if name == "mod" {
@@ -1688,114 +1712,9 @@ impl Emitter {
                         )),
                     }
                 } else if let Ir::Var(name) = func.as_ref() {
-                    // Call a named function (admitted via Def)
-                    if let Some(&label) = self.functions.get(name) {
-                        match self.function_arities.get(name) {
-                            Some(DefArity::Fixed(arity)) => {
-                                let arity = *arity;
-                                if args.len() != arity || arity > 5 {
-                                    return Err(CompileError::UnsupportedVariant(
-                                        "App (too many args for named function)",
-                                    ));
-                                }
-                                let arg_slots: Vec<usize> = args
-                                    .iter()
-                                    .map(|arg| {
-                                        self.emit_ir(arg)?;
-                                        let slot = self.allocate_slot();
-                                        self.line(&format!(
-                                            "    movq %rax, {}(%rsp)",
-                                            Self::slot_offset(slot)
-                                        ));
-                                        Ok(slot)
-                                    })
-                                    .collect::<Result<_, CompileError>>()?;
-                                self.line("    movq %r12, %rdi");
-                                let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
-                                for (i, slot) in arg_slots.iter().enumerate() {
-                                    self.line(&format!(
-                                        "    movq {}(%rsp), {}",
-                                        Self::slot_offset(*slot),
-                                        regs[i]
-                                    ));
-                                }
-                                self.line(&format!("    call .Lfn_{label}"));
-                                Ok(())
-                            }
-                            Some(DefArity::Variadic { fixed }) => {
-                                let fixed = *fixed;
-                                if args.len() < fixed || fixed + 1 > 5 {
-                                    return Err(CompileError::UnsupportedVariant(
-                                        "App (variadic args out of bounds)",
-                                    ));
-                                }
-                                let fixed_args = &args[..fixed];
-                                let rest_args = &args[fixed..];
-
-                                let mut arg_slots = Vec::with_capacity(fixed + 1);
-                                for arg in fixed_args {
-                                    self.emit_ir(arg)?;
-                                    let slot = self.allocate_slot();
-                                    self.line(&format!(
-                                        "    movq %rax, {}(%rsp)",
-                                        Self::slot_offset(slot)
-                                    ));
-                                    arg_slots.push(slot);
-                                }
-
-                                let mut rest_slots = Vec::with_capacity(rest_args.len());
-                                for arg in rest_args {
-                                    self.emit_ir(arg)?;
-                                    let slot = self.allocate_slot();
-                                    self.line(&format!(
-                                        "    movq %rax, {}(%rsp)",
-                                        Self::slot_offset(slot)
-                                    ));
-                                    rest_slots.push(slot);
-                                }
-
-                                let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
-                                arg_slots.push(rest_slot);
-
-                                self.line("    movq %r12, %rdi");
-                                let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
-                                for (i, slot) in arg_slots.iter().enumerate() {
-                                    self.line(&format!(
-                                        "    movq {}(%rsp), {}",
-                                        Self::slot_offset(*slot),
-                                        regs[i]
-                                    ));
-                                }
-                                self.line(&format!("    call .Lfn_{label}"));
-                                Ok(())
-                            }
-                            Some(DefArity::AllRest) => {
-                                let mut rest_slots = Vec::with_capacity(args.len());
-                                for arg in args {
-                                    self.emit_ir(arg)?;
-                                    let slot = self.allocate_slot();
-                                    self.line(&format!(
-                                        "    movq %rax, {}(%rsp)",
-                                        Self::slot_offset(slot)
-                                    ));
-                                    rest_slots.push(slot);
-                                }
-
-                                let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
-
-                                self.line("    movq %r12, %rdi");
-                                self.line(&format!(
-                                    "    movq {}(%rsp), %rsi",
-                                    Self::slot_offset(rest_slot)
-                                ));
-                                self.line(&format!("    call .Lfn_{label}"));
-                                Ok(())
-                            }
-                            _ => self.emit_fixed_arity_closure_call(func, args),
-                        }
-                    } else {
-                        self.emit_fixed_arity_closure_call(func, args)
-                    }
+                    // Call a named function (admitted via Def), or a typed
+                    // user-def whose registry name is an 8-bit pattern.
+                    self.emit_named_def_call(func, name, args)
                 } else {
                     self.emit_fixed_arity_closure_call(func, args)
                 }
@@ -2304,6 +2223,113 @@ impl Emitter {
     /// wsm_fail(AbiViolation) rather than being invoked with a guessed ABI.
     ///
     /// Dispatch remains a linear chain over matching closure definitions.
+    fn emit_named_def_call(
+        &mut self,
+        value_func: &Ir,
+        name: &str,
+        args: &[Ir],
+    ) -> Result<(), CompileError> {
+        // Call a named function (admitted via Def), whose registry name may be
+        // an 8-bit pattern for typed SID-keyed user definitions (#238).
+        // `value_func` is the expression that loads the closure object when the
+        // def is not a direct machine function (data-def fallback).
+        if let Some(&label) = self.functions.get(name) {
+            match self.function_arities.get(name) {
+                Some(DefArity::Fixed(arity)) => {
+                    let arity = *arity;
+                    if args.len() != arity || arity > 5 {
+                        return Err(CompileError::UnsupportedVariant(
+                            "App (too many args for named function)",
+                        ));
+                    }
+                    let arg_slots: Vec<usize> = args
+                        .iter()
+                        .map(|arg| {
+                            self.emit_ir(arg)?;
+                            let slot = self.allocate_slot();
+                            self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                            Ok(slot)
+                        })
+                        .collect::<Result<_, CompileError>>()?;
+                    self.line("    movq %r12, %rdi");
+                    let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+                    for (i, slot) in arg_slots.iter().enumerate() {
+                        self.line(&format!(
+                            "    movq {}(%rsp), {}",
+                            Self::slot_offset(*slot),
+                            regs[i]
+                        ));
+                    }
+                    self.line(&format!("    call .Lfn_{label}"));
+                    Ok(())
+                }
+                Some(DefArity::Variadic { fixed }) => {
+                    let fixed = *fixed;
+                    if args.len() < fixed || fixed + 1 > 5 {
+                        return Err(CompileError::UnsupportedVariant(
+                            "App (variadic args out of bounds)",
+                        ));
+                    }
+                    let fixed_args = &args[..fixed];
+                    let rest_args = &args[fixed..];
+
+                    let mut arg_slots = Vec::with_capacity(fixed + 1);
+                    for arg in fixed_args {
+                        self.emit_ir(arg)?;
+                        let slot = self.allocate_slot();
+                        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                        arg_slots.push(slot);
+                    }
+
+                    let mut rest_slots = Vec::with_capacity(rest_args.len());
+                    for arg in rest_args {
+                        self.emit_ir(arg)?;
+                        let slot = self.allocate_slot();
+                        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                        rest_slots.push(slot);
+                    }
+
+                    let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
+                    arg_slots.push(rest_slot);
+
+                    self.line("    movq %r12, %rdi");
+                    let regs = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+                    for (i, slot) in arg_slots.iter().enumerate() {
+                        self.line(&format!(
+                            "    movq {}(%rsp), {}",
+                            Self::slot_offset(*slot),
+                            regs[i]
+                        ));
+                    }
+                    self.line(&format!("    call .Lfn_{label}"));
+                    Ok(())
+                }
+                Some(DefArity::AllRest) => {
+                    let mut rest_slots = Vec::with_capacity(args.len());
+                    for arg in args {
+                        self.emit_ir(arg)?;
+                        let slot = self.allocate_slot();
+                        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                        rest_slots.push(slot);
+                    }
+
+                    let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
+
+                    self.line("    movq %r12, %rdi");
+                    self.line(&format!(
+                        "    movq {}(%rsp), %rsi",
+                        Self::slot_offset(rest_slot)
+                    ));
+                    self.line(&format!("    call .Lfn_{label}"));
+                    Ok(())
+                }
+                _ => self.emit_fixed_arity_closure_call(value_func, args),
+            }
+        } else {
+            self.emit_fixed_arity_closure_call(value_func, args)
+        }
+    }
+
     fn emit_fixed_arity_closure_call(
         &mut self,
         function: &Ir,

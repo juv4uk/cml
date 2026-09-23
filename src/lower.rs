@@ -83,6 +83,31 @@ fn top_level_definition_name(expr: &Expr) -> Option<String> {
     }
 }
 
+/// Returns the SID used as a definition key, if this top-level form is a
+/// define whose name is a typed Sid8. Name-keyed surface defines return `None`.
+fn sid_keyed_definition_name(expr: &Expr) -> Option<my_lisp::Sid8> {
+    use crate::canon::{CANON_DEFINE_EXACT, CANON_DEFINE_UPPER, is_canon_form};
+
+    let Expr::List(items) = expr else {
+        return None;
+    };
+    let [head, name, _] = items.as_slice() else {
+        return None;
+    };
+    let is_define_head = match head {
+        Expr::Symbol(form) => is_canon_form(form, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT),
+        Expr::Sid(sid) => *sid == my_lisp::sid!(00001001) || *sid == my_lisp::sid!(00001011),
+        _ => false,
+    };
+    if !is_define_head {
+        return None;
+    }
+    match name {
+        Expr::Sid(sid) => Some(*sid),
+        _ => None,
+    }
+}
+
 pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
     let folded: Vec<Expr> = exprs
         .iter()
@@ -95,7 +120,16 @@ pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
     // callable in its own body and in later/peer top-level forms. This is only
     // name resolution; the backend still owns its existing closure/letrec
     // mechanism and may fail closed for an unsupported executable shape.
-    let mut env = Env::default();
+    let mut sid_keyed_defs = std::collections::HashSet::new();
+    for expr in &folded {
+        if let Some(sid) = sid_keyed_definition_name(expr) {
+            sid_keyed_defs.insert(sid.to_string());
+        }
+    }
+    let mut env = Env {
+        bound: Vec::new(),
+        sid_keyed_defs,
+    };
     for expr in &folded {
         if let Some(name) = top_level_definition_name(expr) {
             if !env.is_bound(&name) {
@@ -293,11 +327,20 @@ fn primitive_name(op: PrimOp) -> &'static str {
 #[derive(Clone, Default)]
 struct Env {
     bound: Vec<String>,
+    /// Set of definition keys that are typed 8-bit SID patterns (from
+    /// byte-SID `define` rows). A name-keyed call is lowered to `App(Sid)`
+    /// only when the target def is actually registered under that SID, so
+    /// the call identity matches the def identity (#238).
+    sid_keyed_defs: std::collections::HashSet<String>,
 }
 
 impl Env {
     fn is_bound(&self, name: &str) -> bool {
         self.bound.iter().any(|b| b == name)
+    }
+
+    fn has_sid_keyed_def(&self, sid: my_lisp::Sid8) -> bool {
+        self.sid_keyed_defs.contains(&sid.to_string())
     }
 }
 
@@ -538,8 +581,21 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
                 ));
             }
         }
+        // (#238) Typed user-def call identity. A word with a Lisp-owned
+        // registered semantic ID that is neither a backend primitive projection
+        // nor a canonical builtin (e.g. `reverse`, `not`) dispatches by its
+        // Sid8 call key, but only when the current program actually keys the
+        // definition under that SID. This keeps call identity identical to def
+        // identity and preserves classic name-keyed definitions in other
+        // backends. Canonical builtins (`=`, `>`, `mod`, ...) keep their
+        // Builtin identity on purpose (admitted-but-partial, #92).
+        if let Some(sid) = my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(func)
+        {
+            if crate::canon::canonical_builtin_name(sid).is_none() && env.has_sid_keyed_def(sid) {
+                return lower_generic_call(&Expr::Sid(sid), args, env);
+            }
+        }
     }
-
     lower_generic_call(&Expr::Symbol(func.to_string()), args, env)
 }
 
@@ -834,5 +890,54 @@ mod sid_head_tests {
             Ir::App { ref func, .. }
                 if matches!(func.as_ref(), Ir::Sid(s) if *s == my_lisp::sid!(00000101))
         ));
+    }
+
+    #[test]
+    fn user_word_call_resolves_to_registry_sid_identity() {
+        // A user-defined word with a Lisp-owned registered semantic ID that is
+        // neither a backend primitive nor a canonical builtin (e.g. `reverse`)
+        // dispatches by its typed Sid8 call key when the program keys the def
+        // under that SID: `(reverse x)` -> App(Sid(...)).
+        let mut env = Env::default();
+        let sid = my_lisp::semantic_registry_export::semantic_id_for_admitted_surface("reverse")
+            .expect("reverse has an admitted surface SID");
+        env.sid_keyed_defs.insert(sid.to_string());
+        let expr = Expr::List(vec![
+            Expr::Symbol("reverse".into()),
+            Expr::Symbol("x".into()),
+        ]);
+        let ir = lower_expr_admitted(&expr, &env).expect("user-word call lowers");
+        match ir {
+            Ir::App { func, args } => {
+                assert!(matches!(
+                    func.as_ref(),
+                    Ir::Sid(sid) if *sid
+                        == my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(
+                            "reverse"
+                        )
+                        .expect("reverse has an admitted surface SID")
+                ));
+                assert_eq!(args.len(), 1);
+            }
+            other => panic!("expected typed SID App, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn equality_builtin_stays_builtin_identity_not_sid() {
+        // #92 contract: numeric `=` keeps its admitted-but-partial canonical
+        // Builtin identity; the typed SID route must never capture it.
+        let expr = Expr::List(vec![
+            Expr::Symbol("=".into()),
+            Expr::Symbol("x".into()),
+            Expr::Integer(1),
+        ]);
+        let ir = lower_expr_admitted(&expr, &Env::default()).expect("builtin call lowers");
+        match ir {
+            Ir::App { func, .. } => {
+                assert!(matches!(func.as_ref(), Ir::Builtin(name) if name == "="));
+            }
+            other => panic!("expected Builtin App, got {other:?}"),
+        }
     }
 }
