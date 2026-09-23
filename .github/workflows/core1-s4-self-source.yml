@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: juv4uk/wsm-my-lisp
-          ref: a6bd9747196f2d676ab6883cbb4b84c7fcfc6947
+          ref: 5591eca48bfd32aa1a1e9e159ad205afdb3475c2
           path: wsm-my-lisp
           fetch-depth: 1
 
@@ -44,8 +44,8 @@ jobs:
           set -euo pipefail
           test "$(git -C upstream-my-lisp rev-parse HEAD)" = "d359c4885e0609a6c8350daf45de157b40cf48f3"
           test "$(git -C upstream-my-lisp hash-object lib/core1-compiler-prelude.lisp)" = "dfc8f0074464f9f1d2b71a97a9ab4184925ca3a1"
-          test "$(git -C wsm-my-lisp rev-parse HEAD)" = "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947"
-          test "$(git -C wsm-my-lisp hash-object lib/compiler.lisp)" = "d708d22f03e0095211399e83474a5e6df11e614d"
+          test "$(git -C wsm-my-lisp rev-parse HEAD)" = "5591eca48bfd32aa1a1e9e159ad205afdb3475c2"
+          test "$(git -C wsm-my-lisp hash-object lib/compiler.lisp)" = "8015a4b96040e2c9bf6dd889a91527f5d6b2f9bc"
 
       - name: Run native S4 self-source witness
         env:
