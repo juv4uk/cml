@@ -21,11 +21,11 @@ fn report_is_deterministic_and_matches_the_merged_ledger() {
     assert_eq!(first, second, "coverage report must be byte-deterministic");
 
     let text = String::from_utf8(first).expect("coverage report must be UTF-8");
-    let ledger = CoverageLedger::supported_pin();
+    let ledger = CoverageLedger::build_source();
     let summary = ledger.summary();
 
     assert!(text.starts_with("schema\tcml-coverage/1\n"));
-    assert!(text.contains("\nupstream-channel\tsupported-pin\n"));
+    assert!(text.contains("\nupstream-channel\tbuild-source\n"));
     assert!(text.contains(&format!(
         "\nsemantic-identities\t{}\n",
         summary.semantic_identities
