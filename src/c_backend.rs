@@ -667,42 +667,15 @@ impl CBackend {
                     Ok(result)
                 }
             }
-            PrimOp::Cddr => Ok(format!(
-                "v_cddr({})",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Cadddr => Ok(format!(
-                "v_cadddr({})",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Caar => Ok(format!(
-                "v_caar({})",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Cadr => Ok(format!(
-                "v_cadr({})",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Cddr => Ok(format!(
-                "v_cddr({})",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Caddr => Ok(format!(
-                "v_caddr({})",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Cadddr => Ok(format!(
-                "v_cadddr({})",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Caar => Ok(format!(
-                "v_caar({})",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Cadr => Ok(format!(
-                "v_cadr({})",
-                self.compile_expr(&args[0], env)?
-            )),
+            PrimOp::Cddr => Ok(format!("v_cddr({})", self.compile_expr(&args[0], env)?)),
+            PrimOp::Cadddr => Ok(format!("v_cadddr({})", self.compile_expr(&args[0], env)?)),
+            PrimOp::Caar => Ok(format!("v_caar({})", self.compile_expr(&args[0], env)?)),
+            PrimOp::Cadr => Ok(format!("v_cadr({})", self.compile_expr(&args[0], env)?)),
+            PrimOp::Cddr => Ok(format!("v_cddr({})", self.compile_expr(&args[0], env)?)),
+            PrimOp::Caddr => Ok(format!("v_caddr({})", self.compile_expr(&args[0], env)?)),
+            PrimOp::Cadddr => Ok(format!("v_cadddr({})", self.compile_expr(&args[0], env)?)),
+            PrimOp::Caar => Ok(format!("v_caar({})", self.compile_expr(&args[0], env)?)),
+            PrimOp::Cadr => Ok(format!("v_cadr({})", self.compile_expr(&args[0], env)?)),
             PrimOp::Car => Ok(format!("v_car({})", self.compile_expr(&args[0], env)?)),
             PrimOp::Cdr => Ok(format!("v_cdr({})", self.compile_expr(&args[0], env)?)),
             PrimOp::Eq => Ok(format!(

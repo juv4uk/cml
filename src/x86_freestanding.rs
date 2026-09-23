@@ -1423,9 +1423,7 @@ fn preflight_quoted(
     Ok(())
 }
 
-fn primitive_contract(
-    operation: PrimOp,
-) -> Result<(&'static str, Option<usize>), CompileError> {
+fn primitive_contract(operation: PrimOp) -> Result<(&'static str, Option<usize>), CompileError> {
     match operation {
         PrimOp::Cons => Ok(("cons", Some(2))),
         PrimOp::List => Ok(("list", None)),
@@ -2599,7 +2597,6 @@ impl Emitter {
     }
 
     /// Execute semantic 1017 (exact-Q <=) for the bounded fixnum domain.
-
 
     fn emit_exact_q_le(&mut self, args: &[Ir]) -> Result<(), CompileError> {
         debug_assert_eq!(args.len(), 2);
