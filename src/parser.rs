@@ -439,6 +439,29 @@ fn parse_list(tokens: &mut Tokens) -> Result<Expr, ParseError> {
 }
 
 #[cfg(test)]
+mod sid8_identity_tests {
+    use super::*;
+
+    #[test]
+    fn exact_bare_eight_bit_binary_token_parses_as_typed_sid8() {
+        let exprs = parse("00000101").expect("exact bare SID8 must parse");
+        assert_eq!(exprs, vec![Expr::Sid(my_lisp::sid!(00000101))]);
+    }
+
+    #[test]
+    fn quoted_eight_bit_text_remains_string_and_never_mints_sid8() {
+        let exprs = parse("\"00000101\"").expect("quoted text must parse");
+        assert_eq!(exprs, vec![Expr::String("00000101".to_string())]);
+    }
+
+    #[test]
+    fn decimal_101_is_not_sid_00000101() {
+        let exprs = parse("101").expect("decimal integer must parse");
+        assert_eq!(exprs, vec![Expr::Integer(101)]);
+    }
+}
+
+#[cfg(test)]
 mod comment_tests {
     use super::*;
 
