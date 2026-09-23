@@ -5,6 +5,7 @@ pub mod c_backend;
 pub mod canon;
 pub mod compiler;
 pub mod compute;
+pub mod core_profile;
 pub mod coverage;
 pub mod cpu_profile;
 pub mod elf64;
