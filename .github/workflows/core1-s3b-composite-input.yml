@@ -1,0 +1,63 @@
+name: Core1 S3b composite input witness
+
+on:
+  pull_request:
+    paths:
+      - "src/witness_bridge.rs"
+      - "src/x86_freestanding_metadata.rs"
+      - "tests/core1_s3b_composite_input_test.rs"
+      - ".github/workflows/core1-s3b-composite-input.yml"
+      - "src/x86_freestanding.rs"
+
+jobs:
+  core1-s3b-composite-input:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CML with build-source submodule
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Checkout exact merged Core1 bootstrap source
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/my-lisp
+          ref: d359c4885e0609a6c8350daf45de157b40cf48f3
+          path: upstream-my-lisp
+          fetch-depth: 1
+
+      - name: Checkout exact admitted S2 compiler source and nucleus
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: a6bd9747196f2d676ab6883cbb4b84c7fcfc6947
+          path: wsm-my-lisp
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Record exact S3b provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CML: '
+          git rev-parse HEAD
+          printf 'build-source my-lisp: '
+          git -C external/my-lisp rev-parse HEAD
+          printf 'Core1 bootstrap source: '
+          git -C upstream-my-lisp rev-parse HEAD
+          printf 'S2 compiler source: '
+          git -C wsm-my-lisp rev-parse HEAD
+          test "$(git -C upstream-my-lisp rev-parse HEAD)" = "d359c4885e0609a6c8350daf45de157b40cf48f3"
+          test "$(git -C upstream-my-lisp hash-object lib/core1-compiler-prelude.lisp)" = "dfc8f0074464f9f1d2b71a97a9ab4184925ca3a1"
+          test "$(git -C wsm-my-lisp rev-parse HEAD)" = "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947"
+          test "$(git -C wsm-my-lisp hash-object lib/compiler.lisp)" = "d708d22f03e0095211399e83474a5e6df11e614d"
+
+      - name: Run real composite S3b witness
+        env:
+          WSM_NUCLEUS_ASM: ${{ github.workspace }}/wsm-my-lisp/asm/nucleus.s
+          WSM_MY_LISP_CORE1_PRELUDE_SOURCE: ${{ github.workspace }}/upstream-my-lisp/lib/core1-compiler-prelude.lisp
+          WSM_MY_LISP_COMPILER_SOURCE: ${{ github.workspace }}/wsm-my-lisp/lib/compiler.lisp
+        run: cargo test --test core1_s3b_composite_input_test -- --nocapture
