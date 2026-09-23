@@ -11,7 +11,7 @@
  (version . (1 0))
  (repository . "juv4uk/my-lisp")
  (supported-pin-source . external/my-lisp-gitlink)
- (supported-pin-sha . "8088e9f88d845ba0edb2197d44da3dbbe57eca0e")
+ (supported-pin-sha . "5a99136bf7a2e9ab5792bdc945ad53c3774802cd")
  (observed-current-source . exact-github-commit)
  (observed-current-sha . "b5a128f8b1c7c85ded7670be8f94f1e153e7f8e3")
  (historical
