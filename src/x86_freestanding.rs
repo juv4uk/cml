@@ -702,6 +702,24 @@ fn preflight_env(
         }
         Ir::Lambda { .. } => return Err(CompileError::UnsupportedVariant("lambda")),
         Ir::App { func, args } => {
+            if let Ir::Sid(sid) = func.as_ref() {
+                let Some((expected, _runtime)) = sid8_call_contract(*sid) else {
+                    return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
+                };
+                if let Some(expected) = expected {
+                    if args.len() != expected {
+                        return Err(CompileError::InvalidArity {
+                            operation: "SID8",
+                            expected,
+                            actual: args.len(),
+                        });
+                    }
+                }
+                for argument in args {
+                    preflight_env(argument, bindings, symbols, def_arities, slots)?;
+                }
+                return Ok(());
+            }
             if let Ir::Builtin(name) = func.as_ref() {
                 if name == "mod" {
                     if args.len() != 2 {
@@ -977,6 +995,24 @@ fn preflight_lambda_body(
             Ok(())
         }
         Ir::App { func, args } => {
+            if let Ir::Sid(sid) = func.as_ref() {
+                let Some((expected, _runtime)) = sid8_call_contract(*sid) else {
+                    return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
+                };
+                if let Some(expected) = expected {
+                    if args.len() != expected {
+                        return Err(CompileError::InvalidArity {
+                            operation: "SID8",
+                            expected,
+                            actual: args.len(),
+                        });
+                    }
+                }
+                for argument in args {
+                    preflight_lambda_body(argument, bindings, symbols, slots)?;
+                }
+                return Ok(());
+            }
             if let Ir::Builtin(name) = func.as_ref() {
                 if name == "mod" {
                     if args.len() != 2 {
@@ -1174,6 +1210,24 @@ fn preflight_def_body(
             Ok(())
         }
         Ir::App { func, args } => {
+            if let Ir::Sid(sid) = func.as_ref() {
+                let Some((expected, _runtime)) = sid8_call_contract(*sid) else {
+                    return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
+                };
+                if let Some(expected) = expected {
+                    if args.len() != expected {
+                        return Err(CompileError::InvalidArity {
+                            operation: "SID8",
+                            expected,
+                            actual: args.len(),
+                        });
+                    }
+                }
+                for argument in args {
+                    preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+                }
+                return Ok(());
+            }
             if let Ir::Builtin(name) = func.as_ref() {
                 if name == "mod" {
                     if args.len() != 2 {
@@ -1433,6 +1487,24 @@ fn preflight_quoted(
     Ok(())
 }
 
+fn sid8_call_contract(sid: my_lisp::Sid8) -> Option<(Option<usize>, &'static str)> {
+    if sid == my_lisp::sid!(00000010) {
+        Some((Some(1), "wsm_atom"))
+    } else if sid == my_lisp::sid!(00000011) {
+        Some((Some(2), "wsm_eq"))
+    } else if sid == my_lisp::sid!(00000100) {
+        Some((Some(2), "wsm_cons"))
+    } else if sid == my_lisp::sid!(00000101) {
+        Some((Some(1), "wsm_car"))
+    } else if sid == my_lisp::sid!(00000110) {
+        Some((Some(1), "wsm_cdr"))
+    } else if sid == my_lisp::sid!(00100111) {
+        Some((None, "wsm_cons"))
+    } else {
+        None
+    }
+}
+
 fn primitive_contract(operation: PrimOp) -> Result<(&'static str, Option<usize>), CompileError> {
     match operation {
         PrimOp::Cons => Ok(("cons", Some(2))),
@@ -1579,6 +1651,9 @@ impl Emitter {
                 "Lambda (variadic/all-rest)",
             )),
             Ir::App { func, args } => {
+                if let Ir::Sid(sid) = func.as_ref() {
+                    return self.emit_sid8_call(*sid, args);
+                }
                 if let Ir::Builtin(name) = func.as_ref() {
                     if name == "mod" {
                         return self.emit_mod(args);
@@ -2478,6 +2553,40 @@ impl Emitter {
                 Ok(())
             }
         }
+    }
+
+    fn emit_sid8_call(&mut self, sid: my_lisp::Sid8, args: &[Ir]) -> Result<(), CompileError> {
+        let Some((expected, runtime)) = sid8_call_contract(sid) else {
+            return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
+        };
+        if let Some(expected) = expected {
+            debug_assert_eq!(args.len(), expected, "preflight checked SID8 arity");
+        }
+
+        if sid == my_lisp::sid!(00100111) {
+            return self.emit_primitive_list(args);
+        }
+
+        let slots: Vec<usize> = args
+            .iter()
+            .map(|argument| {
+                self.emit_ir(argument)?;
+                let slot = self.allocate_slot();
+                self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                Ok(slot)
+            })
+            .collect::<Result<_, CompileError>>()?;
+
+        self.line("    movq %r12, %rdi");
+        let registers = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+        for (slot, register) in slots.iter().zip(registers.iter()) {
+            self.line(&format!(
+                "    movq {}(%rsp), {register}",
+                Self::slot_offset(*slot)
+            ));
+        }
+        self.line(&format!("    call {runtime}"));
+        Ok(())
     }
 
     fn emit_primitive(&mut self, operation: PrimOp, args: &[Ir]) -> Result<(), CompileError> {
