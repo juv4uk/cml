@@ -1,7 +1,5 @@
 use cml::{
-    lower,
-    parser,
-    witness_bridge::execute_x86_actual_with_metadata,
+    lower, parser, witness_bridge::execute_x86_actual_with_metadata,
     x86_freestanding::X86FreestandingBackend,
 };
 
