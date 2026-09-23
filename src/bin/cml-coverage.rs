@@ -25,7 +25,7 @@ fn backend_state(state: BackendEvidenceState) -> &'static str {
 }
 
 fn main() {
-    let ledger = CoverageLedger::supported_pin();
+    let ledger = CoverageLedger::build_source();
     let summary = ledger.summary();
 
     println!("schema\tcml-coverage/1");

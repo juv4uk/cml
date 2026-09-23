@@ -32,7 +32,7 @@ fn x86_section(matrix: &str) -> &str {
 
 #[test]
 fn x86_add_and_sub_are_executable_but_fixnum_representation_limited() {
-    let ledger = CoverageLedger::supported_pin();
+    let ledger = CoverageLedger::build_source();
     let matrix = read("capability-matrix.lisp");
     let x86 = x86_section(&matrix);
     let witnesses = read("tests/x86_freestanding_test.rs");
@@ -98,7 +98,7 @@ fn x86_add_and_sub_are_executable_but_fixnum_representation_limited() {
 
 #[test]
 fn summary_keeps_representation_limited_out_of_full_executable_count() {
-    let summary = CoverageLedger::supported_pin().summary();
+    let summary = CoverageLedger::build_source().summary();
 
     assert_eq!(summary.x86_executable, 4);
     assert_eq!(summary.x86_assembly_witness_only, 3);
