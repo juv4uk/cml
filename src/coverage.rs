@@ -6,10 +6,10 @@
 //! compiler target facts. It never derives backend execution from source
 //! admission alone.
 
-use my_lisp::Sid8;
 use crate::canon::{
     CANON_SUPPORTED_PIN_REGISTRY_FNV1A64, CANON_SUPPORTED_PIN_SEMANTIC_IDS, find_operation_by_id,
 };
+use my_lisp::Sid8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdmissionState {

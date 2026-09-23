@@ -1377,7 +1377,7 @@ fn primitive_contract(operation: PrimOp) -> Result<(&'static str, usize), Compil
     }
 }
 
-    fn machine_primitive_contract(operation: MachineOp) -> Result<(&'static str, usize), CompileError> {
+fn machine_primitive_contract(operation: MachineOp) -> Result<(&'static str, usize), CompileError> {
     match operation {
         MachineOp::Rdtsc => Ok(("rdtsc", 0)),
     }
@@ -2265,10 +2265,7 @@ impl Emitter {
         Ok(())
     }
 
-    fn emit_cond_match(
-        &mut self,
-        branches: &[(Ir, Quoted, Ir)],
-    ) -> Result<(), CompileError> {
+    fn emit_cond_match(&mut self, branches: &[(Ir, Quoted, Ir)]) -> Result<(), CompileError> {
         let end_label = self.allocate_label();
         let mut next_branch_label = self.allocate_label();
 
@@ -2306,7 +2303,10 @@ impl Emitter {
             next_branch_label = self.allocate_label();
 
             // If equal (result is canonical T), jump to body
-            self.line(&format!("    movabsq ${}, %rcx", wsm_os_target::CANONICAL_T));
+            self.line(&format!(
+                "    movabsq ${}, %rcx",
+                wsm_os_target::CANONICAL_T
+            ));
             self.line("    cmpq %rcx, %rax");
             self.line(&format!("    je .Lcm_body_{}", next_branch_label));
 

@@ -19,9 +19,7 @@ use cml::x86_freestanding::X86FreestandingBackend;
 use cml::{lower, parser};
 
 fn run_low3(numerator: i64) -> i64 {
-    let source = format!(
-        "(def x86-low3 (lambda (code) (mod code 8)))\n(x86-low3 {numerator})"
-    );
+    let source = format!("(def x86-low3 (lambda (code) (mod code 8)))\n(x86-low3 {numerator})");
     let expressions = parser::parse(&source).expect("low3 fixture must parse");
     let program = lower::lower_program(&expressions).expect("low3 fixture must lower");
     let assembly = X86FreestandingBackend::new()
@@ -32,8 +30,7 @@ fn run_low3(numerator: i64) -> i64 {
         .duration_since(UNIX_EPOCH)
         .expect("clock must be after epoch")
         .as_nanos();
-    let base =
-        std::env::temp_dir().join(format!("cml-low3-parity-{}-{nonce}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("cml-low3-parity-{}-{nonce}", std::process::id()));
     let asm_path = base.with_extension("s");
     let c_path = base.with_extension("c");
     let exe_path = base.with_extension("bin");
@@ -75,8 +72,7 @@ fn run_low3(numerator: i64) -> i64 {
         .trim()
         .parse()
         .unwrap_or_else(|_| panic!("witness must print one tagged word, got {stdout:?}"));
-    wsm_os_target::decode_fixnum(tagged)
-        .expect("low3 result must remain an exact target fixnum")
+    wsm_os_target::decode_fixnum(tagged).expect("low3 result must remain an exact target fixnum")
 }
 
 #[test]

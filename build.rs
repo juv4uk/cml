@@ -15,14 +15,15 @@ use std::fs;
 use std::path::PathBuf;
 
 /// IDs whose surfaces feed `is_reserved_canon_surface` (Canon 0+7).
-const TARGET_IDS: &[&str] = &["00000001", "00000010", "00000011", "00000100", "00000101", "00000110", "00000111"];
+const TARGET_IDS: &[&str] = &[
+    "00000001", "00000010", "00000011", "00000100", "00000101", "00000110", "00000111",
+];
 
 /// Callable primitives and library operations whose semantic identity must survive
 /// surface spelling changes across English, Ukrainian, Sanskrit, and symbolic forms.
 const CALLABLE_IDS: &[&str] = &[
-    "00000010", "00000011", "00000100", "00000101", "00000110", "00001100", "00001101",
-    "00001110", "00010011", "00011010", "00011011", "00011100", "00011101", "00011110",
-    "00100010", "01011001",
+    "00000010", "00000011", "00000100", "00000101", "00000110", "00001100", "00001101", "00001110",
+    "00010011", "00011010", "00011011", "00011100", "00011101", "00011110", "00100010", "01011001",
 ];
 
 /// Retired semantic IDs that must NEVER be active or recycled (e.g. 1153 for former RDTSC attribution).
@@ -461,9 +462,8 @@ fn collect_supported_pin_semantic_ids(root: &[Sexp]) -> Vec<u8> {
         if !is_semantic_id(id) {
             panic!("cml#106: semantic ID must be an 8-bit binary token: {id:?}");
         }
-        let numeric = u8::from_str_radix(id, 2).unwrap_or_else(|_| {
-            panic!("cml#106: semantic ID must fit in u8: {id:?}")
-        });
+        let numeric = u8::from_str_radix(id, 2)
+            .unwrap_or_else(|_| panic!("cml#106: semantic ID must fit in u8: {id:?}"));
         if !seen.insert(numeric) {
             panic!("cml#106: duplicate semantic ID {id}");
         }
@@ -528,7 +528,6 @@ fn collect_surfaces_detailed(root: &[Sexp], id: &str) -> Vec<(String, String)> {
     surfaces
 }
 
-
 /// Resolve each admitted operation's canonical name to the exact 8-bit SID
 /// owned by the upstream registry. The canonical name matches either the `en`
 /// surface or, when `en` is absent, the `sym` surface of the row.
@@ -553,7 +552,9 @@ fn resolve_operation_semantic_ids(root: &[Sexp]) -> HashMap<String, u8> {
             if parts.len() < 2 {
                 continue;
             }
-            let Sexp::Atom(marker) = &parts[0] else { continue };
+            let Sexp::Atom(marker) = &parts[0] else {
+                continue;
+            };
             let value = &parts[1];
             if matches!(value, Sexp::List(items) if items.is_empty()) {
                 continue;
@@ -648,21 +649,26 @@ fn main() {
             _ => None,
         })
         .unwrap_or_else(|| {
-            panic!("cml#14: no top-level (sr/1 ...) or headerless row list found in semantic-registry")
+            panic!(
+                "cml#14: no top-level (sr/1 ...) or headerless row list found in semantic-registry"
+            )
         });
 
     let supported_pin_semantic_ids = collect_supported_pin_semantic_ids(root);
-    let supported_pin_semantic_id_set: BTreeSet<u8> = supported_pin_semantic_ids.iter().copied().collect();
+    let supported_pin_semantic_id_set: BTreeSet<u8> =
+        supported_pin_semantic_ids.iter().copied().collect();
     let name_to_sid = resolve_operation_semantic_ids(root);
 
     let mut operation_ids: Vec<(usize, u8)> = Vec::with_capacity(OPERATIONS.len());
     for (index, operation) in OPERATIONS.iter().enumerate() {
-        let id = *name_to_sid.get(operation.canonical_name).unwrap_or_else(|| {
-            panic!(
-                "cml#106: admitted operation {} has no SID in the supported-pin registry",
-                operation.canonical_name
-            );
-        });
+        let id = *name_to_sid
+            .get(operation.canonical_name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "cml#106: admitted operation {} has no SID in the supported-pin registry",
+                    operation.canonical_name
+                );
+            });
         if !supported_pin_semantic_id_set.contains(&id) {
             panic!(
                 "cml#106: admitted operation {} references semantic ID {:08b} absent from the supported-pin registry",
@@ -731,7 +737,10 @@ fn main() {
             "        canonical_name: {:?},\n",
             op.canonical_name
         ));
-        generated.push_str(&format!("        semantic_id: my_lisp::sid!({}),\n", sid_text));
+        generated.push_str(&format!(
+            "        semantic_id: my_lisp::sid!({}),\n",
+            sid_text
+        ));
         generated.push_str(&format!("        formal_action: {:?},\n", op.formal_action));
         generated.push_str("        surfaces: &[\n");
         for (lang, word) in &surfaces {

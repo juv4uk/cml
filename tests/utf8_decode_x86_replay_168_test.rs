@@ -17,7 +17,7 @@ use std::path::PathBuf;
 
 use cml::ast::Expr as CExpr;
 use cml::lower::lower_program;
-use cml::upstream_sid_bridge::{convert_lisp_expr, key_definition_by_sid, BridgeError};
+use cml::upstream_sid_bridge::{BridgeError, convert_lisp_expr, key_definition_by_sid};
 use cml::x86_freestanding::X86FreestandingBackend;
 use my_lisp::parse;
 
