@@ -1374,6 +1374,11 @@ fn primitive_contract(operation: PrimOp) -> Result<(&'static str, usize), Compil
         PrimOp::EqualP => Ok(("eq", 2)),
         PrimOp::ExactQLt => Ok(("exact-Q <", 2)),
         PrimOp::ExactQLe => Ok(("exact-Q <=", 2)),
+        PrimOp::Cddr => Ok(("cddr", 1)),
+        PrimOp::Cadddr => Ok(("cadddr", 1)),
+        PrimOp::Caar => Ok(("caar", 1)),
+        PrimOp::Cadr => Ok(("cadr", 1)),
+        PrimOp::Caddr => Ok(("caddr", 1)),
         PrimOp::ExactQGe => Ok(("exact-Q >=", 2)),
     }
 }
@@ -2484,7 +2489,43 @@ impl Emitter {
         Ok(())
     }
 
+    /// Emit composed CDR operations (caar, cadr, caddr, cddr, cadddr)
+    /// These are implemented as sequences of car/cdr operations.
+    fn emit_composed_cdr(&mut self, operation: PrimOp, args: &[Ir]) -> Result<(), CompileError> {
+        debug_assert_eq!(args.len(), 1);
+        // Evaluate the argument
+        self.emit_ir(&args[0])?;
+        // Result is in %rax
+        match operation {
+            PrimOp::Cddr => {
+                self.line("    call wsm_cdr");
+                self.line("    call wsm_cdr");
+            }
+            PrimOp::Cadddr => {
+                self.line("    call wsm_cdr");
+                self.line("    call wsm_cdr");
+                self.line("    call wsm_cdr");
+            }
+            PrimOp::Caar => {
+                self.line("    call wsm_car");
+                self.line("    call wsm_car");
+            }
+            PrimOp::Cadr => {
+                self.line("    call wsm_cdr");
+                self.line("    call wsm_car");
+            }
+            PrimOp::Caddr => {
+                self.line("    call wsm_cdr");
+                self.line("    call wsm_cdr");
+                self.line("    call wsm_car");
+            }
+            _ => unreachable!(),
+        }
+        Ok(())
+    }
+
     /// Execute semantic 1017 (exact-Q <=) for the bounded fixnum domain.
+
 
     fn emit_exact_q_le(&mut self, args: &[Ir]) -> Result<(), CompileError> {
         debug_assert_eq!(args.len(), 2);

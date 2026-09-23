@@ -263,6 +263,15 @@ fn primitive_name(op: PrimOp) -> &'static str {
         PrimOp::ExactQLt => "<",
         PrimOp::ExactQLe => "<=",
         PrimOp::ExactQGe => ">=",
+        PrimOp::Cddr => "CDDR",
+        PrimOp::Cadddr => "CADDDR",
+        PrimOp::Cddr => "CDDR",
+        PrimOp::Caar => "CAAR",
+        PrimOp::Cadr => "CADR",
+        PrimOp::Caddr => "CADDR",
+        PrimOp::Caar => "CAAR",
+        PrimOp::Cadr => "CADR",
+        PrimOp::Caddr => "CADDR",
         PrimOp::List => "LIST",
     }
 }
@@ -412,6 +421,34 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
             if semantic_id == my_lisp::sid!(00100111) {
                 // LIST is variadic: (list) -> NIL, (list a b c) -> (a b c)
                 return lower_prim(PrimOp::List, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00100111) {
+                // LIST is variadic: (list) -> NIL, (list a b c) -> (a b c)
+                return lower_prim(PrimOp::List, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00110011) && args.len() == 1 {
+                return lower_prim(PrimOp::Caar, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00110100) && args.len() == 1 {
+                return lower_prim(PrimOp::Cadr, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00110101) && args.len() == 1 {
+                return lower_prim(PrimOp::Cddr, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00110110) && args.len() == 1 {
+                return lower_prim(PrimOp::Cadddr, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00110011) && args.len() == 1 {
+                return lower_prim(PrimOp::Caar, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00110100) && args.len() == 1 {
+                return lower_prim(PrimOp::Cadr, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00110101) && args.len() == 1 {
+                return lower_prim(PrimOp::Cddr, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00110110) && args.len() == 1 {
+                return lower_prim(PrimOp::Cadddr, args, env);
             }
             if semantic_id == my_lisp::sid!(00000100) && args.len() == 2 {
                 return lower_prim(PrimOp::Cons, args, env);

@@ -116,6 +116,11 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
                     PrimOp::ExactQLe => my_lisp::sid!(00011101),
                     PrimOp::ExactQGe => my_lisp::sid!(00011110),
                     PrimOp::List => my_lisp::sid!(00100111),
+                    PrimOp::Cddr => my_lisp::sid!(00110101),
+                    PrimOp::Cadddr => my_lisp::sid!(00110110),
+                    PrimOp::Caar => my_lisp::sid!(00110011),
+                    PrimOp::Cadr => my_lisp::sid!(00110100),
+                    PrimOp::Caddr => my_lisp::sid!(00110110),
                 };
                 ids.insert(id);
                 for arg in args {

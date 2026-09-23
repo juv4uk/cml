@@ -386,6 +386,33 @@ impl Compiler {
                     self.emit(&format!("MOV {} R1", target_reg));
                 }
             }
+            PrimOp::Caar => {
+                self.compile_expr(&args[0], "R1");
+                self.emit("CAR R1");
+                self.emit("CAR R1");
+            }
+            PrimOp::Cadr => {
+                self.compile_expr(&args[0], "R1");
+                self.emit("CDR R1");
+                self.emit("CAR R1");
+            }
+            PrimOp::Cddr => {
+                self.compile_expr(&args[0], "R1");
+                self.emit("CDR R1");
+                self.emit("CDR R1");
+            }
+            PrimOp::Caddr => {
+                self.compile_expr(&args[0], "R1");
+                self.emit("CDR R1");
+                self.emit("CDR R1");
+                self.emit("CAR R1");
+            }
+            PrimOp::Cadddr => {
+                self.compile_expr(&args[0], "R1");
+                self.emit("CDR R1");
+                self.emit("CDR R1");
+                self.emit("CDR R1");
+            }
             PrimOp::ExactQLt => unreachable!("ExactQLt rejected by validate_ir"),
             PrimOp::ExactQLe => unreachable!("ExactQLe rejected by validate_ir"),
             PrimOp::ExactQGe => unreachable!("ExactQGe rejected by validate_ir"),
