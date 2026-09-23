@@ -46,18 +46,31 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         "#84 revision manifest must declare its kind"
     );
     assert!(
-        manifest.contains("(supported-pin-source . external/my-lisp-gitlink)"),
-        "#84 supported-pin must be the checked-in external/my-lisp gitlink"
+        manifest.contains("(build-source-source . external/my-lisp-gitlink)"),
+        "#212 build-source must be the checked-in external/my-lisp gitlink"
+    );
+    assert!(
+        manifest.contains("(supported-pin-source . exact-github-commit)"),
+        "#212 supported-pin must be independent compatibility evidence"
     );
     assert!(
         manifest.contains("(observed-current-source . exact-github-commit)"),
         "#84 observed-current must be an exact reproducible upstream commit"
     );
+    assert!(
+        manifest.contains("(bootstrap-core1-source . exact-github-commit)"),
+        "#208 Core1 bootstrap source must be independently pinned"
+    );
 
+    let build_source = quoted_field(&manifest, "build-source-sha")
+        .expect("#212 manifest must declare build-source-sha");
     let supported = quoted_field(&manifest, "supported-pin-sha")
         .expect("#84 manifest must declare supported-pin-sha");
     let observed = quoted_field(&manifest, "observed-current-sha")
         .expect("#84 manifest must declare observed-current-sha");
+    let bootstrap = quoted_field(&manifest, "bootstrap-core1-source-sha")
+        .expect("#208 manifest must declare bootstrap-core1-source-sha");
+    assert_eq!(build_source.len(), 40, "build-source-sha must be a full git SHA");
     assert_eq!(
         supported.len(),
         40,
@@ -68,12 +81,24 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         40,
         "observed-current-sha must be a full git SHA"
     );
+    assert_eq!(
+        bootstrap.len(),
+        40,
+        "bootstrap-core1-source-sha must be a full git SHA"
+    );
 
-    let supported_checkout = Path::new(env!("CARGO_MANIFEST_DIR")).join("external/my-lisp");
+    let build_checkout = Path::new(env!("CARGO_MANIFEST_DIR")).join("external/my-lisp");
+    assert_eq!(
+        head(&build_checkout),
+        build_source,
+        "#212 build-source declaration must match external/my-lisp"
+    );
+
+    let supported_checkout = sibling("my-lisp-supported");
     assert_eq!(
         head(&supported_checkout),
         supported,
-        "#84 supported-pin declaration must match the external/my-lisp gitlink checkout"
+        "#212 supported evidence checkout must match supported-pin"
     );
 
     let observed_checkout = sibling("my-lisp");
@@ -81,6 +106,13 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         head(&observed_checkout),
         observed,
         "#84 CI sibling my-lisp checkout must be the declared observed-current revision"
+    );
+
+    let bootstrap_checkout = sibling("my-lisp-bootstrap");
+    assert_eq!(
+        head(&bootstrap_checkout),
+        bootstrap,
+        "#208 bootstrap checkout must match bootstrap-core1-source"
     );
 
     let compatibility =
@@ -104,8 +136,20 @@ fn ci_resolves_active_my_lisp_revisions_from_the_channel_manifest() {
         "#84 CI must resolve revision channels from the canonical manifest"
     );
     assert!(
+        workflow.contains("steps.upstream_revisions.outputs.build_source_sha"),
+        "#212 CI must report the manifest-derived build-source"
+    );
+    assert!(
+        workflow.contains("steps.upstream_revisions.outputs.supported_pin_sha"),
+        "#212 supported checkout must consume the manifest-derived supported pin"
+    );
+    assert!(
         workflow.contains("steps.upstream_revisions.outputs.observed_current_sha"),
         "#84 observed-current checkout must consume the manifest-derived CI output"
+    );
+    assert!(
+        workflow.contains("steps.upstream_revisions.outputs.bootstrap_core1_sha"),
+        "#208 bootstrap checkout must consume the manifest-derived Core1 source"
     );
     assert!(
         !workflow.contains("d4ad7e7c7717a610599875ffb90123b713ac05c7"),
