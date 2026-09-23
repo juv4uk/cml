@@ -4,7 +4,10 @@ use std::fs;
 use cml::coverage::{BackendEvidenceState, CoverageLedger};
 
 const LIMITED: &[(my_lisp::Sid8, &str)] = &[
-    (my_lisp::sid!(00001100), "named_definition_uses_a_lexical_let_binding"),
+    (
+        my_lisp::sid!(00001100),
+        "named_definition_uses_a_lexical_let_binding",
+    ),
     (
         my_lisp::sid!(00001101),
         "out_of_line_named_self_tail_recursion_reuses_its_native_frame",
@@ -61,7 +64,11 @@ fn x86_add_and_sub_are_executable_but_fixnum_representation_limited() {
             evidence.evidence.contains(runtime_witness),
             "{semantic_id} must name its runtime witness"
         );
-        let operation_key = if *semantic_id == my_lisp::sid!(00001100) { "add" } else { "sub" };
+        let operation_key = if *semantic_id == my_lisp::sid!(00001100) {
+            "add"
+        } else {
+            "sub"
+        };
         assert!(
             x86.contains(&format!("({operation_key} . {:?})", evidence.evidence)),
             "x86 matrix evidence must exactly match ledger evidence for {semantic_id}"

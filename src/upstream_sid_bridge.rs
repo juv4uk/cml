@@ -15,8 +15,8 @@
 //! мовними семантичними ідентичностями.
 
 use crate::ast::Expr as CExpr;
-use my_lisp::semantic_registry_export::semantic_id_bits;
 use my_lisp::Sid8;
+use my_lisp::semantic_registry_export::semantic_id_bits;
 
 /// Convert one raw my-lisp S-expression into a CML `Expr`.
 ///
@@ -109,7 +109,7 @@ impl std::error::Error for BridgeError {}
 /// (local functions, special forms, variables) are left unchanged.
 pub fn rewrite_calls_to_sid(expr: &mut CExpr) {
     use my_lisp::semantic_registry_export::semantic_id_for_admitted_surface;
-    
+
     fn walk(expr: &mut CExpr) {
         match expr {
             CExpr::Symbol(name) => {
@@ -191,7 +191,7 @@ mod tests {
 /// Does NOT rewrite special forms (cond, lambda, quote, def, defmacro, etc.).
 pub fn rewrite_calls_in_body(expr: &mut CExpr) {
     use my_lisp::semantic_registry_export::semantic_id_for_admitted_surface;
-    
+
     fn walk_in_body(expr: &mut CExpr, in_call_position: bool) {
         match expr {
             CExpr::Symbol(name) => {
@@ -226,7 +226,7 @@ pub fn rewrite_calls_in_body(expr: &mut CExpr) {
             _ => {}
         }
     }
-    
+
     // For a def form: (def name body...) - walk body with in_call_position=false initially
     // For a lambda form: (lambda params body...) - walk body
     match expr {
@@ -257,19 +257,16 @@ pub fn rewrite_calls_in_body(expr: &mut CExpr) {
 
 /// Check if a symbol name is a CML special form that should NOT be rewritten to SID.
 fn is_special_form(name: &str) -> bool {
-    use crate::canon::{is_canon_form, CANON_QUOTE_UPPER, CANON_QUOTE_EXACT,
-                       CANON_COND_UPPER, CANON_COND_EXACT,
-                       CANON_LAMBDA_UPPER, CANON_LAMBDA_EXACT,
-                       CANON_DEFINE_UPPER, CANON_DEFINE_EXACT,
-                       CANON_DEFMACRO_UPPER, CANON_DEFMACRO_EXACT,
-                       callable_semantic_id};
+    use crate::canon::{
+        CANON_COND_EXACT, CANON_COND_UPPER, CANON_DEFINE_EXACT, CANON_DEFINE_UPPER,
+        CANON_DEFMACRO_EXACT, CANON_DEFMACRO_UPPER, CANON_LAMBDA_EXACT, CANON_LAMBDA_UPPER,
+        CANON_QUOTE_EXACT, CANON_QUOTE_UPPER, callable_semantic_id, is_canon_form,
+    };
     let _upper = name.to_uppercase();
-    is_canon_form(name, CANON_QUOTE_UPPER, CANON_QUOTE_EXACT) ||
-    is_canon_form(name, CANON_COND_UPPER, CANON_COND_EXACT) ||
-    is_canon_form(name, CANON_LAMBDA_UPPER, CANON_LAMBDA_EXACT) ||
-    is_canon_form(name, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT) ||
-    is_canon_form(name, CANON_DEFMACRO_UPPER, CANON_DEFMACRO_EXACT) ||
-    callable_semantic_id(name).is_some()
+    is_canon_form(name, CANON_QUOTE_UPPER, CANON_QUOTE_EXACT)
+        || is_canon_form(name, CANON_COND_UPPER, CANON_COND_EXACT)
+        || is_canon_form(name, CANON_LAMBDA_UPPER, CANON_LAMBDA_EXACT)
+        || is_canon_form(name, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT)
+        || is_canon_form(name, CANON_DEFMACRO_UPPER, CANON_DEFMACRO_EXACT)
+        || callable_semantic_id(name).is_some()
 }
-
-

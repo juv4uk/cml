@@ -17,11 +17,10 @@ fn supported_pin_ledger_covers_every_upstream_identity_once() {
     let ids: BTreeSet<_> = ledger.rows.iter().map(|row| row.semantic_id).collect();
     assert_eq!(ids.len(), ledger.rows.len(), "semantic IDs must be unique");
     assert!(
-        ids.iter()
-            .all(|id| {
-                let spelling = id.to_string();
-                spelling.len() == 8 && spelling.chars().all(|c| c == '0' || c == '1')
-            }),
+        ids.iter().all(|id| {
+            let spelling = id.to_string();
+            spelling.len() == 8 && spelling.chars().all(|c| c == '0' || c == '1')
+        }),
         "supported-pin semantic identities remain opaque 8-bit binary spellings"
     );
 }
