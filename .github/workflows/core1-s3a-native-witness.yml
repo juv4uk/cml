@@ -1,0 +1,77 @@
+name: Core1 S3a native compiled-emitter witness
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tests/core1_s3a_compiled_emitter_test.rs"
+      - ".github/workflows/core1-s3a-native-witness.yml"
+      - "src/lower.rs"
+      - "src/x86_freestanding.rs"
+      - "src/x86_freestanding_metadata.rs"
+      - "src/witness_bridge.rs"
+
+jobs:
+  core1-s3a-native-witness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CML build substrate
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Checkout exact merged Core1 bootstrap source
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/my-lisp
+          ref: d359c4885e0609a6c8350daf45de157b40cf48f3
+          path: upstream-my-lisp
+          fetch-depth: 1
+
+      - name: Checkout exact admitted S2 compiler source
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: a6bd9747196f2d676ab6883cbb4b84c7fcfc6947
+          path: wsm-my-lisp
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Record bootstrap provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CML: '
+          git rev-parse HEAD
+          printf 'CML build-source my-lisp submodule: '
+          git -C external/my-lisp rev-parse HEAD
+          printf 'Core1 bootstrap source commit: '
+          git -C upstream-my-lisp rev-parse HEAD
+          printf 'wsm-my-lisp compiler source commit: '
+          git -C wsm-my-lisp rev-parse HEAD
+          printf 'Core1 prelude blob: '
+          git -C upstream-my-lisp hash-object lib/core1-compiler-prelude.lisp
+          printf 'Core1 prelude sha256: '
+          sha256sum upstream-my-lisp/lib/core1-compiler-prelude.lisp | cut -d' ' -f1
+          printf 'S2 compiler blob: '
+          git -C wsm-my-lisp hash-object lib/compiler.lisp
+          printf 'S2 compiler sha256: '
+          sha256sum wsm-my-lisp/lib/compiler.lisp | cut -d' ' -f1
+
+          test "$(git -C external/my-lisp rev-parse HEAD)" = "5a99136bf7a2e9ab5792bdc945ad53c3774802cd"
+          test "$(git -C upstream-my-lisp rev-parse HEAD)" = "d359c4885e0609a6c8350daf45de157b40cf48f3"
+          test "$(git -C upstream-my-lisp hash-object lib/core1-compiler-prelude.lisp)" = "dfc8f0074464f9f1d2b71a97a9ab4184925ca3a1"
+          test "$(git -C wsm-my-lisp rev-parse HEAD)" = "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947"
+          test "$(git -C wsm-my-lisp hash-object lib/compiler.lisp)" = "d708d22f03e0095211399e83474a5e6df11e614d"
+
+      - name: Run bounded native S3a witness
+        shell: bash
+        env:
+          WSM_MY_LISP_CORE1_PRELUDE_SOURCE: ${{ github.workspace }}/upstream-my-lisp/lib/core1-compiler-prelude.lisp
+          WSM_MY_LISP_COMPILER_SOURCE: ${{ github.workspace }}/wsm-my-lisp/lib/compiler.lisp
+        run: |
+          set -euo pipefail
+          cargo test --test core1_s3a_compiled_emitter_test -- --nocapture
