@@ -1,0 +1,32 @@
+name: S3b native input boundary RED witness
+
+on:
+  pull_request:
+    paths:
+      - "tests/s3b_native_input_boundary_test.rs"
+      - ".github/workflows/s3b-native-input-boundary.yml"
+      - "src/x86_freestanding.rs"
+      - "src/witness_bridge.rs"
+
+jobs:
+  s3b-input-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Checkout pinned wsm-my-lisp nucleus
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: a6bd9747196f2d676ab6883cbb4b84c7fcfc6947
+          path: wsm-my-lisp
+          fetch-depth: 1
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Run focused S3b input-boundary witness
+        env:
+          WSM_NUCLEUS_ASM: ${{ github.workspace }}/wsm-my-lisp/asm/nucleus.s
+        run: cargo test --test s3b_native_input_boundary_test -- --nocapture
