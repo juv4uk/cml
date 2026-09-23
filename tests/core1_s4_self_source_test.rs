@@ -24,7 +24,11 @@ fn collect_symbols(expr: &Expr, out: &mut BTreeSet<String>) {
             }
             collect_symbols(tail, out);
         }
-        Expr::Integer(_) | Expr::Rational(_, _) | Expr::String(_) | Expr::NumericBuffer(_) => {}
+        Expr::Sid(_)
+        | Expr::Integer(_)
+        | Expr::Rational(_, _)
+        | Expr::String(_)
+        | Expr::NumericBuffer(_) => {}
     }
 }
 
@@ -51,6 +55,9 @@ fn encode_expr(
     compiled: &cml::x86_freestanding_metadata::X86CompiledProgram,
 ) -> X86InputValue {
     match expr {
+        Expr::Sid(_) => {
+            panic!("S4 target input transport has no admitted SID8 ABI yet; do not alias SID8 through a symbol/string/integer word")
+        }
         Expr::Integer(value) => X86InputValue::word(
             wsm_os_target::encode_fixnum(*value)
                 .unwrap_or_else(|| panic!("fixture integer outside target fixnum range: {value}")),
