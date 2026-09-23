@@ -140,6 +140,35 @@ mod tests {
     use my_lisp::parse;
 
     #[test]
+    fn bare_sid_bridge_preserves_typed_sid8_without_surface_projection() {
+        let exprs = parse("00000101").expect("my-lisp must parse exact bare SID8");
+        assert_eq!(exprs.len(), 1);
+
+        let projected = convert_lisp_expr(&exprs[0]).expect("CML bridge must accept bare SID8");
+        assert_eq!(
+            projected,
+            CExpr::Sid(my_lisp::sid!(00000101)),
+            "SID 00000101 must remain typed exact Sid8; projecting it to CAR/car, String/Symbol, decimal/hex, or any other alias is forbidden"
+        );
+    }
+
+    #[test]
+    fn define_sid_head_stays_typed_sid8_before_lowering() {
+        let row = "(00001001 list (00001000 args args))";
+        let exprs = parse(row).expect("my-lisp must parse byte-SID row");
+        let projected = convert_lisp_expr(&exprs[0]).expect("byte-SID row must project");
+
+        let CExpr::List(items) = projected else {
+            panic!("expected list form");
+        };
+        assert_eq!(
+            items[0],
+            CExpr::Sid(my_lisp::sid!(00001001)),
+            "function identity 00001001 must stay typed Sid8 and must not become define/def or any other textual alias"
+        );
+    }
+
+    #[test]
     fn byte_sid_define_row_converts_and_keeps_registry_sid_key() {
         let row = "(00001001 list (00001000 args args))";
         let exprs = parse(row).expect("my-lisp must parse the pinned byte-SID row");
