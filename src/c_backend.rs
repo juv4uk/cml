@@ -651,6 +651,22 @@ impl CBackend {
                 self.compile_expr(&args[0], env)?,
                 self.compile_expr(&args[1], env)?
             )),
+            PrimOp::List => {
+                if args.is_empty() {
+                    Ok("&NIL_V".to_string())
+                } else {
+                    let mut elems = Vec::new();
+                    for arg in args {
+                        elems.push(self.compile_expr(arg, env)?);
+                    }
+                    // Build list right-to-left using mk_cons
+                    let mut result = "&NIL_V".to_string();
+                    for elem in elems.iter().rev() {
+                        result = format!("mk_cons({}, {})", elem, result);
+                    }
+                    Ok(result)
+                }
+            }
             PrimOp::Car => Ok(format!("v_car({})", self.compile_expr(&args[0], env)?)),
             PrimOp::Cdr => Ok(format!("v_cdr({})", self.compile_expr(&args[0], env)?)),
             PrimOp::Eq => Ok(format!(

@@ -370,6 +370,22 @@ impl Compiler {
                 self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
                 self.emit(&format!("SUB {} R1 R2", target_reg));
             }
+            PrimOp::List => {
+                // List is variadic: build list right-to-left via wsm_cons
+                for arg in args.iter().rev() {
+                    self.compile_expr(arg, "R1");
+                    self.emit("PUSH R1");
+                }
+                // Start with NIL
+                self.emit("MOV R1 0");
+                for _ in 0..args.len() {
+                    self.emit("POP R2");
+                    self.emit("CONS R1 R2 R1");
+                }
+                if target_reg != "R1" {
+                    self.emit(&format!("MOV {} R1", target_reg));
+                }
+            }
             PrimOp::ExactQLt => unreachable!("ExactQLt rejected by validate_ir"),
             PrimOp::ExactQLe => unreachable!("ExactQLe rejected by validate_ir"),
             PrimOp::ExactQGe => unreachable!("ExactQGe rejected by validate_ir"),

@@ -47,6 +47,7 @@ pub enum PrimOp {
     Cons,
     Car,
     Cdr,
+    List,
     Eq,
     Atom,
     EqualP,

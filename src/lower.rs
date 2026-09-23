@@ -263,6 +263,7 @@ fn primitive_name(op: PrimOp) -> &'static str {
         PrimOp::ExactQLt => "<",
         PrimOp::ExactQLe => "<=",
         PrimOp::ExactQGe => ">=",
+        PrimOp::List => "LIST",
     }
 }
 
@@ -407,6 +408,10 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
             }
             if semantic_id == my_lisp::sid!(00000011) && args.len() == 2 {
                 return lower_prim(PrimOp::Eq, args, env);
+            }
+            if semantic_id == my_lisp::sid!(00100111) {
+                // LIST is variadic: (list) -> NIL, (list a b c) -> (a b c)
+                return lower_prim(PrimOp::List, args, env);
             }
             if semantic_id == my_lisp::sid!(00000100) && args.len() == 2 {
                 return lower_prim(PrimOp::Cons, args, env);
