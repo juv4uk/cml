@@ -147,8 +147,8 @@ mod tests {
         let projected = convert_lisp_expr(&exprs[0]).expect("CML bridge must accept bare SID8");
         assert_eq!(
             projected,
-            CExpr::Symbol("00000101".to_string()),
-            "SID 00000101 must remain exact SID bits; projecting it to CAR/car or any other surface name is forbidden"
+            CExpr::Sid(my_lisp::sid!(00000101)),
+            "SID 00000101 must remain typed exact Sid8; projecting it to CAR/car, a String/Symbol, or any other surface alias is forbidden"
         );
     }
 
@@ -164,8 +164,8 @@ mod tests {
 
         assert_eq!(
             items[0],
-            CExpr::Symbol("00001001".to_string()),
-            "function identity 00001001 must not be rewritten to define/def at the bridge boundary"
+            CExpr::Sid(my_lisp::sid!(00001001)),
+            "function identity 00001001 must remain typed exact Sid8 and must not be rewritten to define/def or any textual alias"
         );
     }
 
