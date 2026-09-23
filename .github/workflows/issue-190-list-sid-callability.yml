@@ -1,0 +1,29 @@
+name: Issue 190 LIST SID reachability
+
+on:
+  pull_request:
+    paths:
+      - "tests/list_sid_callability_test.rs"
+      - ".github/workflows/issue-190-list-sid-callability.yml"
+      - "build.rs"
+      - "src/lower.rs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    name: LIST SID callability
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout CML with build-source submodule
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run focused LIST SID regression
+        run: cargo test --test list_sid_callability_test -- --nocapture
