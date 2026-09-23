@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use cml::canon::{CANON_OPERATIONS_TABLE, CANON_BUILD_SOURCE_SEMANTIC_IDS};
+use cml::canon::{CANON_BUILD_SOURCE_SEMANTIC_IDS, CANON_OPERATIONS_TABLE};
 use cml::coverage::{AdmissionState, CoverageLedger};
 
 #[test]
