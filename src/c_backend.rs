@@ -213,19 +213,41 @@ static Value *v_rat_div(Value *a, Value *b) {
 
 static Value *v_car(Value *v) { return v->u.cons.car; }
 static Value *v_cdr(Value *v) { return v->u.cons.cdr; }
-static int is_atom(Value *v) { return v->tag != TAG_CONS; }
 static int truthy(Value *v) { return v->tag != TAG_NIL; }
 
+static Value *relation_record(const char *kind, const char *value) {
+    return mk_cons(mk_sym(kind), mk_cons(mk_sym(value), &NIL_V));
+}
+
+static Value *v_structural_kind(Value *v) {
+    if (v->tag == TAG_NIL) return relation_record("STRUCTURAL-KIND", "EMPTY-LIST");
+    if (v->tag == TAG_CONS) return relation_record("STRUCTURAL-KIND", "PAIR");
+    return relation_record("STRUCTURAL-KIND", "ATOM");
+}
+
+static Value *identity_relation(int same) {
+    return relation_record("IDENTITY-RELATION", same ? "SAME" : "DISTINCT");
+}
+
+static Value *structural_relation(int same) {
+    return relation_record("STRUCTURAL-RELATION", same ? "SAME" : "DISTINCT");
+}
+
 static Value *v_eq(Value *a, Value *b) {
-    if (a->tag != b->tag) return &NIL_V;
+    if (a->tag != b->tag) return identity_relation(0);
+    int same = 0;
     switch (a->tag) {
-        case TAG_NIL: return &TRUE_V;
-        case TAG_INT: return a->u.i == b->u.i ? &TRUE_V : &NIL_V;
-        case TAG_RATIONAL: return rational_checked_mul(a->u.rat.num, b->u.rat.den) == rational_checked_mul(b->u.rat.num, a->u.rat.den) ? &TRUE_V : &NIL_V;
-        case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0 ? &TRUE_V : &NIL_V;
-        case TAG_STRING: return strcmp(a->u.str, b->u.str) == 0 ? &TRUE_V : &NIL_V;
-        default: return a == b ? &TRUE_V : &NIL_V;
+        case TAG_NIL: same = 1; break;
+        case TAG_INT: same = a->u.i == b->u.i; break;
+        case TAG_RATIONAL:
+            same = rational_checked_mul(a->u.rat.num, b->u.rat.den)
+                == rational_checked_mul(b->u.rat.num, a->u.rat.den);
+            break;
+        case TAG_SYM: same = strcmp(a->u.sym, b->u.sym) == 0; break;
+        case TAG_STRING: same = strcmp(a->u.str, b->u.str) == 0; break;
+        default: same = a == b; break;
     }
+    return identity_relation(same);
 }
 
 static int v_equal_p(Value *a, Value *b) {
@@ -392,8 +414,8 @@ static Value *builtin_eq(Value *args, Value *env) {
     if (left->tag == TAG_CONS || right->tag == TAG_CONS) runtime_error("Type", "eq");
     return v_eq(left, right);
 }
-static Value *builtin_atom(Value *args, Value *env) { (void)env; require_arity(args, 1, "atom"); return is_atom(arg_at(args, 0)) ? &TRUE_V : &NIL_V; }
-static Value *builtin_equal_p(Value *args, Value *env) { (void)env; require_arity(args, 2, "equal?"); return v_equal_p(arg_at(args, 0), arg_at(args, 1)) ? &TRUE_V : &NIL_V; }
+static Value *builtin_atom(Value *args, Value *env) { (void)env; require_arity(args, 1, "atom"); return v_structural_kind(arg_at(args, 0)); }
+static Value *builtin_equal_p(Value *args, Value *env) { (void)env; require_arity(args, 2, "equal?"); return structural_relation(v_equal_p(arg_at(args, 0), arg_at(args, 1))); }
 static Value *builtin_exact_q_lt(Value *args, Value *env) {
     (void)env;
     require_arity(args, 2, "<");
