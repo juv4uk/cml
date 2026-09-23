@@ -791,6 +791,10 @@ impl CBackend {
     }
 
     fn compile_app(&mut self, func: &Ir, args: &[Ir], env: &str) -> Result<String, CompileError> {
+        if let Ir::Sid(sid) = func {
+            return self.compile_sid8_call(*sid, args, env);
+        }
+
         if let Ir::Var(name) = func {
             if name == "NUMERIC-BUFFER-MAP" && args.len() == 2 {
                 let function = self.compile_expr(&args[0], env)?;
@@ -807,6 +811,33 @@ impl CBackend {
         Ok(format!(
             "({{ Value *_f = {func_expr}; v_apply(_f, ({args_list})); }})"
         ))
+    }
+
+    fn compile_sid8_call(
+        &mut self,
+        sid: my_lisp::Sid8,
+        args: &[Ir],
+        env: &str,
+    ) -> Result<String, CompileError> {
+        if sid == my_lisp::sid!(00000101) {
+            if args.len() != 1 {
+                return Err(CompileError::UnsupportedVariant("SID8 call arity mismatch"));
+            }
+            return Ok(format!("v_car({})", self.compile_expr(&args[0], env)?));
+        }
+
+        if sid == my_lisp::sid!(00000100) {
+            if args.len() != 2 {
+                return Err(CompileError::UnsupportedVariant("SID8 call arity mismatch"));
+            }
+            return Ok(format!(
+                "mk_cons({}, {})",
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            ));
+        }
+
+        Err(CompileError::UnsupportedVariant("unimplemented SID8 call"))
     }
 
     fn compile_cond(&mut self, branches: &[(Ir, Ir)], env: &str) -> Result<String, CompileError> {
