@@ -28,5 +28,13 @@ jobs:
         with:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
+      - name: Rustfmt
+        run: cargo fmt --all -- --check
       - name: Exact direct SID8 C-backend dispatch witness
         run: cargo test --test direct_sid8_c_backend_dispatch_test -- --nocapture
+      - name: Existing C backend regression suite
+        run: cargo test --test c_backend_test -- --nocapture
+      - name: Existing explicit COND C backend suite
+        run: cargo test --test explicit_cond_backend_test -- --nocapture
+      - name: Existing typed buffer C backend suite
+        run: cargo test --test typed_buffer_ir_test -- --nocapture
