@@ -1521,6 +1521,7 @@ impl Emitter {
 
     fn emit_ir(&mut self, ir: &Ir) -> Result<(), CompileError> {
         match ir {
+            Ir::Sid(_) => Err(CompileError::UnsupportedVariant("standalone SID8 value")),
             Ir::Int(value) => {
                 let word = wsm_os_target::encode_fixnum(*value)
                     .ok_or(CompileError::FixnumOutOfRange(*value))?;

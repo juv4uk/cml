@@ -20,13 +20,13 @@ use my_lisp::semantic_registry_export::semantic_id_bits;
 
 /// Convert one raw my-lisp S-expression into a CML `Expr`.
 ///
-/// `Sid` leaves become their canonical display bits (`semantic_id_bits`),
-/// which a consumer may then use as an opaque address; symbols survive
-/// verbatim; numbers/rationals/strings pass through; lists recurse.
+/// `Sid` leaves remain typed exact `Sid8` values. They are never converted
+/// to surface names, strings, symbols, integers, or other aliases; symbols
+/// survive verbatim; numbers/rationals/strings pass through; lists recurse.
 pub fn convert_lisp_expr(expr: &my_lisp::Expr) -> Result<CExpr, BridgeError> {
     use my_lisp::ExprKind;
     match &expr.kind {
-        ExprKind::Sid(sid) => Ok(CExpr::Symbol(surface_of(*sid))),
+        ExprKind::Sid(sid) => Ok(CExpr::Sid(*sid)),
         ExprKind::Symbol(s) => Ok(CExpr::Symbol(s.to_string())),
         ExprKind::Number(n, _) => Ok(CExpr::Integer(*n as i64)),
         ExprKind::String(s) => Ok(CExpr::String(s.to_string())),
@@ -70,16 +70,16 @@ pub fn surface_of(sid: Sid8) -> String {
 /// returned form keeps the same shape; only the definition name changes.
 pub fn key_definition_by_sid(mut expr: CExpr) -> CExpr {
     if let CExpr::List(items) = &mut expr {
-        if matches!(
+        let is_define_sid = matches!(
             items.first(),
-            Some(CExpr::Symbol(s)) if s.eq_ignore_ascii_case("define")
-                || s.eq_ignore_ascii_case("def")
-        ) {
-            if let Some(CExpr::Symbol(name)) = items.get_mut(1) {
+            Some(CExpr::Sid(sid)) if *sid == my_lisp::sid!(00001001)
+        );
+        if is_define_sid {
+            if let Some(CExpr::Symbol(name)) = items.get(1) {
                 if let Some(sid) =
                     my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(name)
                 {
-                    *name = address_of(sid);
+                    items[1] = CExpr::Sid(sid);
                 }
             }
         }
@@ -104,40 +104,19 @@ impl std::fmt::Display for BridgeError {
 
 impl std::error::Error for BridgeError {}
 
-/// Rewrites all function call sites (symbols in call position) that are
-/// registry-admitted to their Lisp-owned SID keys. Non-admitted symbols
-/// (local functions, special forms, variables) are left unchanged.
-pub fn rewrite_calls_to_sid(expr: &mut CExpr) {
-    use my_lisp::semantic_registry_export::semantic_id_for_admitted_surface;
-
-    fn walk(expr: &mut CExpr) {
-        match expr {
-            CExpr::Symbol(name) => {
-                if let Some(sid) = semantic_id_for_admitted_surface(name) {
-                    *name = address_of(sid);
-                }
-            }
-            CExpr::List(items) => {
-                for item in items.iter_mut() {
-                    walk(item);
-                }
-            }
-            CExpr::DottedList(items, tail) => {
-                for item in items.iter_mut() {
-                    walk(item);
-                }
-                walk(tail);
-            }
-            _ => {}
-        }
-    }
-    walk(expr);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use my_lisp::parse;
+
+    #[test]
+    fn bare_sid_leaf_never_becomes_surface_name_or_bit_string_symbol() {
+        let exprs = parse("00000101").expect("bare SID8 must parse upstream");
+        let converted = convert_lisp_expr(&exprs[0]).expect("SID8 bridge conversion");
+        assert_eq!(converted, CExpr::Sid(my_lisp::sid!(00000101)));
+        assert_ne!(converted, CExpr::Symbol("car".to_string()));
+        assert_ne!(converted, CExpr::Symbol("00000101".to_string()));
+    }
 
     #[test]
     fn byte_sid_define_row_converts_and_keeps_registry_sid_key() {
@@ -155,13 +134,13 @@ mod tests {
         };
         assert_eq!(
             items[0],
-            CExpr::Symbol("define".to_string()),
-            "define SID must project to its canonical surface"
+            CExpr::Sid(my_lisp::sid!(00001001)),
+            "define identity must remain the exact typed SID8"
         );
         assert_eq!(
             items[1],
-            CExpr::Symbol("00100111".to_string()),
-            "registry-admitted name `list` must be addressed by its Lisp-owned SID"
+            CExpr::Sid(my_lisp::sid!(00100111)),
+            "registry-admitted name `list` must resolve once to exact typed SID8"
         );
     }
 
