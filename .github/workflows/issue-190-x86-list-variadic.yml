@@ -18,11 +18,22 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
+      - name: Checkout exact wsm-my-lisp runtime nucleus
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: a6bd9747196f2d676ab6883cbb4b84c7fcfc6947
+          path: wsm-my-lisp
+          fetch-depth: 1
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Run native LIST witnesses
         shell: bash
+        env:
+          WSM_NUCLEUS_ASM: ${{ github.workspace }}/wsm-my-lisp/asm/nucleus.s
         run: |
           set -euo pipefail
+          test "$(git -C wsm-my-lisp rev-parse HEAD)" = "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947"
           cargo test --test x86_list_variadic_test -- --nocapture
