@@ -2,16 +2,11 @@ use std::fs;
 
 use cml::{
     lower, parser,
-    witness_bridge::{
-        X86InputValue, execute_x86_actuals_with_metadata_and_inputs,
-    },
+    witness_bridge::{X86InputValue, execute_x86_actuals_with_metadata_and_inputs},
     x86_freestanding::X86FreestandingBackend,
 };
 
-fn symbol_word(
-    compiled: &cml::x86_freestanding_metadata::X86CompiledProgram,
-    name: &str,
-) -> u64 {
+fn symbol_word(compiled: &cml::x86_freestanding_metadata::X86CompiledProgram, name: &str) -> u64 {
     compiled
         .symbols
         .iter()
@@ -21,10 +16,12 @@ fn symbol_word(
 }
 
 fn list(items: Vec<X86InputValue>) -> X86InputValue {
-    items.into_iter().rev().fold(
-        X86InputValue::word(wsm_os_target::NIL),
-        |cdr, car| X86InputValue::cons(car, cdr),
-    )
+    items
+        .into_iter()
+        .rev()
+        .fold(X86InputValue::word(wsm_os_target::NIL), |cdr, car| {
+            X86InputValue::cons(car, cdr)
+        })
 }
 
 #[test]
@@ -97,11 +94,8 @@ fn core1_compiled_emitter_accepts_two_composite_inputs_without_recompile() {
         ]),
     ]);
 
-    let actual = execute_x86_actuals_with_metadata_and_inputs(
-        &compiled,
-        &[input_cons, input_car],
-    )
-    .expect("same compiled artifact must process both composite inputs");
+    let actual = execute_x86_actuals_with_metadata_and_inputs(&compiled, &[input_cons, input_car])
+        .expect("same compiled artifact must process both composite inputs");
 
     assert_eq!(
         actual,

@@ -69,7 +69,6 @@ int main(void) {
     );
 }
 
-
 #[test]
 fn s3b_input_entry_initializes_first_class_named_function_slots() {
     let expressions = parser::parse(
@@ -78,7 +77,8 @@ fn s3b_input_entry_initializes_first_class_named_function_slots() {
          (def bootstrap-entry (lambda (input) (apply-one identity input)))",
     )
     .expect("first-class startup fixture must parse");
-    let program = lower::lower_program(&expressions).expect("first-class startup fixture must lower");
+    let program =
+        lower::lower_program(&expressions).expect("first-class startup fixture must lower");
     let assembly = X86FreestandingBackend::new()
         .compile_program_with_input_entry(&program, "BOOTSTRAP-ENTRY")
         .expect("input entry with first-class named function must compile");
@@ -87,8 +87,7 @@ fn s3b_input_entry_initializes_first_class_named_function_slots() {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let base =
-        std::env::temp_dir().join(format!("cml-s3b-startup-{}-{nonce}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("cml-s3b-startup-{}-{nonce}", std::process::id()));
     let source = base.with_extension("s");
     let harness = base.with_extension("c");
     let executable = base.with_extension("bin");
