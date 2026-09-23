@@ -821,7 +821,9 @@ impl CBackend {
     ) -> Result<String, CompileError> {
         if sid == my_lisp::sid!(00000101) {
             if args.len() != 1 {
-                return Err(CompileError::UnsupportedVariant("SID8 call arity mismatch"));
+                return Err(CompileError::UnsupportedVariant(
+                    "SID8 call arity mismatch",
+                ));
             }
             return Ok(format!("v_car({})", self.compile_expr(&args[0], env)?));
         }
@@ -837,7 +839,9 @@ impl CBackend {
             ));
         }
 
-        Err(CompileError::UnsupportedVariant("unimplemented SID8 call"))
+        Err(CompileError::UnsupportedVariant(
+            "unimplemented SID8 call",
+        ))
     }
 
     fn compile_cond(&mut self, branches: &[(Ir, Ir)], env: &str) -> Result<String, CompileError> {
