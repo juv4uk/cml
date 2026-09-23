@@ -1,0 +1,40 @@
+name: Issue 212 build-source coverage truth
+
+on:
+  pull_request:
+    paths:
+      - "build.rs"
+      - "src/coverage.rs"
+      - "src/bin/cml-coverage.rs"
+      - "tests/coverage_ledger_test.rs"
+      - "tests/coverage_report_cli_test.rs"
+      - "tests/coverage_x86_canon_reconciliation_test.rs"
+      - "tests/coverage_x86_fixnum_limit_test.rs"
+      - ".github/workflows/issue-212-build-source-coverage.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    name: Build-source coverage provenance
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout CML with build-source submodule
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run focused coverage provenance tests
+        run: |
+          cargo test --test coverage_ledger_test -- --nocapture
+          cargo test --test coverage_report_cli_test -- --nocapture
+          cargo test --test coverage_x86_canon_reconciliation_test -- --nocapture
+          cargo test --test coverage_x86_fixnum_limit_test -- --nocapture
