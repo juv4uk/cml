@@ -399,14 +399,14 @@ fn lower_symbol(s: &str, env: &Env) -> Result<Ir, LowerError> {
         };
     }
 
-    // Canon callable meaning comes from the semantic registry even when the
-    // function appears as a first-class value rather than in call position.
-    // Rust only projects the opaque semantic ID onto the compiler mechanism.
+    // One-way function resolution. Once a source spelling resolves to an
+    // admitted function identity, the exact Sid8 is the first-class value.
+    // Lowering must not replace it with a Builtin/name/host-enum identity.
     if !env.is_bound(&upper) {
-        if let Some(semantic_id) = crate::canon::callable_semantic_id(s) {
-            if let Some(name) = crate::canon::canonical_builtin_name(semantic_id) {
-                return Ok(Ir::Builtin(name.to_string()));
-            }
+        if let Some(semantic_id) = crate::canon::callable_semantic_id(s).or_else(|| {
+            my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(s)
+        }) {
+            return Ok(Ir::Sid(semantic_id));
         }
     }
 
@@ -499,101 +499,13 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 
     let upper = func.to_uppercase();
     if !env.is_bound(&upper) {
-        // Canon callable identity comes from my-lisp's registry. The match
-        // below is only the compiler's finite mechanism projection from an
-        // opaque semantic ID to the IR operation it can implement.
-        if let Some(semantic_id) = callable_semantic_id(func) {
-            if semantic_id == my_lisp::sid!(00000010) && args.len() == 1 {
-                return lower_prim(PrimOp::Atom, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00000011) && args.len() == 2 {
-                return lower_prim(PrimOp::Eq, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00100111) {
-                // LIST is variadic: (list) -> NIL, (list a b c) -> (a b c)
-                return lower_prim(PrimOp::List, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00100111) {
-                // LIST is variadic: (list) -> NIL, (list a b c) -> (a b c)
-                return lower_prim(PrimOp::List, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110011) && args.len() == 1 {
-                return lower_prim(PrimOp::Caar, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110100) && args.len() == 1 {
-                return lower_prim(PrimOp::Cadr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110101) && args.len() == 1 {
-                return lower_prim(PrimOp::Cddr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110110) && args.len() == 1 {
-                return lower_prim(PrimOp::Cadddr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110011) && args.len() == 1 {
-                return lower_prim(PrimOp::Caar, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110100) && args.len() == 1 {
-                return lower_prim(PrimOp::Cadr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110101) && args.len() == 1 {
-                return lower_prim(PrimOp::Cddr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110110) && args.len() == 1 {
-                return lower_prim(PrimOp::Cadddr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00000100) && args.len() == 2 {
-                return lower_prim(PrimOp::Cons, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00000101) && args.len() == 1 {
-                return lower_prim(PrimOp::Car, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00000110) && args.len() == 1 {
-                return lower_prim(PrimOp::Cdr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00001100) && args.len() == 2 {
-                return lower_prim(PrimOp::Add, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00001101) && args.len() == 2 {
-                return lower_prim(PrimOp::Sub, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00100010) && args.len() == 2 {
-                return lower_prim(PrimOp::EqualP, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00011010) && args.len() == 2 {
-                return lower_prim(PrimOp::ExactQLt, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00011101) && args.len() == 2 {
-                return lower_prim(PrimOp::ExactQLe, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00011110) && args.len() == 2 {
-                return lower_prim(PrimOp::ExactQGe, args, env);
-            }
-            if semantic_id == my_lisp::sid!(01011001) {
-                if args.len() == 2 {
-                    return lower_generic_call(
-                        &Expr::Symbol("NUMERIC-BUFFER-MAP".to_string()),
-                        args,
-                        env,
-                    );
-                }
-                return Err(LowerError::arity(
-                    "numeric-buffer-map expects exactly two arguments",
-                ));
-            }
-        }
-        // (#238) Typed user-def call identity. A word with a Lisp-owned
-        // registered semantic ID that is neither a backend primitive projection
-        // nor a canonical builtin (e.g. `reverse`, `not`) dispatches by its
-        // Sid8 call key, but only when the current program actually keys the
-        // definition under that SID. This keeps call identity identical to def
-        // identity and preserves classic name-keyed definitions in other
-        // backends. Canonical builtins (`=`, `>`, `mod`, ...) keep their
-        // Builtin identity on purpose (admitted-but-partial, #92).
-        if let Some(sid) = my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(func)
-        {
-            if crate::canon::canonical_builtin_name(sid).is_none() && env.has_sid_keyed_def(sid) {
-                return lower_generic_call(&Expr::Sid(sid), args, env);
-            }
+        // Resolve a human/source spelling once. From here onward the function
+        // key is the exact Sid8; backends may choose private mechanisms from
+        // it, but lowering never converts it to PrimOp, Builtin, or a name.
+        if let Some(sid) = callable_semantic_id(func).or_else(|| {
+            my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(func)
+        }) {
+            return lower_generic_call(&Expr::Sid(sid), args, env);
         }
     }
     lower_generic_call(&Expr::Symbol(func.to_string()), args, env)
