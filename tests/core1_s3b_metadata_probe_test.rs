@@ -16,6 +16,7 @@ fn input_entry_metadata_keeps_explicit_quoted_transport_vocabulary() {
 
     let expressions = parser::parse(source).expect("probe source must parse");
     let program = lower::lower_program(&expressions).expect("probe source must lower");
+    eprintln!("S3b input-entry lowered program = {program:#?}");
     let compiled = X86FreestandingBackend::new()
         .compile_program_with_metadata_and_input_entry(&program, "BOOTSTRAP-ENTRY")
         .expect("input-entry metadata probe must compile");
