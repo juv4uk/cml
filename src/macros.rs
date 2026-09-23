@@ -187,7 +187,7 @@ fn eval_macro_body(expr: &Expr, env: &HashMap<String, Expr>) -> Result<Expr, Mac
         | Expr::Integer(_)
         | Expr::Rational(_, _)
         | Expr::String(_)
-        | Expr::NumericBuffer(_) => Ok(expr.clone())
+        | Expr::NumericBuffer(_) => Ok(expr.clone()),
         Expr::Symbol(s) => {
             let upper = s.to_uppercase();
             if upper == "NIL" {
