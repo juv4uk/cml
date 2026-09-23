@@ -1,6 +1,5 @@
 use cml::canon::{
-    CANON_OPERATIONS_TABLE, callable_semantic_id, find_operation_by_id,
-    find_operation_by_surface,
+    CANON_OPERATIONS_TABLE, callable_semantic_id, find_operation_by_id, find_operation_by_surface,
 };
 use cml::ir::{Ir, PrimOp};
 use cml::{lower, parser};
