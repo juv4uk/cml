@@ -6,11 +6,20 @@ use cml::coverage::{BackendEvidenceState, CoverageLedger};
 
 const EXPECTED: &[(my_lisp::Sid8, BackendEvidenceState)] = &[
     (my_lisp::sid!(00000001), BackendEvidenceState::Executable),
-    (my_lisp::sid!(00000010), BackendEvidenceState::AssemblyWitness),
+    (
+        my_lisp::sid!(00000010),
+        BackendEvidenceState::AssemblyWitness,
+    ),
     (my_lisp::sid!(00000011), BackendEvidenceState::Executable),
     (my_lisp::sid!(00000100), BackendEvidenceState::Executable),
-    (my_lisp::sid!(00000101), BackendEvidenceState::AssemblyWitness),
-    (my_lisp::sid!(00000110), BackendEvidenceState::AssemblyWitness),
+    (
+        my_lisp::sid!(00000101),
+        BackendEvidenceState::AssemblyWitness,
+    ),
+    (
+        my_lisp::sid!(00000110),
+        BackendEvidenceState::AssemblyWitness,
+    ),
     (my_lisp::sid!(00000111), BackendEvidenceState::Executable),
 ];
 
