@@ -1487,9 +1487,7 @@ fn preflight_quoted(
     Ok(())
 }
 
-fn sid8_call_contract(
-    sid: my_lisp::Sid8,
-) -> Option<(Option<usize>, &'static str)> {
+fn sid8_call_contract(sid: my_lisp::Sid8) -> Option<(Option<usize>, &'static str)> {
     if sid == my_lisp::sid!(00000010) {
         Some((Some(1), "wsm_atom"))
     } else if sid == my_lisp::sid!(00000011) {
@@ -2557,11 +2555,7 @@ impl Emitter {
         }
     }
 
-    fn emit_sid8_call(
-        &mut self,
-        sid: my_lisp::Sid8,
-        args: &[Ir],
-    ) -> Result<(), CompileError> {
+    fn emit_sid8_call(&mut self, sid: my_lisp::Sid8, args: &[Ir]) -> Result<(), CompileError> {
         let Some((expected, runtime)) = sid8_call_contract(sid) else {
             return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
         };
