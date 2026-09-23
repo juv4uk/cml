@@ -44,7 +44,7 @@ fn x86_canon_evidence_reconciles_matrix_ledger_and_pushed_witnesses() {
     let matrix = read_repo("capability-matrix.lisp");
     let x86 = x86_section(&matrix);
     let witness_source = read_repo("tests/x86_freestanding_test.rs");
-    let ledger = CoverageLedger::supported_pin();
+    let ledger = CoverageLedger::build_source();
 
     let mut x86_rows = 0usize;
     for (semantic_id, expected_state) in EXPECTED {
@@ -114,7 +114,7 @@ fn x86_canon_evidence_reconciles_matrix_ledger_and_pushed_witnesses() {
 
 #[test]
 fn x86_summary_distinguishes_executable_from_assembly_only() {
-    let summary = CoverageLedger::supported_pin().summary();
+    let summary = CoverageLedger::build_source().summary();
 
     assert_eq!(summary.x86_executable, 4);
     assert_eq!(summary.x86_assembly_witness_only, 3);
