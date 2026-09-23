@@ -38,8 +38,10 @@ fn many_closures_via_map_style_recursion() {
     let src = r#"
 (def map
   (lambda (f xs)
-    (cond ((atom xs) ())
-          (t (cons (f (car xs)) (map f (cdr xs)))))))
+    (cond ((atom xs) (structural-kind empty-list) ())
+          ((atom xs) (structural-kind atom) ())
+          ((atom xs) (structural-kind pair)
+           (cons (f (car xs)) (map f (cdr xs)))))))
 (map (lambda (x) (+ x 1)) (quote (1 2 3 4 5 6 7 8 9 10)))
 "#;
     assert_eq!(value(src), "(2 3 4 5 6 7 8 9 10 11)");
