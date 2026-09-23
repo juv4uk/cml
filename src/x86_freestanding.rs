@@ -668,14 +668,12 @@ fn preflight_env(
         }
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
-            if let Some(expected) = expected {
-                if args.len() != expected {
-                    return Err(CompileError::InvalidArity {
-                        operation: name,
-                        expected,
-                        actual: args.len(),
-                    });
-                }
+            if args.len() != expected {
+                return Err(CompileError::InvalidArity {
+                    operation: name,
+                    expected,
+                    actual: args.len(),
+                });
             }
             for argument in args {
                 preflight_env(argument, bindings, symbols, def_arities, slots)?;
@@ -949,14 +947,12 @@ fn preflight_lambda_body(
         }
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
-            if let Some(expected) = expected {
-                if args.len() != expected {
-                    return Err(CompileError::InvalidArity {
-                        operation: name,
-                        expected,
-                        actual: args.len(),
-                    });
-                }
+            if args.len() != expected {
+                return Err(CompileError::InvalidArity {
+                    operation: name,
+                    expected,
+                    actual: args.len(),
+                });
             }
             for argument in args {
                 preflight_lambda_body(argument, bindings, symbols, slots)?;
@@ -1155,14 +1151,12 @@ fn preflight_def_body(
         }
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
-            if let Some(expected) = expected {
-                if args.len() != expected {
-                    return Err(CompileError::InvalidArity {
-                        operation: name,
-                        expected,
-                        actual: args.len(),
-                    });
-                }
+            if args.len() != expected {
+                return Err(CompileError::InvalidArity {
+                    operation: name,
+                    expected,
+                    actual: args.len(),
+                });
             }
             for argument in args {
                 preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
