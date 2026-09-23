@@ -1,5 +1,8 @@
-use cml::canon::{CANON_OPERATIONS_TABLE, find_operation_by_id, find_operation_by_surface};
-use cml::ir::Ir;
+use cml::canon::{
+    CANON_OPERATIONS_TABLE, callable_semantic_id, find_operation_by_id,
+    find_operation_by_surface,
+};
+use cml::ir::{Ir, PrimOp};
 use cml::{lower, parser};
 use my_lisp::Sid8;
 
@@ -8,6 +11,32 @@ fn lower_one(source: &str) -> Ir {
     let mut lowered = lower::lower_program(&expressions).expect("source must lower");
     assert_eq!(lowered.len(), 1, "fixture must contain one expression");
     lowered.remove(0)
+}
+
+#[test]
+fn list_sid_is_generated_as_a_callable_and_lowers_through_sid_identity() {
+    assert_eq!(
+        callable_semantic_id("list"),
+        Some(my_lisp::sid!(00100111)),
+        "LIST must be admitted from the upstream registry, not a spelling special case"
+    );
+    assert_eq!(
+        callable_semantic_id("LIST"),
+        Some(my_lisp::sid!(00100111)),
+        "Latin callable lookup remains case-folded"
+    );
+
+    let lowered = lower_one("(list (quote A) (quote B) (quote C))");
+    assert!(
+        matches!(lowered, Ir::Prim { op: PrimOp::List, ref args } if args.len() == 3),
+        "LIST call must reach the existing PrimOp::List mechanism; got {lowered:?}"
+    );
+
+    let empty = lower_one("(list)");
+    assert!(
+        matches!(empty, Ir::Prim { op: PrimOp::List, ref args } if args.is_empty()),
+        "zero-arity LIST must remain the same variadic primitive mechanism; got {empty:?}"
+    );
 }
 
 #[test]
