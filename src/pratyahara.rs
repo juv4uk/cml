@@ -74,12 +74,12 @@ pub fn fold_constants(expr: &Expr) -> Expr {
             if let Expr::Symbol(op) = &folded[0] {
                 let args = &folded[1..];
 
+                // Quote is a hard data barrier. A quoted symbol may happen to
+                // share a spelling with a pratyahara name (notably `car`),
+                // but it must remain ordinary Lisp data. Explicit pratyahara
+                // operators below may still interpret quoted names through
+                // resolve_mask_value.
                 if op == "quote" && args.len() == 1 {
-                    if let Expr::Symbol(s) = &args[0] {
-                        if let Some(mask) = get_pratyahara_mask(s) {
-                            return Expr::Integer(mask as i64);
-                        }
-                    }
                     return Expr::List(folded);
                 }
 
@@ -154,5 +154,40 @@ pub fn fold_constants(expr: &Expr) -> Expr {
             Expr::DottedList(folded_items, folded_tail)
         }
         _ => expr.clone(),
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn quote_symbol(name: &str) -> Expr {
+        Expr::List(vec![
+            Expr::Symbol("quote".to_string()),
+            Expr::Symbol(name.to_string()),
+        ])
+    }
+
+    #[test]
+    fn quote_is_a_hard_barrier_even_for_pratyahara_named_symbols() {
+        assert_eq!(fold_constants(&quote_symbol("car")), quote_symbol("car"));
+        assert_eq!(fold_constants(&quote_symbol("ac")), quote_symbol("ac"));
+    }
+
+    #[test]
+    fn explicit_pratyahara_operations_still_fold_quoted_names() {
+        let intersection = Expr::List(vec![
+            Expr::Symbol("intersection".to_string()),
+            quote_symbol("ac"),
+            quote_symbol("ik"),
+        ]);
+        assert_eq!(fold_constants(&intersection), Expr::Integer(30));
+
+        let explicit = Expr::List(vec![
+            Expr::Symbol("pratyahara".to_string()),
+            quote_symbol("car"),
+        ]);
+        assert_eq!(fold_constants(&explicit), Expr::Integer(4380866641920));
     }
 }
