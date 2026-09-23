@@ -56,7 +56,9 @@ fn encode_expr(
 ) -> X86InputValue {
     match expr {
         Expr::Sid(_) => {
-            panic!("S4 target input transport has no admitted SID8 ABI yet; do not alias SID8 through a symbol/string/integer word")
+            panic!(
+                "S4 target input transport has no admitted SID8 ABI yet; do not alias SID8 through a symbol/string/integer word"
+            )
         }
         Expr::Integer(value) => X86InputValue::word(
             wsm_os_target::encode_fixnum(*value)
