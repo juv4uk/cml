@@ -405,9 +405,9 @@ fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
         })
     );
     let result = backend.compile_program(&[Ir::Prim {
-            op: PrimOp::EqualP,
-            args: vec![Ir::Int(1), Ir::Int(1)],
-        }]);
+        op: PrimOp::EqualP,
+        args: vec![Ir::Int(1), Ir::Int(1)],
+    }]);
     assert!(result.is_ok());
 }
 
