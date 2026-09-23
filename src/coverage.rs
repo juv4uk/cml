@@ -1,13 +1,13 @@
 //! Machine-readable CML coverage foundation (#106).
 //!
-//! Language identity comes from the supported-pin my-lisp semantic registry,
+//! Language identity comes from the build-source my-lisp semantic registry,
 //! generated into `canon` by build.rs. This module only joins those opaque
 //! IDs with CML's existing operation-admission table and evidence-backed
 //! compiler target facts. It never derives backend execution from source
 //! admission alone.
 
 use crate::canon::{
-    CANON_SUPPORTED_PIN_REGISTRY_FNV1A64, CANON_SUPPORTED_PIN_SEMANTIC_IDS, find_operation_by_id,
+    CANON_BUILD_SOURCE_REGISTRY_FNV1A64, CANON_BUILD_SOURCE_SEMANTIC_IDS, find_operation_by_id,
 };
 use my_lisp::Sid8;
 
@@ -126,8 +126,8 @@ fn x86_fixnum_arithmetic_evidence(semantic_id: Sid8) -> Vec<BackendEvidence> {
 }
 
 impl CoverageLedger {
-    pub fn supported_pin() -> Self {
-        let rows = CANON_SUPPORTED_PIN_SEMANTIC_IDS
+    pub fn build_source() -> Self {
+        let rows = CANON_BUILD_SOURCE_SEMANTIC_IDS
             .iter()
             .map(|semantic_id| {
                 let semantic_id = *semantic_id;
@@ -156,8 +156,8 @@ impl CoverageLedger {
             .collect();
 
         Self {
-            upstream_channel: "supported-pin",
-            registry_digest_fnv1a64: CANON_SUPPORTED_PIN_REGISTRY_FNV1A64,
+            upstream_channel: "build-source",
+            registry_digest_fnv1a64: CANON_BUILD_SOURCE_REGISTRY_FNV1A64,
             rows,
         }
     }
