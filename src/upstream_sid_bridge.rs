@@ -20,13 +20,13 @@ use my_lisp::semantic_registry_export::semantic_id_bits;
 
 /// Convert one raw my-lisp S-expression into a CML `Expr`.
 ///
-/// `Sid` leaves become their canonical display bits (`semantic_id_bits`),
-/// which a consumer may then use as an opaque address; symbols survive
-/// verbatim; numbers/rationals/strings pass through; lists recurse.
+/// `Sid` leaves remain typed exact `Sid8` values. They are never converted
+/// to surface names, strings, symbols, integers, or other aliases; symbols
+/// survive verbatim; numbers/rationals/strings pass through; lists recurse.
 pub fn convert_lisp_expr(expr: &my_lisp::Expr) -> Result<CExpr, BridgeError> {
     use my_lisp::ExprKind;
     match &expr.kind {
-        ExprKind::Sid(sid) => Ok(CExpr::Symbol(surface_of(*sid))),
+        ExprKind::Sid(sid) => Ok(CExpr::Sid(*sid)),
         ExprKind::Symbol(s) => Ok(CExpr::Symbol(s.to_string())),
         ExprKind::Number(n, _) => Ok(CExpr::Integer(*n as i64)),
         ExprKind::String(s) => Ok(CExpr::String(s.to_string())),
