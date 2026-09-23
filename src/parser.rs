@@ -216,6 +216,24 @@ fn parse_expr(tokens: &mut Tokens) -> Result<Expr, ParseError> {
                 Ok(Expr::String(
                     token.text[1..token.text.len() - 1].to_string(),
                 ))
+            } else if token.text.len() == 8
+                && token.text.bytes().all(|byte| matches!(byte, b'0' | b'1'))
+            {
+                let upstream = my_lisp::parse(&token.text)
+                    .map_err(|_| ParseError::unexpected_token("invalid SID8", token.location))?;
+                match upstream.as_slice() {
+                    [expr] => match expr.kind {
+                        my_lisp::ExprKind::Sid(sid) => Ok(Expr::Sid(sid)),
+                        _ => Err(ParseError::unexpected_token(
+                            "exact eight-bit binary token must be SID8",
+                            token.location,
+                        )),
+                    },
+                    _ => Err(ParseError::unexpected_token(
+                        "exact eight-bit binary token must parse as one SID8",
+                        token.location,
+                    )),
+                }
             } else if let Ok(n) = token.text.parse::<i64>() {
                 Ok(Expr::Integer(n))
             } else if let Some(rat) = parse_rational_literal(&token.text) {
@@ -493,5 +511,35 @@ mod comment_tests {
     fn a_file_consisting_only_of_comments_parses_as_empty() {
         let exprs = parse("; just a comment\n; another one").unwrap();
         assert!(exprs.is_empty());
+    }
+}
+
+
+#[cfg(test)]
+mod sid8_identity_tests {
+    use super::*;
+
+    #[test]
+    fn exact_bare_eight_bit_binary_token_parses_as_typed_sid8() {
+        let exprs = parse("00000101").expect("exact bare SID8 must parse");
+        assert_eq!(exprs, vec![Expr::Sid(my_lisp::sid!(00000101))]);
+    }
+
+    #[test]
+    fn quoted_eight_bit_text_remains_string_and_never_mints_sid8() {
+        let exprs = parse("\"00000101\"").expect("quoted text must parse");
+        assert_eq!(exprs, vec![Expr::String("00000101".to_string())]);
+    }
+
+    #[test]
+    fn decimal_101_is_not_sid_00000101() {
+        let exprs = parse("101").expect("decimal integer must parse");
+        assert_eq!(exprs, vec![Expr::Integer(101)]);
+    }
+
+    #[test]
+    fn wrong_width_binary_digit_token_is_not_sid8() {
+        let exprs = parse("0000101").expect("seven-bit spelling remains ordinary numeric token");
+        assert_eq!(exprs, vec![Expr::Integer(101)]);
     }
 }
