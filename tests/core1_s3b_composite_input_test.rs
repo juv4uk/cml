@@ -63,10 +63,14 @@ fn core1_compiled_emitter_accepts_two_composite_inputs_without_recompile() {
         .compile_program_with_input_entry(&wrapper_program, "BOOTSTRAP-ENTRY")
         .expect("S3b wrapper alone must compile before metadata enrichment");
 
-    // A/B are inert quoted values used only to make their exact target Symbol
-    // words part of compiler-owned metadata. The explicit input entry bypasses
-    // wsm_entry, so these forms are never evaluated as bootstrap inputs.
-    let source = format!("{wrapper_source}(quote A)\n(quote B)\n");
+    // Input-vocabulary symbols are inert quoted values used only to make their
+    // exact image-local target words part of compiler-owned metadata. The
+    // explicit input entry bypasses wsm_entry, so these forms are never
+    // evaluated as bootstrap inputs and carry no host-side Lisp semantics.
+    let source = format!(
+        "{wrapper_source}\
+         (quote cons)\n(quote car)\n(quote quote)\n(quote A)\n(quote B)\n"
+    );
 
     let expressions = parser::parse(&source).expect("S3b combined source must parse");
     let program = lower::lower_program(&expressions).expect("S3b combined source must lower");
