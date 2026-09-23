@@ -1173,6 +1173,11 @@ fn preflight_def_body(
             Some(DefArity::Data) => Ok(()),
             None => Err(CompileError::UnsupportedVariant("unbound variable")),
         },
+        // A Canon builtin identity (e.g. numeric `=`, SID 00011100) is a
+        // legitimate first-class value inside a def body; the preflight
+        // admits the identity, while actual machine support remains an emit
+        // concern that fail-closes precisely (admitted-but-partial, #92).
+        Ir::Builtin(_) => Ok(()),
         Ir::Int(value) => {
             wsm_os_target::encode_fixnum(*value).ok_or(CompileError::FixnumOutOfRange(*value))?;
             Ok(())
