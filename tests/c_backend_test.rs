@@ -407,7 +407,7 @@ fn compiles_self_recursive_def_to_c_and_runs_it() {
     // clobber bug (e73f93a) -- here to prove the C backend's independent
     // letrec-placeholder-plus-backpatch (compile_def in c_backend.rs)
     // gets self-recursion right too, not just fixed-arity application.
-    let code = "(def count (lambda (n) (cond ((eq n 0) 99) (t (count (+ n -1)))))) (count 3)";
+    let code = "(def count (lambda (n) (cond ((eq n 0) (identity-relation same) 99) ((eq n 0) (identity-relation distinct) (count (+ n -1)))))) (count 3)";
     let exprs = parser::parse(code).unwrap();
     let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
     let mut backend = CBackend::new();
@@ -635,8 +635,8 @@ fn c_backend_true_is_an_ordinary_symbol_not_a_manufactured_tag() {
     // unequal tags and returned () -- exactly the class of bug the
     // owner's paradigm forbids (a substrate inventing a primitive
     // category the language itself never asked for; t is plain
-    // Symbol("t") in canonical WSM). Print, atom, and cross-representation
-    // eq must all agree t is just an ordinary symbol.
+    // Symbol("t") in canonical WSM). Print, structural-kind, and
+    // identity-relation must all agree t is just an ordinary symbol.
     //
     // The test harness lowercases captured stdout before comparing, so
     // the expected strings below are lowercase regardless of the runtime's
@@ -646,14 +646,16 @@ fn c_backend_true_is_an_ordinary_symbol_not_a_manufactured_tag() {
     // canonical symbols uppercase (lower.rs uppercases every symbol name,
     // cml's own established convention, distinct from my-lisp's lowercase
     // display), so a first version of this fix using a lowercase "t"
-    // literal for TRUE_V made `(eq t (quote t))` compile to
-    // `strcmp("t", "T")` internally -- genuinely unequal, real () result,
-    // not a test-harness artifact. Fixed by storing TRUE_V's symbol as
-    // "T" to match mk_sym's own canonical case.
+    // literal for TRUE_V made `(eq t (quote t))` compare "t" and "T"
+    // internally. The current result domain is now an identity-relation
+    // record, but the underlying symbol identity must still be canonical.
     assert_eq!(compile_and_run_first_class("t", "true_prints_as_t"), "t");
-    assert_eq!(compile_and_run_first_class("(atom t)", "true_is_atom"), "t");
+    assert_eq!(
+        compile_and_run_first_class("(atom t)", "true_is_atom"),
+        "(structural-kind atom)"
+    );
     assert_eq!(
         compile_and_run_first_class("(eq t (quote t))", "true_eq_quoted_symbol_t"),
-        "t"
+        "(identity-relation same)"
     );
 }
