@@ -590,6 +590,7 @@ impl CBackend {
 
     fn compile_expr(&mut self, ir: &Ir, env: &str) -> Result<String, CompileError> {
         match ir {
+            Ir::Sid(_) => Err(CompileError::UnsupportedVariant("standalone SID8 value")),
             Ir::Int(n) => Ok(format!("mk_int({n})")),
             Ir::Float(_) => Err(CompileError::UnsupportedVariant("Float")),
             Ir::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
