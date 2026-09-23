@@ -197,7 +197,8 @@ fn collect_backend_symbol_names(ir: &Ir, out: &mut BTreeSet<String>) {
                 collect_backend_symbol_names(arg, out);
             }
         }
-        Ir::Int(_)
+        Ir::Sid(_)
+        | Ir::Int(_)
         | Ir::Float(_)
         | Ir::Rational(_, _)
         | Ir::String(_)
