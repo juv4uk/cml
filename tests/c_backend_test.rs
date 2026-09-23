@@ -152,6 +152,37 @@ fn c_backend_top_level_def_shadows_registry_callable() {
 }
 
 #[test]
+fn c_backend_current_predicates_return_upstream_record_domains() {
+    assert_eq!(
+        compile_and_run_first_class("(atom (quote radio))", "atom_kind_atom"),
+        "(structural-kind atom)"
+    );
+    assert_eq!(
+        compile_and_run_first_class("(atom (quote ()))", "atom_kind_empty"),
+        "(structural-kind empty-list)"
+    );
+    assert_eq!(
+        compile_and_run_first_class("(atom (quote (radio antenna)))", "atom_kind_pair"),
+        "(structural-kind pair)"
+    );
+    assert_eq!(
+        compile_and_run_first_class("(eq 3 3)", "eq_identity_same"),
+        "(identity-relation same)"
+    );
+    assert_eq!(
+        compile_and_run_first_class("(eq 3 4)", "eq_identity_distinct"),
+        "(identity-relation distinct)"
+    );
+    assert_eq!(
+        compile_and_run_first_class(
+            "(equal? (quote (p . 0)) (cons (quote p) 0))",
+            "equal_structural_same",
+        ),
+        "(structural-relation same)"
+    );
+}
+
+#[test]
 fn c_backend_passes_a_builtin_as_a_higher_order_argument() {
     let code = "((lambda (f) (f 2 3)) +)";
     assert_eq!(
