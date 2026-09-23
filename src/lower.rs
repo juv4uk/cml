@@ -294,6 +294,7 @@ pub fn lower_expr(expr: &Expr) -> Result<Ir, LowerError> {
 
 fn lower_expr_admitted(expr: &Expr, env: &Env) -> Result<Ir, LowerError> {
     match expr {
+        Expr::Sid(sid) => Ok(Ir::Sid(*sid)),
         Expr::Integer(n) => Ok(Ir::Int(*n)),
         Expr::Rational(num, den) => Ok(Ir::Rational(*num, *den)),
         Expr::NumericBuffer(NumericBufferLiteral::I32(values)) => {
@@ -669,6 +670,9 @@ fn lower_def(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 
 fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
     match expr {
+        Expr::Sid(_) => Err(LowerError::invalid_form(
+            "quoted SID8 is not a function identity; quoted/string/literal SID wrappers are forbidden",
+        )),
         Expr::Integer(n) => Ok(Quoted::Int(*n)),
         Expr::Rational(num, den) => Ok(Quoted::Rational(*num, *den)),
         // Case-preserving: unlike a symbol, a string's character content is
