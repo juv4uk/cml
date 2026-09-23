@@ -1362,7 +1362,7 @@ fn preflight_quoted(
 fn primitive_contract(operation: PrimOp) -> Result<(&'static str, usize), CompileError> {
     match operation {
         PrimOp::Cons => Ok(("cons", 2)),
-        PrimOp::List => Ok(("list", 0)),  // variadic, min 0 args
+        PrimOp::List => Ok(("list", 0)), // variadic, min 0 args
         PrimOp::Car => Ok(("car", 1)),
         PrimOp::Cdr => Ok(("cdr", 1)),
         PrimOp::Eq => Ok(("eq", 2)),
@@ -2441,7 +2441,7 @@ impl Emitter {
         }
         let runtime = match operation {
             PrimOp::Cons => "wsm_cons",
-            PrimOp::List => "wsm_cons",  // List uses wsm_cons internally
+            PrimOp::List => "wsm_cons", // List uses wsm_cons internally
             PrimOp::Car => "wsm_car",
             PrimOp::Cdr => "wsm_cdr",
             PrimOp::Eq => "wsm_eq",
@@ -2452,7 +2452,7 @@ impl Emitter {
         Ok(())
     }
 
-/// Emit a variadic List primitive: (list) -> NIL, (list a b c) -> (a b c)
+    /// Emit a variadic List primitive: (list) -> NIL, (list a b c) -> (a b c)
     /// Builds the list right-to-left using wsm_cons.
     fn emit_primitive_list(&mut self, args: &[Ir]) -> Result<(), CompileError> {
         if args.is_empty() {
@@ -2473,7 +2473,10 @@ impl Emitter {
         self.emit_immediate(wsm_os_target::NIL);
         for slot in slots.iter().rev() {
             // NIL/prev in %rax, next element in slot
-            self.line(&format!("    movq {}(%rsp), %rsi", Self::slot_offset(*slot)));
+            self.line(&format!(
+                "    movq {}(%rsp), %rsi",
+                Self::slot_offset(*slot)
+            ));
             self.line("    movq %r12, %rdi");
             self.line("    call wsm_cons");
         }
