@@ -1365,9 +1365,7 @@ fn preflight_quoted(
     Ok(())
 }
 
-fn primitive_contract(
-    operation: PrimOp,
-) -> Result<(&'static str, Option<usize>), CompileError> {
+fn primitive_contract(operation: PrimOp) -> Result<(&'static str, Option<usize>), CompileError> {
     match operation {
         PrimOp::Cons => Ok(("cons", Some(2))),
         PrimOp::List => Ok(("list", None)),
