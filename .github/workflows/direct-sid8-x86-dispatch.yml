@@ -1,10 +1,12 @@
-name: Direct SID8 x86 dispatch
+name: Direct SID8 backend dispatch
 
 on:
   pull_request:
     paths:
       - "src/x86_freestanding.rs"
+      - "src/c_backend.rs"
       - "tests/direct_sid8_x86_dispatch_test.rs"
+      - "tests/direct_sid8_c_backend_dispatch_test.rs"
       - ".github/workflows/direct-sid8-x86-dispatch.yml"
   workflow_dispatch:
 
@@ -16,5 +18,15 @@ jobs:
         with:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
-      - name: Exact direct SID8 dispatch witness
+      - name: Exact direct SID8 x86 dispatch witness
         run: cargo test --test direct_sid8_x86_dispatch_test -- --nocapture
+
+  direct-sid8-c:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Exact direct SID8 C-backend dispatch witness
+        run: cargo test --test direct_sid8_c_backend_dispatch_test -- --nocapture
