@@ -1,8 +1,12 @@
 ; upstream-revisions.lisp — canonical my-lisp revision channels for CML.
 ; Revision roles are evidence metadata, not language-semantic authority.
 ;
+; build-source:
+;   exact my-lisp crate/registry-format revision used by the CML Rust build.
+;   This is mechanism/API provenance, not a semantic compatibility claim.
 ; supported-pin:
-;   exact revision CML may use as its compatibility/evidence denominator.
+;   exact revision used as the frozen semantic compatibility/evidence denominator.
+;   It need not be the Rust build substrate.
 ; observed-current:
 ;   exact reproducible snapshot used for drift detection and forward workload intake.
 ;   Moving it never upgrades CML's supported language contract.
@@ -11,9 +15,11 @@
 ;   Moving it requires fresh bootstrap evidence and never promotes global support.
 
 ((kind . cml-upstream-revision-channels)
- (version . (1 1))
+ (version . (1 2))
  (repository . "juv4uk/my-lisp")
- (supported-pin-source . external/my-lisp-gitlink)
+ (build-source . external/my-lisp-gitlink)
+ (build-source-sha . "5a99136bf7a2e9ab5792bdc945ad53c3774802cd")
+ (supported-pin-source . exact-github-commit)
  (supported-pin-sha . "8088e9f88d845ba0edb2197d44da3dbbe57eca0e")
  (observed-current-source . exact-github-commit)
  (observed-current-sha . "d359c4885e0609a6c8350daf45de157b40cf48f3")
@@ -27,7 +33,9 @@
       (sha . "ed1ef28928df1db0cc83f17ae993527635b6256d")
       (role . historical-workload-snapshot))))
  (policy
-  . ((supported-pin . compatibility-claim-denominator)
+  . ((build-source . compiler-mechanism-api-substrate)
+     (build-source-does-not-promote-supported-contract . t)
+     (supported-pin . compatibility-claim-denominator)
      (observed-current . forward-drift-and-workload-intake)
      (bootstrap-core1-source . profile-scoped-bootstrap-input)
      (historical . immutable-evidence-not-active-channel)
