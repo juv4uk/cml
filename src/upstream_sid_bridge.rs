@@ -140,6 +140,36 @@ mod tests {
     use my_lisp::parse;
 
     #[test]
+    fn bare_sid_bridge_must_preserve_exact_sid_bits_without_surface_projection() {
+        let exprs = parse("00000101").expect("my-lisp must parse exact bare SID8");
+        assert_eq!(exprs.len(), 1);
+
+        let projected = convert_lisp_expr(&exprs[0]).expect("CML bridge must accept bare SID8");
+        assert_eq!(
+            projected,
+            CExpr::Symbol("00000101".to_string()),
+            "SID 00000101 must remain exact SID bits; projecting it to CAR/car or any other surface name is forbidden"
+        );
+    }
+
+    #[test]
+    fn define_sid_head_must_remain_exact_sid_bits_before_any_lowering() {
+        let row = "(00001001 list (00001000 args args))";
+        let exprs = parse(row).expect("my-lisp must parse the pinned byte-SID row");
+        let projected = convert_lisp_expr(&exprs[0]).expect("byte-SID row must project to CML");
+
+        let CExpr::List(items) = projected else {
+            panic!("expected list form");
+        };
+
+        assert_eq!(
+            items[0],
+            CExpr::Symbol("00001001".to_string()),
+            "function identity 00001001 must not be rewritten to define/def at the bridge boundary"
+        );
+    }
+
+    #[test]
     fn byte_sid_define_row_converts_and_keeps_registry_sid_key() {
         let row = "(00001001 list (00001000 args args))";
         let exprs = parse(row).expect("my-lisp must parse the pinned byte-SID row");
