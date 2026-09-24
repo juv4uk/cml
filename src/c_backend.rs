@@ -886,9 +886,7 @@ impl CBackend {
             let arg_expr = self.compile_expr(arg, env)?;
             args_list = format!("mk_cons({arg_expr}, {args_list})");
         }
-        Ok(format!(
-            "v_apply(mk_sid_callable(0b{sid}), ({args_list}))"
-        ))
+        Ok(format!("v_apply(mk_sid_callable(0b{sid}), ({args_list}))"))
     }
 
     fn compile_sid8_call(
