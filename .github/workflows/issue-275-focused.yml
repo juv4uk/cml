@@ -15,11 +15,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          path: cml
           submodules: recursive
+      - uses: actions/checkout@v5
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: 1fe661664479c92da1968d60914b512320678ac2
+          path: wsm-my-lisp
       - uses: dtolnay/rust-toolchain@stable
       - name: Format check
+        working-directory: cml
         run: cargo fmt -p cml -- --check
       - name: Freestanding x86 regression
+        working-directory: cml
         run: cargo test --test x86_freestanding_test -- --nocapture
       - name: Exhaustive IR classification
+        working-directory: cml
         run: cargo test --test exhaustive_classification_test -- --nocapture
