@@ -20,7 +20,7 @@
 //! оптимізацій (#55 Unboxing, #58 Inlining, #57 DCE, #56 RegAlloc). Він не змінює
 //! семантику мови `my-lisp` і не додає жодних сторонніх варіантів у спільний `src/ir.rs`.
 
-use crate::ir::{Ir, PrimOp};
+use crate::ir::Ir;
 use crate::machine_inst::{AluOp, CondCode, MachineItem, Provenance};
 use std::collections::HashMap;
 use std::fmt;
@@ -449,20 +449,6 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
                 )))
             }
         }
-        Ir::Prim { op, args } => match op {
-            PrimOp::Add | PrimOp::Sub => {
-                let lir_op = match op {
-                    PrimOp::Add => LirAluOp::Add,
-                    PrimOp::Sub => LirAluOp::Sub,
-                    _ => unreachable!(),
-                };
-                return lower_binary_alu(args, lir_op, ctx, prov);
-            }
-            _ => Err(LirLowerError::Unsupported(format!(
-                "primitive op {:?} is not admitted in scalar LIR slice",
-                op
-            ))),
-        },
         Ir::App { func, args }
             if matches!(func.as_ref(), Ir::Sid(sid)
             if *sid == my_lisp::sid!(00001100) || *sid == my_lisp::sid!(00001101)) =>
@@ -502,17 +488,15 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
                     break;
                 }
 
-                // Normalize SID8 eq (00000011) to the Prim shape the rest of
-                // this branch already handles; SID is the language identity,
-                // PrimOp here is only a backend dispatch marker.
+                // Exact SID8 eq (00000011) is the only admitted semantic
+                // identity for this scalar branch test. Legacy PrimOp host
+                // enums are not callable identity in the LIR boundary.
                 let normalized_test = match test_expr {
-                    Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000011)) => {
+                    Ir::App { func, args }
+                        if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000011)) =>
+                    {
                         Some(args.as_slice())
                     }
-                    Ir::Prim {
-                        op: PrimOp::Eq,
-                        args,
-                    } => Some(args.as_slice()),
                     _ => None,
                 };
 
@@ -712,8 +696,8 @@ mod tests {
 
     #[test]
     fn test_lower_arithmetic_witness() {
-        let ir = Ir::Prim {
-            op: PrimOp::Add,
+        let ir = Ir::App {
+            func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
             args: vec![Ir::Int(10), Ir::Int(32)],
         };
         let func = lower_ir_to_lir(&ir).expect("lower arithmetic witness");
@@ -728,8 +712,8 @@ mod tests {
         let ir = Ir::Cond {
             branches: vec![
                 (
-                    Ir::Prim {
-                        op: PrimOp::Eq,
+                    Ir::App {
+                        func: Box::new(Ir::Sid(my_lisp::sid!(00000011))),
                         args: vec![Ir::Int(5), Ir::Int(5)],
                     },
                     Ir::Int(42),

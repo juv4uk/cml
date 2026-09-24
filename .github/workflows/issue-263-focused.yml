@@ -1,0 +1,19 @@
+name: Issue 263 focused x86 LIR Sid8 identity
+
+on:
+  pull_request:
+    paths:
+      - src/x86_lir.rs
+      - .github/workflows/issue-263-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: x86 LIR unit witnesses
+        run: cargo test --lib x86_lir::tests -- --nocapture
