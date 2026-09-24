@@ -42,9 +42,8 @@ pub fn callable_semantic_id(name: &str) -> Option<Sid8> {
     // English surfaces without changing Ukrainian/Sanskrit identity.
     my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(name).or_else(|| {
         let folded = name.to_ascii_lowercase();
-        (folded != name).then(|| {
-            my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(&folded)
-        })?
+        (folded != name)
+            .then(|| my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(&folded))?
     })
 }
 
