@@ -1,0 +1,23 @@
+name: Issue 267 focused Lisp assembler Sid8 vertical
+
+on:
+  pull_request:
+    paths:
+      - src/lisp_asm_vertical.rs
+      - tests/vertical_slice_witness_test.rs
+      - tests/exact_q_mod_x86_vertical_test.rs
+      - .github/workflows/issue-267-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Vertical slice witnesses
+        run: cargo test --test vertical_slice_witness_test -- --nocapture
+      - name: Exact-Q mod vertical witness
+        run: cargo test --test exact_q_mod_x86_vertical_test -- --nocapture
