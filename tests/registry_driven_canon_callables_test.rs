@@ -12,7 +12,6 @@ fn lower_one(source: &str) -> Ir {
     lowered.remove(0)
 }
 
-
 #[test]
 fn callable_resolution_is_owned_by_my_lisp_registry_not_a_cml_allowlist() {
     // FILTER was never present in CML's historical CALLABLE_IDS allowlist.
