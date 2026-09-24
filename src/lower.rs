@@ -252,7 +252,7 @@ fn reify_primitive_calls(ir: Ir) -> Ir {
         // #286 / #250: exact callable identity must survive the
         // backend-facing C frontend unchanged. Presentation/runtime labels are
         // a backend concern after Sid8 dispatch, never a lowering identity.
-        Ir::Sid(sid) => Ir::Sid(sid)
+        Ir::Sid(sid) => Ir::Sid(sid),
         Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(_)) => Ir::App {
             func,
             args: args.into_iter().map(reify_primitive_calls).collect(),
