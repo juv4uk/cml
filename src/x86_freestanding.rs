@@ -1177,7 +1177,10 @@ fn preflight_def_body(
         // legitimate first-class value inside a def body; the preflight
         // admits the identity, while actual machine support remains an emit
         // concern that fail-closes precisely (admitted-but-partial, #92).
-        Ir::Builtin(_) => Ok(()),
+        // #246: first-class callables now carry the exact Sid8, admitted here
+        // the same way -- the emit layer still fail-closes on the standalone
+        // word unless it can materialize an actual loadable value.
+        Ir::Builtin(_) | Ir::Sid(_) => Ok(()),
         Ir::Int(value) => {
             wsm_os_target::encode_fixnum(*value).ok_or(CompileError::FixnumOutOfRange(*value))?;
             Ok(())

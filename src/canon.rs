@@ -143,6 +143,12 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
                     ids.insert(id);
                 }
             }
+            // #246: first-class callables carry the exact Sid8 identity, not a
+            // compiler Builtin name. Record the operation so a program that
+            // references a callable as a value is credited with that operation.
+            Ir::Sid(sid) => {
+                ids.insert(*sid);
+            }
             Ir::App { func, args } => {
                 walk(func, ids);
                 for arg in args {

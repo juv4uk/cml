@@ -249,6 +249,17 @@ fn mark_tail_position(ir: &Ir, self_name: &str) -> Ir {
 fn reify_primitive_calls(ir: Ir) -> Ir {
     match ir {
         Ir::Builtin(name) => Ir::Var(name),
+        // #246: first-class callables now carry the exact Sid8. The C
+        // runtime-first path still resolves them to the canonical runtime
+        // variable when the ID has a projection; non-projected SIDs stay
+        // exact and fail closed at the backend (standalone SID8 value).
+        Ir::Sid(sid) => {
+            if let Some(name) = crate::canon::canonical_builtin_name(sid) {
+                Ir::Var(name.to_string())
+            } else {
+                Ir::Sid(sid)
+            }
+        }
         // SID8 canonical builtins used as first-class values keep their
         // historic Builtin/Var shape for the C backend runtime path.
         Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(_)) => {
@@ -414,12 +425,10 @@ fn lower_symbol(s: &str, env: &Env) -> Result<Ir, LowerError> {
 
     // Canon callable meaning comes from the semantic registry even when the
     // function appears as a first-class value rather than in call position.
-    // Rust only projects the opaque semantic ID onto the compiler mechanism.
+    // #246: the identity is the exact Sid8, never Builtin or surface text.
     if !env.is_bound(&upper) {
         if let Some(semantic_id) = crate::canon::callable_semantic_id(s) {
-            if let Some(name) = crate::canon::canonical_builtin_name(semantic_id) {
-                return Ok(Ir::Builtin(name.to_string()));
-            }
+            return Ok(Ir::Sid(semantic_id));
         }
     }
 
