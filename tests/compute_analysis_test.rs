@@ -2,12 +2,33 @@ use cml::compute::{
     AdmissionBlocker, BulkOperation, EffectClass, ExecutionShape, NumericDomain, StorageClass,
     analyze, refine_representation,
 };
+use cml::ir::Ir;
 use cml::lower;
 use cml::parser;
 
 fn lower_one(source: &str) -> cml::ir::Ir {
     let expressions = parser::parse(source).unwrap();
     lower::lower_program(&expressions).unwrap().remove(0)
+}
+
+#[test]
+fn map_and_reduce_lower_to_exact_sid8_identity() {
+    for (source, expected) in [
+        ("(map (lambda (x) (+ x 1)) data)", my_lisp::sid!(00110111)),
+        (
+            "(reduce (lambda (acc x) (+ acc x)) 0 data)",
+            my_lisp::sid!(00111001),
+        ),
+    ] {
+        let ir = lower_one(source);
+        let Ir::App { func, .. } = ir else {
+            panic!("expected Sid8-keyed application, got {ir:?}");
+        };
+        assert!(
+            matches!(func.as_ref(), Ir::Sid(sid) if *sid == expected),
+            "expected exact Sid8 {expected}, got {func:?}"
+        );
+    }
 }
 
 #[test]
@@ -110,9 +131,9 @@ fn proven_fixed_width_contiguous_representation_unlocks_gpu_candidate() {
 }
 
 #[test]
-fn first_class_builtin_add_inside_map_matches_structural_primitive_form() {
+fn sid8_add_inside_numeric_buffer_map_is_gpu_eligible() {
     let source = parser::parse("(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3))").unwrap();
-    let program = lower::lower_program_with_first_class_builtins(&source).unwrap();
+    let program = lower::lower_program(&source).unwrap();
     let analysis = analyze(&program[0]);
     assert!(
         analysis.gpu_eligible(),
