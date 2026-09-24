@@ -875,6 +875,22 @@ impl CBackend {
         ))
     }
 
+    fn compile_sid8_runtime_apply(
+        &mut self,
+        sid: my_lisp::Sid8,
+        args: &[Ir],
+        env: &str,
+    ) -> Result<String, CompileError> {
+        let mut args_list = "(&NIL_V)".to_string();
+        for arg in args.iter().rev() {
+            let arg_expr = self.compile_expr(arg, env)?;
+            args_list = format!("mk_cons({arg_expr}, {args_list})");
+        }
+        Ok(format!(
+            "v_apply(mk_sid_callable(0b{sid}), ({args_list}))"
+        ))
+    }
+
     fn compile_sid8_call(
         &mut self,
         sid: my_lisp::Sid8,
@@ -939,12 +955,7 @@ impl CBackend {
         }
 
         if sid == my_lisp::sid!(00001101) {
-            require_arity(2)?;
-            return Ok(format!(
-                "v_sub({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
+            return self.compile_sid8_runtime_apply(sid, args, env);
         }
 
         if sid == my_lisp::sid!(00010100) {
