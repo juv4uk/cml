@@ -1,0 +1,20 @@
+name: Issue 304 repaired upstream UTF-8 closure
+
+on:
+  pull_request:
+    paths:
+      - external/my-lisp
+      - tests/utf8_decode_x86_replay_168_test.rs
+      - .github/workflows/issue-304-utf8-upstream-sync.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Repaired upstream UTF-8 closure
+        run: cargo test --test utf8_decode_x86_replay_168_test full_decoder_closure_state_is_recorded_honestly -- --exact --nocapture
