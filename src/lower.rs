@@ -10,7 +10,7 @@
 //! `main.rs`: `MacroExpander::new().process(&exprs)` runs first).
 
 use crate::ast::{Expr, NumericBufferLiteral};
-use crate::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
+use crate::ir::{BufferLiteral, Ir, Params, Quoted};
 use crate::semantic::{self, SemanticError};
 use std::fmt;
 
@@ -144,16 +144,6 @@ pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
         .collect()
 }
 
-/// Contract-2.1 lowering for backends that represent builtins as ordinary
-/// callable values in the lexical environment.  The shared structural IR
-/// still records primitive calls as `Ir::Prim` first (the fpga-lisp 2.0
-/// backend depends on that form); this backend-facing pass reifies every
-/// primitive use into `App(Var(...), ...)`, recursively, so a local binding
-/// can shadow `+`, `car`, etc. through normal environment lookup.
-pub fn lower_program_with_first_class_builtins(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
-    lower_program(exprs).map(|program| program.into_iter().map(reify_primitive_calls).collect())
-}
-
 /// Lower and mark explicit self-tail-calls inside `Def` bodies.
 ///
 /// For each `Def { name, value: Lambda { body } }`, any `App { func:
@@ -243,89 +233,6 @@ fn mark_tail_position(ir: &Ir, self_name: &str) -> Ir {
         },
         // All other nodes are leaves or non-tail contexts — clone unchanged.
         other => other.clone(),
-    }
-}
-
-fn reify_primitive_calls(ir: Ir) -> Ir {
-    match ir {
-        Ir::Builtin(name) => Ir::Var(name),
-        // #286 / #250: exact callable identity must survive the
-        // backend-facing C frontend unchanged. Presentation/runtime labels are
-        // a backend concern after Sid8 dispatch, never a lowering identity.
-        Ir::Sid(sid) => Ir::Sid(sid),
-        Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(_)) => Ir::App {
-            func,
-            args: args.into_iter().map(reify_primitive_calls).collect(),
-        },
-        Ir::Prim { op, args } => Ir::App {
-            func: Box::new(Ir::Var(primitive_name(op).to_string())),
-            args: args.into_iter().map(reify_primitive_calls).collect(),
-        },
-        Ir::MachinePrim { op, args } => Ir::MachinePrim {
-            op,
-            args: args.into_iter().map(reify_primitive_calls).collect(),
-        },
-        Ir::Lambda { params, body } => Ir::Lambda {
-            params,
-            body: Box::new(reify_primitive_calls(*body)),
-        },
-        Ir::App { func, args } => Ir::App {
-            func: Box::new(reify_primitive_calls(*func)),
-            args: args.into_iter().map(reify_primitive_calls).collect(),
-        },
-        Ir::Cond { branches } => Ir::Cond {
-            branches: branches
-                .into_iter()
-                .map(|(test, body)| (reify_primitive_calls(test), reify_primitive_calls(body)))
-                .collect(),
-        },
-        Ir::CondMatch { branches } => Ir::CondMatch {
-            branches: branches
-                .into_iter()
-                .map(|(query, expected, body)| {
-                    (
-                        reify_primitive_calls(query),
-                        expected,
-                        reify_primitive_calls(body),
-                    )
-                })
-                .collect(),
-        },
-        Ir::Let { bindings, body } => Ir::Let {
-            bindings: bindings
-                .into_iter()
-                .map(|(name, value)| (name, reify_primitive_calls(value)))
-                .collect(),
-            body: Box::new(reify_primitive_calls(*body)),
-        },
-        Ir::Def { name, value } => Ir::Def {
-            name,
-            value: Box::new(reify_primitive_calls(*value)),
-        },
-        leaf => leaf,
-    }
-}
-
-fn primitive_name(op: PrimOp) -> &'static str {
-    match op {
-        PrimOp::Add => "+",
-        PrimOp::Sub => "-",
-        PrimOp::Cons => "CONS",
-        PrimOp::Car => "CAR",
-        PrimOp::Cdr => "CDR",
-        PrimOp::Eq => "EQ",
-        PrimOp::Atom => "ATOM",
-        PrimOp::EqualP => "EQUAL?",
-        PrimOp::ExactQLt => "<",
-        PrimOp::ExactQLe => "<=",
-        PrimOp::ExactQGe => ">=",
-        PrimOp::Cddr => "CDDR",
-        PrimOp::Cadddr => "CADDDR",
-        PrimOp::Caar => "CAAR",
-        PrimOp::Cadr => "CADR",
-        PrimOp::Caddr => "CADDR",
-        PrimOp::List => "LIST",
-        PrimOp::Quotient => "QUOTIENT",
     }
 }
 
