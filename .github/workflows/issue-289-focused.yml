@@ -1,0 +1,25 @@
+name: Issue 289 exact Sid8 x86 multiplication
+
+on:
+  pull_request:
+    paths:
+      - src/x86_freestanding.rs
+      - tests/direct_sid8_x86_mul_test.rs
+      - tests/utf8_decode_x86_replay_168_test.rs
+      - .github/workflows/issue-289-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format check
+        run: cargo fmt -p cml -- --check
+      - name: Native exact Sid8 multiplication
+        run: cargo test --test direct_sid8_x86_mul_test -- --nocapture
+      - name: Current real UTF8 closure after multiplication
+        run: cargo test --test utf8_decode_x86_replay_168_test full_decoder_closure_state_is_recorded_honestly -- --nocapture
