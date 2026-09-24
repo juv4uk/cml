@@ -1,0 +1,26 @@
+name: Issue 283 registry-driven callable identity
+
+on:
+  pull_request:
+    paths:
+      - build.rs
+      - src/canon.rs
+      - tests/registry_driven_canon_callables_test.rs
+      - tests/compute_analysis_test.rs
+      - .github/workflows/issue-283-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format check
+        run: cargo fmt -p cml -- --check
+      - name: Registry callable proof
+        run: cargo test --test registry_driven_canon_callables_test -- --nocapture
+      - name: Compute MAP REDUCE proof
+        run: cargo test --test compute_analysis_test -- --nocapture
