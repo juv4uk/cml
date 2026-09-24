@@ -18,8 +18,10 @@ fn value(source: &str) -> String {
 const LENGTH_LIB: &str = r#"
 (def length-onto
   (lambda (x acc)
-    (cond ((atom x) acc)
-          (t (length-onto (cdr x) (+ acc 1))))))
+    (cond ((atom x) (structural-kind empty-list) acc)
+          ((atom x) (structural-kind atom) acc)
+          ((atom x) (structural-kind pair)
+           (length-onto (cdr x) (+ acc 1))))))
 (def length
   (lambda (x) (length-onto x 0)))
 "#;
@@ -27,8 +29,10 @@ const LENGTH_LIB: &str = r#"
 const MAP_LIB: &str = r#"
 (def map
   (lambda (f xs)
-    (cond ((atom xs) ())
-          (t (cons (f (car xs)) (map f (cdr xs)))))))
+    (cond ((atom xs) (structural-kind empty-list) ())
+          ((atom xs) (structural-kind atom) ())
+          ((atom xs) (structural-kind pair)
+           (cons (f (car xs)) (map f (cdr xs)))))))
 "#;
 
 #[test]

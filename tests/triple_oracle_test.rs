@@ -35,7 +35,7 @@ fn cases() -> Vec<Case> {
         },
         Case {
             name: "self-recursive-count",
-            source: "(def count (lambda (n) (cond ((eq n 0) 0) (t (+ 1 (count (- n 1))))))) (count 3)",
+            source: "(def count (lambda (n) (cond ((eq n 0) (identity-relation same) 0) ((eq n 0) (identity-relation distinct) (+ 1 (count (- n 1))))))) (count 3)",
             expected: Observation::Value("3".into()),
         },
         Case {
@@ -88,7 +88,7 @@ fn cases() -> Vec<Case> {
         },
         Case {
             name: "cond-t-branch",
-            source: "(cond ((eq 0 1) 99) (t 42))",
+            source: "(cond ((eq 0 1) (identity-relation same) 99) ((eq 0 1) (identity-relation distinct) 42))",
             expected: Observation::Value("42".into()),
         },
     ]

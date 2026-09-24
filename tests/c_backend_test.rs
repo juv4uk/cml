@@ -152,6 +152,37 @@ fn c_backend_top_level_def_shadows_registry_callable() {
 }
 
 #[test]
+fn c_backend_current_predicates_return_upstream_record_domains() {
+    assert_eq!(
+        compile_and_run_first_class("(atom (quote radio))", "atom_kind_atom"),
+        "(structural-kind atom)"
+    );
+    assert_eq!(
+        compile_and_run_first_class("(atom (quote ()))", "atom_kind_empty"),
+        "(structural-kind empty-list)"
+    );
+    assert_eq!(
+        compile_and_run_first_class("(atom (quote (radio antenna)))", "atom_kind_pair"),
+        "(structural-kind pair)"
+    );
+    assert_eq!(
+        compile_and_run_first_class("(eq 3 3)", "eq_identity_same"),
+        "(identity-relation same)"
+    );
+    assert_eq!(
+        compile_and_run_first_class("(eq 3 4)", "eq_identity_distinct"),
+        "(identity-relation distinct)"
+    );
+    assert_eq!(
+        compile_and_run_first_class(
+            "(equal? (quote (p . 0)) (cons (quote p) 0))",
+            "equal_structural_same",
+        ),
+        "(structural-relation same)"
+    );
+}
+
+#[test]
 fn c_backend_passes_a_builtin_as_a_higher_order_argument() {
     let code = "((lambda (f) (f 2 3)) +)";
     assert_eq!(
@@ -376,7 +407,7 @@ fn compiles_self_recursive_def_to_c_and_runs_it() {
     // clobber bug (e73f93a) -- here to prove the C backend's independent
     // letrec-placeholder-plus-backpatch (compile_def in c_backend.rs)
     // gets self-recursion right too, not just fixed-arity application.
-    let code = "(def count (lambda (n) (cond ((eq n 0) 99) (t (count (+ n -1)))))) (count 3)";
+    let code = "(def count (lambda (n) (cond ((eq n 0) (identity-relation same) 99) ((eq n 0) (identity-relation distinct) (count (+ n -1)))))) (count 3)";
     let exprs = parser::parse(code).unwrap();
     let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
     let mut backend = CBackend::new();
@@ -620,9 +651,12 @@ fn c_backend_true_is_an_ordinary_symbol_not_a_manufactured_tag() {
     // not a test-harness artifact. Fixed by storing TRUE_V's symbol as
     // "T" to match mk_sym's own canonical case.
     assert_eq!(compile_and_run_first_class("t", "true_prints_as_t"), "t");
-    assert_eq!(compile_and_run_first_class("(atom t)", "true_is_atom"), "t");
+    assert_eq!(
+        compile_and_run_first_class("(atom t)", "true_is_atom"),
+        "(structural-kind atom)"
+    );
     assert_eq!(
         compile_and_run_first_class("(eq t (quote t))", "true_eq_quoted_symbol_t"),
-        "t"
+        "(identity-relation same)"
     );
 }
