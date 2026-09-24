@@ -1,0 +1,35 @@
+name: Issue 302 focused C backend no-Prim boundary
+
+on:
+  pull_request:
+    paths:
+      - src/c_backend.rs
+      - tests/c_backend_test.rs
+      - tests/c_backend_conformance_test.rs
+      - tests/exhaustive_classification_test.rs
+      - tests/ir_classification_matrix_test.rs
+      - .github/workflows/issue-302-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format check
+        run: cargo fmt -p cml -- --check
+      - name: C backend regression
+        run: cargo test --test c_backend_test -- --nocapture
+      - name: C backend conformance
+        run: cargo test --test c_backend_conformance_test -- --nocapture
+      - name: Exhaustive classification
+        run: cargo test --test exhaustive_classification_test -- --nocapture
+      - name: IR classification matrix
+        run: cargo test --test ir_classification_matrix_test -- --nocapture
+      - name: Exact callable value guard
+        run: cargo test --test c_sid8_callable_value_test -- --nocapture
+      - name: Current predicate record-domain guard
+        run: cargo test --test c_predicate_record_domain_test -- --nocapture
