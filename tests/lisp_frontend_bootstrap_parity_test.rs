@@ -37,10 +37,7 @@ fn rust_lowering_envelope(source: &str) -> String {
     let parsed = parser::parse(source).expect("CML source must parse");
     let lowered = lower::lower_program(&parsed).expect("CML source must lower");
 
-    let [
-        Ir::App { func, args },
-    ] = lowered.as_slice()
-    else {
+    let [Ir::App { func, args }] = lowered.as_slice() else {
         panic!("bounded bootstrap witness must lower to one Sid8-keyed application: {lowered:?}");
     };
 
