@@ -32,7 +32,7 @@ fn upstream_mul_witness() -> (String, String) {
 
 fn compile_and_run(source: &str) -> String {
     let expressions = parser::parse(source).expect("upstream multiplication witness must parse");
-    let program = lower::lower_program_with_first_class_builtins(&expressions)
+    let program = lower::lower_program(&expressions)
         .expect("upstream multiplication witness must lower");
     let c_source = CBackend::new()
         .compile_program(&program)
