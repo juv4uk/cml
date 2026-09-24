@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/issue-258-current-probe.yml
+      - tests/utf8_sid_inventory_probe_test.rs
 
 jobs:
   probe:
@@ -16,3 +17,5 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Current real UTF8 closure
         run: cargo test --test utf8_decode_x86_replay_168_test full_decoder_closure_state_is_recorded_honestly -- --nocapture
+      - name: Current UTF8 SID inventory
+        run: cargo test --test utf8_sid_inventory_probe_test -- --nocapture
