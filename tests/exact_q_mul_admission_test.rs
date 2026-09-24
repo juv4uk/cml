@@ -15,7 +15,7 @@ fn exact_q_mul_is_admitted_by_upstream_semantic_identity_1002() {
         .expect("admitted exact-Q multiplication identity must have compiler operation metadata");
     assert_eq!(operation.semantic_id, my_lisp::sid!(00001110));
     assert_eq!(operation.canonical_name, "*");
-    assert_eq!(operation.cml_ir_projection, "Ir::App(Builtin(\"*\"))");
+    assert_eq!(operation.cml_ir_projection, "Ir::App(Sid(00001110))");
     assert_eq!(operation.status, "partial");
 
     let expressions = parser::parse("(* 3 64)").expect("multiplication source must parse");
@@ -28,15 +28,12 @@ fn exact_q_mul_is_admitted_by_upstream_semantic_identity_1002() {
 
     match node {
         Ir::App { func, args } => {
-            assert_eq!(
-                func.as_ref(),
-                &Ir::Builtin("*".to_string()),
-                "semantic 1002 must lower as its own Canon builtin identity"
+            assert!(
+                matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00001110)),
+                "semantic 1002 must lower as its own SID8 identity"
             );
             assert_eq!(args, &[Ir::Int(3), Ir::Int(64)]);
         }
-        other => panic!(
-            "semantic identity 1002 must lower to a distinct Canon builtin before backend admission, got {other:?}"
-        ),
+        other => panic!("semantic identity 1002 must lower to a distinct SID8 App, got {other:?}"),
     }
 }

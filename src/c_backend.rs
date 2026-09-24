@@ -668,15 +668,26 @@ impl CBackend {
                     Ok(result)
                 }
             }
-            PrimOp::Cddr => Ok(format!("v_cddr({})", self.compile_expr(&args[0], env)?)),
-            PrimOp::Cadddr => Ok(format!("v_cadddr({})", self.compile_expr(&args[0], env)?)),
-            PrimOp::Caar => Ok(format!("v_caar({})", self.compile_expr(&args[0], env)?)),
-            PrimOp::Cadr => Ok(format!("v_cadr({})", self.compile_expr(&args[0], env)?)),
-            PrimOp::Cddr => Ok(format!("v_cddr({})", self.compile_expr(&args[0], env)?)),
-            PrimOp::Caddr => Ok(format!("v_caddr({})", self.compile_expr(&args[0], env)?)),
-            PrimOp::Cadddr => Ok(format!("v_cadddr({})", self.compile_expr(&args[0], env)?)),
-            PrimOp::Caar => Ok(format!("v_caar({})", self.compile_expr(&args[0], env)?)),
-            PrimOp::Cadr => Ok(format!("v_cadr({})", self.compile_expr(&args[0], env)?)),
+            PrimOp::Cddr => Ok(format!(
+                "v_cdr(v_cdr({}))",
+                self.compile_expr(&args[0], env)?
+            )),
+            PrimOp::Cadddr => Ok(format!(
+                "v_car(v_cdr(v_cdr(v_cdr({}))))",
+                self.compile_expr(&args[0], env)?
+            )),
+            PrimOp::Caar => Ok(format!(
+                "v_car(v_car({}))",
+                self.compile_expr(&args[0], env)?
+            )),
+            PrimOp::Cadr => Ok(format!(
+                "v_car(v_cdr({}))",
+                self.compile_expr(&args[0], env)?
+            )),
+            PrimOp::Caddr => Ok(format!(
+                "v_car(v_cdr(v_cdr({}))))",
+                self.compile_expr(&args[0], env)?
+            )),
             PrimOp::Car => Ok(format!("v_car({})", self.compile_expr(&args[0], env)?)),
             PrimOp::Cdr => Ok(format!("v_cdr({})", self.compile_expr(&args[0], env)?)),
             PrimOp::Eq => Ok(format!(
@@ -820,22 +831,153 @@ impl CBackend {
         args: &[Ir],
         env: &str,
     ) -> Result<String, CompileError> {
-        if sid == my_lisp::sid!(00000101) {
-            if args.len() != 1 {
-                return Err(CompileError::UnsupportedVariant("SID8 call arity mismatch"));
+        if args.is_empty() && sid == my_lisp::sid!(00100111) {
+            return Ok("&NIL_V".to_string());
+        }
+
+        let require_arity = |expected: usize| {
+            if args.len() == expected {
+                Ok(())
+            } else {
+                Err(CompileError::UnsupportedVariant("SID8 call arity mismatch"))
             }
-            return Ok(format!("v_car({})", self.compile_expr(&args[0], env)?));
+        };
+
+        if sid == my_lisp::sid!(00000010) {
+            require_arity(1)?;
+            return Ok(format!(
+                "(is_atom({}) ? &TRUE_V : &NIL_V)",
+                self.compile_expr(&args[0], env)?
+            ));
+        }
+
+        if sid == my_lisp::sid!(00000011) {
+            require_arity(2)?;
+            return Ok(format!(
+                "(v_eq({}, {}) ? &TRUE_V : &NIL_V)",
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            ));
         }
 
         if sid == my_lisp::sid!(00000100) {
-            if args.len() != 2 {
-                return Err(CompileError::UnsupportedVariant("SID8 call arity mismatch"));
-            }
+            require_arity(2)?;
             return Ok(format!(
                 "mk_cons({}, {})",
                 self.compile_expr(&args[0], env)?,
                 self.compile_expr(&args[1], env)?
             ));
+        }
+
+        if sid == my_lisp::sid!(00000101) {
+            require_arity(1)?;
+            return Ok(format!("v_car({})", self.compile_expr(&args[0], env)?));
+        }
+
+        if sid == my_lisp::sid!(00000110) {
+            require_arity(1)?;
+            return Ok(format!("v_cdr({})", self.compile_expr(&args[0], env)?));
+        }
+
+        if sid == my_lisp::sid!(00001100) {
+            require_arity(2)?;
+            return Ok(format!(
+                "v_add({}, {})",
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            ));
+        }
+
+        if sid == my_lisp::sid!(00001101) {
+            require_arity(2)?;
+            return Ok(format!(
+                "v_sub({}, {})",
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            ));
+        }
+
+        if sid == my_lisp::sid!(00010100) {
+            return Err(CompileError::UnsupportedVariant("quotient in C backend"));
+        }
+
+        if sid == my_lisp::sid!(00011100) {
+            require_arity(2)?;
+            return Ok(format!(
+                "(v_equal_p({}, {}) ? &TRUE_V : &NIL_V)",
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            ));
+        }
+
+        if sid == my_lisp::sid!(00011010) {
+            require_arity(2)?;
+            return Ok(format!(
+                "v_exact_q_lt({}, {})",
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            ));
+        }
+
+        if sid == my_lisp::sid!(00011101) {
+            require_arity(2)?;
+            let a = self.compile_expr(&args[0], env)?;
+            let b = self.compile_expr(&args[1], env)?;
+            return Ok(format!(
+                "(v_exact_q_lt({a}, {b}) == &TRUE_V || v_equal_p({a}, {b}) ? &TRUE_V : &NIL_V)"
+            ));
+        }
+
+        if sid == my_lisp::sid!(00011110) {
+            require_arity(2)?;
+            let a = self.compile_expr(&args[0], env)?;
+            let b = self.compile_expr(&args[1], env)?;
+            return Ok(format!(
+                "(v_exact_q_lt({b}, {a}) == &TRUE_V || v_equal_p({a}, {b}) ? &TRUE_V : &NIL_V)"
+            ));
+        }
+
+        if sid == my_lisp::sid!(00100010) {
+            require_arity(2)?;
+            return Ok(format!(
+                "(v_equal_p({}, {}) ? &TRUE_V : &NIL_V)",
+                self.compile_expr(&args[0], env)?,
+                self.compile_expr(&args[1], env)?
+            ));
+        }
+
+        if sid == my_lisp::sid!(00100111) {
+            // Variadic list: build a chain of mk_cons ending in &NIL_V.
+            let mut list = "&NIL_V".to_string();
+            for arg in args.iter().rev() {
+                let arg_expr = self.compile_expr(arg, env)?;
+                list = format!("mk_cons({arg_expr}, {list})");
+            }
+            return Ok(list);
+        }
+
+        if sid == my_lisp::sid!(00110011) {
+            require_arity(1)?;
+            let x = self.compile_expr(&args[0], env)?;
+            return Ok(format!("v_car(v_car({x}))"));
+        }
+
+        if sid == my_lisp::sid!(00110100) {
+            require_arity(1)?;
+            let x = self.compile_expr(&args[0], env)?;
+            return Ok(format!("v_car(v_cdr({x}))"));
+        }
+
+        if sid == my_lisp::sid!(00110101) {
+            require_arity(1)?;
+            let x = self.compile_expr(&args[0], env)?;
+            return Ok(format!("v_cdr(v_cdr({x}))"));
+        }
+
+        if sid == my_lisp::sid!(00110110) {
+            require_arity(1)?;
+            let x = self.compile_expr(&args[0], env)?;
+            return Ok(format!("v_car(v_cdr(v_cdr(v_cdr({x}))))"));
         }
 
         Err(CompileError::UnsupportedVariant("unimplemented SID8 call"))

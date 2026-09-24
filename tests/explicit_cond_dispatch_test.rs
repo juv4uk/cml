@@ -1,4 +1,4 @@
-use cml::ir::{Ir, PrimOp, Quoted};
+use cml::ir::{Ir, Quoted};
 use cml::{lower, parser};
 
 #[test]
@@ -24,7 +24,9 @@ fn current_three_part_cond_clause_reaches_ir_without_truthiness_rewrite() {
     assert_eq!(branches.len(), 2);
 
     let (query, expected, body) = &branches[0];
-    assert!(matches!(query, Ir::Prim { op: PrimOp::Eq, .. }));
+    assert!(
+        matches!(query, Ir::App { func, .. } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000011)))
+    );
     assert!(matches!(body, Ir::Quote(Quoted::Sym { original, .. }) if original == "matched"));
     assert_eq!(
         expected,

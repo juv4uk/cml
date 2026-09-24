@@ -86,7 +86,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "atom",
         formal_action: "primitive:atom",
-        cml_ir_projection: "Ir::Prim(PrimOp::Atom)",
+        cml_ir_projection: "Ir::App(Sid(00000010))",
         backend_projections: &[
             ("fpga-lisp", "OP_ATOM"),
             ("c", "prim_atom"),
@@ -99,7 +99,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "eq",
         formal_action: "primitive:eq",
-        cml_ir_projection: "Ir::Prim(PrimOp::Eq)",
+        cml_ir_projection: "Ir::App(Sid(00000011))",
         backend_projections: &[
             ("fpga-lisp", "OP_EQ"),
             ("c", "prim_eq"),
@@ -112,7 +112,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "cons",
         formal_action: "primitive:cons",
-        cml_ir_projection: "Ir::Prim(PrimOp::Cons)",
+        cml_ir_projection: "Ir::App(Sid(00000100))",
         backend_projections: &[
             ("fpga-lisp", "OP_CONS"),
             ("c", "mk_cons"),
@@ -125,7 +125,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "car",
         formal_action: "primitive:car",
-        cml_ir_projection: "Ir::Prim(PrimOp::Car)",
+        cml_ir_projection: "Ir::App(Sid(00000101))",
         backend_projections: &[
             ("fpga-lisp", "OP_CAR"),
             ("c", "v_car"),
@@ -138,7 +138,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "cdr",
         formal_action: "primitive:cdr",
-        cml_ir_projection: "Ir::Prim(PrimOp::Cdr)",
+        cml_ir_projection: "Ir::App(Sid(00000110))",
         backend_projections: &[
             ("fpga-lisp", "OP_CDR"),
             ("c", "v_cdr"),
@@ -216,7 +216,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "+",
         formal_action: "primitive:add",
-        cml_ir_projection: "Ir::Prim(PrimOp::Add)",
+        cml_ir_projection: "Ir::App(Sid(00001100))",
         backend_projections: &[
             ("fpga-lisp", "OP_ADD"),
             ("c", "prim_add"),
@@ -229,7 +229,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "-",
         formal_action: "primitive:sub",
-        cml_ir_projection: "Ir::Prim(PrimOp::Sub)",
+        cml_ir_projection: "Ir::App(Sid(00001101))",
         backend_projections: &[
             ("fpga-lisp", "OP_SUB"),
             ("c", "prim_sub"),
@@ -242,7 +242,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "*",
         formal_action: "primitive:exact-q-mul",
-        cml_ir_projection: "Ir::App(Builtin(\"*\"))",
+        cml_ir_projection: "Ir::App(Sid(00001110))",
         backend_projections: &[
             ("fpga-lisp", "unsupported"),
             ("c", "unsupported"),
@@ -255,7 +255,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "mod",
         formal_action: "primitive:exact-q-mod",
-        cml_ir_projection: "Ir::App(Builtin(\"mod\"))",
+        cml_ir_projection: "Ir::App(Sid(00010011))",
         backend_projections: &[
             ("fpga-lisp", "unsupported"),
             ("c", "unsupported"),
@@ -268,7 +268,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "<",
         formal_action: "primitive:exact-q-less-than",
-        cml_ir_projection: "Ir::Prim(PrimOp::ExactQLt)",
+        cml_ir_projection: "Ir::App(Sid(00011010))",
         backend_projections: &[
             ("fpga-lisp", "unsupported"),
             ("c", "v_exact_q_lt/builtin_exact_q_lt"),
@@ -281,7 +281,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: ">",
         formal_action: "primitive:exact-q-greater-than",
-        cml_ir_projection: "Ir::App(Builtin(\">\"))",
+        cml_ir_projection: "Ir::App(Sid(00011011))",
         backend_projections: &[
             ("fpga-lisp", "unsupported"),
             ("c", "unsupported"),
@@ -294,7 +294,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "=",
         formal_action: "primitive:exact-q-equal",
-        cml_ir_projection: "Ir::App(Builtin(\"=\"))",
+        cml_ir_projection: "Ir::App(Sid(00011100))",
         backend_projections: &[
             ("fpga-lisp", "unsupported"),
             ("c", "unsupported"),
@@ -307,7 +307,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "<=",
         formal_action: "primitive:exact-q-less-equal",
-        cml_ir_projection: "Ir::Prim(PrimOp::ExactQLe)",
+        cml_ir_projection: "Ir::App(Sid(00011101))",
         backend_projections: &[
             ("fpga-lisp", "unsupported"),
             ("c", "unsupported"),
@@ -320,7 +320,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: ">=",
         formal_action: "primitive:exact-q-greater-equal",
-        cml_ir_projection: "Ir::Prim(PrimOp::ExactQGe)",
+        cml_ir_projection: "Ir::App(Sid(00011110))",
         backend_projections: &[
             ("fpga-lisp", "unsupported"),
             ("c", "unsupported"),
@@ -333,7 +333,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "equal?",
         formal_action: "primitive:equalp",
-        cml_ir_projection: "Ir::Prim(PrimOp::EqualP)",
+        cml_ir_projection: "Ir::App(Sid(00100010))",
         backend_projections: &[
             ("fpga-lisp", "cml_equal"),
             ("c", "prim_equalp"),
@@ -346,7 +346,7 @@ const OPERATIONS: &[OperationSpec] = &[
     OperationSpec {
         canonical_name: "numeric-buffer-map",
         formal_action: "library:numeric-buffer-map",
-        cml_ir_projection: "Ir::App(Builtin(\"NUMERIC-BUFFER-MAP\"))",
+        cml_ir_projection: "Ir::App(Sid(01011001))",
         backend_projections: &[
             ("fpga-lisp", "unsupported"),
             ("c", "cml_numeric_buffer_map"),

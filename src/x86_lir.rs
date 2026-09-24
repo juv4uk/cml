@@ -451,34 +451,29 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
         }
         Ir::Prim { op, args } => match op {
             PrimOp::Add | PrimOp::Sub => {
-                if args.len() != 2 {
-                    return Err(LirLowerError::InvalidArity {
-                        expected: 2,
-                        found: args.len(),
-                    });
-                }
-                let lhs = lower_expr(&args[0], ctx)?;
-                let rhs = lower_expr(&args[1], ctx)?;
-                let dst = ctx.func.alloc_vreg();
                 let lir_op = match op {
                     PrimOp::Add => LirAluOp::Add,
                     PrimOp::Sub => LirAluOp::Sub,
                     _ => unreachable!(),
                 };
-                ctx.emit(LirInst::Alu {
-                    op: lir_op,
-                    dst,
-                    lhs,
-                    rhs,
-                    provenance: prov,
-                });
-                Ok(dst)
+                return lower_binary_alu(args, lir_op, ctx, prov);
             }
             _ => Err(LirLowerError::Unsupported(format!(
                 "primitive op {:?} is not admitted in scalar LIR slice",
                 op
             ))),
         },
+        Ir::App { func, args }
+            if matches!(func.as_ref(), Ir::Sid(sid)
+            if *sid == my_lisp::sid!(00001100) || *sid == my_lisp::sid!(00001101)) =>
+        {
+            let lir_op = if *func.as_ref() == Ir::Sid(my_lisp::sid!(00001100)) {
+                LirAluOp::Add
+            } else {
+                LirAluOp::Sub
+            };
+            lower_binary_alu(args, lir_op, ctx, prov)
+        }
         Ir::Cond { branches } => {
             if branches.is_empty() {
                 return Err(LirLowerError::Unsupported(
@@ -507,12 +502,22 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
                     break;
                 }
 
+                // Normalize SID8 eq (00000011) to the Prim shape the rest of
+                // this branch already handles; SID is the language identity,
+                // PrimOp here is only a backend dispatch marker.
+                let normalized_test = match test_expr {
+                    Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000011)) => {
+                        Some(args.as_slice())
+                    }
+                    Ir::Prim {
+                        op: PrimOp::Eq,
+                        args,
+                    } => Some(args.as_slice()),
+                    _ => None,
+                };
+
                 // If test is (eq lhs rhs)
-                if let Ir::Prim {
-                    op: PrimOp::Eq,
-                    args,
-                } = test_expr
-                {
+                if let Some(args) = normalized_test {
                     if args.len() != 2 {
                         return Err(LirLowerError::InvalidArity {
                             expected: 2,
@@ -586,6 +591,31 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
             other
         ))),
     }
+}
+
+fn lower_binary_alu(
+    args: &[Ir],
+    op: LirAluOp,
+    ctx: &mut LowerContext<'_>,
+    prov: Provenance,
+) -> Result<VReg, LirLowerError> {
+    if args.len() != 2 {
+        return Err(LirLowerError::InvalidArity {
+            expected: 2,
+            found: args.len(),
+        });
+    }
+    let lhs = lower_expr(&args[0], ctx)?;
+    let rhs = lower_expr(&args[1], ctx)?;
+    let dst = ctx.func.alloc_vreg();
+    ctx.emit(LirInst::Alu {
+        op,
+        dst,
+        lhs,
+        rhs,
+        provenance: prov,
+    });
+    Ok(dst)
 }
 
 /// Lowers a semantic `Ir` program into an x86 `LirFunction` CFG.

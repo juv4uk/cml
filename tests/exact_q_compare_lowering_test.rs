@@ -1,4 +1,4 @@
-use cml::ir::{Ir, PrimOp};
+use cml::ir::Ir;
 use cml::{canon, lower, parser};
 
 #[test]
@@ -36,50 +36,19 @@ fn exact_q_compare_family_is_admitted_by_distinct_semantic_identity() {
             panic!("expected one lowered expression for {surface}, got {lowered:?}");
         };
 
-        if semantic_id == my_lisp::sid!(00011010) {
-            assert_eq!(operation.cml_ir_projection, "Ir::Prim(PrimOp::ExactQLt)");
-            assert!(matches!(
-                node,
-                Ir::Prim {
-                    op: PrimOp::ExactQLt,
-                    args
-                } if args == &[Ir::Int(128), Ir::Int(191)]
-            ));
-        } else if semantic_id == my_lisp::sid!(00011101) {
-            assert_eq!(operation.cml_ir_projection, "Ir::Prim(PrimOp::ExactQLe)");
-            assert!(matches!(
-                node,
-                Ir::Prim {
-                    op: PrimOp::ExactQLe,
-                    args
-                } if args == &[Ir::Int(128), Ir::Int(191)]
-            ));
-        } else if semantic_id == my_lisp::sid!(00011110) {
-            assert_eq!(operation.cml_ir_projection, "Ir::Prim(PrimOp::ExactQGe)");
-            assert!(matches!(
-                node,
-                Ir::Prim {
-                    op: PrimOp::ExactQGe,
-                    args
-                } if args == &[Ir::Int(128), Ir::Int(191)]
-            ));
-        } else {
-            assert_eq!(
-                operation.cml_ir_projection,
-                format!("Ir::App(Builtin(\"{surface}\"))")
-            );
-            match node {
-                Ir::App { func, args } => {
-                    assert_eq!(
-                        func.as_ref(),
-                        &Ir::Builtin(surface.to_string()),
-                        "numeric {surface} must be a Canon builtin identity, not a free Var or semantic 0003 Eq"
-                    );
-                    assert_eq!(args, &[Ir::Int(128), Ir::Int(191)]);
-                }
-                other => panic!(
-                    "semantic identity {semantic_id} must remain admitted-but-partial until its own #92 slice, got {other:?}"
-                ),
+        // #246: every admitted callable is an exact SID8 function call.
+        let expected_projection = format!("Ir::App(Sid({}))", semantic_id);
+        assert_eq!(operation.cml_ir_projection, expected_projection);
+        match node {
+            Ir::App { func, args } => {
+                assert!(
+                    matches!(func.as_ref(), Ir::Sid(sid) if *sid == semantic_id),
+                    "{surface} must lower as an exact SID8 call, not a Builtin or free Var"
+                );
+                assert_eq!(args, &[Ir::Int(128), Ir::Int(191)]);
+            }
+            other => {
+                panic!("semantic identity {semantic_id} must lower as Ir::App(Sid), got {other:?}")
             }
         }
     }

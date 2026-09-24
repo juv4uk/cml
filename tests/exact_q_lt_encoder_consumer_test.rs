@@ -11,16 +11,14 @@ fn assert_exact_q_lt_surface(source: &str) {
     };
 
     match node {
-        Ir::Prim { op, args } => {
-            assert_eq!(format!("{op:?}"), "ExactQLt", "source: {source}");
+        Ir::App { func, args } => {
+            assert!(
+                matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00011010)),
+                "source: {source}"
+            );
             assert_eq!(args, &[Ir::Int(42), Ir::Int(512)], "source: {source}");
         }
-        Ir::App { .. } => panic!(
-            "semantic 1014 surface {source} is admitted but still lowers as generic App; my-lisp#507 compiled encoder now reaches this exact blocker through Lisp-owned largest-chunk"
-        ),
-        other => panic!(
-            "semantic 1014 surface {source} must lower as exact-Q comparison IR, got {other:?}"
-        ),
+        other => panic!("semantic 1014 surface {source} must lower as SID8 App, got {other:?}"),
     }
 }
 

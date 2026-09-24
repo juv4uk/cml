@@ -10,7 +10,7 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use cml::elf64::Elf64Executable;
-use cml::ir::{Ir, PrimOp};
+use cml::ir::Ir;
 use cml::lisp_asm_vertical::{VerticalSliceError, items_to_gnu_asm, select_arithmetic_slice};
 use cml::lower;
 use cml::machine_inst::assemble_program;
@@ -35,8 +35,8 @@ fn lisp_source_reaches_native_x86_without_c_or_rust_runtime() {
     let ir = lower::lower_program(&expanded).expect("lowering must succeed");
     assert_eq!(
         ir,
-        vec![Ir::Prim {
-            op: PrimOp::Add,
+        vec![Ir::App {
+            func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
             args: vec![Ir::Int(10), Ir::Int(32)],
         }],
         "fixture must lower through admitted Lisp IR, not hand-built target bytes"
@@ -130,8 +130,8 @@ fn arithmetic_slice_fails_closed_outside_its_admitted_scope() {
         Err(VerticalSliceError::EmptyProgram)
     );
 
-    let bad_arity = vec![Ir::Prim {
-        op: PrimOp::Add,
+    let bad_arity = vec![Ir::App {
+        func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
         args: vec![Ir::Int(1)],
     }];
     assert_eq!(

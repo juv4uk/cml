@@ -80,7 +80,9 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
                     max: MAX_CALL_ARGS,
                 });
             }
-            validate_ir(func)?;
+            if !matches!(func.as_ref(), Ir::Sid(_)) {
+                validate_ir(func)?;
+            }
             args.iter().try_for_each(validate_ir)
         }
         Ir::Cond { branches } => branches.iter().try_for_each(|(test, body)| {
@@ -311,6 +313,13 @@ impl Compiler {
             Ir::Builtin(_) => unreachable!("Builtin rejected by validate_ir"),
             Ir::Quote(q) => self.compile_quoted(q, target_reg),
             Ir::Lambda { params, body } => self.compile_lambda(params, body, target_reg),
+            Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(_)) => {
+                if let Ir::Sid(sid) = func.as_ref() {
+                    self.compile_sid_call(*sid, args, target_reg)
+                } else {
+                    unreachable!()
+                }
+            }
             Ir::App { func, args } => self.compile_generic_call(func, args, target_reg),
             Ir::Cond { branches } => self.compile_cond(branches, target_reg),
             Ir::CondMatch { branches } => self.compile_cond_match(branches, target_reg),
@@ -420,6 +429,43 @@ impl Compiler {
             PrimOp::ExactQGe => unreachable!("ExactQGe rejected by validate_ir"),
             PrimOp::Quotient => unreachable!("Quotient rejected by validate_ir"),
         }
+    }
+
+    fn compile_sid_call(&mut self, sid: my_lisp::Sid8, args: &[Ir], target_reg: &str) {
+        // SID8 -> fpga-lisp primitive mechanism. The SID is the language
+        // function identity; PrimOp here is only a backend dispatch marker.
+        let op = if sid == my_lisp::sid!(00000010) {
+            PrimOp::Atom
+        } else if sid == my_lisp::sid!(00000011) || sid == my_lisp::sid!(00011100) {
+            // `eq` and numeric `=` are word equality on the target value.
+            PrimOp::Eq
+        } else if sid == my_lisp::sid!(00100010) {
+            // `equal?` is structural equality.
+            PrimOp::EqualP
+        } else if sid == my_lisp::sid!(00000100) {
+            PrimOp::Cons
+        } else if sid == my_lisp::sid!(00000101) {
+            PrimOp::Car
+        } else if sid == my_lisp::sid!(00000110) {
+            PrimOp::Cdr
+        } else if sid == my_lisp::sid!(00001100) {
+            PrimOp::Add
+        } else if sid == my_lisp::sid!(00001101) {
+            PrimOp::Sub
+        } else if sid == my_lisp::sid!(00100111) {
+            PrimOp::List
+        } else if sid == my_lisp::sid!(00110011) {
+            PrimOp::Caar
+        } else if sid == my_lisp::sid!(00110100) {
+            PrimOp::Cadr
+        } else if sid == my_lisp::sid!(00110101) {
+            PrimOp::Cddr
+        } else if sid == my_lisp::sid!(00110110) {
+            PrimOp::Cadddr
+        } else {
+            panic!("unsupported SID8 call in fpga-lisp compiler: {sid:?}");
+        };
+        self.compile_prim(op, args, target_reg);
     }
 
     fn compile_generic_call(&mut self, func: &Ir, args: &[Ir], target_reg: &str) {

@@ -22,7 +22,7 @@ fn exact_q_mod_is_admitted_by_upstream_semantic_identity_1007() {
     let operation = canon::find_operation_by_id(my_lisp::sid!(00010011))
         .expect("admitted semantic 1007 must have compiler operation metadata");
     assert_eq!(operation.canonical_name, "mod");
-    assert_eq!(operation.cml_ir_projection, "Ir::App(Builtin(\"mod\"))");
+    assert_eq!(operation.cml_ir_projection, "Ir::App(Sid(00010011))");
     assert_eq!(operation.status, "partial");
 
     let expressions = parser::parse("(mod 7 3)").expect("mod source must parse");
@@ -35,11 +35,9 @@ fn exact_q_mod_is_admitted_by_upstream_semantic_identity_1007() {
 
     match node {
         Ir::App { func, args } => {
-            assert_eq!(func.as_ref(), &Ir::Builtin("mod".to_string()));
+            assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00010011)));
             assert_eq!(args, &[Ir::Int(7), Ir::Int(3)]);
         }
-        other => panic!(
-            "semantic 1007 must first lower as its own Canon builtin before backend admission, got {other:?}"
-        ),
+        other => panic!("semantic 1007 must lower as SID8 App, got {other:?}"),
     }
 }

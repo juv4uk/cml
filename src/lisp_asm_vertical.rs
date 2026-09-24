@@ -73,75 +73,26 @@ pub fn select_arithmetic_slice(program: &[Ir]) -> Result<Vec<MachineItem>, Verti
             }));
         }
         Ir::Prim { op, args } if matches!(op, PrimOp::Add | PrimOp::Sub) => {
-            if args.len() != 2 {
-                return Err(VerticalSliceError::InvalidArity {
-                    expected: 2,
-                    actual: args.len(),
-                });
-            }
-
-            let literal = |ir: &Ir| match ir {
-                Ir::Int(n) => Ok(*n),
-                _ => Err(VerticalSliceError::UnsupportedIrVariant(
-                    "non-integer arithmetic operand",
-                )),
+            let alu_op = match op {
+                PrimOp::Add => AluOp::Add,
+                PrimOp::Sub => AluOp::Sub,
+                _ => unreachable!(),
             };
-            let a = literal(&args[0])?;
-            let b = literal(&args[1])?;
-            let tagged_a =
-                wsm_os_target::encode_fixnum(a).ok_or(VerticalSliceError::FixnumOutOfRange(a))?;
-            let tagged_b =
-                wsm_os_target::encode_fixnum(b).ok_or(VerticalSliceError::FixnumOutOfRange(b))?;
-
-            // Load canonical target words, untag, perform arithmetic, then retag.
-            items.push(MachineItem::Inst(MachineInst::MovImm64 {
-                dst: X86Reg::Rcx,
-                imm: tagged_a,
-                provenance: prov.clone(),
-            }));
-            items.push(MachineItem::Inst(MachineInst::SarImm {
-                reg: X86Reg::Rcx,
-                imm: 3,
-                provenance: prov.clone(),
-            }));
-            items.push(MachineItem::Inst(MachineInst::MovImm64 {
-                dst: X86Reg::Rdx,
-                imm: tagged_b,
-                provenance: prov.clone(),
-            }));
-            items.push(MachineItem::Inst(MachineInst::SarImm {
-                reg: X86Reg::Rdx,
-                imm: 3,
-                provenance: prov.clone(),
-            }));
-            items.push(MachineItem::Inst(MachineInst::AluRegReg {
-                op: match op {
-                    PrimOp::Add => AluOp::Add,
-                    PrimOp::Sub => AluOp::Sub,
-                    _ => unreachable!(),
-                },
-                dst: X86Reg::Rcx,
-                src: X86Reg::Rdx,
-                provenance: prov.clone(),
-            }));
-            items.push(MachineItem::Inst(MachineInst::ShlImm {
-                reg: X86Reg::Rcx,
-                imm: 3,
-                provenance: prov.clone(),
-            }));
-            items.push(MachineItem::Inst(MachineInst::AluImm8 {
-                op: AluOp::Or,
-                dst: X86Reg::Rcx,
-                imm: wsm_os_target::Tag::Fixnum as i8,
-                provenance: prov.clone(),
-            }));
-            items.push(MachineItem::Inst(MachineInst::MovRegReg {
-                dst: X86Reg::Rax,
-                src: X86Reg::Rcx,
-                provenance: prov.clone(),
-            }));
+            emit_literal_arithmetic(&mut items, alu_op, args, &prov)?;
         }
-        Ir::App { func, args } if matches!(func.as_ref(), Ir::Builtin(name) if name == "mod") => {
+        Ir::App { func, args }
+            if matches!(func.as_ref(), Ir::Sid(sid)
+                if *sid == my_lisp::sid!(00001100) || *sid == my_lisp::sid!(00001101)) =>
+        {
+            let alu_op = if *func.as_ref() == Ir::Sid(my_lisp::sid!(00001100)) {
+                AluOp::Add
+            } else {
+                AluOp::Sub
+            };
+            emit_literal_arithmetic(&mut items, alu_op, args, &prov)?;
+        }
+        Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00010011)) =>
+        {
             if args.len() != 2 {
                 return Err(VerticalSliceError::InvalidArity {
                     expected: 2,
@@ -298,4 +249,75 @@ pub fn items_to_gnu_asm(items: &[MachineItem]) -> String {
         }
     }
     text
+}
+
+fn emit_literal_arithmetic(
+    items: &mut Vec<MachineItem>,
+    op: AluOp,
+    args: &[Ir],
+    prov: &Provenance,
+) -> Result<(), VerticalSliceError> {
+    if args.len() != 2 {
+        return Err(VerticalSliceError::InvalidArity {
+            expected: 2,
+            actual: args.len(),
+        });
+    }
+
+    let literal = |ir: &Ir| match ir {
+        Ir::Int(n) => Ok(*n),
+        _ => Err(VerticalSliceError::UnsupportedIrVariant(
+            "non-integer arithmetic operand",
+        )),
+    };
+    let a = literal(&args[0])?;
+    let b = literal(&args[1])?;
+    let tagged_a =
+        wsm_os_target::encode_fixnum(a).ok_or(VerticalSliceError::FixnumOutOfRange(a))?;
+    let tagged_b =
+        wsm_os_target::encode_fixnum(b).ok_or(VerticalSliceError::FixnumOutOfRange(b))?;
+
+    items.push(MachineItem::Inst(MachineInst::MovImm64 {
+        dst: X86Reg::Rcx,
+        imm: tagged_a,
+        provenance: prov.clone(),
+    }));
+    items.push(MachineItem::Inst(MachineInst::SarImm {
+        reg: X86Reg::Rcx,
+        imm: 3,
+        provenance: prov.clone(),
+    }));
+    items.push(MachineItem::Inst(MachineInst::MovImm64 {
+        dst: X86Reg::Rdx,
+        imm: tagged_b,
+        provenance: prov.clone(),
+    }));
+    items.push(MachineItem::Inst(MachineInst::SarImm {
+        reg: X86Reg::Rdx,
+        imm: 3,
+        provenance: prov.clone(),
+    }));
+    items.push(MachineItem::Inst(MachineInst::AluRegReg {
+        op,
+        dst: X86Reg::Rcx,
+        src: X86Reg::Rdx,
+        provenance: prov.clone(),
+    }));
+    items.push(MachineItem::Inst(MachineInst::ShlImm {
+        reg: X86Reg::Rcx,
+        imm: 3,
+        provenance: prov.clone(),
+    }));
+    items.push(MachineItem::Inst(MachineInst::AluImm8 {
+        op: AluOp::Or,
+        dst: X86Reg::Rcx,
+        imm: wsm_os_target::Tag::Fixnum as i8,
+        provenance: prov.clone(),
+    }));
+    items.push(MachineItem::Inst(MachineInst::MovRegReg {
+        dst: X86Reg::Rax,
+        src: X86Reg::Rcx,
+        provenance: prov.clone(),
+    }));
+    Ok(())
 }

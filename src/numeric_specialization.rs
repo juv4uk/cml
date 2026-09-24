@@ -226,6 +226,26 @@ fn lower_spec_expr(
 ) -> Result<(VReg, NumericDomain, ValueRepresentation), LirLowerError> {
     let prov = Provenance::new(Some("0104"), "numeric_specialization");
 
+    // SID8 -> local PrimOp mechanism marker for the arithmetic specialization
+    // path. The SID remains the language identity; PrimOp here is only a
+    // backend dispatch convenience inside this pass.
+    let normalized = match expr {
+        Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00001100)) => {
+            Some(Ir::Prim {
+                op: PrimOp::Add,
+                args: args.clone(),
+            })
+        }
+        Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00001101)) => {
+            Some(Ir::Prim {
+                op: PrimOp::Sub,
+                args: args.clone(),
+            })
+        }
+        _ => None,
+    };
+    let expr = normalized.as_ref().unwrap_or(expr);
+
     match expr {
         Ir::Int(val) => {
             let in_fixnum_range = *val >= MIN_FIXNUM && *val <= MAX_FIXNUM;

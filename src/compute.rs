@@ -456,6 +456,15 @@ fn lower_scalar_expr(ir: &Ir, parameters: &[String]) -> Option<ScalarExpr> {
                 Box::new(lower_scalar_expr(&args[1], parameters)?),
             ))
         }
+        Ir::App { func, args }
+            if matches!(&**func, Ir::Sid(sid) if *sid == my_lisp::sid!(00001100))
+                && args.len() == 2 =>
+        {
+            Some(ScalarExpr::CheckedAdd(
+                Box::new(lower_scalar_expr(&args[0], parameters)?),
+                Box::new(lower_scalar_expr(&args[1], parameters)?),
+            ))
+        }
         _ => None,
     }
 }
@@ -499,6 +508,7 @@ fn effect_of(ir: &Ir) -> EffectClass {
                 Ir::Var(name) | Ir::Builtin(name) => {
                     name == "+" || name == "MAP" || name == "NUMERIC-BUFFER-MAP" || name == "REDUCE"
                 }
+                Ir::Sid(sid) => *sid == my_lisp::sid!(00001100),
                 _ => false,
             };
             if known_pure {

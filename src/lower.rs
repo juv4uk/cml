@@ -249,6 +249,22 @@ fn mark_tail_position(ir: &Ir, self_name: &str) -> Ir {
 fn reify_primitive_calls(ir: Ir) -> Ir {
     match ir {
         Ir::Builtin(name) => Ir::Var(name),
+        // SID8 canonical builtins used as first-class values keep their
+        // historic Builtin/Var shape for the C backend runtime path.
+        Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(_)) => {
+            if let Ir::Sid(sid) = func.as_ref() {
+                if let Some(name) = crate::canon::canonical_builtin_name(*sid) {
+                    return Ir::App {
+                        func: Box::new(Ir::Var(name.to_string())),
+                        args: args.into_iter().map(reify_primitive_calls).collect(),
+                    };
+                }
+            }
+            Ir::App {
+                func: Box::new(reify_primitive_calls(*func)),
+                args: args.into_iter().map(reify_primitive_calls).collect(),
+            }
+        }
         Ir::Prim { op, args } => Ir::App {
             func: Box::new(Ir::Var(primitive_name(op).to_string())),
             args: args.into_iter().map(reify_primitive_calls).collect(),
@@ -313,10 +329,6 @@ fn primitive_name(op: PrimOp) -> &'static str {
         PrimOp::ExactQGe => ">=",
         PrimOp::Cddr => "CDDR",
         PrimOp::Cadddr => "CADDDR",
-        PrimOp::Cddr => "CDDR",
-        PrimOp::Caar => "CAAR",
-        PrimOp::Cadr => "CADR",
-        PrimOp::Caddr => "CADDR",
         PrimOp::Caar => "CAAR",
         PrimOp::Cadr => "CADR",
         PrimOp::Caddr => "CADDR",
@@ -467,7 +479,7 @@ fn lower_sid_head(sid: my_lisp::Sid8, args: &[Expr], env: &Env) -> Result<Ir, Lo
         return lower_let_star(args, env);
     }
     if sid == my_lisp::sid!(00010100) && args.len() == 2 {
-        return lower_prim(PrimOp::Quotient, args, env);
+        return lower_sid_call(sid, args, env);
     }
     if sid == my_lisp::sid!(00001010) {
         return Err(LowerError::invalid_form(
@@ -509,75 +521,10 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 
     let upper = func.to_uppercase();
     if !env.is_bound(&upper) {
-        // Canon callable identity comes from my-lisp's registry. The match
-        // below is only the compiler's finite mechanism projection from an
-        // opaque semantic ID to the IR operation it can implement.
+        // Canon callable identity comes from my-lisp's registry. Every
+        // admitted callable lowers as an exact SID8 function call; backends
+        // select their private mechanism from the 8-bit identity directly.
         if let Some(semantic_id) = callable_semantic_id(func) {
-            if semantic_id == my_lisp::sid!(00000010) && args.len() == 1 {
-                return lower_prim(PrimOp::Atom, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00000011) && args.len() == 2 {
-                return lower_prim(PrimOp::Eq, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00100111) {
-                // LIST is variadic: (list) -> NIL, (list a b c) -> (a b c)
-                return lower_prim(PrimOp::List, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00100111) {
-                // LIST is variadic: (list) -> NIL, (list a b c) -> (a b c)
-                return lower_prim(PrimOp::List, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110011) && args.len() == 1 {
-                return lower_prim(PrimOp::Caar, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110100) && args.len() == 1 {
-                return lower_prim(PrimOp::Cadr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110101) && args.len() == 1 {
-                return lower_prim(PrimOp::Cddr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110110) && args.len() == 1 {
-                return lower_prim(PrimOp::Cadddr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110011) && args.len() == 1 {
-                return lower_prim(PrimOp::Caar, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110100) && args.len() == 1 {
-                return lower_prim(PrimOp::Cadr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110101) && args.len() == 1 {
-                return lower_prim(PrimOp::Cddr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00110110) && args.len() == 1 {
-                return lower_prim(PrimOp::Cadddr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00000100) && args.len() == 2 {
-                return lower_prim(PrimOp::Cons, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00000101) && args.len() == 1 {
-                return lower_prim(PrimOp::Car, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00000110) && args.len() == 1 {
-                return lower_prim(PrimOp::Cdr, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00001100) && args.len() == 2 {
-                return lower_prim(PrimOp::Add, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00001101) && args.len() == 2 {
-                return lower_prim(PrimOp::Sub, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00100010) && args.len() == 2 {
-                return lower_prim(PrimOp::EqualP, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00011010) && args.len() == 2 {
-                return lower_prim(PrimOp::ExactQLt, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00011101) && args.len() == 2 {
-                return lower_prim(PrimOp::ExactQLe, args, env);
-            }
-            if semantic_id == my_lisp::sid!(00011110) && args.len() == 2 {
-                return lower_prim(PrimOp::ExactQGe, args, env);
-            }
             if semantic_id == my_lisp::sid!(01011001) {
                 if args.len() == 2 {
                     return lower_generic_call(
@@ -590,36 +537,31 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
                     "numeric-buffer-map expects exactly two arguments",
                 ));
             }
+            return lower_sid_call(semantic_id, args, env);
         }
         // (#238) Typed user-def call identity. A word with a Lisp-owned
-        // registered semantic ID that is neither a backend primitive projection
-        // nor a canonical builtin (e.g. `reverse`, `not`) dispatches by its
-        // Sid8 call key, but only when the current program actually keys the
-        // definition under that SID. This keeps call identity identical to def
-        // identity and preserves classic name-keyed definitions in other
-        // backends. Canonical builtins (`=`, `>`, `mod`, ...) keep their
-        // Builtin identity on purpose (admitted-but-partial, #92).
+        // registered semantic ID that is not a backend primitive projection
+        // dispatches by its Sid8 call key, but only when the current program
+        // actually keys the definition under that SID. This keeps call
+        // identity identical to def identity.
         if let Some(sid) = my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(func)
         {
-            if crate::canon::canonical_builtin_name(sid).is_none() && env.has_sid_keyed_def(sid) {
+            if env.has_sid_keyed_def(sid) {
                 return lower_generic_call(&Expr::Sid(sid), args, env);
             }
-        }
-        // Other admitted callables that are primitive operations but not in
-        // the Canon callable table (e.g. `quotient`) lower directly to PrimOp.
-        if let Some(sid) = my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(func)
-        {
+            // `quotient` is an admitted primitive that is not in the Canon
+            // callable table; it still lowers by its exact SID8.
             if sid == my_lisp::sid!(00010100) && args.len() == 2 {
-                return lower_prim(PrimOp::Quotient, args, env);
+                return lower_sid_call(sid, args, env);
             }
         }
     }
     lower_generic_call(&Expr::Symbol(func.to_string()), args, env)
 }
 
-fn lower_prim(op: PrimOp, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
-    Ok(Ir::Prim {
-        op,
+fn lower_sid_call(sid: my_lisp::Sid8, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
+    Ok(Ir::App {
+        func: Box::new(Ir::Sid(sid)),
         args: args
             .iter()
             .map(|e| lower_expr_admitted(e, env))
@@ -991,9 +933,9 @@ mod sid_head_tests {
     }
 
     #[test]
-    fn equality_builtin_stays_builtin_identity_not_sid() {
-        // #92 contract: numeric `=` keeps its admitted-but-partial canonical
-        // Builtin identity; the typed SID route must never capture it.
+    fn equality_builtin_lowers_to_sid8() {
+        // #246: every admitted callable is an exact SID8 function call.
+        // Numeric `=` is SID 00011100; it no longer keeps a Builtin identity.
         let expr = Expr::List(vec![
             Expr::Symbol("=".into()),
             Expr::Symbol("x".into()),
@@ -1001,10 +943,11 @@ mod sid_head_tests {
         ]);
         let ir = lower_expr_admitted(&expr, &Env::default()).expect("builtin call lowers");
         match ir {
-            Ir::App { func, .. } => {
-                assert!(matches!(func.as_ref(), Ir::Builtin(name) if name == "="));
+            Ir::App { func, args } => {
+                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00011100)));
+                assert_eq!(args.len(), 2);
             }
-            other => panic!("expected Builtin App, got {other:?}"),
+            other => panic!("expected SID8 App, got {other:?}"),
         }
     }
 
@@ -1051,21 +994,21 @@ mod sid_head_tests {
     }
 
     #[test]
-    fn quotient_call_lowers_to_primop() {
-        // Both surface `quotient` and SID 00010100 lower to PrimOp::Quotient.
+    fn quotient_call_lowers_to_sid8() {
+        // Both surface `quotient` and SID 00010100 lower to an exact SID8 call.
         let surface = Expr::List(vec![
             Expr::Symbol("quotient".into()),
             Expr::Integer(7),
             Expr::Integer(2),
         ]);
         let ir = lower_expr_admitted(&surface, &Env::default()).expect("quotient lowers");
-        assert!(matches!(
-            ir,
-            Ir::Prim {
-                op: PrimOp::Quotient,
-                args
-            } if args.len() == 2
-        ));
+        match ir {
+            Ir::App { func, args } => {
+                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00010100)));
+                assert_eq!(args.len(), 2);
+            }
+            other => panic!("expected SID8 App, got {other:?}"),
+        }
 
         let sid_call = Expr::List(vec![
             Expr::Sid(my_lisp::sid!(00010100)),
@@ -1073,12 +1016,12 @@ mod sid_head_tests {
             Expr::Integer(2),
         ]);
         let ir = lower_expr_admitted(&sid_call, &Env::default()).expect("SID quotient lowers");
-        assert!(matches!(
-            ir,
-            Ir::Prim {
-                op: PrimOp::Quotient,
-                args
-            } if args.len() == 2
-        ));
+        match ir {
+            Ir::App { func, args } => {
+                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00010100)));
+                assert_eq!(args.len(), 2);
+            }
+            other => panic!("expected SID8 App, got {other:?}"),
+        }
     }
 }

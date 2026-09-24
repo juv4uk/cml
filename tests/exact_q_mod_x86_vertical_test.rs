@@ -68,7 +68,7 @@ fn upstream_bounded_mod_reaches_native_x86_through_semantics_neutral_divreg() {
             "#111 semantic 1007 witness must lower as one generic builtin application, got {ir:?}"
         );
     };
-    assert_eq!(func.as_ref(), &Ir::Builtin("mod".to_string()));
+    assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00010011)));
     assert_eq!(args.len(), 2);
 
     let machine_items = select_arithmetic_slice(&ir).unwrap_or_else(|error| {

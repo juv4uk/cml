@@ -120,8 +120,12 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
                     PrimOp::Cadddr => my_lisp::sid!(00110110),
                     PrimOp::Caar => my_lisp::sid!(00110011),
                     PrimOp::Cadr => my_lisp::sid!(00110100),
-                    PrimOp::Caddr => my_lisp::sid!(00110110),
                     PrimOp::Quotient => my_lisp::sid!(00010100),
+                    PrimOp::Caddr => {
+                        // No canonical SID exists for caddr; it must lower as
+                        // composite car/cdr, and contribute no scalar semantic ID.
+                        return;
+                    }
                 };
                 ids.insert(id);
                 for arg in args {

@@ -1507,7 +1507,12 @@ fn preflight_quoted(
 fn sid8_call_contract(sid: my_lisp::Sid8) -> Option<(Option<usize>, &'static str)> {
     if sid == my_lisp::sid!(00000010) {
         Some((Some(1), "wsm_atom"))
-    } else if sid == my_lisp::sid!(00000011) {
+    } else if sid == my_lisp::sid!(00000011)
+        || sid == my_lisp::sid!(00011100)
+        || sid == my_lisp::sid!(00100010)
+    {
+        // `eq` (00000011), numeric `=` (00011100) and `equal?` (00100010)
+        // are all word equality on the target representation.
         Some((Some(2), "wsm_eq"))
     } else if sid == my_lisp::sid!(00000100) {
         Some((Some(2), "wsm_cons"))
@@ -1517,6 +1522,23 @@ fn sid8_call_contract(sid: my_lisp::Sid8) -> Option<(Option<usize>, &'static str
         Some((Some(1), "wsm_cdr"))
     } else if sid == my_lisp::sid!(00100111) {
         Some((None, "wsm_cons"))
+    } else if sid == my_lisp::sid!(00001100)
+        || sid == my_lisp::sid!(00001101)
+        || sid == my_lisp::sid!(00010011)
+        || sid == my_lisp::sid!(00011010)
+        || sid == my_lisp::sid!(00011101)
+        || sid == my_lisp::sid!(00011110)
+        || sid == my_lisp::sid!(00010100)
+    {
+        // Inline arithmetic / mod / exact-Q / quotient: arity 2, no runtime name.
+        Some((Some(2), ""))
+    } else if sid == my_lisp::sid!(00110011)
+        || sid == my_lisp::sid!(00110100)
+        || sid == my_lisp::sid!(00110101)
+        || sid == my_lisp::sid!(00110110)
+    {
+        // Composed car/cdr accessors: arity 1, no runtime name.
+        Some((Some(1), ""))
     } else {
         None
     }
@@ -2593,6 +2615,56 @@ impl Emitter {
         };
         if let Some(expected) = expected {
             debug_assert_eq!(args.len(), expected, "preflight checked SID8 arity");
+        }
+
+        // Inline or backend-composed mechanisms selected directly from SID8.
+        if sid == my_lisp::sid!(00001100) {
+            return self.emit_arithmetic(PrimOp::Add, args);
+        }
+        if sid == my_lisp::sid!(00001101) {
+            return self.emit_arithmetic(PrimOp::Sub, args);
+        }
+        if sid == my_lisp::sid!(00011010) {
+            return self.emit_exact_q_lt(args);
+        }
+        if sid == my_lisp::sid!(00011101) {
+            return self.emit_exact_q_le(args);
+        }
+        if sid == my_lisp::sid!(00011110) {
+            return self.emit_exact_q_ge(args);
+        }
+        if sid == my_lisp::sid!(00010100) {
+            return self.emit_quotient(args);
+        }
+        if sid == my_lisp::sid!(00010011) {
+            return self.emit_mod(args);
+        }
+
+        if sid == my_lisp::sid!(00110011) {
+            self.emit_ir(&args[0])?;
+            self.line("    call wsm_car");
+            self.line("    call wsm_car");
+            return Ok(());
+        }
+        if sid == my_lisp::sid!(00110100) {
+            self.emit_ir(&args[0])?;
+            self.line("    call wsm_cdr");
+            self.line("    call wsm_car");
+            return Ok(());
+        }
+        if sid == my_lisp::sid!(00110101) {
+            self.emit_ir(&args[0])?;
+            self.line("    call wsm_cdr");
+            self.line("    call wsm_cdr");
+            return Ok(());
+        }
+        if sid == my_lisp::sid!(00110110) {
+            self.emit_ir(&args[0])?;
+            self.line("    call wsm_cdr");
+            self.line("    call wsm_cdr");
+            self.line("    call wsm_cdr");
+            self.line("    call wsm_car");
+            return Ok(());
         }
 
         if sid == my_lisp::sid!(00100111) {
