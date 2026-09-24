@@ -14,11 +14,10 @@
 //! self-recursive, via the same letrec-placeholder-plus-backpatch
 //! technique `compiler.rs`'s `compile_def` uses on fpga-lisp -- see that
 //! function's doc comment and `docs/abi.md`'s `def` section for the
-//! shared idea), and the first contract-2.1 slice: builtins bootstrapped as
-//! ordinary callable values, higher-order use, lexical shadowing, canonical
-//! `#<builtin name>` printing, and named non-callable/arity failures.  The C
-//! path receives `lower_program_with_first_class_builtins`; fpga-lisp keeps
-//! the contract-2.0 `Ir::Prim` path until it independently implements 2.1.
+//! shared idea), and exact Sid8 callable values: higher-order use, lexical
+//! shadowing, presentation-only builtin labels, and fail-closed arity/type
+//! boundaries. The C path consumes the same standard Sid8-preserving lowering
+//! as every other backend; legacy `Ir::Prim` callable identity is rejected.
 //!
 //! The runtime is a small tagged-union `Value` with a mutable-cons alist
 //! for environments -- the same conceptual model `compiler.rs` uses on
@@ -26,7 +25,7 @@
 //! walking it), just implemented directly as C structs instead of tagged
 //! 32-bit words on a heap array.
 
-use crate::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
+use crate::ir::{BufferLiteral, Ir, Params, Quoted};
 use std::fmt;
 
 /// Sanitizes a my-lisp def name into a valid C identifier for use as a raw
@@ -704,87 +703,7 @@ impl CBackend {
             Ir::Def { .. } => Err(CompileError::NestedDef),
             Ir::MachinePrim { .. } => Err(CompileError::UnsupportedVariant("MachinePrim")),
             Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
-            Ir::Prim { op, args } => self.compile_prim(*op, args, env),
-        }
-    }
-
-    fn compile_prim(&mut self, op: PrimOp, args: &[Ir], env: &str) -> Result<String, CompileError> {
-        match op {
-            PrimOp::Add => Ok(format!(
-                "v_add({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            )),
-            PrimOp::Sub => Ok(format!(
-                "v_sub({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            )),
-            PrimOp::Cons => Ok(format!(
-                "mk_cons({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            )),
-            PrimOp::List => {
-                if args.is_empty() {
-                    Ok("&NIL_V".to_string())
-                } else {
-                    let mut elems = Vec::new();
-                    for arg in args {
-                        elems.push(self.compile_expr(arg, env)?);
-                    }
-                    // Build list right-to-left using mk_cons
-                    let mut result = "&NIL_V".to_string();
-                    for elem in elems.iter().rev() {
-                        result = format!("mk_cons({}, {})", elem, result);
-                    }
-                    Ok(result)
-                }
-            }
-            PrimOp::Cddr => Ok(format!(
-                "v_cdr(v_cdr({}))",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Cadddr => Ok(format!(
-                "v_car(v_cdr(v_cdr(v_cdr({}))))",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Caar => Ok(format!(
-                "v_car(v_car({}))",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Cadr => Ok(format!(
-                "v_car(v_cdr({}))",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Caddr => Ok(format!(
-                "v_car(v_cdr(v_cdr({}))))",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::Car => Ok(format!("v_car({})", self.compile_expr(&args[0], env)?)),
-            PrimOp::Cdr => Ok(format!("v_cdr({})", self.compile_expr(&args[0], env)?)),
-            PrimOp::Eq => Ok(format!(
-                "v_eq({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            )),
-            PrimOp::Atom => Ok(format!(
-                "v_structural_kind({})",
-                self.compile_expr(&args[0], env)?
-            )),
-            PrimOp::EqualP => Ok(format!(
-                "structural_relation(v_equal_p({}, {}))",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            )),
-            PrimOp::ExactQLt => Ok(format!(
-                "v_exact_q_lt({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            )),
-            PrimOp::ExactQLe => Err(CompileError::UnsupportedVariant("ExactQLe primitive")),
-            PrimOp::ExactQGe => Err(CompileError::UnsupportedVariant("ExactQGe primitive")),
-            PrimOp::Quotient => Err(CompileError::UnsupportedVariant("Quotient primitive")),
+            Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
         }
     }
 
