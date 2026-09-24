@@ -256,7 +256,7 @@ fn reify_primitive_calls(ir: Ir) -> Ir {
         Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(_)) => Ir::App {
             func,
             args: args.into_iter().map(reify_primitive_calls).collect(),
-        }
+        },
         Ir::Prim { op, args } => Ir::App {
             func: Box::new(Ir::Var(primitive_name(op).to_string())),
             args: args.into_iter().map(reify_primitive_calls).collect(),
