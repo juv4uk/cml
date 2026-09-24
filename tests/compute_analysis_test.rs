@@ -11,7 +11,6 @@ fn lower_one(source: &str) -> cml::ir::Ir {
     lower::lower_program(&expressions).unwrap().remove(0)
 }
 
-
 #[test]
 fn map_and_reduce_lower_to_exact_sid8_identity() {
     for (source, expected) in [
