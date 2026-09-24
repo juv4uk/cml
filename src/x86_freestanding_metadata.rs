@@ -295,16 +295,15 @@ mod tests {
 
     #[test]
     fn operations_metadata_records_canonical_identity_and_provenance() {
-        use crate::ir::PrimOp;
         let backend = X86FreestandingBackend::new();
         let program = [
             Ir::Quote(Quoted::Int(42)),
-            Ir::Prim {
-                op: PrimOp::Add,
+            Ir::App {
+                func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
                 args: vec![Ir::Int(1), Ir::Int(2)],
             },
-            Ir::Prim {
-                op: PrimOp::Cons,
+            Ir::App {
+                func: Box::new(Ir::Sid(my_lisp::sid!(00000100))),
                 args: vec![Ir::Int(1), Ir::Nil],
             },
         ];
