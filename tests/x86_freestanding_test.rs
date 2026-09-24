@@ -4,7 +4,7 @@ use std::fs;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use cml::ir::{Ir, Params, PrimOp, Quoted};
+use cml::ir::{Ir, Params, Quoted};
 use cml::lower;
 use cml::parser;
 use cml::x86_freestanding::{CompileError, X86FreestandingBackend};
@@ -14,6 +14,13 @@ const FIRST_FIXTURE_SOURCE: &str = "(cons (quote A) (quote B))";
 fn frozen_fixture() -> Vec<Ir> {
     let expressions = parser::parse(FIRST_FIXTURE_SOURCE).unwrap();
     lower::lower_program(&expressions).unwrap()
+}
+
+fn sid_call(sid: Sid8, args: Vec<Ir>) -> Ir {
+    Ir::App {
+        func: Box::new(Ir::Sid(sid)),
+        args,
+    }
 }
 
 fn assemble_and_undefined_symbols(assembly: &str, stem: &str) -> BTreeSet<String> {
@@ -75,22 +82,16 @@ fn frozen_cons_fixture_is_deterministic_and_assembles() {
 #[test]
 fn primitive_slice_uses_only_ratified_runtime_imports() {
     let program = vec![
-        Ir::Prim {
-            op: PrimOp::Car,
-            args: vec![Ir::Quote(Quoted::List(vec![Quoted::Int(1)]))],
-        },
-        Ir::Prim {
-            op: PrimOp::Cdr,
-            args: vec![Ir::Quote(Quoted::List(vec![Quoted::Int(1)]))],
-        },
-        Ir::Prim {
-            op: PrimOp::Eq,
-            args: vec![Ir::Int(1), Ir::Int(1)],
-        },
-        Ir::Prim {
-            op: PrimOp::Atom,
-            args: vec![Ir::Int(1)],
-        },
+        sid_call(
+            my_lisp::sid!(00000101),
+            vec![Ir::Quote(Quoted::List(vec![Quoted::Int(1)]))],
+        ),
+        sid_call(
+            my_lisp::sid!(00000110),
+            vec![Ir::Quote(Quoted::List(vec![Quoted::Int(1)]))],
+        ),
+        sid_call(my_lisp::sid!(00000011), vec![Ir::Int(1), Ir::Int(1)]),
+        sid_call(my_lisp::sid!(00000010), vec![Ir::Int(1)]),
     ];
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
@@ -394,20 +395,17 @@ fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
         Err(CompileError::UnsupportedVariant("Var (unbound)"))
     );
     assert_eq!(
-        backend.compile_program(&[Ir::Prim {
-            op: PrimOp::Car,
-            args: vec![],
-        }]),
+        backend.compile_program(&[sid_call(my_lisp::sid!(00000101), vec![])]),
         Err(CompileError::InvalidArity {
             operation: "car",
             expected: 1,
             actual: 0,
         })
     );
-    let result = backend.compile_program(&[Ir::Prim {
-        op: PrimOp::EqualP,
-        args: vec![Ir::Int(1), Ir::Int(1)],
-    }]);
+    let result = backend.compile_program(&[sid_call(
+        my_lisp::sid!(00100010),
+        vec![Ir::Int(1), Ir::Int(1)],
+    )]);
     assert!(result.is_ok());
 }
 
@@ -417,10 +415,10 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
 
     // Simple add: 1 + 2 = 3 — assembly must not call any runtime function.
     let add_asm = backend
-        .compile_program(&[Ir::Prim {
-            op: PrimOp::Add,
-            args: vec![Ir::Int(1), Ir::Int(2)],
-        }])
+        .compile_program(&[sid_call(
+            my_lisp::sid!(00001100),
+            vec![Ir::Int(1), Ir::Int(2)],
+        )])
         .unwrap();
     assert!(add_asm.contains("sarq $3,"), "add must decode fixnum");
     assert!(add_asm.contains("addq"), "add must use addq");
@@ -429,10 +427,10 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
 
     // Simple sub: 5 - 3 = 2 — assembly must not call any runtime function.
     let sub_asm = backend
-        .compile_program(&[Ir::Prim {
-            op: PrimOp::Sub,
-            args: vec![Ir::Int(5), Ir::Int(3)],
-        }])
+        .compile_program(&[sid_call(
+            my_lisp::sid!(00001101),
+            vec![Ir::Int(5), Ir::Int(3)],
+        )])
         .unwrap();
     assert!(sub_asm.contains("subq"), "sub must use subq");
     assert!(sub_asm.contains("wsm_fail"), "sub must guard overflow path");
@@ -454,10 +452,10 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
     // Overflow: the assembly for FIXNUM_MAX + 1 would overflow — but that's a
     // *runtime* overflow, not a preflight error, since both inputs are in range.
     let overflow_asm = backend
-        .compile_program(&[Ir::Prim {
-            op: PrimOp::Add,
-            args: vec![Ir::Int(wsm_os_target::FIXNUM_MAX), Ir::Int(1)],
-        }])
+        .compile_program(&[sid_call(
+            my_lisp::sid!(00001100),
+            vec![Ir::Int(wsm_os_target::FIXNUM_MAX), Ir::Int(1)],
+        )])
         .unwrap();
     // Must assemble correctly — the overflow is caught at runtime by wsm_fail.
     let symbols = assemble_and_undefined_symbols(&overflow_asm, "add-overflow");
