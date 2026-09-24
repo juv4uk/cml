@@ -492,9 +492,7 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
                 // identity for this scalar branch test. Legacy PrimOp host
                 // enums are not callable identity in the LIR boundary.
                 let normalized_test = match test_expr {
-                    Ir::App { func, args }
-                        if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000011)) =>
-                    {
+                    Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000011)) => {
                         Some(args.as_slice())
                     }
                     _ => None,

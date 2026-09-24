@@ -22,7 +22,7 @@
 //! When the entry contract is already a bounded raw machine contract (`RawU64`),
 //! zero boxing or unboxing occurs across the entire function.
 
-use crate::ir::{Ir, PrimOp};
+use crate::ir::Ir;
 use crate::machine_inst::Provenance;
 use crate::x86_lir::{BlockId, LirAluOp, LirFunction, LirInst, LirLowerError, LirTerminator, VReg};
 use std::collections::HashMap;
@@ -112,6 +112,12 @@ pub enum SpecializationMode {
     Enabled,
     /// Disable specialization (canonical boxed arithmetic at every intermediate step).
     Disabled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NumericAluKind {
+    Add,
+    Sub,
 }
 
 /// Analysis fact associated with a virtual register.
@@ -226,26 +232,6 @@ fn lower_spec_expr(
 ) -> Result<(VReg, NumericDomain, ValueRepresentation), LirLowerError> {
     let prov = Provenance::new(Some("0104"), "numeric_specialization");
 
-    // SID8 -> local PrimOp mechanism marker for the arithmetic specialization
-    // path. The SID remains the language identity; PrimOp here is only a
-    // backend dispatch convenience inside this pass.
-    let normalized = match expr {
-        Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00001100)) => {
-            Some(Ir::Prim {
-                op: PrimOp::Add,
-                args: args.clone(),
-            })
-        }
-        Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00001101)) => {
-            Some(Ir::Prim {
-                op: PrimOp::Sub,
-                args: args.clone(),
-            })
-        }
-        _ => None,
-    };
-    let expr = normalized.as_ref().unwrap_or(expr);
-
     match expr {
         Ir::Int(val) => {
             let in_fixnum_range = *val >= MIN_FIXNUM && *val <= MAX_FIXNUM;
@@ -302,276 +288,282 @@ fn lower_spec_expr(
                 }
             }
         }
-        Ir::Prim { op, args } => match op {
-            PrimOp::Add | PrimOp::Sub => {
-                if args.len() != 2 {
-                    return Err(LirLowerError::InvalidArity {
-                        expected: 2,
-                        found: args.len(),
-                    });
-                }
-
-                let (lhs_vreg, lhs_domain, lhs_rep) = lower_spec_expr(&args[0], ctx)?;
-                let (rhs_vreg, rhs_domain, rhs_rep) = lower_spec_expr(&args[1], ctx)?;
-
-                let lir_alu_op = match op {
-                    PrimOp::Add => LirAluOp::Add,
-                    PrimOp::Sub => LirAluOp::Sub,
-                    _ => unreachable!(),
-                };
-
-                // Check domain bounds and prove absence of overflow
-                let (res_domain, overflow_proof) = match (&lhs_domain, &rhs_domain) {
-                    (
-                        NumericDomain::Fixnum {
-                            min: min1,
-                            max: max1,
-                        },
-                        NumericDomain::Fixnum {
-                            min: min2,
-                            max: max2,
-                        },
-                    ) => match op {
-                        PrimOp::Add => {
-                            let (min_sum, o1) = min1.overflowing_add(*min2);
-                            let (max_sum, o2) = max1.overflowing_add(*max2);
-                            if !o1 && !o2 && min_sum >= MIN_FIXNUM && max_sum <= MAX_FIXNUM {
-                                (
-                                    NumericDomain::Fixnum {
-                                        min: min_sum,
-                                        max: max_sum,
-                                    },
-                                    OverflowProof::ProvenNoOverflow,
-                                )
-                            } else {
-                                (NumericDomain::DynamicUnknown, OverflowProof::Unknown)
-                            }
-                        }
-                        PrimOp::Sub => {
-                            let (min_sub, o1) = min1.overflowing_sub(*max2);
-                            let (max_sub, o2) = max1.overflowing_sub(*min2);
-                            if !o1 && !o2 && min_sub >= MIN_FIXNUM && max_sub <= MAX_FIXNUM {
-                                (
-                                    NumericDomain::Fixnum {
-                                        min: min_sub,
-                                        max: max_sub,
-                                    },
-                                    OverflowProof::ProvenNoOverflow,
-                                )
-                            } else {
-                                (NumericDomain::DynamicUnknown, OverflowProof::Unknown)
-                            }
-                        }
-                        _ => unreachable!(),
-                    },
-                    (
-                        NumericDomain::RawU64 {
-                            min: min1,
-                            max: max1,
-                        },
-                        NumericDomain::RawU64 {
-                            min: min2,
-                            max: max2,
-                        },
-                    ) => match op {
-                        PrimOp::Add => {
-                            let (max_sum, o) = max1.overflowing_add(*max2);
-                            if !o {
-                                (
-                                    NumericDomain::RawU64 {
-                                        min: min1 + min2,
-                                        max: max_sum,
-                                    },
-                                    OverflowProof::ProvenNoOverflow,
-                                )
-                            } else {
-                                (NumericDomain::DynamicUnknown, OverflowProof::Unknown)
-                            }
-                        }
-                        PrimOp::Sub => {
-                            if min1 >= max2 {
-                                (
-                                    NumericDomain::RawU64 {
-                                        min: min1 - max2,
-                                        max: max1 - min2,
-                                    },
-                                    OverflowProof::ProvenNoOverflow,
-                                )
-                            } else {
-                                (NumericDomain::DynamicUnknown, OverflowProof::Unknown)
-                            }
-                        }
-                        _ => unreachable!(),
-                    },
-                    _ => (NumericDomain::DynamicUnknown, OverflowProof::Unknown),
-                };
-
-                // GUARD: No unboxed path without explicit proof of domain and absence of overflow!
-                let can_specialize = ctx.mode == SpecializationMode::Enabled
-                    && overflow_proof == OverflowProof::ProvenNoOverflow
-                    && res_domain != NumericDomain::DynamicUnknown;
-
-                if can_specialize {
-                    // Proof-driven unboxed path:
-                    // Ensure operands are unboxed (unbox once if they came as boxed from dynamic boundary)
-                    let raw_lhs = match lhs_rep {
-                        ValueRepresentation::UnboxedRaw => lhs_vreg,
-                        ValueRepresentation::BoxedFixnum => {
-                            let u = ctx.func.alloc_vreg();
-                            ctx.emit(LirInst::UnboxFixnum {
-                                dst: u,
-                                src: lhs_vreg,
-                                provenance: prov.clone(),
-                            });
-                            ctx.record_fact(
-                                u,
-                                lhs_domain,
-                                ValueRepresentation::UnboxedRaw,
-                                OverflowProof::ProvenNoOverflow,
-                                prov.clone(),
-                            );
-                            u
-                        }
-                        ValueRepresentation::BoxedDynamic => {
-                            return Err(LirLowerError::Unsupported(
-                                "dynamic value cannot be unboxed without guard proof".to_string(),
-                            ));
-                        }
-                    };
-
-                    let raw_rhs = match rhs_rep {
-                        ValueRepresentation::UnboxedRaw => rhs_vreg,
-                        ValueRepresentation::BoxedFixnum => {
-                            let u = ctx.func.alloc_vreg();
-                            ctx.emit(LirInst::UnboxFixnum {
-                                dst: u,
-                                src: rhs_vreg,
-                                provenance: prov.clone(),
-                            });
-                            ctx.record_fact(
-                                u,
-                                rhs_domain,
-                                ValueRepresentation::UnboxedRaw,
-                                OverflowProof::ProvenNoOverflow,
-                                prov.clone(),
-                            );
-                            u
-                        }
-                        ValueRepresentation::BoxedDynamic => {
-                            return Err(LirLowerError::Unsupported(
-                                "dynamic value cannot be unboxed without guard proof".to_string(),
-                            ));
-                        }
-                    };
-
-                    let dst_raw = ctx.func.alloc_vreg();
-                    ctx.emit(LirInst::Alu {
-                        op: lir_alu_op,
-                        dst: dst_raw,
-                        lhs: raw_lhs,
-                        rhs: raw_rhs,
-                        provenance: prov.clone(),
-                    });
-
-                    ctx.unboxed_alu_count += 1;
-                    ctx.eliminated_box_count += 1; // Saved intermediate re-boxing
-
-                    ctx.record_fact(
-                        dst_raw,
-                        res_domain.clone(),
-                        ValueRepresentation::UnboxedRaw,
-                        overflow_proof,
-                        prov,
-                    );
-
-                    Ok((dst_raw, res_domain, ValueRepresentation::UnboxedRaw))
-                } else {
-                    // Canonical unspecialized path (or out-of-domain/unproven overflow fallback)
-                    // Every operation unboxes operands, does ALU, and re-boxes the result.
-                    let raw_lhs = match lhs_rep {
-                        ValueRepresentation::UnboxedRaw => lhs_vreg,
-                        ValueRepresentation::BoxedFixnum => {
-                            let u = ctx.func.alloc_vreg();
-                            ctx.emit(LirInst::UnboxFixnum {
-                                dst: u,
-                                src: lhs_vreg,
-                                provenance: prov.clone(),
-                            });
-                            u
-                        }
-                        ValueRepresentation::BoxedDynamic => {
-                            return Err(LirLowerError::Unsupported(
-                                "unproven dynamic value rejected from arithmetic lowering"
-                                    .to_string(),
-                            ));
-                        }
-                    };
-
-                    let raw_rhs = match rhs_rep {
-                        ValueRepresentation::UnboxedRaw => rhs_vreg,
-                        ValueRepresentation::BoxedFixnum => {
-                            let u = ctx.func.alloc_vreg();
-                            ctx.emit(LirInst::UnboxFixnum {
-                                dst: u,
-                                src: rhs_vreg,
-                                provenance: prov.clone(),
-                            });
-                            u
-                        }
-                        ValueRepresentation::BoxedDynamic => {
-                            return Err(LirLowerError::Unsupported(
-                                "unproven dynamic value rejected from arithmetic lowering"
-                                    .to_string(),
-                            ));
-                        }
-                    };
-
-                    let dst_raw = ctx.func.alloc_vreg();
-                    ctx.emit(LirInst::Alu {
-                        op: lir_alu_op,
-                        dst: dst_raw,
-                        lhs: raw_lhs,
-                        rhs: raw_rhs,
-                        provenance: prov.clone(),
-                    });
-
-                    ctx.record_fact(
-                        dst_raw,
-                        res_domain.clone(),
-                        ValueRepresentation::UnboxedRaw,
-                        overflow_proof,
-                        prov.clone(),
-                    );
-
-                    if ctx.boundary == BoundaryConvention::RawU64 {
-                        Ok((dst_raw, res_domain, ValueRepresentation::UnboxedRaw))
-                    } else {
-                        let dst_boxed = ctx.func.alloc_vreg();
-                        ctx.emit(LirInst::BoxFixnum {
-                            dst: dst_boxed,
-                            src: dst_raw,
-                            provenance: prov.clone(),
-                        });
-                        ctx.record_fact(
-                            dst_boxed,
-                            res_domain.clone(),
-                            ValueRepresentation::BoxedFixnum,
-                            overflow_proof,
-                            prov,
-                        );
-                        Ok((dst_boxed, res_domain, ValueRepresentation::BoxedFixnum))
-                    }
-                }
-            }
-            _ => Err(LirLowerError::Unsupported(format!(
-                "primitive op {:?} not admitted in numeric specialization slice",
-                op
-            ))),
-        },
+        Ir::App { func, args }
+            if matches!(func.as_ref(), Ir::Sid(sid)
+                if *sid == my_lisp::sid!(00001100) || *sid == my_lisp::sid!(00001101)) =>
+        {
+            let kind = if *func.as_ref() == Ir::Sid(my_lisp::sid!(00001100)) {
+                NumericAluKind::Add
+            } else {
+                NumericAluKind::Sub
+            };
+            lower_numeric_binary(args, kind, ctx, prov)
+        }
         other => Err(LirLowerError::Unsupported(format!(
             "IR form {:?} is not admitted in numeric specialization slice",
             other
         ))),
+    }
+}
+
+fn lower_numeric_binary(
+    args: &[Ir],
+    kind: NumericAluKind,
+    ctx: &mut SpecLowerContext,
+    prov: Provenance,
+) -> Result<(VReg, NumericDomain, ValueRepresentation), LirLowerError> {
+    if args.len() != 2 {
+        return Err(LirLowerError::InvalidArity {
+            expected: 2,
+            found: args.len(),
+        });
+    }
+
+    let (lhs_vreg, lhs_domain, lhs_rep) = lower_spec_expr(&args[0], ctx)?;
+    let (rhs_vreg, rhs_domain, rhs_rep) = lower_spec_expr(&args[1], ctx)?;
+
+    let lir_alu_op = match kind {
+        NumericAluKind::Add => LirAluOp::Add,
+        NumericAluKind::Sub => LirAluOp::Sub,
+    };
+
+    // Check domain bounds and prove absence of overflow
+    let (res_domain, overflow_proof) = match (&lhs_domain, &rhs_domain) {
+        (
+            NumericDomain::Fixnum {
+                min: min1,
+                max: max1,
+            },
+            NumericDomain::Fixnum {
+                min: min2,
+                max: max2,
+            },
+        ) => match kind {
+            NumericAluKind::Add => {
+                let (min_sum, o1) = min1.overflowing_add(*min2);
+                let (max_sum, o2) = max1.overflowing_add(*max2);
+                if !o1 && !o2 && min_sum >= MIN_FIXNUM && max_sum <= MAX_FIXNUM {
+                    (
+                        NumericDomain::Fixnum {
+                            min: min_sum,
+                            max: max_sum,
+                        },
+                        OverflowProof::ProvenNoOverflow,
+                    )
+                } else {
+                    (NumericDomain::DynamicUnknown, OverflowProof::Unknown)
+                }
+            }
+            NumericAluKind::Sub => {
+                let (min_sub, o1) = min1.overflowing_sub(*max2);
+                let (max_sub, o2) = max1.overflowing_sub(*min2);
+                if !o1 && !o2 && min_sub >= MIN_FIXNUM && max_sub <= MAX_FIXNUM {
+                    (
+                        NumericDomain::Fixnum {
+                            min: min_sub,
+                            max: max_sub,
+                        },
+                        OverflowProof::ProvenNoOverflow,
+                    )
+                } else {
+                    (NumericDomain::DynamicUnknown, OverflowProof::Unknown)
+                }
+            }
+        },
+        (
+            NumericDomain::RawU64 {
+                min: min1,
+                max: max1,
+            },
+            NumericDomain::RawU64 {
+                min: min2,
+                max: max2,
+            },
+        ) => match kind {
+            NumericAluKind::Add => {
+                let (max_sum, o) = max1.overflowing_add(*max2);
+                if !o {
+                    (
+                        NumericDomain::RawU64 {
+                            min: min1 + min2,
+                            max: max_sum,
+                        },
+                        OverflowProof::ProvenNoOverflow,
+                    )
+                } else {
+                    (NumericDomain::DynamicUnknown, OverflowProof::Unknown)
+                }
+            }
+            NumericAluKind::Sub => {
+                if min1 >= max2 {
+                    (
+                        NumericDomain::RawU64 {
+                            min: min1 - max2,
+                            max: max1 - min2,
+                        },
+                        OverflowProof::ProvenNoOverflow,
+                    )
+                } else {
+                    (NumericDomain::DynamicUnknown, OverflowProof::Unknown)
+                }
+            }
+        },
+        _ => (NumericDomain::DynamicUnknown, OverflowProof::Unknown),
+    };
+
+    // GUARD: No unboxed path without explicit proof of domain and absence of overflow!
+    let can_specialize = ctx.mode == SpecializationMode::Enabled
+        && overflow_proof == OverflowProof::ProvenNoOverflow
+        && res_domain != NumericDomain::DynamicUnknown;
+
+    if can_specialize {
+        // Proof-driven unboxed path:
+        // Ensure operands are unboxed (unbox once if they came as boxed from dynamic boundary)
+        let raw_lhs = match lhs_rep {
+            ValueRepresentation::UnboxedRaw => lhs_vreg,
+            ValueRepresentation::BoxedFixnum => {
+                let u = ctx.func.alloc_vreg();
+                ctx.emit(LirInst::UnboxFixnum {
+                    dst: u,
+                    src: lhs_vreg,
+                    provenance: prov.clone(),
+                });
+                ctx.record_fact(
+                    u,
+                    lhs_domain,
+                    ValueRepresentation::UnboxedRaw,
+                    OverflowProof::ProvenNoOverflow,
+                    prov.clone(),
+                );
+                u
+            }
+            ValueRepresentation::BoxedDynamic => {
+                return Err(LirLowerError::Unsupported(
+                    "dynamic value cannot be unboxed without guard proof".to_string(),
+                ));
+            }
+        };
+
+        let raw_rhs = match rhs_rep {
+            ValueRepresentation::UnboxedRaw => rhs_vreg,
+            ValueRepresentation::BoxedFixnum => {
+                let u = ctx.func.alloc_vreg();
+                ctx.emit(LirInst::UnboxFixnum {
+                    dst: u,
+                    src: rhs_vreg,
+                    provenance: prov.clone(),
+                });
+                ctx.record_fact(
+                    u,
+                    rhs_domain,
+                    ValueRepresentation::UnboxedRaw,
+                    OverflowProof::ProvenNoOverflow,
+                    prov.clone(),
+                );
+                u
+            }
+            ValueRepresentation::BoxedDynamic => {
+                return Err(LirLowerError::Unsupported(
+                    "dynamic value cannot be unboxed without guard proof".to_string(),
+                ));
+            }
+        };
+
+        let dst_raw = ctx.func.alloc_vreg();
+        ctx.emit(LirInst::Alu {
+            op: lir_alu_op,
+            dst: dst_raw,
+            lhs: raw_lhs,
+            rhs: raw_rhs,
+            provenance: prov.clone(),
+        });
+
+        ctx.unboxed_alu_count += 1;
+        ctx.eliminated_box_count += 1; // Saved intermediate re-boxing
+
+        ctx.record_fact(
+            dst_raw,
+            res_domain.clone(),
+            ValueRepresentation::UnboxedRaw,
+            overflow_proof,
+            prov,
+        );
+
+        Ok((dst_raw, res_domain, ValueRepresentation::UnboxedRaw))
+    } else {
+        // Canonical unspecialized path (or out-of-domain/unproven overflow fallback)
+        // Every operation unboxes operands, does ALU, and re-boxes the result.
+        let raw_lhs = match lhs_rep {
+            ValueRepresentation::UnboxedRaw => lhs_vreg,
+            ValueRepresentation::BoxedFixnum => {
+                let u = ctx.func.alloc_vreg();
+                ctx.emit(LirInst::UnboxFixnum {
+                    dst: u,
+                    src: lhs_vreg,
+                    provenance: prov.clone(),
+                });
+                u
+            }
+            ValueRepresentation::BoxedDynamic => {
+                return Err(LirLowerError::Unsupported(
+                    "unproven dynamic value rejected from arithmetic lowering".to_string(),
+                ));
+            }
+        };
+
+        let raw_rhs = match rhs_rep {
+            ValueRepresentation::UnboxedRaw => rhs_vreg,
+            ValueRepresentation::BoxedFixnum => {
+                let u = ctx.func.alloc_vreg();
+                ctx.emit(LirInst::UnboxFixnum {
+                    dst: u,
+                    src: rhs_vreg,
+                    provenance: prov.clone(),
+                });
+                u
+            }
+            ValueRepresentation::BoxedDynamic => {
+                return Err(LirLowerError::Unsupported(
+                    "unproven dynamic value rejected from arithmetic lowering".to_string(),
+                ));
+            }
+        };
+
+        let dst_raw = ctx.func.alloc_vreg();
+        ctx.emit(LirInst::Alu {
+            op: lir_alu_op,
+            dst: dst_raw,
+            lhs: raw_lhs,
+            rhs: raw_rhs,
+            provenance: prov.clone(),
+        });
+
+        ctx.record_fact(
+            dst_raw,
+            res_domain.clone(),
+            ValueRepresentation::UnboxedRaw,
+            overflow_proof,
+            prov.clone(),
+        );
+
+        if ctx.boundary == BoundaryConvention::RawU64 {
+            Ok((dst_raw, res_domain, ValueRepresentation::UnboxedRaw))
+        } else {
+            let dst_boxed = ctx.func.alloc_vreg();
+            ctx.emit(LirInst::BoxFixnum {
+                dst: dst_boxed,
+                src: dst_raw,
+                provenance: prov.clone(),
+            });
+            ctx.record_fact(
+                dst_boxed,
+                res_domain.clone(),
+                ValueRepresentation::BoxedFixnum,
+                overflow_proof,
+                prov,
+            );
+            Ok((dst_boxed, res_domain, ValueRepresentation::BoxedFixnum))
+        }
     }
 }
 

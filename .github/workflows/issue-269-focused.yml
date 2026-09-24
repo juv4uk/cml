@@ -1,0 +1,23 @@
+name: Issue 269 focused numeric specialization Sid8
+
+# Re-run on current head after rustfmt debt repair.
+
+on:
+  pull_request:
+    paths:
+      - src/numeric_specialization.rs
+      - .github/workflows/issue-269-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format check
+        run: cargo fmt -p cml -- --check
+      - name: Numeric specialization unit witnesses
+        run: cargo test --lib numeric_specialization::tests -- --nocapture
