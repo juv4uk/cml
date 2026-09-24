@@ -397,7 +397,7 @@ fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
     assert_eq!(
         backend.compile_program(&[sid_call(my_lisp::sid!(00000101), vec![])]),
         Err(CompileError::InvalidArity {
-            operation: "car",
+            operation: "SID8",
             expected: 1,
             actual: 0,
         })
