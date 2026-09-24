@@ -61,7 +61,7 @@ jobs:
           printf 'S2 compiler sha256: '
           sha256sum wsm-my-lisp/lib/compiler.lisp | cut -d' ' -f1
 
-          test "$(git -C external/my-lisp rev-parse HEAD)" = "5a99136bf7a2e9ab5792bdc945ad53c3774802cd"
+          test "$(git -C external/my-lisp rev-parse HEAD)" = "42691cb26c9c4a2a2506b4ce571db57e94b63192"
           test "$(git -C upstream-my-lisp rev-parse HEAD)" = "d359c4885e0609a6c8350daf45de157b40cf48f3"
           test "$(git -C upstream-my-lisp hash-object lib/core1-compiler-prelude.lisp)" = "dfc8f0074464f9f1d2b71a97a9ab4184925ca3a1"
           test "$(git -C wsm-my-lisp rev-parse HEAD)" = "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947"
