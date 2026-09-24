@@ -1,0 +1,33 @@
+name: Issue 261 focused FPGA Sid8 dispatch
+
+on:
+  pull_request:
+    paths:
+      - src/compiler.rs
+      - tests/compiler_test.rs
+      - tests/registry_driven_canon_callables_test.rs
+      - .github/workflows/issue-261-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: cml
+          submodules: recursive
+      - uses: actions/checkout@v5
+        with:
+          repository: juv4uk/fpga-lisp
+          ref: b5d68bba109b972122f92fa10d237f81ce90aa87
+          path: fpga-lisp
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Icarus Verilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: FPGA compiler regression
+        working-directory: cml
+        run: cargo test --test compiler_test -- --nocapture
+      - name: Registry callable parity
+        working-directory: cml
+        run: cargo test --test registry_driven_canon_callables_test -- --nocapture

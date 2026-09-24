@@ -331,99 +331,116 @@ impl Compiler {
         }
     }
 
+    fn compile_cons_mechanism(&mut self, args: &[Ir], target_reg: &str) {
+        self.compile_expr(&args[0], "R1");
+        self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
+        self.emit(&format!("CONS {} R1 R2", target_reg));
+    }
+
+    fn compile_car_mechanism(&mut self, args: &[Ir], target_reg: &str) {
+        self.compile_expr(&args[0], "R1");
+        self.emit(&format!("CAR {} R1", target_reg));
+    }
+
+    fn compile_cdr_mechanism(&mut self, args: &[Ir], target_reg: &str) {
+        self.compile_expr(&args[0], "R1");
+        self.emit(&format!("CDR {} R1", target_reg));
+    }
+
+    fn compile_eq_mechanism(&mut self, args: &[Ir], target_reg: &str) {
+        self.compile_expr(&args[0], "R1");
+        self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
+        self.emit(&format!("EQ {} R1 R2", target_reg));
+    }
+
+    fn compile_atom_mechanism(&mut self, args: &[Ir], target_reg: &str) {
+        self.compile_expr(&args[0], "R1");
+        self.emit(&format!("ATOM {} R1", target_reg));
+    }
+
+    fn compile_equal_mechanism(&mut self, args: &[Ir], target_reg: &str) {
+        self.compile_expr(&args[0], "R1");
+        self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
+        self.used_equal = true;
+        self.call_subroutine("cml_equal");
+        self.emit(&format!("MOV {} R15", target_reg));
+    }
+
+    fn compile_add_mechanism(&mut self, args: &[Ir], target_reg: &str) {
+        self.compile_expr(&args[0], "R1");
+        self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
+        self.emit(&format!("ADD {} R1 R2", target_reg));
+    }
+
+    fn compile_sub_mechanism(&mut self, args: &[Ir], target_reg: &str) {
+        self.compile_expr(&args[0], "R1");
+        self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
+        self.emit(&format!("SUB {} R1 R2", target_reg));
+    }
+
+    fn compile_list_mechanism(&mut self, args: &[Ir], target_reg: &str) {
+        for arg in args.iter().rev() {
+            self.compile_expr(arg, "R1");
+            self.emit("PUSH R1");
+        }
+        self.emit("MOV R1 0");
+        for _ in 0..args.len() {
+            self.emit("POP R2");
+            self.emit("CONS R1 R2 R1");
+        }
+        if target_reg != "R1" {
+            self.emit(&format!("MOV {} R1", target_reg));
+        }
+    }
+
+    fn compile_caar_mechanism(&mut self, args: &[Ir]) {
+        self.compile_expr(&args[0], "R1");
+        self.emit("CAR R1");
+        self.emit("CAR R1");
+    }
+
+    fn compile_cadr_mechanism(&mut self, args: &[Ir]) {
+        self.compile_expr(&args[0], "R1");
+        self.emit("CDR R1");
+        self.emit("CAR R1");
+    }
+
+    fn compile_cddr_mechanism(&mut self, args: &[Ir]) {
+        self.compile_expr(&args[0], "R1");
+        self.emit("CDR R1");
+        self.emit("CDR R1");
+    }
+
+    fn compile_caddr_mechanism(&mut self, args: &[Ir]) {
+        self.compile_expr(&args[0], "R1");
+        self.emit("CDR R1");
+        self.emit("CDR R1");
+        self.emit("CAR R1");
+    }
+
+    fn compile_cadddr_mechanism(&mut self, args: &[Ir]) {
+        self.compile_expr(&args[0], "R1");
+        self.emit("CDR R1");
+        self.emit("CDR R1");
+        self.emit("CDR R1");
+    }
+
     fn compile_prim(&mut self, op: PrimOp, args: &[Ir], target_reg: &str) {
         match op {
-            PrimOp::Cons => {
-                // args[1] may itself be a two-arg primitive call, which
-                // also hardcodes R1 as scratch -- preserve R1 across
-                // evaluating args[1] so it can't clobber the
-                // already-computed first operand (docs/abi.md).
-                self.compile_expr(&args[0], "R1");
-                self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-                self.emit(&format!("CONS {} R1 R2", target_reg));
-            }
-            PrimOp::Car => {
-                self.compile_expr(&args[0], "R1");
-                self.emit(&format!("CAR {} R1", target_reg));
-            }
-            PrimOp::Cdr => {
-                self.compile_expr(&args[0], "R1");
-                self.emit(&format!("CDR {} R1", target_reg));
-            }
-            PrimOp::Eq => {
-                self.compile_expr(&args[0], "R1");
-                self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-                self.emit(&format!("EQ {} R1 R2", target_reg));
-            }
-            PrimOp::Atom => {
-                self.compile_expr(&args[0], "R1");
-                self.emit(&format!("ATOM {} R1", target_reg));
-            }
-            PrimOp::EqualP => {
-                self.compile_expr(&args[0], "R1");
-                self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-                self.used_equal = true;
-                // cml_equal returns via RET R14 like cml_lookup, so it
-                // needs the same call_subroutine protection -- this used
-                // to be a bare `CALL R14 cml_equal` with no R14 save,
-                // silently destroying whatever function this equal? call
-                // was nested inside's own eventual `RET R14` target.
-                self.call_subroutine("cml_equal");
-                self.emit(&format!("MOV {} R15", target_reg));
-            }
-            PrimOp::Add => {
-                self.compile_expr(&args[0], "R1");
-                self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-                self.emit(&format!("ADD {} R1 R2", target_reg));
-            }
-            PrimOp::Sub => {
-                self.compile_expr(&args[0], "R1");
-                self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-                self.emit(&format!("SUB {} R1 R2", target_reg));
-            }
-            PrimOp::List => {
-                // List is variadic: build list right-to-left via wsm_cons
-                for arg in args.iter().rev() {
-                    self.compile_expr(arg, "R1");
-                    self.emit("PUSH R1");
-                }
-                // Start with NIL
-                self.emit("MOV R1 0");
-                for _ in 0..args.len() {
-                    self.emit("POP R2");
-                    self.emit("CONS R1 R2 R1");
-                }
-                if target_reg != "R1" {
-                    self.emit(&format!("MOV {} R1", target_reg));
-                }
-            }
-            PrimOp::Caar => {
-                self.compile_expr(&args[0], "R1");
-                self.emit("CAR R1");
-                self.emit("CAR R1");
-            }
-            PrimOp::Cadr => {
-                self.compile_expr(&args[0], "R1");
-                self.emit("CDR R1");
-                self.emit("CAR R1");
-            }
-            PrimOp::Cddr => {
-                self.compile_expr(&args[0], "R1");
-                self.emit("CDR R1");
-                self.emit("CDR R1");
-            }
-            PrimOp::Caddr => {
-                self.compile_expr(&args[0], "R1");
-                self.emit("CDR R1");
-                self.emit("CDR R1");
-                self.emit("CAR R1");
-            }
-            PrimOp::Cadddr => {
-                self.compile_expr(&args[0], "R1");
-                self.emit("CDR R1");
-                self.emit("CDR R1");
-                self.emit("CDR R1");
-            }
+            PrimOp::Cons => self.compile_cons_mechanism(args, target_reg),
+            PrimOp::Car => self.compile_car_mechanism(args, target_reg),
+            PrimOp::Cdr => self.compile_cdr_mechanism(args, target_reg),
+            PrimOp::Eq => self.compile_eq_mechanism(args, target_reg),
+            PrimOp::Atom => self.compile_atom_mechanism(args, target_reg),
+            PrimOp::EqualP => self.compile_equal_mechanism(args, target_reg),
+            PrimOp::Add => self.compile_add_mechanism(args, target_reg),
+            PrimOp::Sub => self.compile_sub_mechanism(args, target_reg),
+            PrimOp::List => self.compile_list_mechanism(args, target_reg),
+            PrimOp::Caar => self.compile_caar_mechanism(args),
+            PrimOp::Cadr => self.compile_cadr_mechanism(args),
+            PrimOp::Cddr => self.compile_cddr_mechanism(args),
+            PrimOp::Caddr => self.compile_caddr_mechanism(args),
+            PrimOp::Cadddr => self.compile_cadddr_mechanism(args),
             PrimOp::ExactQLt => unreachable!("ExactQLt rejected by validate_ir"),
             PrimOp::ExactQLe => unreachable!("ExactQLe rejected by validate_ir"),
             PrimOp::ExactQGe => unreachable!("ExactQGe rejected by validate_ir"),
@@ -432,40 +449,38 @@ impl Compiler {
     }
 
     fn compile_sid_call(&mut self, sid: my_lisp::Sid8, args: &[Ir], target_reg: &str) {
-        // SID8 -> fpga-lisp primitive mechanism. The SID is the language
-        // function identity; PrimOp here is only a backend dispatch marker.
-        let op = if sid == my_lisp::sid!(00000010) {
-            PrimOp::Atom
+        // Exact Sid8 is the callable identity. Dispatch directly from that
+        // identity to the private fpga-lisp mechanism; do not translate it
+        // through PrimOp or any surface/backend name.
+        if sid == my_lisp::sid!(00000010) {
+            self.compile_atom_mechanism(args, target_reg);
         } else if sid == my_lisp::sid!(00000011) || sid == my_lisp::sid!(00011100) {
-            // `eq` and numeric `=` are word equality on the target value.
-            PrimOp::Eq
+            self.compile_eq_mechanism(args, target_reg);
         } else if sid == my_lisp::sid!(00100010) {
-            // `equal?` is structural equality.
-            PrimOp::EqualP
+            self.compile_equal_mechanism(args, target_reg);
         } else if sid == my_lisp::sid!(00000100) {
-            PrimOp::Cons
+            self.compile_cons_mechanism(args, target_reg);
         } else if sid == my_lisp::sid!(00000101) {
-            PrimOp::Car
+            self.compile_car_mechanism(args, target_reg);
         } else if sid == my_lisp::sid!(00000110) {
-            PrimOp::Cdr
+            self.compile_cdr_mechanism(args, target_reg);
         } else if sid == my_lisp::sid!(00001100) {
-            PrimOp::Add
+            self.compile_add_mechanism(args, target_reg);
         } else if sid == my_lisp::sid!(00001101) {
-            PrimOp::Sub
+            self.compile_sub_mechanism(args, target_reg);
         } else if sid == my_lisp::sid!(00100111) {
-            PrimOp::List
+            self.compile_list_mechanism(args, target_reg);
         } else if sid == my_lisp::sid!(00110011) {
-            PrimOp::Caar
+            self.compile_caar_mechanism(args);
         } else if sid == my_lisp::sid!(00110100) {
-            PrimOp::Cadr
+            self.compile_cadr_mechanism(args);
         } else if sid == my_lisp::sid!(00110101) {
-            PrimOp::Cddr
+            self.compile_cddr_mechanism(args);
         } else if sid == my_lisp::sid!(00110110) {
-            PrimOp::Cadddr
+            self.compile_cadddr_mechanism(args);
         } else {
             panic!("unsupported SID8 call in fpga-lisp compiler: {sid:?}");
-        };
-        self.compile_prim(op, args, target_reg);
+        }
     }
 
     fn compile_generic_call(&mut self, func: &Ir, args: &[Ir], target_reg: &str) {
