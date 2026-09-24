@@ -1,0 +1,25 @@
+name: Issue 275 focused freestanding x86 no-Prim boundary
+
+on:
+  pull_request:
+    paths:
+      - src/x86_freestanding.rs
+      - tests/x86_freestanding_test.rs
+      - tests/exhaustive_classification_test.rs
+      - .github/workflows/issue-275-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format check
+        run: cargo fmt -p cml -- --check
+      - name: Freestanding x86 regression
+        run: cargo test --test x86_freestanding_test -- --nocapture
+      - name: Exhaustive IR classification
+        run: cargo test --test exhaustive_classification_test -- --nocapture
