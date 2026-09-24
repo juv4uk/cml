@@ -204,10 +204,9 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
         return None;
     };
     match (&**func, args.as_slice()) {
-        (
-            Ir::Sid(sid),
-            [function, input],
-        ) if *sid == my_lisp::sid!(00110111) || *sid == my_lisp::sid!(01011001) => {
+        (Ir::Sid(sid), [function, input])
+            if *sid == my_lisp::sid!(00110111) || *sid == my_lisp::sid!(01011001) =>
+        {
             Some(ComputeRegion {
                 operation: BulkOperation::Map,
                 function: function.clone(),
@@ -216,9 +215,7 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
                 kernel: lower_kernel(function, 1),
             })
         }
-        (Ir::Sid(sid), [function, initial, input])
-            if *sid == my_lisp::sid!(00111001) =>
-        {
+        (Ir::Sid(sid), [function, initial, input]) if *sid == my_lisp::sid!(00111001) => {
             Some(ComputeRegion {
                 operation: BulkOperation::Reduce,
                 function: function.clone(),
