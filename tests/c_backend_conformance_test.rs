@@ -57,8 +57,8 @@ fn compile_and_run(expr_str: &str, stem: &str) -> Result<std::process::Output, S
     let exprs = MacroExpander::new()
         .process(&exprs)
         .map_err(|error| format!("macro expansion failed: {error}"))?;
-    let program = lower::lower_program(&exprs)
-        .map_err(|error| format!("lowering failed: {error}"))?;
+    let program =
+        lower::lower_program(&exprs).map_err(|error| format!("lowering failed: {error}"))?;
     let c_source = CBackend::new()
         .compile_program(&program)
         .map_err(|error| format!("C emission failed: {error}"))?;
