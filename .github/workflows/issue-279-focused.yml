@@ -1,0 +1,22 @@
+name: Issue 279 focused compute CONS Sid8 effect
+
+on:
+  pull_request:
+    paths:
+      - src/compute.rs
+      - tests/compute_analysis_test.rs
+      - .github/workflows/issue-279-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format check
+        run: cargo fmt -p cml -- --check
+      - name: Compute analysis regression
+        run: cargo test --test compute_analysis_test -- --nocapture

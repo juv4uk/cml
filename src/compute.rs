@@ -478,9 +478,6 @@ fn effect_of(ir: &Ir) -> EffectClass {
         // A standalone SID8 value is a pure word (first-class callable identity).
         | Ir::Sid(_) => EffectClass::Pure,
         Ir::Lambda { body, .. } => effect_of(body),
-        Ir::Prim {
-            op: PrimOp::Cons, ..
-        } => EffectClass::Allocating,
         Ir::Prim { args, .. } => join_effects(args.iter().map(effect_of)),
         Ir::Cond { branches } => join_effects(
             branches
@@ -496,6 +493,12 @@ fn effect_of(ir: &Ir) -> EffectClass {
         Ir::Def { .. } => EffectClass::Stateful,
         Ir::TailSelfCall { .. } => EffectClass::Stateful,
         Ir::App { func, args } => {
+            if matches!(
+                &**func,
+                Ir::Sid(sid) if *sid == my_lisp::sid!(00000100)
+            ) {
+                return EffectClass::Allocating;
+            }
             let known_pure = matches!(
                 &**func,
                 Ir::Sid(sid)
