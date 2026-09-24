@@ -1544,6 +1544,12 @@ fn platform_call_contract(func: &Ir) -> Option<(&'static str, usize, &'static st
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum X86ArithmeticKind {
+    Add,
+    Sub,
+}
+
 struct Emitter {
     output: String,
     symbols: BTreeMap<String, u64>,
@@ -2569,10 +2575,10 @@ impl Emitter {
 
         // Inline or backend-composed mechanisms selected directly from SID8.
         if sid == my_lisp::sid!(00001100) {
-            return self.emit_arithmetic(PrimOp::Add, args);
+            return self.emit_arithmetic(X86ArithmeticKind::Add, args);
         }
         if sid == my_lisp::sid!(00001101) {
-            return self.emit_arithmetic(PrimOp::Sub, args);
+            return self.emit_arithmetic(X86ArithmeticKind::Sub, args);
         }
         if sid == my_lisp::sid!(00011010) {
             return self.emit_exact_q_lt(args);
@@ -2654,7 +2660,12 @@ impl Emitter {
 
         // Arithmetic is inline — no runtime call, checked for 61-bit overflow.
         if matches!(operation, PrimOp::Add | PrimOp::Sub) {
-            return self.emit_arithmetic(operation, args);
+            let kind = match operation {
+                PrimOp::Add => X86ArithmeticKind::Add,
+                PrimOp::Sub => X86ArithmeticKind::Sub,
+                _ => unreachable!(),
+            };
+            return self.emit_arithmetic(kind, args);
         }
         if matches!(operation, PrimOp::ExactQGe) {
             return self.emit_exact_q_ge(args);
@@ -2952,7 +2963,11 @@ impl Emitter {
     }
 
     /// Inline checked fixnum addition or subtraction.
-    fn emit_arithmetic(&mut self, operation: PrimOp, args: &[Ir]) -> Result<(), CompileError> {
+    fn emit_arithmetic(
+        &mut self,
+        operation: X86ArithmeticKind,
+        args: &[Ir],
+    ) -> Result<(), CompileError> {
         let ok_label = self.allocate_label();
 
         self.emit_ir(&args[0])?;
@@ -2982,9 +2997,8 @@ impl Emitter {
 
         let overflow_label = self.allocate_label();
         match operation {
-            PrimOp::Add => self.line("    addq %rdx, %rcx"),
-            PrimOp::Sub => self.line("    subq %rdx, %rcx"),
-            _ => unreachable!(),
+            X86ArithmeticKind::Add => self.line("    addq %rdx, %rcx"),
+            X86ArithmeticKind::Sub => self.line("    subq %rdx, %rcx"),
         }
         self.line(&format!("    jo .Larith_overflow_{overflow_label}"));
 
