@@ -28,3 +28,11 @@ jobs:
         run: cargo test --test c_backend_test c_backend_prints_the_contractual_builtin_representation -- --exact --nocapture
       - name: First-class subtraction uses Sid8 payload
         run: cargo test --test c_backend_test c_backend_supports_first_class_subtraction -- --exact --nocapture
+      - name: Numeric buffer map resolves exact SID8 mechanism
+        run: cargo test --test c_backend_test c_backend_lowers_source_level_numeric_buffer_map -- --exact --nocapture
+      - name: Numeric buffer map matches CPU reference
+        run: cargo test --test c_backend_test c_backend_i32_map_matches_cpu_reference_for_source_fixtures -- --exact --nocapture
+      - name: Named runtime arity survives SID8 dispatch
+        run: cargo test --test c_backend_test c_backend_rejects_wrong_builtin_arity_with_a_named_error -- --exact --nocapture
+      - name: Contractual core errors survive SID8 dispatch
+        run: cargo test --test c_backend_test c_backend_reports_contractual_core_error_kinds -- --exact --nocapture
