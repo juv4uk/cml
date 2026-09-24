@@ -1,0 +1,33 @@
+name: Issue 298 C standard SID8 lowering
+
+on:
+  pull_request:
+    paths:
+      - src/build.rs
+      - src/lower.rs
+      - src/c_backend.rs
+      - tests/c_backend_test.rs
+      - tests/c_backend_conformance_test.rs
+      - tests/exact_q_mul_upstream_execution_test.rs
+      - tests/exact_rational_upstream_authority_test.rs
+      - .github/workflows/issue-298-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: C backend regression on standard lowering
+        run: cargo test --test c_backend_test -- --nocapture
+      - name: Constitutive C conformance on standard lowering
+        run: cargo test --test c_backend_conformance_test -- --nocapture
+      - name: Exact-Q multiplication upstream execution
+        run: cargo test --test exact_q_mul_upstream_execution_test -- --nocapture
+      - name: Exact rational upstream authority
+        run: cargo test --test exact_rational_upstream_authority_test -- --nocapture
+      - name: Standard lowering SID8 guard
+        run: cargo test --test sid8_standard_lowering_guard_test -- --nocapture
