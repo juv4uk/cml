@@ -59,7 +59,7 @@ fn gcc_command() -> Command {
 
 fn compile_and_run_first_class(code: &str, stem: &str) -> String {
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
     let c_source = CBackend::new().compile_program(&program).unwrap();
     let c_path = format!("c_backend_{stem}_test.c");
     let bin_path = format!("c_backend_{stem}_test");
