@@ -1,0 +1,25 @@
+name: Issue 271 focused x86 mod Sid8 identity
+
+on:
+  pull_request:
+    paths:
+      - src/x86_freestanding.rs
+      - tests/exact_q_mod_admission_test.rs
+      - tests/exact_q_mod_x86_low3_parity_test.rs
+      - .github/workflows/issue-271-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format check
+        run: cargo fmt -p cml -- --check
+      - name: Mod SID8 admission
+        run: cargo test --test exact_q_mod_admission_test -- --nocapture
+      - name: Real low3 x86 execution
+        run: cargo test --test exact_q_mod_x86_low3_parity_test -- --nocapture
