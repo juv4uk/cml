@@ -13,12 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          path: cml
           submodules: recursive
       - uses: actions/checkout@v5
         with:
           repository: juv4uk/my-lisp
           ref: d359c4885e0609a6c8350daf45de157b40cf48f3
-          path: ../my-lisp
+          path: my-lisp
       - uses: dtolnay/rust-toolchain@stable
       - name: Focused exact-rational x86 witness
+        working-directory: cml
         run: cargo test --test exact_rational_x86_observed_current_red_test -- --nocapture
