@@ -23,6 +23,8 @@ jobs:
           ref: b5d68bba109b972122f92fa10d237f81ce90aa87
           path: fpga-lisp
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install Icarus Verilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
       - name: FPGA compiler regression
         working-directory: cml
         run: cargo test --test compiler_test -- --nocapture
