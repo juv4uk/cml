@@ -57,7 +57,7 @@ fn compile_and_run(expr_str: &str, stem: &str) -> Result<std::process::Output, S
     let exprs = MacroExpander::new()
         .process(&exprs)
         .map_err(|error| format!("macro expansion failed: {error}"))?;
-    let program = lower::lower_program_with_first_class_builtins(&exprs)
+    let program = lower::lower_program(&exprs)
         .map_err(|error| format!("lowering failed: {error}"))?;
     let c_source = CBackend::new()
         .compile_program(&program)
@@ -175,7 +175,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         if let Some((expr_str, expected_kind)) = parse_error_line(line) {
             if expr_str == "(quote a b)" {
                 let exprs = parser::parse(&expr_str).expect("contract fixture must parse");
-                match lower::lower_program_with_first_class_builtins(&exprs) {
+                match lower::lower_program(&exprs) {
                     Err(error) if error.kind == lower::LowerErrorKind::Arity => {
                         checked_errors += 1;
                     }
@@ -228,7 +228,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
             failures.push(format!("{expr_str}: macro expansion failed"));
             continue;
         };
-        let Ok(program) = lower::lower_program_with_first_class_builtins(&exprs) else {
+        let Ok(program) = lower::lower_program(&exprs) else {
             failures.push(format!("{expr_str}: lowering failed"));
             continue;
         };
