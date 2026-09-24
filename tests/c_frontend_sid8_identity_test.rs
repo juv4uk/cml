@@ -4,7 +4,7 @@ use cml::{lower, parser};
 fn lower_first_class(source: &str) -> Ir {
     let parsed = parser::parse(source).expect("source must parse");
     let mut lowered =
-        lower::lower_program_with_first_class_builtins(&parsed).expect("C frontend must lower");
+        lower::lower_program(&parsed).expect("C frontend must lower");
     assert_eq!(lowered.len(), 1);
     lowered.remove(0)
 }
