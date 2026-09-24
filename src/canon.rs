@@ -71,7 +71,7 @@ pub fn find_operation_by_id(semantic_id: Sid8) -> Option<&'static CanonOperation
 
 /// Collect every unique canonical operation present in an IR expression stream.
 pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static CanonOperation> {
-    use crate::ir::{Ir, PrimOp};
+    use crate::ir::Ir;
     use std::collections::BTreeSet;
 
     let mut ids = BTreeSet::new();
@@ -102,32 +102,12 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
                 }
                 walk(body, ids);
             }
-            Ir::Prim { op, args } => {
-                let id = match op {
-                    PrimOp::Atom => my_lisp::sid!(00000010),
-                    PrimOp::Eq => my_lisp::sid!(00000011),
-                    PrimOp::Cons => my_lisp::sid!(00000100),
-                    PrimOp::Car => my_lisp::sid!(00000101),
-                    PrimOp::Cdr => my_lisp::sid!(00000110),
-                    PrimOp::Add => my_lisp::sid!(00001100),
-                    PrimOp::Sub => my_lisp::sid!(00001101),
-                    PrimOp::EqualP => my_lisp::sid!(00100010),
-                    PrimOp::ExactQLt => my_lisp::sid!(00011010),
-                    PrimOp::ExactQLe => my_lisp::sid!(00011101),
-                    PrimOp::ExactQGe => my_lisp::sid!(00011110),
-                    PrimOp::List => my_lisp::sid!(00100111),
-                    PrimOp::Cddr => my_lisp::sid!(00110101),
-                    PrimOp::Cadddr => my_lisp::sid!(00110110),
-                    PrimOp::Caar => my_lisp::sid!(00110011),
-                    PrimOp::Cadr => my_lisp::sid!(00110100),
-                    PrimOp::Quotient => my_lisp::sid!(00010100),
-                    PrimOp::Caddr => {
-                        // No canonical SID exists for caddr; it must lower as
-                        // composite car/cdr, and contribute no scalar semantic ID.
-                        return;
-                    }
-                };
-                ids.insert(id);
+            Ir::Prim { args, .. } => {
+                // #252 / #246: PrimOp is a migration-era mechanism shape, not
+                // semantic function identity. Never reconstruct a Sid8 from a
+                // host enum here. Current lowering records callable identity as
+                // Ir::Sid and Ir::App(func = Ir::Sid(...)); legacy Prim nodes
+                // may still be traversed so nested exact identities are visible.
                 for arg in args {
                     walk(arg, ids);
                 }
@@ -138,10 +118,10 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
                     walk(arg, ids);
                 }
             }
-            Ir::Builtin(name) => {
-                if let Some(id) = callable_semantic_id(name) {
-                    ids.insert(id);
-                }
+            Ir::Builtin(_) => {
+                // #252 / #246: a human/backend name cannot be promoted back
+                // into semantic function identity. Exact callable identity is
+                // collected only from typed Ir::Sid nodes.
             }
             // #246: first-class callables carry the exact Sid8 identity, not a
             // compiler Builtin name. Record the operation so a program that
