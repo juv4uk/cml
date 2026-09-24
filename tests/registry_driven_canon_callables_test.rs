@@ -27,14 +27,14 @@ fn list_sid_is_generated_as_a_callable_and_lowers_through_sid_identity() {
 
     let lowered = lower_one("(list (quote A) (quote B) (quote C))");
     assert!(
-        matches!(lowered, Ir::Prim { op: PrimOp::List, ref args } if args.len() == 3),
-        "LIST call must reach the existing PrimOp::List mechanism; got {lowered:?}"
+        matches!(lowered, Ir::App { ref func, ref args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00100111)) && args.len() == 3),
+        "LIST call must lower to Ir::App with Sid8 function key (SID8 contract #246); got {lowered:?}"
     );
 
     let empty = lower_one("(list)");
     assert!(
-        matches!(empty, Ir::Prim { op: PrimOp::List, ref args } if args.is_empty()),
-        "zero-arity LIST must remain the same variadic primitive mechanism; got {empty:?}"
+        matches!(empty, Ir::App { ref func, ref args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00100111)) && args.is_empty()),
+        "zero-arity LIST must lower to Ir::App with Sid8 function key (SID8 contract #246); got {empty:?}"
     );
 }
 
@@ -220,9 +220,11 @@ fn operations_table_file_matches_compiled_canon_table() {
     assert!(file_content.contains("(version . (1 0))"));
 
     // Ensure every compiled operation ID is present in the machine-readable file
+    // The file uses string format "00000001" not Rust Debug format "Sid8(00000001)"
     for op in CANON_OPERATIONS_TABLE {
+        let sid_spelling = op.semantic_id.to_string(); // exact 8-bit spelling
         assert!(
-            file_content.contains(&format!("(semantic-id . {:?})", op.semantic_id)),
+            file_content.contains(&format!("(semantic-id . {:?})", sid_spelling)),
             "operations table file must contain semantic-id {}",
             op.semantic_id
         );

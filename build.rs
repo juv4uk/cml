@@ -23,8 +23,8 @@ const TARGET_IDS: &[&str] = &[
 /// surface spelling changes across English, Ukrainian, Sanskrit, and symbolic forms.
 const CALLABLE_IDS: &[&str] = &[
     "00000010", "00000011", "00000100", "00000101", "00000110", "00001100", "00001101", "00001110",
-    "00010011", "00011010", "00011011", "00011100", "00011101", "00011110", "00100010", "00100111",
-    "01011001", "00110011", "00110100", "00110101", "00110110",
+    "00001111", "00010011", "00010100", "00011010", "00011011", "00011100", "00011101", "00011110",
+    "00100010", "00100111", "01011001", "00110011", "00110100", "00110101", "00110110",
 ];
 
 /// Retired semantic IDs that must NEVER be active or recycled (e.g. 1153 for former RDTSC attribution).
@@ -49,7 +49,9 @@ const BUILTIN_PROJECTIONS: &[(&str, &str)] = &[
     ("00001100", "+"),
     ("00001101", "-"),
     ("00001110", "*"),
+    ("00001111", "/"),
     ("00010011", "mod"),
+    ("00010100", "QUOTIENT"),
     ("00011010", "<"),
     ("00011011", ">"),
     ("00011100", "="),
@@ -264,6 +266,32 @@ const OPERATIONS: &[OperationSpec] = &[
         status: "partial",
         authority_owner: "my-lisp:language-core cml:compiler-middle-end",
         provenance_witness: "lib/surface/semantic-registry.wsm tests/exact_q_mod_admission_test.rs",
+    },
+    OperationSpec {
+        canonical_name: "/",
+        formal_action: "primitive:exact-q-div",
+        cml_ir_projection: "Ir::App(Sid(00001111))",
+        backend_projections: &[
+            ("fpga-lisp", "unsupported"),
+            ("c", "unsupported"),
+            ("x86_freestanding", "unsupported"),
+        ],
+        status: "partial",
+        authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
+        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_div_admission_test.rs",
+    },
+    OperationSpec {
+        canonical_name: "quotient",
+        formal_action: "primitive:exact-q-quotient",
+        cml_ir_projection: "Ir::App(Sid(00010100))",
+        backend_projections: &[
+            ("fpga-lisp", "unsupported"),
+            ("c", "unsupported"),
+            ("x86_freestanding", "unsupported"),
+        ],
+        status: "partial",
+        authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
+        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_quotient_admission_test.rs",
     },
     OperationSpec {
         canonical_name: "<",

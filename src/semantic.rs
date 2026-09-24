@@ -10,6 +10,19 @@
 //! enforces that reservation before IR lowering. CML still claims only
 //! language contract 2.0 globally; this is a targeted static rejection that
 //! aligns binder behaviour with upstream without upgrading the full claim.
+//!
+//! SID8 space = language function identity (owner directive, 2026-09-24):
+//! the whole range `00000000..11111111` is reserved callable identity --
+//! exactly eight bare binary digits in, a function identity out. Applying an
+//! arithmetic/ordering operation over an SID operand is rejected here, once,
+//! so every backend (C, freestanding, compute) sees the same gate. This
+//! mirrors my-lisp `sid.rs`: `Sid8` derives `Eq`/`Hash`/`PartialEq` (identity
+//! comparison is meaningful) but deliberately NOT `Ord`/`PartialOrd` and no
+//! arithmetic traits -- "математичні операції над нашим сідом" are
+//! impossible by construction. The static gate below catches the source
+//! shape `(math-op <SID-literal> ...)` for the whole compiler; SID values
+//! that reach a numeric primitive by indirect paths are rejected at runtime
+//! by the backend's numeric domain check (same contract my-lisp enforces).
 
 use crate::ast::{Expr, NumericBufferLiteral};
 use std::collections::HashSet;
@@ -23,6 +36,11 @@ pub enum SemanticErrorKind {
     UnsupportedF32Buffer,
     /// Attempt to bind a reserved Canon 0+7 surface name (Contract 6.0).
     ReservedCanonName,
+    /// Arithmetic or numeric ordering applied over an SID8 operand. The whole
+    /// `00000000..11111111` space is language function identity, never a
+    /// number: math over a SID cannot compile (owner directive 2026-09-24,
+    /// mirroring my-lisp sid.rs removing `Ord` and arithmetic from `Sid8`).
+    MathOperationOnSid,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +89,57 @@ pub fn analyze_program(exprs: &[Expr]) -> Result<(), SemanticError> {
     exprs.iter().try_for_each(analyze_expr)
 }
 
+/// The fully-admitted semantic IDs of arithmetic and numeric-ordering
+/// operations from the Canon 0+7 registry (`/home/agents/GitHub/my-lisp/
+/// lib/surface/semantic-registry.wsm` via build.rs). Anything else a SID
+/// may name is not numeric math.
+///
+/// add 00001100 · sub 00001101 · mul 00001110 · div 00001111 ·
+/// mod 00010011 · quotient 00010100 · lt 00011010 · gt 00011011 ·
+/// le 00011101 · ge 00011110 · eq_numeric 00011100.
+fn is_math_operation(sid: my_lisp::Sid8) -> bool {
+    const MATH_SIDS: [my_lisp::Sid8; 11] = [
+        my_lisp::sid!(00001100),
+        my_lisp::sid!(00001101),
+        my_lisp::sid!(00001110),
+        my_lisp::sid!(00001111),
+        my_lisp::sid!(00010011),
+        my_lisp::sid!(00010100),
+        my_lisp::sid!(00011010),
+        my_lisp::sid!(00011011),
+        my_lisp::sid!(00011100),
+        my_lisp::sid!(00011101),
+        my_lisp::sid!(00011110),
+    ];
+    MATH_SIDS.iter().any(|&s| s == sid)
+}
+
+fn reject_math_over_sid(items: &[Expr]) -> Result<(), SemanticError> {
+    let head = match items.first() {
+        Some(Expr::Symbol(name)) => crate::canon::callable_semantic_id(name),
+        Some(Expr::Sid(sid)) => Some(*sid),
+        _ => None,
+    };
+    let Some(head_sid) = head else {
+        return Ok(());
+    };
+    if !is_math_operation(head_sid) {
+        return Ok(());
+    }
+    if let Some(sid) = items.iter().skip(1).find_map(|arg| match arg {
+        Expr::Sid(sid) => Some(sid.to_string()),
+        _ => None,
+    }) {
+        return Err(SemanticError {
+            kind: SemanticErrorKind::MathOperationOnSid,
+            detail: format!(
+                "математична операція над SID {sid} неможлива: SID — ідентичність функції мови, не число"
+            ),
+        });
+    }
+    Ok(())
+}
+
 pub fn analyze_expr(expr: &Expr) -> Result<(), SemanticError> {
     // #f32(...) numeric buffer source syntax is rejected at front-end admission
     if let Expr::NumericBuffer(NumericBufferLiteral::F32(_)) = expr {
@@ -84,6 +153,12 @@ pub fn analyze_expr(expr: &Expr) -> Result<(), SemanticError> {
     let Expr::List(items) = expr else {
         return Ok(());
     };
+
+    // SID8 space is language function identity, not a number: a math
+    // operation with a SID operand must be refused before ANY backend sees
+    // it. This is the global gate for the whole compiler.
+    reject_math_over_sid(items)?;
+
     let Some(Expr::Symbol(head)) = items.first() else {
         return items.iter().try_for_each(analyze_expr);
     };
