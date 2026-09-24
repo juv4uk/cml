@@ -14,8 +14,14 @@ fn compile_and_run(source: &str, stem: &str) -> (std::process::ExitStatus, Vec<u
         .compile_program(&program)
         .expect("exact Sid8 multiplication must compile");
 
-    assert!(assembly.contains("imulq"), "multiplication must use native imulq");
-    assert!(assembly.contains("jo .Larith_overflow_"), "multiplication must keep overflow guard");
+    assert!(
+        assembly.contains("imulq"),
+        "multiplication must use native imulq"
+    );
+    assert!(
+        assembly.contains("jo .Larith_overflow_"),
+        "multiplication must keep overflow guard"
+    );
 
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -46,7 +52,9 @@ fn compile_and_run(source: &str, stem: &str) -> (std::process::ExitStatus, Vec<u
         String::from_utf8_lossy(&linked.stderr)
     );
 
-    let output = Command::new(&exe).output().expect("native witness must execute");
+    let output = Command::new(&exe)
+        .output()
+        .expect("native witness must execute");
     let _ = fs::remove_file(asm);
     let _ = fs::remove_file(harness);
     let _ = fs::remove_file(exe);
