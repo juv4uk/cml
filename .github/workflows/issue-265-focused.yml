@@ -1,0 +1,19 @@
+name: Issue 265 focused native baseline Sid8 fixtures
+
+on:
+  pull_request:
+    paths:
+      - src/native_baseline.rs
+      - .github/workflows/issue-265-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Native baseline unit witnesses
+        run: cargo test --lib native_baseline::tests -- --nocapture
