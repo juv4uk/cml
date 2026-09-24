@@ -24,15 +24,28 @@ pub fn is_canon_form(name: &str, upper: &[&str], exact: &[&str]) -> bool {
 /// a mechanism for a known ID, but it does not get to invent identity from a
 /// human-facing spelling.
 pub fn callable_semantic_id(name: &str) -> Option<Sid8> {
-    let folded = name.to_uppercase();
-    CANON_CALLABLE_UPPER
-        .iter()
-        .find_map(|(id, surface)| (*surface == folded).then_some(*id))
-        .or_else(|| {
-            CANON_CALLABLE_EXACT
-                .iter()
-                .find_map(|(id, surface)| (*surface == name).then_some(*id))
-        })
+    // Structural forms are resolved by the parser/lowering rules above the
+    // ordinary callable layer; they must never be reclassified as function
+    // values merely because they also have registry surfaces.
+    if is_canon_form(name, CANON_QUOTE_UPPER, CANON_QUOTE_EXACT)
+        || is_canon_form(name, CANON_COND_UPPER, CANON_COND_EXACT)
+        || is_canon_form(name, CANON_LAMBDA_UPPER, CANON_LAMBDA_EXACT)
+        || is_canon_form(name, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT)
+        || is_canon_form(name, CANON_DEFMACRO_UPPER, CANON_DEFMACRO_EXACT)
+    {
+        return None;
+    }
+
+    // my-lisp owns admitted surface -> opaque SID identity. CML does not keep
+    // a second callable allowlist. Exact Unicode names are tried first; the
+    // ASCII-lowercase fallback preserves ordinary Lisp case-insensitivity for
+    // English surfaces without changing Ukrainian/Sanskrit identity.
+    my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(name).or_else(|| {
+        let folded = name.to_ascii_lowercase();
+        (folded != name).then(|| {
+            my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(&folded)
+        })?
+    })
 }
 
 /// Map an admitted semantic ID to its canonical uppercase target builtin name.
