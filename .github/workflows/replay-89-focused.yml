@@ -1,0 +1,19 @@
+name: Replay 89 focused UTF-8 x86 witness
+
+on:
+  pull_request:
+    paths:
+      - tests/utf8_decode_x86_red_test.rs
+      - .github/workflows/replay-89-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Focused UTF-8 x86 witness
+        run: cargo test --test utf8_decode_x86_red_test -- --nocapture
