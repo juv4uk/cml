@@ -213,6 +213,7 @@ fn x86_freestanding_explicitly_classifies_every_ir_variant() {
                 match error {
                     X86CompileError::EmptyProgram
                     | X86CompileError::UnsupportedVariant(_)
+                    | X86CompileError::UnimplementedSid8(_)
                     | X86CompileError::InvalidArity { .. }
                     | X86CompileError::DefArityMismatch { .. }
                     | X86CompileError::FixnumOutOfRange(_)
