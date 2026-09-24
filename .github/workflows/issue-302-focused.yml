@@ -29,7 +29,9 @@ jobs:
         run: cargo test --test exhaustive_classification_test -- --nocapture
       - name: IR classification matrix
         run: cargo test --test ir_classification_matrix_test -- --nocapture
-      - name: Exact callable value guard
-        run: cargo test --test c_sid8_callable_value_test -- --nocapture
-      - name: Current predicate record-domain guard
-        run: cargo test --test c_predicate_record_domain_test -- --nocapture
+      - name: C frontend preserves exact Sid8
+        run: cargo test --test c_frontend_sid8_identity_test -- --nocapture
+      - name: Direct SID8 C dispatch remains exact
+        run: cargo test --test direct_sid8_c_backend_dispatch_test -- --nocapture
+      - name: Current predicate record-domain witness
+        run: cargo test --test c_backend_test c_backend_current_predicates_return_upstream_record_domains -- --exact --nocapture
