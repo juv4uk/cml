@@ -1,0 +1,19 @@
+name: Replay 153 focused Lisp frontend parity
+
+on:
+  pull_request:
+    paths:
+      - tests/lisp_frontend_bootstrap_parity_test.rs
+      - .github/workflows/replay-153-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Focused Lisp frontend parity
+        run: cargo test --test lisp_frontend_bootstrap_parity_test -- --nocapture
