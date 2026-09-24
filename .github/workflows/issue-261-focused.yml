@@ -15,9 +15,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          path: cml
           submodules: recursive
+      - uses: actions/checkout@v5
+        with:
+          repository: juv4uk/fpga-lisp
+          ref: b5d68bba109b972122f92fa10d237f81ce90aa87
+          path: fpga-lisp
       - uses: dtolnay/rust-toolchain@stable
       - name: FPGA compiler regression
+        working-directory: cml
         run: cargo test --test compiler_test -- --nocapture
       - name: Registry callable parity
+        working-directory: cml
         run: cargo test --test registry_driven_canon_callables_test -- --nocapture
