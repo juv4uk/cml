@@ -1,0 +1,19 @@
+name: Issue 294 typed buffer SID8 fixtures
+
+on:
+  pull_request:
+    paths:
+      - tests/typed_buffer_ir_test.rs
+      - .github/workflows/issue-294-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Typed buffer compute suite
+        run: cargo test --test typed_buffer_ir_test -- --nocapture
