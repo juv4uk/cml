@@ -1,0 +1,23 @@
+name: Issue 261 focused FPGA Sid8 dispatch
+
+on:
+  pull_request:
+    paths:
+      - src/compiler.rs
+      - tests/compiler_test.rs
+      - tests/registry_driven_canon_callables_test.rs
+      - .github/workflows/issue-261-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: FPGA compiler regression
+        run: cargo test --test compiler_test -- --nocapture
+      - name: Registry callable parity
+        run: cargo test --test registry_driven_canon_callables_test -- --nocapture
