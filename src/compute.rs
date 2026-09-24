@@ -203,29 +203,27 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
     let Ir::App { func, args } = ir else {
         return None;
     };
-    let name: &str = match &**func {
-        Ir::Var(name) => name.as_str(),
-        Ir::Builtin(name) => name.as_str(),
-        Ir::Sid(sid) if *sid == my_lisp::sid!(00110111) || *sid == my_lisp::sid!(01011001) => "MAP",
-        Ir::Sid(sid) if *sid == my_lisp::sid!(00111001) => "REDUCE",
-        _ => return None,
-        _ => return None,
-    };
-    match (name, args.as_slice()) {
-        ("MAP" | "NUMERIC-BUFFER-MAP", [function, input]) => Some(ComputeRegion {
-            operation: BulkOperation::Map,
-            function: function.clone(),
-            input: input.clone(),
-            initial: None,
-            kernel: lower_kernel(function, 1),
-        }),
-        ("REDUCE" | "NUMERIC-BUFFER-REDUCE", [function, initial, input]) => Some(ComputeRegion {
-            operation: BulkOperation::Reduce,
-            function: function.clone(),
-            input: input.clone(),
-            initial: Some(initial.clone()),
-            kernel: lower_kernel(function, 2),
-        }),
+    match (&**func, args.as_slice()) {
+        (Ir::Sid(sid), [function, input])
+            if *sid == my_lisp::sid!(00110111) || *sid == my_lisp::sid!(01011001) =>
+        {
+            Some(ComputeRegion {
+                operation: BulkOperation::Map,
+                function: function.clone(),
+                input: input.clone(),
+                initial: None,
+                kernel: lower_kernel(function, 1),
+            })
+        }
+        (Ir::Sid(sid), [function, initial, input]) if *sid == my_lisp::sid!(00111001) => {
+            Some(ComputeRegion {
+                operation: BulkOperation::Reduce,
+                function: function.clone(),
+                input: input.clone(),
+                initial: Some(initial.clone()),
+                kernel: lower_kernel(function, 2),
+            })
+        }
         _ => None,
     }
 }
@@ -410,11 +408,10 @@ pub(crate) fn f32_affine_offset(expression: &ScalarExpr) -> Option<i64> {
 
 fn lower_kernel(function: &Ir, expected_parameters: usize) -> Option<ComputeKernel> {
     if expected_parameters == 2 {
-        let is_add = match function {
-            Ir::Var(name) | Ir::Builtin(name) => name == "+",
-            Ir::Sid(sid) => *sid == my_lisp::sid!(00001100),
-            _ => false,
-        };
+        let is_add = matches!(
+            function,
+            Ir::Sid(sid) if *sid == my_lisp::sid!(00001100)
+        );
         if is_add {
             return Some(ComputeKernel {
                 parameter_count: 2,
@@ -449,21 +446,6 @@ fn lower_scalar_expr(ir: &Ir, parameters: &[String]) -> Option<ScalarExpr> {
             .iter()
             .position(|parameter| parameter == name)
             .map(ScalarExpr::Parameter),
-        Ir::Prim {
-            op: PrimOp::Add,
-            args,
-        } if args.len() == 2 => Some(ScalarExpr::CheckedAdd(
-            Box::new(lower_scalar_expr(&args[0], parameters)?),
-            Box::new(lower_scalar_expr(&args[1], parameters)?),
-        )),
-        Ir::App { func, args }
-            if matches!(&**func, Ir::Var(name) if name == "+") && args.len() == 2 =>
-        {
-            Some(ScalarExpr::CheckedAdd(
-                Box::new(lower_scalar_expr(&args[0], parameters)?),
-                Box::new(lower_scalar_expr(&args[1], parameters)?),
-            ))
-        }
         Ir::App { func, args }
             if matches!(&**func, Ir::Sid(sid) if *sid == my_lisp::sid!(00001100))
                 && args.len() == 2 =>
@@ -514,21 +496,14 @@ fn effect_of(ir: &Ir) -> EffectClass {
         Ir::Def { .. } => EffectClass::Stateful,
         Ir::TailSelfCall { .. } => EffectClass::Stateful,
         Ir::App { func, args } => {
-            let known_pure = match &**func {
-                Ir::Var(name) | Ir::Builtin(name) => {
-                    name == "+" || name == "MAP" || name == "NUMERIC-BUFFER-MAP" || name == "REDUCE"
-                }
-                Ir::Sid(sid) => {
-                    // Exact Sid8 identities of the pure bulk operations
-                    // (+ map numeric-buffer-map reduce). The bare numeric-buffer-map
-                    // call carries Ir::Sid(01011001) after #246 lowering.
-                    *sid == my_lisp::sid!(00001100)
+            let known_pure = matches!(
+                &**func,
+                Ir::Sid(sid)
+                    if *sid == my_lisp::sid!(00001100)
                         || *sid == my_lisp::sid!(00110111)
                         || *sid == my_lisp::sid!(01011001)
                         || *sid == my_lisp::sid!(00111001)
-                }
-                _ => false,
-            };
+            );
             if known_pure {
                 join_effects(args.iter().map(effect_of))
             } else {
