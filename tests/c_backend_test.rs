@@ -29,7 +29,7 @@ fn gcc_command() -> Command {
 
 fn compile_and_run_first_class(code: &str, stem: &str) -> String {
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
     let c_source = CBackend::new().compile_program(&program).unwrap();
     let c_path = format!("c_backend_{stem}_test.c");
     let bin_path = format!("c_backend_{stem}_test");
@@ -57,7 +57,7 @@ fn compile_and_run_first_class(code: &str, stem: &str) -> String {
 
 fn compile_and_run_failure(code: &str, stem: &str) -> std::process::Output {
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
     let c_source = CBackend::new().compile_program(&program).unwrap();
     let c_path = format!("c_backend_{stem}_test.c");
     let bin_path = format!("c_backend_{stem}_test");
@@ -276,13 +276,12 @@ fn c_backend_supports_i32_buffers_and_rejects_f32_by_name() {
         compile_and_run_first_class("#i32(1 -2 3)", "i32_buffer"),
         "#i32(1 -2 3)"
     );
-    let i32_program =
-        lower::lower_program_with_first_class_builtins(&parser::parse("#i32(1)").unwrap()).unwrap();
+    let i32_program = lower::lower_program(&parser::parse("#i32(1)").unwrap()).unwrap();
     let i32_c_source = CBackend::new().compile_program(&i32_program).unwrap();
     assert!(i32_c_source.contains("OutOfMemory"));
     assert!(i32_c_source.contains("checked_malloc"));
     let exprs = parser::parse("#f32(1.0 2.0)").unwrap();
-    let error = lower::lower_program_with_first_class_builtins(&exprs).unwrap_err();
+    let error = lower::lower_program(&exprs).unwrap_err();
     assert!(
         format!("{error:?}").contains("UnsupportedF32Buffer"),
         "expected semantic UnsupportedF32Buffer rejection, got: {error:?}"
@@ -363,7 +362,7 @@ fn c_backend_numeric_buffer_map_fails_closed_on_i32_overflow() {
 fn compiles_add1_to_c_and_runs_it() {
     let code = "(def add1 (lambda (x) (+ x 1))) (add1 41)";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
     let mut backend = CBackend::new();
     let c_source = backend.compile_program(&program).unwrap();
 
@@ -409,7 +408,7 @@ fn compiles_self_recursive_def_to_c_and_runs_it() {
     // gets self-recursion right too, not just fixed-arity application.
     let code = "(def count (lambda (n) (cond ((eq n 0) (identity-relation same) 99) ((eq n 0) (identity-relation distinct) (count (+ n -1)))))) (count 3)";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
     let mut backend = CBackend::new();
     let c_source = backend.compile_program(&program).unwrap();
 
@@ -451,7 +450,7 @@ fn compiles_let_to_c_and_runs_it() {
     // never actually been run before this test.
     let code = "(let ((x 5) (y 3)) (+ x y))";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
     let mut backend = CBackend::new();
     let c_source = backend.compile_program(&program).unwrap();
 
@@ -492,7 +491,7 @@ fn compiles_variadic_and_dotted_lambda_params_to_c_and_runs_it() {
     // Params::Variadic/AllRest.
     let code = "(cons (car ((lambda args args) 1 2 3)) (car ((lambda (a . rest) rest) 1 2 3)))";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
     let mut backend = CBackend::new();
     let c_source = backend.compile_program(&program).unwrap();
 
@@ -535,7 +534,7 @@ fn compiles_quoted_list_access_to_c_and_runs_it() {
     // format matching my-lisp's own list printer.
     let code = "(cons (car (quote (1 2 3))) (car (cdr (quote (1 2 3)))))";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
     let mut backend = CBackend::new();
     let c_source = backend.compile_program(&program).unwrap();
 
@@ -577,7 +576,7 @@ fn nested_def_returns_graceful_error() {
     // CompileError::NestedDef instead of panicking.
     let code = "(def x (def y 1))";
     let exprs = parser::parse(code).unwrap();
-    let program = lower::lower_program_with_first_class_builtins(&exprs).unwrap();
+    let program = lower::lower_program(&exprs).unwrap();
     let mut backend = CBackend::new();
     let err = backend.compile_program(&program).unwrap_err();
     assert!(

@@ -93,7 +93,7 @@ pub fn parse_source(source: &str) -> Result<Vec<Expr>, BuildError> {
 pub fn front_end_to_ir(source: &str) -> Result<Vec<Ir>, BuildError> {
     let exprs = parse_source(source)?;
     let exprs = expand_macros(&exprs)?;
-    lower::lower_program_with_first_class_builtins(&exprs).map_err(BuildError::Lower)
+    lower::lower_program(&exprs).map_err(BuildError::Lower)
 }
 
 /// Emit C source for a lowered program.
