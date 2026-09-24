@@ -1,0 +1,18 @@
+name: Issue 258 current UTF8 x86 closure probe
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/issue-258-current-probe.yml
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Current real UTF8 closure
+        run: cargo test --test utf8_decode_x86_replay_168_test full_decoder_closure_state_is_recorded_honestly -- --nocapture
