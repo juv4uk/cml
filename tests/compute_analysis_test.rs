@@ -61,7 +61,6 @@ fn recognizes_reduce_as_a_distinct_execution_shape() {
     assert_eq!(analysis.region.unwrap().operation, BulkOperation::Reduce);
 }
 
-
 #[test]
 fn sid8_cons_is_classified_as_allocating() {
     let analysis = analyze(&lower_one("(cons 1 2)"));
