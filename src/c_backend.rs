@@ -907,75 +907,35 @@ impl CBackend {
             }
         };
 
-        if sid == my_lisp::sid!(00000010) {
-            require_arity(1)?;
-            return Ok(format!(
-                "(is_atom({}) ? &TRUE_V : &NIL_V)",
-                self.compile_expr(&args[0], env)?
-            ));
-        }
-
-        if sid == my_lisp::sid!(00000011) {
-            require_arity(2)?;
-            return Ok(format!(
-                "(v_eq({}, {}) ? &TRUE_V : &NIL_V)",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
-        }
-
-        if sid == my_lisp::sid!(00000100) {
-            require_arity(2)?;
-            return Ok(format!(
-                "mk_cons({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
-        }
-
-        if sid == my_lisp::sid!(00000101) {
-            require_arity(1)?;
-            return Ok(format!("v_car({})", self.compile_expr(&args[0], env)?));
-        }
-
-        if sid == my_lisp::sid!(00000110) {
-            require_arity(1)?;
-            return Ok(format!("v_cdr({})", self.compile_expr(&args[0], env)?));
-        }
-
-        if sid == my_lisp::sid!(00001100) {
-            require_arity(2)?;
-            return Ok(format!(
-                "v_add({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
-        }
-
-        if sid == my_lisp::sid!(00001101) {
+        // Runtime-backed semantic callables use one exact path for direct,
+        // first-class and higher-order application. The callable identity is
+        // the Sid8 payload; arity/type rules live in the existing runtime
+        // mechanism selected only after that SID dispatch.
+        if sid == my_lisp::sid!(00000010)
+            || sid == my_lisp::sid!(00000011)
+            || sid == my_lisp::sid!(00000100)
+            || sid == my_lisp::sid!(00000101)
+            || sid == my_lisp::sid!(00000110)
+            || sid == my_lisp::sid!(00001100)
+            || sid == my_lisp::sid!(00001101)
+            || sid == my_lisp::sid!(00001110)
+            || sid == my_lisp::sid!(00001111)
+            || sid == my_lisp::sid!(00011010)
+            || sid == my_lisp::sid!(00011100)
+            || sid == my_lisp::sid!(00100010)
+        {
             return self.compile_sid8_runtime_apply(sid, args, env);
+        }
+
+        if sid == my_lisp::sid!(01011001) {
+            require_arity(2)?;
+            let function = self.compile_expr(&args[0], env)?;
+            let buffer = self.compile_expr(&args[1], env)?;
+            return Ok(format!("v_map_i32_buffer({function}, {buffer})"));
         }
 
         if sid == my_lisp::sid!(00010100) {
             return Err(CompileError::UnsupportedVariant("quotient in C backend"));
-        }
-
-        if sid == my_lisp::sid!(00011100) {
-            require_arity(2)?;
-            return Ok(format!(
-                "(v_equal_p({}, {}) ? &TRUE_V : &NIL_V)",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
-        }
-
-        if sid == my_lisp::sid!(00011010) {
-            require_arity(2)?;
-            return Ok(format!(
-                "v_exact_q_lt({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
         }
 
         if sid == my_lisp::sid!(00011101) {
@@ -993,15 +953,6 @@ impl CBackend {
             let b = self.compile_expr(&args[1], env)?;
             return Ok(format!(
                 "(v_exact_q_lt({b}, {a}) == &TRUE_V || v_equal_p({a}, {b}) ? &TRUE_V : &NIL_V)"
-            ));
-        }
-
-        if sid == my_lisp::sid!(00100010) {
-            require_arity(2)?;
-            return Ok(format!(
-                "(v_equal_p({}, {}) ? &TRUE_V : &NIL_V)",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
             ));
         }
 
