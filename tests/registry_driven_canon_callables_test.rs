@@ -12,6 +12,38 @@ fn lower_one(source: &str) -> Ir {
     lowered.remove(0)
 }
 
+
+#[test]
+fn callable_resolution_is_owned_by_my_lisp_registry_not_a_cml_allowlist() {
+    // FILTER was never present in CML's historical CALLABLE_IDS allowlist.
+    // Its identity must nevertheless be available because my-lisp owns the
+    // admitted surface -> SID projection.
+    assert_eq!(
+        callable_semantic_id("filter"),
+        Some(my_lisp::sid!(00111000))
+    );
+    assert_eq!(
+        callable_semantic_id("FILTER"),
+        Some(my_lisp::sid!(00111000)),
+        "ordinary Latin Lisp lookup remains case-insensitive"
+    );
+    assert_eq!(
+        callable_semantic_id("відсіяти"),
+        Some(my_lisp::sid!(00111000)),
+        "Ukrainian surface comes from the same Lisp-owned registry row"
+    );
+
+    // Structural forms have registry identities too, but they are not
+    // ordinary callable values at this lowering boundary.
+    for form in ["quote", "cond", "lambda", "define", "def", "defmacro"] {
+        assert_eq!(
+            callable_semantic_id(form),
+            None,
+            "{form} must remain a structural form, not an ordinary callable"
+        );
+    }
+}
+
 #[test]
 fn list_sid_is_generated_as_a_callable_and_lowers_through_sid_identity() {
     assert_eq!(
