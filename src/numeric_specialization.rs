@@ -369,7 +369,7 @@ fn lower_numeric_binary(
                     (NumericDomain::DynamicUnknown, OverflowProof::Unknown)
                 }
             }
-            },
+        },
         (
             NumericDomain::RawU64 {
                 min: min1,
@@ -407,7 +407,7 @@ fn lower_numeric_binary(
                     (NumericDomain::DynamicUnknown, OverflowProof::Unknown)
                 }
             }
-            },
+        },
         _ => (NumericDomain::DynamicUnknown, OverflowProof::Unknown),
     };
 
@@ -506,8 +506,7 @@ fn lower_numeric_binary(
             }
             ValueRepresentation::BoxedDynamic => {
                 return Err(LirLowerError::Unsupported(
-                    "unproven dynamic value rejected from arithmetic lowering"
-                        .to_string(),
+                    "unproven dynamic value rejected from arithmetic lowering".to_string(),
                 ));
             }
         };
@@ -525,8 +524,7 @@ fn lower_numeric_binary(
             }
             ValueRepresentation::BoxedDynamic => {
                 return Err(LirLowerError::Unsupported(
-                    "unproven dynamic value rejected from arithmetic lowering"
-                        .to_string(),
+                    "unproven dynamic value rejected from arithmetic lowering".to_string(),
                 ));
             }
         };
@@ -567,7 +565,6 @@ fn lower_numeric_binary(
             Ok((dst_boxed, res_domain, ValueRepresentation::BoxedFixnum))
         }
     }
-
 }
 
 /// Lowers a semantic `Ir` program to an x86 `LirFunction` under numeric specialization.
