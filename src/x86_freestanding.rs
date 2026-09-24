@@ -5,7 +5,7 @@
 //! Unsupported IR is rejected during preflight, before any assembly text is
 //! produced. There is no libc, host syscall, filesystem, or C-backend fallback.
 
-use crate::ir::{Ir, MachineOp, Params, PrimOp, Quoted};
+use crate::ir::{Ir, MachineOp, Params, Quoted};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -660,22 +660,7 @@ fn preflight_env(
         Ir::String(_) => return Err(CompileError::UnsupportedVariant("String")),
         Ir::Nil | Ir::True => {}
         Ir::Quote(value) => preflight_quoted(value, symbols, slots)?,
-        Ir::Prim { op, args } => {
-            let (name, expected) = primitive_contract(*op)?;
-            if let Some(expected) = expected {
-                if args.len() != expected {
-                    return Err(CompileError::InvalidArity {
-                        operation: name,
-                        expected,
-                        actual: args.len(),
-                    });
-                }
-            }
-            for argument in args {
-                preflight_env(argument, bindings, symbols, def_arities, slots)?;
-            }
-            return Ok(());
-        }
+        Ir::Prim { .. } => return Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
             if args.len() != expected {
@@ -941,22 +926,7 @@ fn preflight_lambda_body(
         }
         Ir::Nil | Ir::True => Ok(()),
         Ir::Quote(value) => preflight_quoted(value, symbols, slots),
-        Ir::Prim { op, args } => {
-            let (name, expected) = primitive_contract(*op)?;
-            if let Some(expected) = expected {
-                if args.len() != expected {
-                    return Err(CompileError::InvalidArity {
-                        operation: name,
-                        expected,
-                        actual: args.len(),
-                    });
-                }
-            }
-            for argument in args {
-                preflight_lambda_body(argument, bindings, symbols, slots)?;
-            }
-            Ok(())
-        }
+        Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
             if args.len() != expected {
@@ -1155,22 +1125,7 @@ fn preflight_def_body(
         }
         Ir::Nil | Ir::True => Ok(()),
         Ir::Quote(value) => preflight_quoted(value, symbols, slots),
-        Ir::Prim { op, args } => {
-            let (name, expected) = primitive_contract(*op)?;
-            if let Some(expected) = expected {
-                if args.len() != expected {
-                    return Err(CompileError::InvalidArity {
-                        operation: name,
-                        expected,
-                        actual: args.len(),
-                    });
-                }
-            }
-            for argument in args {
-                preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
-            }
-            Ok(())
-        }
+        Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
             if args.len() != expected {
@@ -1496,31 +1451,6 @@ fn sid8_call_contract(sid: my_lisp::Sid8) -> Option<(Option<usize>, &'static str
         Some((Some(1), ""))
     } else {
         None
-    }
-}
-
-fn primitive_contract(operation: PrimOp) -> Result<(&'static str, Option<usize>), CompileError> {
-    match operation {
-        PrimOp::Cons => Ok(("cons", Some(2))),
-        PrimOp::List => Ok(("list", None)),
-        PrimOp::Car => Ok(("car", Some(1))),
-        PrimOp::Cdr => Ok(("cdr", Some(1))),
-        PrimOp::Eq => Ok(("eq", Some(2))),
-        PrimOp::Atom => Ok(("atom", Some(1))),
-        PrimOp::Add => Ok(("add", Some(2))),
-        PrimOp::Sub => Ok(("sub", Some(2))),
-        // EqualP is used for exact-Q numeric equality (=) in the decoder closure.
-        // For fixnum operands, word equality (wsm_eq) is sufficient.
-        PrimOp::EqualP => Ok(("eq", Some(2))),
-        PrimOp::ExactQLt => Ok(("exact-Q <", Some(2))),
-        PrimOp::ExactQLe => Ok(("exact-Q <=", Some(2))),
-        PrimOp::Cddr => Ok(("cddr", Some(1))),
-        PrimOp::Cadddr => Ok(("cadddr", Some(1))),
-        PrimOp::Caar => Ok(("caar", Some(1))),
-        PrimOp::Cadr => Ok(("cadr", Some(1))),
-        PrimOp::Caddr => Ok(("caddr", Some(1))),
-        PrimOp::ExactQGe => Ok(("exact-Q >=", Some(2))),
-        PrimOp::Quotient => Ok(("quotient", Some(2))),
     }
 }
 
@@ -1872,7 +1802,7 @@ impl Emitter {
                     _ => Ok(()),
                 }
             }
-            Ir::Prim { op, args } => self.emit_primitive(*op, args),
+            Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
             Ir::MachinePrim { op, args } => self.emit_machine_primitive(*op, args),
             Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
         }
@@ -2649,72 +2579,6 @@ impl Emitter {
         Ok(())
     }
 
-    fn emit_primitive(&mut self, operation: PrimOp, args: &[Ir]) -> Result<(), CompileError> {
-        let (name, expected) = primitive_contract(operation)?;
-        if let Some(expected) = expected {
-            debug_assert_eq!(args.len(), expected, "preflight checked {name} arity");
-        }
-        if operation == PrimOp::List {
-            return self.emit_primitive_list(args);
-        }
-
-        // Arithmetic is inline — no runtime call, checked for 61-bit overflow.
-        if matches!(operation, PrimOp::Add | PrimOp::Sub) {
-            let kind = match operation {
-                PrimOp::Add => X86ArithmeticKind::Add,
-                PrimOp::Sub => X86ArithmeticKind::Sub,
-                _ => unreachable!(),
-            };
-            return self.emit_arithmetic(kind, args);
-        }
-        if matches!(operation, PrimOp::ExactQGe) {
-            return self.emit_exact_q_ge(args);
-        }
-        if matches!(operation, PrimOp::ExactQLe) {
-            return self.emit_exact_q_le(args);
-        }
-        if matches!(operation, PrimOp::ExactQLt) {
-            return self.emit_exact_q_lt(args);
-        }
-        if matches!(operation, PrimOp::Quotient) {
-            return self.emit_quotient(args);
-        }
-
-        let slots: Vec<usize> = args
-            .iter()
-            .map(|argument| {
-                self.emit_ir(argument)?;
-                let slot = self.allocate_slot();
-                self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
-                Ok(slot)
-            })
-            .collect::<Result<_, CompileError>>()?;
-
-        self.line("    movq %r12, %rdi");
-        self.line(&format!(
-            "    movq {}(%rsp), %rsi",
-            Self::slot_offset(slots[0])
-        ));
-        if slots.len() == 2 {
-            self.line(&format!(
-                "    movq {}(%rsp), %rdx",
-                Self::slot_offset(slots[1])
-            ));
-        }
-        let runtime = match operation {
-            PrimOp::Cons => "wsm_cons",
-            PrimOp::List => "wsm_cons", // List uses wsm_cons internally
-            PrimOp::Car => "wsm_car",
-            PrimOp::Cdr => "wsm_cdr",
-            PrimOp::Eq => "wsm_eq",
-            PrimOp::Atom => "wsm_atom",
-            PrimOp::EqualP => "wsm_eq",
-            _ => unreachable!("arithmetic handled above; equal? excluded by preflight"),
-        };
-        self.line(&format!("    call {runtime}"));
-        Ok(())
-    }
-
     /// Emit a variadic List primitive: (list) -> NIL, (list a b c) -> (a b c)
     /// Builds the list right-to-left using wsm_cons.
     fn emit_primitive_list(&mut self, args: &[Ir]) -> Result<(), CompileError> {
@@ -2745,41 +2609,6 @@ impl Emitter {
             ));
             self.line("    movq %r12, %rdi");
             self.line("    call wsm_cons");
-        }
-        Ok(())
-    }
-
-    /// Emit composed CDR operations (caar, cadr, caddr, cddr, cadddr)
-    /// These are implemented as sequences of car/cdr operations.
-    fn emit_composed_cdr(&mut self, operation: PrimOp, args: &[Ir]) -> Result<(), CompileError> {
-        debug_assert_eq!(args.len(), 1);
-        // Evaluate the argument
-        self.emit_ir(&args[0])?;
-        // Result is in %rax
-        match operation {
-            PrimOp::Cddr => {
-                self.line("    call wsm_cdr");
-                self.line("    call wsm_cdr");
-            }
-            PrimOp::Cadddr => {
-                self.line("    call wsm_cdr");
-                self.line("    call wsm_cdr");
-                self.line("    call wsm_cdr");
-            }
-            PrimOp::Caar => {
-                self.line("    call wsm_car");
-                self.line("    call wsm_car");
-            }
-            PrimOp::Cadr => {
-                self.line("    call wsm_cdr");
-                self.line("    call wsm_car");
-            }
-            PrimOp::Caddr => {
-                self.line("    call wsm_cdr");
-                self.line("    call wsm_cdr");
-                self.line("    call wsm_car");
-            }
-            _ => unreachable!(),
         }
         Ok(())
     }
