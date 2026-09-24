@@ -555,6 +555,24 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
                 return lower_sid_call(sid, args, env);
             }
         }
+        // `caddr` has no canonical SID in the upstream registry (only
+        // caar/cadr/cddr/cadddr are registered). It lowers as the composite
+        // car(cdr(cdr x)) so no backend ever dispatches a name-keyed caddr.
+        if func == "caddr" || func == "CADDR" {
+            if args.len() != 1 {
+                return Err(LowerError::arity("caddr expects exactly one argument"));
+            }
+            let arg0 = lower_expr_admitted(&args[0], env)?;
+            let cdr = |inner: Ir| Ir::App {
+                func: Box::new(Ir::Sid(my_lisp::sid!(00000110))),
+                args: vec![inner],
+            };
+            let car = |inner: Ir| Ir::App {
+                func: Box::new(Ir::Sid(my_lisp::sid!(00000101))),
+                args: vec![inner],
+            };
+            return Ok(car(cdr(cdr(arg0))));
+        }
     }
     lower_generic_call(&Expr::Symbol(func.to_string()), args, env)
 }
@@ -1022,6 +1040,44 @@ mod sid_head_tests {
                 assert_eq!(args.len(), 2);
             }
             other => panic!("expected SID8 App, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn caddr_lowers_as_composite_sid8_accessor_nested_car_cdr_cdr() {
+        // caddr has no canonical SID upstream; lowering must compose
+        // car(cdr(cdr x)) out of the registered SIDs, never a name-keyed call.
+        let surface = Expr::List(vec![Expr::Symbol("caddr".into()), Expr::Symbol("x".into())]);
+        let ir = lower_expr_admitted(&surface, &Env::default()).expect("caddr lowers as composite");
+        match ir {
+            Ir::App { func, args } => {
+                assert!(
+                    matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000101)),
+                    "outer must be car SID 00000101, got {func:?}"
+                );
+                assert_eq!(args.len(), 1);
+                match &args[0] {
+                    Ir::App { func, args } => {
+                        assert!(
+                            matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000110)),
+                            "middle must be cdr SID 00000110, got {func:?}"
+                        );
+                        assert_eq!(args.len(), 1);
+                        match &args[0] {
+                            Ir::App { func, args } => {
+                                assert!(
+                                    matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000110)),
+                                    "inner must be cdr SID 00000110, got {func:?}"
+                                );
+                                assert!(matches!(args.as_slice(), [Ir::Var(name)] if name == "X"));
+                            }
+                            other => panic!("expected inner cdr App, got {other:?}"),
+                        }
+                    }
+                    other => panic!("expected middle cdr App, got {other:?}"),
+                }
+            }
+            other => panic!("expected SID8 car App, got {other:?}"),
         }
     }
 }
