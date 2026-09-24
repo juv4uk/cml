@@ -1434,6 +1434,7 @@ fn sid8_call_contract(sid: my_lisp::Sid8) -> Option<(Option<usize>, &'static str
         Some((None, "wsm_cons"))
     } else if sid == my_lisp::sid!(00001100)
         || sid == my_lisp::sid!(00001101)
+        || sid == my_lisp::sid!(00001110)
         || sid == my_lisp::sid!(00010011)
         || sid == my_lisp::sid!(00011010)
         || sid == my_lisp::sid!(00011101)
@@ -1478,6 +1479,7 @@ fn platform_call_contract(func: &Ir) -> Option<(&'static str, usize, &'static st
 enum X86ArithmeticKind {
     Add,
     Sub,
+    Mul,
 }
 
 struct Emitter {
@@ -2510,6 +2512,9 @@ impl Emitter {
         if sid == my_lisp::sid!(00001101) {
             return self.emit_arithmetic(X86ArithmeticKind::Sub, args);
         }
+        if sid == my_lisp::sid!(00001110) {
+            return self.emit_arithmetic(X86ArithmeticKind::Mul, args);
+        }
         if sid == my_lisp::sid!(00011010) {
             return self.emit_exact_q_lt(args);
         }
@@ -2828,6 +2833,7 @@ impl Emitter {
         match operation {
             X86ArithmeticKind::Add => self.line("    addq %rdx, %rcx"),
             X86ArithmeticKind::Sub => self.line("    subq %rdx, %rcx"),
+            X86ArithmeticKind::Mul => self.line("    imulq %rdx, %rcx"),
         }
         self.line(&format!("    jo .Larith_overflow_{overflow_label}"));
 
