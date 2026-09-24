@@ -1,0 +1,20 @@
+name: Issue 291 standard lowering SID8 guard
+
+on:
+  pull_request:
+    paths:
+      - tests/sid8_standard_lowering_guard_test.rs
+      - src/lower.rs
+      - .github/workflows/issue-291-focused.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Standard lowering SID8 guard
+        run: cargo test --test sid8_standard_lowering_guard_test -- --nocapture
