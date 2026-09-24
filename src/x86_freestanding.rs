@@ -720,22 +720,6 @@ fn preflight_env(
                 }
                 return Ok(());
             }
-            if let Ir::Builtin(name) = func.as_ref() {
-                if name == "mod" {
-                    if args.len() != 2 {
-                        return Err(CompileError::InvalidArity {
-                            operation: "mod",
-                            expected: 2,
-                            actual: args.len(),
-                        });
-                    }
-                    for argument in args {
-                        preflight_env(argument, bindings, symbols, def_arities, slots)?;
-                    }
-                    *slots += 2;
-                    return Ok(());
-                }
-            }
             if let Some((operation, expected, _)) = platform_call_contract(func) {
                 if args.len() != expected {
                     return Err(CompileError::InvalidArity {
@@ -1013,22 +997,6 @@ fn preflight_lambda_body(
                 }
                 return Ok(());
             }
-            if let Ir::Builtin(name) = func.as_ref() {
-                if name == "mod" {
-                    if args.len() != 2 {
-                        return Err(CompileError::InvalidArity {
-                            operation: "mod",
-                            expected: 2,
-                            actual: args.len(),
-                        });
-                    }
-                    for argument in args {
-                        preflight_lambda_body(argument, bindings, symbols, slots)?;
-                    }
-                    *slots += 2;
-                    return Ok(());
-                }
-            }
             if let Some((operation, expected, _)) = platform_call_contract(func) {
                 if !matches!(func.as_ref(), Ir::Var(name) if bindings.contains(name)) {
                     if args.len() != expected {
@@ -1247,22 +1215,6 @@ fn preflight_def_body(
                     return preflight_def_body(&named, bindings, symbols, def_arities, slots);
                 }
                 return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
-            }
-            if let Ir::Builtin(name) = func.as_ref() {
-                if name == "mod" {
-                    if args.len() != 2 {
-                        return Err(CompileError::InvalidArity {
-                            operation: "mod",
-                            expected: 2,
-                            actual: args.len(),
-                        });
-                    }
-                    for argument in args {
-                        preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
-                    }
-                    *slots += 2;
-                    return Ok(());
-                }
             }
             if let Some((operation, expected, _)) = platform_call_contract(func) {
                 if !matches!(func.as_ref(), Ir::Var(name) if bindings.contains(name)) {
@@ -1708,11 +1660,6 @@ impl Emitter {
                         return self.emit_named_def_call(&named, &key, args);
                     }
                     return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
-                }
-                if let Ir::Builtin(name) = func.as_ref() {
-                    if name == "mod" {
-                        return self.emit_mod(args);
-                    }
                 }
                 if platform_call_contract(func).is_some()
                     && !matches!(func.as_ref(), Ir::Var(name) if self.env.contains_key(name))
