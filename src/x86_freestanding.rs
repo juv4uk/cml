@@ -2506,7 +2506,7 @@ impl Emitter {
 
     fn emit_sid8_call(&mut self, sid: my_lisp::Sid8, args: &[Ir]) -> Result<(), CompileError> {
         let Some((expected, runtime)) = sid8_call_contract(sid) else {
-            return Err(CompileError::UnimplementedSid8(*sid));
+            return Err(CompileError::UnimplementedSid8(sid));
         };
         if let Some(expected) = expected {
             debug_assert_eq!(args.len(), expected, "preflight checked SID8 arity");
