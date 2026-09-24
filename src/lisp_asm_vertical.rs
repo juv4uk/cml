@@ -5,7 +5,7 @@
 //! and allocates no semantic IDs. The resulting target executable contains no
 //! C runtime and no Rust runtime.
 
-use crate::ir::{Ir, PrimOp};
+use crate::ir::Ir;
 use crate::machine_inst::{AluOp, MachineInst, MachineItem, Provenance, X86Reg};
 
 /// Errors from the deliberately bounded first Lisp -> assembler target slice.
@@ -71,14 +71,6 @@ pub fn select_arithmetic_slice(program: &[Ir]) -> Result<Vec<MachineItem>, Verti
                 imm: tagged,
                 provenance: prov.clone(),
             }));
-        }
-        Ir::Prim { op, args } if matches!(op, PrimOp::Add | PrimOp::Sub) => {
-            let alu_op = match op {
-                PrimOp::Add => AluOp::Add,
-                PrimOp::Sub => AluOp::Sub,
-                _ => unreachable!(),
-            };
-            emit_literal_arithmetic(&mut items, alu_op, args, &prov)?;
         }
         Ir::App { func, args }
             if matches!(func.as_ref(), Ir::Sid(sid)
