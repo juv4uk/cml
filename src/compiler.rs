@@ -1,4 +1,4 @@
-use crate::ir::{Ir, Params, PrimOp, Quoted};
+use crate::ir::{Ir, Params, Quoted};
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -101,19 +101,7 @@ fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
             validate_ir(body)
         }
         Ir::Def { value, .. } => validate_ir(value),
-        Ir::Prim {
-            op: PrimOp::ExactQLt,
-            ..
-        } => Err(CompileError::UnsupportedVariant("ExactQLt")),
-        Ir::Prim {
-            op: PrimOp::ExactQLe,
-            ..
-        } => Err(CompileError::UnsupportedVariant("ExactQLe")),
-        Ir::Prim {
-            op: PrimOp::ExactQGe,
-            ..
-        } => Err(CompileError::UnsupportedVariant("ExactQGe")),
-        Ir::Prim { args, .. } => args.iter().try_for_each(validate_ir),
+        Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { .. } => Err(CompileError::UnsupportedVariant("MachinePrim")),
         Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
     }
@@ -325,7 +313,7 @@ impl Compiler {
             Ir::CondMatch { branches } => self.compile_cond_match(branches, target_reg),
             Ir::Let { bindings, body } => self.compile_let(bindings, body, target_reg),
             Ir::Def { name, value } => self.compile_def(name, value, target_reg),
-            Ir::Prim { op, args } => self.compile_prim(*op, args, target_reg),
+            Ir::Prim { .. } => unreachable!("Prim rejected by validate_ir"),
             Ir::MachinePrim { .. } => unreachable!("MachinePrim rejected by validate_ir"),
             Ir::TailSelfCall { .. } => unreachable!("TailSelfCall rejected by validate_ir"),
         }
@@ -423,29 +411,6 @@ impl Compiler {
         self.emit("CDR R1");
         self.emit("CDR R1");
         self.emit("CDR R1");
-    }
-
-    fn compile_prim(&mut self, op: PrimOp, args: &[Ir], target_reg: &str) {
-        match op {
-            PrimOp::Cons => self.compile_cons_mechanism(args, target_reg),
-            PrimOp::Car => self.compile_car_mechanism(args, target_reg),
-            PrimOp::Cdr => self.compile_cdr_mechanism(args, target_reg),
-            PrimOp::Eq => self.compile_eq_mechanism(args, target_reg),
-            PrimOp::Atom => self.compile_atom_mechanism(args, target_reg),
-            PrimOp::EqualP => self.compile_equal_mechanism(args, target_reg),
-            PrimOp::Add => self.compile_add_mechanism(args, target_reg),
-            PrimOp::Sub => self.compile_sub_mechanism(args, target_reg),
-            PrimOp::List => self.compile_list_mechanism(args, target_reg),
-            PrimOp::Caar => self.compile_caar_mechanism(args),
-            PrimOp::Cadr => self.compile_cadr_mechanism(args),
-            PrimOp::Cddr => self.compile_cddr_mechanism(args),
-            PrimOp::Caddr => self.compile_caddr_mechanism(args),
-            PrimOp::Cadddr => self.compile_cadddr_mechanism(args),
-            PrimOp::ExactQLt => unreachable!("ExactQLt rejected by validate_ir"),
-            PrimOp::ExactQLe => unreachable!("ExactQLe rejected by validate_ir"),
-            PrimOp::ExactQGe => unreachable!("ExactQGe rejected by validate_ir"),
-            PrimOp::Quotient => unreachable!("Quotient rejected by validate_ir"),
-        }
     }
 
     fn compile_sid_call(&mut self, sid: my_lisp::Sid8, args: &[Ir], target_reg: &str) {
