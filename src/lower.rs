@@ -249,32 +249,13 @@ fn mark_tail_position(ir: &Ir, self_name: &str) -> Ir {
 fn reify_primitive_calls(ir: Ir) -> Ir {
     match ir {
         Ir::Builtin(name) => Ir::Var(name),
-        // #246: first-class callables now carry the exact Sid8. The C
-        // runtime-first path still resolves them to the canonical runtime
-        // variable when the ID has a projection; non-projected SIDs stay
-        // exact and fail closed at the backend (standalone SID8 value).
-        Ir::Sid(sid) => {
-            if let Some(name) = crate::canon::canonical_builtin_name(sid) {
-                Ir::Var(name.to_string())
-            } else {
-                Ir::Sid(sid)
-            }
-        }
-        // SID8 canonical builtins used as first-class values keep their
-        // historic Builtin/Var shape for the C backend runtime path.
-        Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(_)) => {
-            if let Ir::Sid(sid) = func.as_ref() {
-                if let Some(name) = crate::canon::canonical_builtin_name(*sid) {
-                    return Ir::App {
-                        func: Box::new(Ir::Var(name.to_string())),
-                        args: args.into_iter().map(reify_primitive_calls).collect(),
-                    };
-                }
-            }
-            Ir::App {
-                func: Box::new(reify_primitive_calls(*func)),
-                args: args.into_iter().map(reify_primitive_calls).collect(),
-            }
+        // #286 / #250: exact callable identity must survive the
+        // backend-facing C frontend unchanged. Presentation/runtime labels are
+        // a backend concern after Sid8 dispatch, never a lowering identity.
+        Ir::Sid(sid) => Ir::Sid(sid)
+        Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(_)) => Ir::App {
+            func,
+            args: args.into_iter().map(reify_primitive_calls).collect(),
         }
         Ir::Prim { op, args } => Ir::App {
             func: Box::new(Ir::Var(primitive_name(op).to_string())),
