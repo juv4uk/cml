@@ -94,9 +94,10 @@ const RUNTIME: &str = r##"
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <stdint.h>
 
 typedef struct Value Value;
-typedef enum { TAG_NIL, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_RATIONAL, TAG_STRING } Tag;
+typedef enum { TAG_NIL, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_SID_CALLABLE, TAG_RATIONAL, TAG_STRING } Tag;
 struct Value {
     Tag tag;
     union {
@@ -106,6 +107,7 @@ struct Value {
         struct { int *data; size_t len; } i32_buffer;
         struct { Value *(*fn)(Value *args, Value *env); Value *env; } closure;
         struct { const char *name; Value *(*fn)(Value *args, Value *env); } builtin;
+        uint8_t sid;
         struct { long num; long den; } rat;
         const char *str;
     } u;
@@ -148,6 +150,7 @@ static Value *mk_cons(Value *a, Value *b) { Value *v = checked_malloc(sizeof(Val
 static Value *mk_i32_buffer(const int *data, size_t len) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_I32_BUFFER; v->u.i32_buffer.data = checked_malloc(len * sizeof(int)); v->u.i32_buffer.len = len; memcpy(v->u.i32_buffer.data, data, len * sizeof(int)); return v; }
 static Value *mk_closure(Value *(*fn)(Value*, Value*), Value *env) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_CLOSURE; v->u.closure.fn = fn; v->u.closure.env = env; return v; }
 static Value *mk_builtin(const char *name, Value *(*fn)(Value*, Value*)) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_BUILTIN; v->u.builtin.name = name; v->u.builtin.fn = fn; return v; }
+static Value *mk_sid_callable(uint8_t sid) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_SID_CALLABLE; v->u.sid = sid; return v; }
 static Value *mk_string(const char *s) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_STRING; v->u.str = s; return v; }
 
 static long rational_gcd(long a, long b) {
@@ -402,8 +405,29 @@ static Value *builtin_exact_q_lt(Value *args, Value *env) {
     return v_exact_q_lt(arg_at(args, 0), arg_at(args, 1));
 }
 
+static Value *apply_sid_callable(uint8_t sid, Value *args) {
+    switch (sid) {
+        case 0b00000010: return builtin_atom(args, &NIL_V);
+        case 0b00000011: return builtin_eq(args, &NIL_V);
+        case 0b00000100: return builtin_cons(args, &NIL_V);
+        case 0b00000101: return builtin_car(args, &NIL_V);
+        case 0b00000110: return builtin_cdr(args, &NIL_V);
+        case 0b00001100: return builtin_add(args, &NIL_V);
+        case 0b00001101: return builtin_subtract(args, &NIL_V);
+        case 0b00001110: return builtin_mul(args, &NIL_V);
+        case 0b00001111: return builtin_div(args, &NIL_V);
+        case 0b00011010: return builtin_exact_q_lt(args, &NIL_V);
+        case 0b00011100: return builtin_equal_p(args, &NIL_V);
+        case 0b00100010: return builtin_equal_p(args, &NIL_V);
+        default:
+            runtime_error("Type", "unsupported SID8 callable");
+            return &NIL_V;
+    }
+}
+
 static Value *v_apply(Value *callable, Value *args) {
     if (callable->tag == TAG_CLOSURE) return callable->u.closure.fn(args, callable->u.closure.env);
+    if (callable->tag == TAG_SID_CALLABLE) return apply_sid_callable(callable->u.sid, args);
     if (callable->tag == TAG_BUILTIN) return callable->u.builtin.fn(args, &NIL_V);
     // Issue cml#3 item 4: my-lisp authority classifies a non-callable
     // application under ErrorKind::Type (crates/my-lisp/src/eval/closures.rs),
@@ -481,6 +505,32 @@ static void print_value(Value *v) {
         case TAG_STRING: printf("%s", v->u.str); break;
         case TAG_CLOSURE: printf("<closure>"); break;
         case TAG_BUILTIN: printf("#<builtin %s>", v->u.builtin.name); break;
+        case TAG_SID_CALLABLE: {
+            const char *label = NULL;
+            switch (v->u.sid) {
+                case 0b00000010: label = "atom"; break;
+                case 0b00000011: label = "eq"; break;
+                case 0b00000100: label = "cons"; break;
+                case 0b00000101: label = "car"; break;
+                case 0b00000110: label = "cdr"; break;
+                case 0b00001100: label = "+"; break;
+                case 0b00001101: label = "-"; break;
+                case 0b00001110: label = "*"; break;
+                case 0b00001111: label = "/"; break;
+                case 0b00011010: label = "<"; break;
+                case 0b00011100: label = "="; break;
+                case 0b00100010: label = "equal?"; break;
+                default: break;
+            }
+            if (label != NULL) {
+                printf("#<builtin %s>", label);
+            } else {
+                printf("#<sid8 ");
+                for (int bit = 7; bit >= 0; --bit) putchar((v->u.sid & (1u << bit)) ? '1' : '0');
+                printf(">");
+            }
+            break;
+        }
         case TAG_I32_BUFFER:
             printf("#i32(");
             for (size_t i = 0; i < v->u.i32_buffer.len; i++) { if (i) printf(" "); printf("%d", v->u.i32_buffer.data[i]); }
@@ -590,7 +640,7 @@ impl CBackend {
 
     fn compile_expr(&mut self, ir: &Ir, env: &str) -> Result<String, CompileError> {
         match ir {
-            Ir::Sid(_) => Err(CompileError::UnsupportedVariant("standalone SID8 value")),
+            Ir::Sid(sid) => Ok(format!("mk_sid_callable(0b{sid})")),
             Ir::Int(n) => Ok(format!("mk_int({n})")),
             Ir::Float(_) => Err(CompileError::UnsupportedVariant("Float")),
             Ir::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
@@ -825,6 +875,20 @@ impl CBackend {
         ))
     }
 
+    fn compile_sid8_runtime_apply(
+        &mut self,
+        sid: my_lisp::Sid8,
+        args: &[Ir],
+        env: &str,
+    ) -> Result<String, CompileError> {
+        let mut args_list = "(&NIL_V)".to_string();
+        for arg in args.iter().rev() {
+            let arg_expr = self.compile_expr(arg, env)?;
+            args_list = format!("mk_cons({arg_expr}, {args_list})");
+        }
+        Ok(format!("v_apply(mk_sid_callable(0b{sid}), ({args_list}))"))
+    }
+
     fn compile_sid8_call(
         &mut self,
         sid: my_lisp::Sid8,
@@ -843,80 +907,35 @@ impl CBackend {
             }
         };
 
-        if sid == my_lisp::sid!(00000010) {
-            require_arity(1)?;
-            return Ok(format!(
-                "(is_atom({}) ? &TRUE_V : &NIL_V)",
-                self.compile_expr(&args[0], env)?
-            ));
+        // Runtime-backed semantic callables use one exact path for direct,
+        // first-class and higher-order application. The callable identity is
+        // the Sid8 payload; arity/type rules live in the existing runtime
+        // mechanism selected only after that SID dispatch.
+        if sid == my_lisp::sid!(00000010)
+            || sid == my_lisp::sid!(00000011)
+            || sid == my_lisp::sid!(00000100)
+            || sid == my_lisp::sid!(00000101)
+            || sid == my_lisp::sid!(00000110)
+            || sid == my_lisp::sid!(00001100)
+            || sid == my_lisp::sid!(00001101)
+            || sid == my_lisp::sid!(00001110)
+            || sid == my_lisp::sid!(00001111)
+            || sid == my_lisp::sid!(00011010)
+            || sid == my_lisp::sid!(00011100)
+            || sid == my_lisp::sid!(00100010)
+        {
+            return self.compile_sid8_runtime_apply(sid, args, env);
         }
 
-        if sid == my_lisp::sid!(00000011) {
+        if sid == my_lisp::sid!(01011001) {
             require_arity(2)?;
-            return Ok(format!(
-                "(v_eq({}, {}) ? &TRUE_V : &NIL_V)",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
-        }
-
-        if sid == my_lisp::sid!(00000100) {
-            require_arity(2)?;
-            return Ok(format!(
-                "mk_cons({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
-        }
-
-        if sid == my_lisp::sid!(00000101) {
-            require_arity(1)?;
-            return Ok(format!("v_car({})", self.compile_expr(&args[0], env)?));
-        }
-
-        if sid == my_lisp::sid!(00000110) {
-            require_arity(1)?;
-            return Ok(format!("v_cdr({})", self.compile_expr(&args[0], env)?));
-        }
-
-        if sid == my_lisp::sid!(00001100) {
-            require_arity(2)?;
-            return Ok(format!(
-                "v_add({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
-        }
-
-        if sid == my_lisp::sid!(00001101) {
-            require_arity(2)?;
-            return Ok(format!(
-                "v_sub({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
+            let function = self.compile_expr(&args[0], env)?;
+            let buffer = self.compile_expr(&args[1], env)?;
+            return Ok(format!("v_map_i32_buffer({function}, {buffer})"));
         }
 
         if sid == my_lisp::sid!(00010100) {
             return Err(CompileError::UnsupportedVariant("quotient in C backend"));
-        }
-
-        if sid == my_lisp::sid!(00011100) {
-            require_arity(2)?;
-            return Ok(format!(
-                "(v_equal_p({}, {}) ? &TRUE_V : &NIL_V)",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
-        }
-
-        if sid == my_lisp::sid!(00011010) {
-            require_arity(2)?;
-            return Ok(format!(
-                "v_exact_q_lt({}, {})",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
-            ));
         }
 
         if sid == my_lisp::sid!(00011101) {
@@ -934,15 +953,6 @@ impl CBackend {
             let b = self.compile_expr(&args[1], env)?;
             return Ok(format!(
                 "(v_exact_q_lt({b}, {a}) == &TRUE_V || v_equal_p({a}, {b}) ? &TRUE_V : &NIL_V)"
-            ));
-        }
-
-        if sid == my_lisp::sid!(00100010) {
-            require_arity(2)?;
-            return Ok(format!(
-                "(v_equal_p({}, {}) ? &TRUE_V : &NIL_V)",
-                self.compile_expr(&args[0], env)?,
-                self.compile_expr(&args[1], env)?
             ));
         }
 

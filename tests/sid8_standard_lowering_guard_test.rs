@@ -88,7 +88,9 @@ fn standard_lowering_never_reifies_language_callables_as_builtin_or_prim() {
 
 #[test]
 fn admitted_first_class_callable_values_are_exact_sid8() {
-    for source in ["atom", "eq", "cons", "car", "cdr", "+", "-", "equal?", "list"] {
+    for source in [
+        "atom", "eq", "cons", "car", "cdr", "+", "-", "equal?", "list",
+    ] {
         let ir = lower_one(source);
         assert!(
             matches!(ir, Ir::Sid(_)),
