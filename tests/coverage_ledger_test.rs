@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use cml::canon::{CANON_BUILD_SOURCE_SEMANTIC_IDS, CANON_OPERATIONS_TABLE};
 use cml::coverage::{AdmissionState, CoverageLedger};
@@ -14,7 +14,7 @@ fn build_source_ledger_covers_every_upstream_identity_once() {
         "the upstream denominator must remain larger than CML's admitted operation slice"
     );
 
-    let ids: BTreeSet<_> = ledger.rows.iter().map(|row| row.semantic_id).collect();
+    let ids: HashSet<_> = ledger.rows.iter().map(|row| row.semantic_id).collect();
     assert_eq!(ids.len(), ledger.rows.len(), "semantic IDs must be unique");
     assert!(
         ids.iter().all(|id| {

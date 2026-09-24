@@ -29,6 +29,7 @@ const CANONICAL_T: wsm_os_target::Word =
 pub enum CompileError {
     EmptyProgram,
     UnsupportedVariant(&'static str),
+    UnimplementedSid8(my_lisp::Sid8),
     InvalidArity {
         operation: &'static str,
         expected: usize,
@@ -59,6 +60,12 @@ impl fmt::Display for CompileError {
                 write!(
                     formatter,
                     "unsupported IR in x86_64-freestanding backend: {node}"
+                )
+            }
+            Self::UnimplementedSid8(sid) => {
+                write!(
+                    formatter,
+                    "unimplemented SID8 call in x86_64-freestanding backend: {sid}"
                 )
             }
             Self::InvalidArity {
@@ -689,7 +696,7 @@ fn preflight_env(
         Ir::App { func, args } => {
             if let Ir::Sid(sid) = func.as_ref() {
                 let Some((expected, _runtime)) = sid8_call_contract(*sid) else {
-                    return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
+                    return Err(CompileError::UnimplementedSid8(*sid));
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {
@@ -951,7 +958,7 @@ fn preflight_lambda_body(
         Ir::App { func, args } => {
             if let Ir::Sid(sid) = func.as_ref() {
                 let Some((expected, _runtime)) = sid8_call_contract(*sid) else {
-                    return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
+                    return Err(CompileError::UnimplementedSid8(*sid));
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {
@@ -1169,7 +1176,7 @@ fn preflight_def_body(
                     };
                     return preflight_def_body(&named, bindings, symbols, def_arities, slots);
                 }
-                return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
+                return Err(CompileError::UnimplementedSid8(*sid));
             }
             if let Some((operation, expected, _)) = platform_call_contract(func) {
                 if !matches!(func.as_ref(), Ir::Var(name) if bindings.contains(name)) {
@@ -1597,7 +1604,7 @@ impl Emitter {
                         let named = Ir::Var(key.clone());
                         return self.emit_named_def_call(&named, &key, args);
                     }
-                    return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
+                    return Err(CompileError::UnimplementedSid8(*sid));
                 }
                 if platform_call_contract(func).is_some()
                     && !matches!(func.as_ref(), Ir::Var(name) if self.env.contains_key(name))
@@ -2499,7 +2506,7 @@ impl Emitter {
 
     fn emit_sid8_call(&mut self, sid: my_lisp::Sid8, args: &[Ir]) -> Result<(), CompileError> {
         let Some((expected, runtime)) = sid8_call_contract(sid) else {
-            return Err(CompileError::UnsupportedVariant("unimplemented SID8 call"));
+            return Err(CompileError::UnimplementedSid8(sid));
         };
         if let Some(expected) = expected {
             debug_assert_eq!(args.len(), expected, "preflight checked SID8 arity");

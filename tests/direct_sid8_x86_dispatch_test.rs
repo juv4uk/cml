@@ -51,6 +51,6 @@ fn unsupported_sid8_call_fails_closed_without_name_fallback() {
         .expect_err("unimplemented SID8 must fail closed");
     assert_eq!(
         error,
-        CompileError::UnsupportedVariant("unimplemented SID8 call")
+        CompileError::UnimplementedSid8(my_lisp::sid!(11111111))
     );
 }

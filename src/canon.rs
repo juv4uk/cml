@@ -84,35 +84,42 @@ pub fn find_operation_by_id(semantic_id: Sid8) -> Option<&'static CanonOperation
 /// Collect every unique canonical operation present in an IR expression stream.
 pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static CanonOperation> {
     use crate::ir::Ir;
-    use std::collections::BTreeSet;
+    use std::collections::HashSet;
 
-    let mut ids = BTreeSet::new();
+    let mut ids = Vec::new();
+    let mut seen = HashSet::new();
 
-    fn walk(ir: &Ir, ids: &mut BTreeSet<Sid8>) {
+    fn record(sid: Sid8, ids: &mut Vec<Sid8>, seen: &mut HashSet<Sid8>) {
+        if seen.insert(sid) {
+            ids.push(sid);
+        }
+    }
+
+    fn walk(ir: &Ir, ids: &mut Vec<Sid8>, seen: &mut HashSet<Sid8>) {
         match ir {
             Ir::Quote(_) => {
-                ids.insert(my_lisp::sid!(00000001));
+                record(my_lisp::sid!(00000001), ids, seen);
             }
             Ir::Cond { branches } => {
-                ids.insert(my_lisp::sid!(00000111));
+                record(my_lisp::sid!(00000111), ids, seen);
                 for (test, body) in branches {
-                    walk(test, ids);
-                    walk(body, ids);
+                    walk(test, ids, seen);
+                    walk(body, ids, seen);
                 }
             }
             Ir::Lambda { body, .. } => {
-                ids.insert(my_lisp::sid!(00001000));
-                walk(body, ids);
+                record(my_lisp::sid!(00001000), ids, seen);
+                walk(body, ids, seen);
             }
             Ir::Def { value, .. } => {
-                ids.insert(my_lisp::sid!(00001001));
-                walk(value, ids);
+                record(my_lisp::sid!(00001001), ids, seen);
+                walk(value, ids, seen);
             }
             Ir::Let { bindings, body } => {
                 for (_, val) in bindings {
-                    walk(val, ids);
+                    walk(val, ids, seen);
                 }
-                walk(body, ids);
+                walk(body, ids, seen);
             }
             Ir::Prim { args, .. } => {
                 // #252 / #246: PrimOp is a migration-era mechanism shape, not
@@ -121,13 +128,13 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
                 // Ir::Sid and Ir::App(func = Ir::Sid(...)); legacy Prim nodes
                 // may still be traversed so nested exact identities are visible.
                 for arg in args {
-                    walk(arg, ids);
+                    walk(arg, ids, seen);
                 }
             }
             Ir::MachinePrim { args, .. } => {
                 // Machine primitives are compiler-owned target mechanisms, NOT language semantic IDs.
                 for arg in args {
-                    walk(arg, ids);
+                    walk(arg, ids, seen);
                 }
             }
             Ir::Builtin(_) => {
@@ -139,12 +146,12 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
             // compiler Builtin name. Record the operation so a program that
             // references a callable as a value is credited with that operation.
             Ir::Sid(sid) => {
-                ids.insert(*sid);
+                record(*sid, ids, seen);
             }
             Ir::App { func, args } => {
-                walk(func, ids);
+                walk(func, ids, seen);
                 for arg in args {
-                    walk(arg, ids);
+                    walk(arg, ids, seen);
                 }
             }
             _ => {}
@@ -152,7 +159,7 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
     }
 
     for expr in program {
-        walk(expr, &mut ids);
+        walk(expr, &mut ids, &mut seen);
     }
 
     ids.into_iter().filter_map(find_operation_by_id).collect()

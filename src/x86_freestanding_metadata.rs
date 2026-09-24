@@ -318,12 +318,13 @@ mod tests {
             op_ids,
             vec![
                 my_lisp::sid!(00000001),
-                my_lisp::sid!(00000100),
-                my_lisp::sid!(00001100)
-            ]
+                my_lisp::sid!(00001100),
+                my_lisp::sid!(00000100)
+            ],
+            "operation metadata must preserve first encounter order, not impose an ordering on opaque Sid8 identities"
         );
         assert_eq!(compiled.operations[0].canonical_name, "quote");
-        assert_eq!(compiled.operations[1].canonical_name, "cons");
-        assert_eq!(compiled.operations[2].canonical_name, "+");
+        assert_eq!(compiled.operations[1].canonical_name, "+");
+        assert_eq!(compiled.operations[2].canonical_name, "cons");
     }
 }
