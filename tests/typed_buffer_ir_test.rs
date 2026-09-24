@@ -2,7 +2,7 @@ use cml::ast::{Expr, NumericBufferLiteral};
 use cml::compute::{
     ComputeKernel, EffectClass, ExecutionShape, NumericDomain, ScalarExpr, StorageClass, analyze,
 };
-use cml::ir::{BufferLiteral, Ir, Params, PrimOp};
+use cml::ir::{BufferLiteral, Ir, Params};
 use cml::{c_backend::CBackend, compiler::Compiler, lower, parser};
 
 fn lower_one(source: &str) -> Ir {
@@ -12,7 +12,7 @@ fn lower_one(source: &str) -> Ir {
 
 fn f32_map_ir(values: &[f32], body: Ir) -> Ir {
     Ir::App {
-        func: Box::new(Ir::Builtin("NUMERIC-BUFFER-MAP".to_string())),
+        func: Box::new(Ir::Sid(my_lisp::sid!(01011001))),
         args: vec![
             Ir::Lambda {
                 params: Params::Fixed(vec!["X".to_string()]),
@@ -97,8 +97,8 @@ fn intermediate_i32_overflow_is_not_hidden_by_later_cancellation() {
 fn internal_affine_f32_ir_has_a_single_rounding_proof() {
     let analysis = analyze(&f32_map_ir(
         &[1.0, 2.0],
-        Ir::Prim {
-            op: PrimOp::Add,
+        Ir::App {
+            func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
             args: vec![Ir::Var("X".to_string()), Ir::Int(0)],
         },
     ));
@@ -109,8 +109,8 @@ fn internal_affine_f32_ir_has_a_single_rounding_proof() {
 fn internal_non_affine_f32_ir_stays_blocked() {
     let analysis = analyze(&f32_map_ir(
         &[1.0, 2.0],
-        Ir::Prim {
-            op: PrimOp::Add,
+        Ir::App {
+            func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
             args: vec![Ir::Var("X".to_string()), Ir::Var("X".to_string())],
         },
     ));
