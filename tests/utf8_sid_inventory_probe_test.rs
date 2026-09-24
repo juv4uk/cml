@@ -60,6 +60,12 @@ fn walk(ir: &Ir, seen: &mut BTreeSet<my_lisp::Sid8>, ordered: &mut Vec<my_lisp::
                 walk(body, seen, ordered);
             }
         }
+        Ir::CondMatch { branches } => {
+            for (query, _expected, body) in branches {
+                walk(query, seen, ordered);
+                walk(body, seen, ordered);
+            }
+        }
         Ir::Prim { args, .. } | Ir::MachinePrim { args, .. } | Ir::TailSelfCall { args } => {
             for arg in args { walk(arg, seen, ordered); }
         }
