@@ -6,7 +6,7 @@
 //! expected Lisp answers or local PASS/FAIL semantic verdicts.
 
 use crate::compute::{ComputeBackend, CpuComputeBackend};
-use crate::ir::{BufferLiteral, Ir, Params, PrimOp};
+use crate::ir::{BufferLiteral, Ir, Params};
 use crate::machine_inst::{
     AluOp, CondCode, MachineInst, MachineItem, Provenance, X86Reg, assemble_program,
 };
@@ -666,12 +666,12 @@ pub fn generate_baseline_report(cml_commit: &str, mylisp_pin: &str) -> BaselineR
     {
         let lisp_src = "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3 4 5))";
         let ir = Ir::App {
-            func: Box::new(Ir::Builtin("NUMERIC-BUFFER-MAP".to_string())),
+            func: Box::new(Ir::Sid(my_lisp::sid!(01011001))),
             args: vec![
                 Ir::Lambda {
                     params: Params::Fixed(vec!["X".to_string()]),
-                    body: Box::new(Ir::Prim {
-                        op: PrimOp::Add,
+                    body: Box::new(Ir::App {
+                        func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
                         args: vec![Ir::Var("X".to_string()), Ir::Int(1)],
                     }),
                 },
