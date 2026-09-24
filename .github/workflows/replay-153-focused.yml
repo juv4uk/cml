@@ -13,7 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          path: cml
           submodules: recursive
+      - uses: actions/checkout@v5
+        with:
+          repository: juv4uk/my-lisp
+          ref: d359c4885e0609a6c8350daf45de157b40cf48f3
+          path: my-lisp
       - uses: dtolnay/rust-toolchain@stable
       - name: Focused Lisp frontend parity
+        working-directory: cml
         run: cargo test --test lisp_frontend_bootstrap_parity_test -- --nocapture
