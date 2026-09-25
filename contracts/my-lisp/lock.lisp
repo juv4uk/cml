@@ -6,5 +6,5 @@
     (repository juv4uk/my-lisp)
     (branch main)
     (path language-contract.lisp))
-  (revision "f665f541f5ab1befab23f1daf9f6c0afa51fbab0")
-  (sha256 "615660828fe4a4abab73d910d095653d4dfe16b7c4143f140c0b9fcd5362e80c"))
+  (revision "fa42bdb69739712588702a091e352a9f7f692929")
+  (sha256 "d031a9835b77a3453be5fbd7c4336b509329e3e5bf44834954931a68850310e3"))
