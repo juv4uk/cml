@@ -185,7 +185,7 @@ fn historical_reader_contract_workflow_is_not_an_active_my_lisp_channel() {
         "#84 Reader Contract 4 must initialize the supported-pin submodule required by Cargo"
     );
     assert!(
-        !workflow.contains("repository: juv4uk/my-lisp"),
+        !workflow.contains("repository: juv4uk/sens"),
         "#84 Reader Contract 4 historical evidence must not create a third active my-lisp checkout"
     );
     assert!(
