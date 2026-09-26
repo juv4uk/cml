@@ -4,7 +4,7 @@
 
 ((kind . cml-compatibility)
  (compiler-version . (0 3 0))
- (language . ((repository . juv4uk/my-lisp)
+ (language . ((repository . juv4uk/sens)
               ; `contract` is the highest language contract this compiler
               ; claims to implement, not an alias for whatever upstream has
               ; most recently published.  Keep the two states separate so a
