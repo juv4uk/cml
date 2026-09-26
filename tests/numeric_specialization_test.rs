@@ -21,7 +21,7 @@ use cml::numeric_specialization::{
 };
 use cml::x86_lir::lir_to_machine_items;
 use cml::{lower, parser};
-use my_lisp::{Session, eval_program};
+use sens::{Session, eval_program};
 use wsm_os_target::Tag;
 
 fn parse_and_lower_ir(source: &str) -> cml::ir::Ir {

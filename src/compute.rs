@@ -205,7 +205,7 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
     };
     match (&**func, args.as_slice()) {
         (Ir::Sid(sid), [function, input])
-            if *sid == my_lisp::sid!(00110111) || *sid == my_lisp::sid!(01011001) =>
+            if *sid == sens::sid!(00110111) || *sid == sens::sid!(01011001) =>
         {
             Some(ComputeRegion {
                 operation: BulkOperation::Map,
@@ -215,7 +215,7 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
                 kernel: lower_kernel(function, 1),
             })
         }
-        (Ir::Sid(sid), [function, initial, input]) if *sid == my_lisp::sid!(00111001) => {
+        (Ir::Sid(sid), [function, initial, input]) if *sid == sens::sid!(00111001) => {
             Some(ComputeRegion {
                 operation: BulkOperation::Reduce,
                 function: function.clone(),
@@ -410,7 +410,7 @@ fn lower_kernel(function: &Ir, expected_parameters: usize) -> Option<ComputeKern
     if expected_parameters == 2 {
         let is_add = matches!(
             function,
-            Ir::Sid(sid) if *sid == my_lisp::sid!(00001100)
+            Ir::Sid(sid) if *sid == sens::sid!(00001100)
         );
         if is_add {
             return Some(ComputeKernel {
@@ -447,7 +447,7 @@ fn lower_scalar_expr(ir: &Ir, parameters: &[String]) -> Option<ScalarExpr> {
             .position(|parameter| parameter == name)
             .map(ScalarExpr::Parameter),
         Ir::App { func, args }
-            if matches!(&**func, Ir::Sid(sid) if *sid == my_lisp::sid!(00001100))
+            if matches!(&**func, Ir::Sid(sid) if *sid == sens::sid!(00001100))
                 && args.len() == 2 =>
         {
             Some(ScalarExpr::CheckedAdd(
@@ -495,17 +495,17 @@ fn effect_of(ir: &Ir) -> EffectClass {
         Ir::App { func, args } => {
             if matches!(
                 &**func,
-                Ir::Sid(sid) if *sid == my_lisp::sid!(00000100)
+                Ir::Sid(sid) if *sid == sens::sid!(00000100)
             ) {
                 return EffectClass::Allocating;
             }
             let known_pure = matches!(
                 &**func,
                 Ir::Sid(sid)
-                    if *sid == my_lisp::sid!(00001100)
-                        || *sid == my_lisp::sid!(00110111)
-                        || *sid == my_lisp::sid!(01011001)
-                        || *sid == my_lisp::sid!(00111001)
+                    if *sid == sens::sid!(00001100)
+                        || *sid == sens::sid!(00110111)
+                        || *sid == sens::sid!(01011001)
+                        || *sid == sens::sid!(00111001)
             );
             if known_pure {
                 join_effects(args.iter().map(effect_of))

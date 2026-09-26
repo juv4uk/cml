@@ -299,17 +299,17 @@ mod tests {
         let program = [
             Ir::Quote(Quoted::Int(42)),
             Ir::App {
-                func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
+                func: Box::new(Ir::Sid(sens::sid!(00001100))),
                 args: vec![Ir::Int(1), Ir::Int(2)],
             },
             Ir::App {
-                func: Box::new(Ir::Sid(my_lisp::sid!(00000100))),
+                func: Box::new(Ir::Sid(sens::sid!(00000100))),
                 args: vec![Ir::Int(1), Ir::Nil],
             },
         ];
         let compiled = backend.compile_program_with_metadata(&program).unwrap();
         assert!(compiled.validate_operation_metadata());
-        let op_ids: Vec<my_lisp::Sid8> = compiled
+        let op_ids: Vec<sens::Sid8> = compiled
             .operations
             .iter()
             .map(|op| op.semantic_id)
@@ -317,14 +317,14 @@ mod tests {
         assert_eq!(
             op_ids,
             vec![
-                my_lisp::sid!(00000001),
-                my_lisp::sid!(00001100),
-                my_lisp::sid!(00000100)
+                sens::sid!(00000001),
+                sens::sid!(00001100),
+                sens::sid!(00000100)
             ],
             "operation metadata must preserve first encounter order, not impose an ordering on opaque Sid8 identities"
         );
         assert_eq!(compiled.operations[0].canonical_name, "quote");
-        assert_eq!(compiled.operations[1].canonical_name, "+");
+        assert_eq!(compiled.operations[1].canonical_name, "plus");
         assert_eq!(compiled.operations[2].canonical_name, "cons");
     }
 }

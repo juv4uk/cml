@@ -102,8 +102,8 @@ name = "cml"
 version = "0.1.0"
 dependencies = [
  "cudarc",
- "my-lisp",
  "pollster",
+ "sens",
  "wgpu",
  "wsm-os-target",
 ]
@@ -393,10 +393,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
-name = "my-lisp"
-version = "0.41.0"
-
-[[package]]
 name = "naga"
 version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -665,6 +661,10 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "sens"
+version = "0.41.0"
 
 [[package]]
 name = "slab"

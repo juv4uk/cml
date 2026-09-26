@@ -19,7 +19,7 @@ use cml::x86_regalloc::{
     emit_machine_items_with_plan,
 };
 use cml::{lower, parser};
-use my_lisp::{Session, eval_program};
+use sens::{Session, eval_program};
 
 fn parse_and_lower_ir(source: &str) -> cml::ir::Ir {
     let exprs =

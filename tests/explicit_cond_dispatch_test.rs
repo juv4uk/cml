@@ -25,7 +25,7 @@ fn current_three_part_cond_clause_reaches_ir_without_truthiness_rewrite() {
 
     let (query, expected, body) = &branches[0];
     assert!(
-        matches!(query, Ir::App { func, .. } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000011)))
+        matches!(query, Ir::App { func, .. } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00000011)))
     );
     assert!(matches!(body, Ir::Quote(Quoted::Sym { original, .. }) if original == "matched"));
     assert_eq!(

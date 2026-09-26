@@ -290,9 +290,9 @@ fn lower_spec_expr(
         }
         Ir::App { func, args }
             if matches!(func.as_ref(), Ir::Sid(sid)
-                if *sid == my_lisp::sid!(00001100) || *sid == my_lisp::sid!(00001101)) =>
+                if *sid == sens::sid!(00001100) || *sid == sens::sid!(00001101)) =>
         {
-            let kind = if *func.as_ref() == Ir::Sid(my_lisp::sid!(00001100)) {
+            let kind = if *func.as_ref() == Ir::Sid(sens::sid!(00001100)) {
                 NumericAluKind::Add
             } else {
                 NumericAluKind::Sub

@@ -67,7 +67,7 @@ fn top_level_definition_name(expr: &Expr) -> Option<String> {
     };
     let is_define_head = match head {
         Expr::Symbol(form) => is_canon_form(form, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT),
-        Expr::Sid(sid) => *sid == my_lisp::sid!(00001001) || *sid == my_lisp::sid!(00001011),
+        Expr::Sid(sid) => *sid == sens::sid!(00001001) || *sid == sens::sid!(00001011),
         _ => false,
     };
     if !is_define_head {
@@ -85,7 +85,7 @@ fn top_level_definition_name(expr: &Expr) -> Option<String> {
 
 /// Returns the SID used as a definition key, if this top-level form is a
 /// define whose name is a typed Sid8. Name-keyed surface defines return `None`.
-fn sid_keyed_definition_name(expr: &Expr) -> Option<my_lisp::Sid8> {
+fn sid_keyed_definition_name(expr: &Expr) -> Option<sens::Sid8> {
     use crate::canon::{CANON_DEFINE_EXACT, CANON_DEFINE_UPPER, is_canon_form};
 
     let Expr::List(items) = expr else {
@@ -96,7 +96,7 @@ fn sid_keyed_definition_name(expr: &Expr) -> Option<my_lisp::Sid8> {
     };
     let is_define_head = match head {
         Expr::Symbol(form) => is_canon_form(form, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT),
-        Expr::Sid(sid) => *sid == my_lisp::sid!(00001001) || *sid == my_lisp::sid!(00001011),
+        Expr::Sid(sid) => *sid == sens::sid!(00001001) || *sid == sens::sid!(00001011),
         _ => false,
     };
     if !is_define_head {
@@ -251,7 +251,7 @@ impl Env {
         self.bound.iter().any(|b| b == name)
     }
 
-    fn has_sid_keyed_def(&self, sid: my_lisp::Sid8) -> bool {
+    fn has_sid_keyed_def(&self, sid: sens::Sid8) -> bool {
         self.sid_keyed_defs.contains(&sid.to_string())
     }
 }
@@ -356,29 +356,29 @@ fn lower_list(list: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 /// here; every other SID remains a first-class call value and keeps
 /// `Ir::App { func: Ir::Sid(sid), .. }` for the direct-SID8 dispatch
 /// (#238), never a SID-to-name fallback.
-fn lower_sid_head(sid: my_lisp::Sid8, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
-    if sid == my_lisp::sid!(00000001) {
+fn lower_sid_head(sid: sens::Sid8, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
+    if sid == sens::sid!(00000001) {
         return match args {
             [single] => Ok(Ir::Quote(lower_quoted(single)?)),
             _ => Err(LowerError::arity("quote expects exactly one argument")),
         };
     }
-    if sid == my_lisp::sid!(00000111) {
+    if sid == sens::sid!(00000111) {
         return lower_cond(args, env);
     }
-    if sid == my_lisp::sid!(00001000) && args.len() >= 2 {
+    if sid == sens::sid!(00001000) && args.len() >= 2 {
         return lower_lambda(args, env);
     }
-    if (sid == my_lisp::sid!(00001001) || sid == my_lisp::sid!(00001011)) && args.len() == 2 {
+    if (sid == sens::sid!(00001001) || sid == sens::sid!(00001011)) && args.len() == 2 {
         return lower_def(args, env);
     }
-    if sid == my_lisp::sid!(10011101) && args.len() == 2 {
+    if sid == sens::sid!(10011101) && args.len() == 2 {
         return lower_let_star(args, env);
     }
-    if sid == my_lisp::sid!(00010100) && args.len() == 2 {
+    if sid == sens::sid!(00010100) && args.len() == 2 {
         return lower_sid_call(sid, args, env);
     }
-    if sid == my_lisp::sid!(00001010) {
+    if sid == sens::sid!(00001010) {
         return Err(LowerError::invalid_form(
             "defmacro must be expanded before IR lowering",
         ));
@@ -422,7 +422,7 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
         // admitted callable lowers as an exact SID8 function call; backends
         // select their private mechanism from the 8-bit identity directly.
         if let Some(semantic_id) = callable_semantic_id(func) {
-            if semantic_id == my_lisp::sid!(01011001) {
+            if semantic_id == sens::sid!(01011001) {
                 if args.len() == 2 {
                     return lower_generic_call(
                         &Expr::Symbol("NUMERIC-BUFFER-MAP".to_string()),
@@ -441,14 +441,14 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
         // dispatches by its Sid8 call key, but only when the current program
         // actually keys the definition under that SID. This keeps call
         // identity identical to def identity.
-        if let Some(sid) = my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(func)
+        if let Some(sid) = sens::semantic_registry_export::semantic_id_for_admitted_surface(func)
         {
             if env.has_sid_keyed_def(sid) {
                 return lower_generic_call(&Expr::Sid(sid), args, env);
             }
             // `quotient` is an admitted primitive that is not in the Canon
             // callable table; it still lowers by its exact SID8.
-            if sid == my_lisp::sid!(00010100) && args.len() == 2 {
+            if sid == sens::sid!(00010100) && args.len() == 2 {
                 return lower_sid_call(sid, args, env);
             }
         }
@@ -461,11 +461,11 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
             }
             let arg0 = lower_expr_admitted(&args[0], env)?;
             let cdr = |inner: Ir| Ir::App {
-                func: Box::new(Ir::Sid(my_lisp::sid!(00000110))),
+                func: Box::new(Ir::Sid(sens::sid!(00000110))),
                 args: vec![inner],
             };
             let car = |inner: Ir| Ir::App {
-                func: Box::new(Ir::Sid(my_lisp::sid!(00000101))),
+                func: Box::new(Ir::Sid(sens::sid!(00000101))),
                 args: vec![inner],
             };
             return Ok(car(cdr(cdr(arg0))));
@@ -474,7 +474,7 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     lower_generic_call(&Expr::Symbol(func.to_string()), args, env)
 }
 
-fn lower_sid_call(sid: my_lisp::Sid8, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
+fn lower_sid_call(sid: sens::Sid8, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     Ok(Ir::App {
         func: Box::new(Ir::Sid(sid)),
         args: args
@@ -744,7 +744,7 @@ mod sid_head_tests {
     #[test]
     fn sid_headed_lambda_lowers_like_surface_lambda() {
         let expr = Expr::List(vec![
-            Expr::Sid(my_lisp::sid!(00001000)),
+            Expr::Sid(sens::sid!(00001000)),
             Expr::Symbol("args".into()),
             Expr::Symbol("args".into()),
         ]);
@@ -760,7 +760,7 @@ mod sid_head_tests {
 
     #[test]
     fn sid_headed_quote_lowers_to_quote() {
-        let expr = Expr::List(vec![Expr::Sid(my_lisp::sid!(00000001)), Expr::List(vec![])]);
+        let expr = Expr::List(vec![Expr::Sid(sens::sid!(00000001)), Expr::List(vec![])]);
         let ir = lower_expr_admitted(&expr, &Env::default()).expect("SID quote lowers");
         assert!(matches!(ir, Ir::Quote(Quoted::Nil)));
     }
@@ -768,10 +768,10 @@ mod sid_head_tests {
     #[test]
     fn sid_headed_define_row_keys_def_by_typed_sid_bits() {
         let expr = Expr::List(vec![
-            Expr::Sid(my_lisp::sid!(00001001)),
-            Expr::Sid(my_lisp::sid!(00100111)),
+            Expr::Sid(sens::sid!(00001001)),
+            Expr::Sid(sens::sid!(00100111)),
             Expr::List(vec![
-                Expr::Sid(my_lisp::sid!(00001000)),
+                Expr::Sid(sens::sid!(00001000)),
                 Expr::Symbol("args".into()),
                 Expr::Symbol("args".into()),
             ]),
@@ -795,8 +795,8 @@ mod sid_head_tests {
     #[test]
     fn top_level_sid_define_registers_env_binding() {
         let expr = Expr::List(vec![
-            Expr::Sid(my_lisp::sid!(00001001)),
-            Expr::Sid(my_lisp::sid!(00100111)),
+            Expr::Sid(sens::sid!(00001001)),
+            Expr::Sid(sens::sid!(00100111)),
             Expr::List(vec![]),
         ]);
         assert_eq!(
@@ -807,12 +807,12 @@ mod sid_head_tests {
 
     #[test]
     fn non_special_sid_head_stays_a_direct_call_value() {
-        let expr = Expr::List(vec![Expr::Sid(my_lisp::sid!(00000101)), Expr::List(vec![])]);
+        let expr = Expr::List(vec![Expr::Sid(sens::sid!(00000101)), Expr::List(vec![])]);
         let ir = lower_expr_admitted(&expr, &Env::default()).expect("SID call lowers");
         assert!(matches!(
             ir,
             Ir::App { ref func, .. }
-                if matches!(func.as_ref(), Ir::Sid(s) if *s == my_lisp::sid!(00000101))
+                if matches!(func.as_ref(), Ir::Sid(s) if *s == sens::sid!(00000101))
         ));
     }
 
@@ -823,7 +823,7 @@ mod sid_head_tests {
         // dispatches by its typed Sid8 call key when the program keys the def
         // under that SID: `(reverse x)` -> App(Sid(...)).
         let mut env = Env::default();
-        let sid = my_lisp::semantic_registry_export::semantic_id_for_admitted_surface("reverse")
+        let sid = sens::semantic_registry_export::semantic_id_for_admitted_surface("reverse")
             .expect("reverse has an admitted surface SID");
         env.sid_keyed_defs.insert(sid.to_string());
         let expr = Expr::List(vec![
@@ -836,7 +836,7 @@ mod sid_head_tests {
                 assert!(matches!(
                     func.as_ref(),
                     Ir::Sid(sid) if *sid
-                        == my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(
+                        == sens::semantic_registry_export::semantic_id_for_admitted_surface(
                             "reverse"
                         )
                         .expect("reverse has an admitted surface SID")
@@ -859,7 +859,7 @@ mod sid_head_tests {
         let ir = lower_expr_admitted(&expr, &Env::default()).expect("builtin call lowers");
         match ir {
             Ir::App { func, args } => {
-                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00011100)));
+                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00011100)));
                 assert_eq!(args.len(), 2);
             }
             other => panic!("expected SID8 App, got {other:?}"),
@@ -919,21 +919,21 @@ mod sid_head_tests {
         let ir = lower_expr_admitted(&surface, &Env::default()).expect("quotient lowers");
         match ir {
             Ir::App { func, args } => {
-                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00010100)));
+                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00010100)));
                 assert_eq!(args.len(), 2);
             }
             other => panic!("expected SID8 App, got {other:?}"),
         }
 
         let sid_call = Expr::List(vec![
-            Expr::Sid(my_lisp::sid!(00010100)),
+            Expr::Sid(sens::sid!(00010100)),
             Expr::Integer(7),
             Expr::Integer(2),
         ]);
         let ir = lower_expr_admitted(&sid_call, &Env::default()).expect("SID quotient lowers");
         match ir {
             Ir::App { func, args } => {
-                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00010100)));
+                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00010100)));
                 assert_eq!(args.len(), 2);
             }
             other => panic!("expected SID8 App, got {other:?}"),
@@ -949,21 +949,21 @@ mod sid_head_tests {
         match ir {
             Ir::App { func, args } => {
                 assert!(
-                    matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000101)),
+                    matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00000101)),
                     "outer must be car SID 00000101, got {func:?}"
                 );
                 assert_eq!(args.len(), 1);
                 match &args[0] {
                     Ir::App { func, args } => {
                         assert!(
-                            matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000110)),
+                            matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00000110)),
                             "middle must be cdr SID 00000110, got {func:?}"
                         );
                         assert_eq!(args.len(), 1);
                         match &args[0] {
                             Ir::App { func, args } => {
                                 assert!(
-                                    matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000110)),
+                                    matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00000110)),
                                     "inner must be cdr SID 00000110, got {func:?}"
                                 );
                                 assert!(matches!(args.as_slice(), [Ir::Var(name)] if name == "X"));

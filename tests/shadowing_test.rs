@@ -52,7 +52,7 @@ fn builtin_as_value_still_works() {
     let ir = lower_expr(&ast).unwrap();
     match ir {
         Ir::Let { bindings, body: _ } => {
-            assert_eq!(bindings[0].1, Ir::Sid(my_lisp::sid!(00000101)));
+            assert_eq!(bindings[0].1, Ir::Sid(sens::sid!(00000101)));
         }
         _ => panic!("Expected Let"),
     }

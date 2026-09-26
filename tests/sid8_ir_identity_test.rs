@@ -12,7 +12,7 @@ fn lower_one(source: &str) -> Ir {
     lowered.remove(0)
 }
 
-fn assert_sid_call(source: &str, expected_sid: my_lisp::Sid8) {
+fn assert_sid_call(source: &str, expected_sid: sens::Sid8) {
     let lowered = lower_one(source);
     match lowered {
         Ir::App { func, .. } => match *func {
@@ -30,20 +30,20 @@ fn assert_sid_call(source: &str, expected_sid: my_lisp::Sid8) {
 
 #[test]
 fn admitted_surface_calls_keep_sid8_as_the_ir_function_key() {
-    assert_sid_call("(car (quote (A B)))", my_lisp::sid!(00000101));
-    assert_sid_call("(cons (quote A) (quote B))", my_lisp::sid!(00000100));
+    assert_sid_call("(car (quote (A B)))", sens::sid!(00000101));
+    assert_sid_call("(cons (quote A) (quote B))", sens::sid!(00000100));
     assert_sid_call(
         "(list (quote A) (quote B) (quote C))",
-        my_lisp::sid!(00100111),
+        sens::sid!(00100111),
     );
-    assert_sid_call("(+ 1 2)", my_lisp::sid!(00001100));
+    assert_sid_call("(+ 1 2)", sens::sid!(00001100));
 }
 
 #[test]
 fn peer_surface_calls_converge_to_the_same_sid8_before_backend_entry() {
-    assert_sid_call("(перше (quote (A B)))", my_lisp::sid!(00000101));
-    assert_sid_call("(сполучити (quote A) (quote B))", my_lisp::sid!(00000100));
-    assert_sid_call("(додати 1 2)", my_lisp::sid!(00001100));
+    assert_sid_call("(перше (quote (A B)))", sens::sid!(00000101));
+    assert_sid_call("(сполучити (quote A) (quote B))", sens::sid!(00000100));
+    assert_sid_call("(додати 1 2)", sens::sid!(00001100));
 }
 
 #[test]
@@ -51,12 +51,12 @@ fn first_class_callable_surface_is_sid8_not_builtin_name_or_primop_identity() {
     let lowered = lower_one("car");
     assert_eq!(
         lowered,
-        Ir::Sid(my_lisp::sid!(00000101)),
+        Ir::Sid(sens::sid!(00000101)),
         "first-class callable identity must remain exact Sid8"
     );
 }
 
 #[test]
 fn exact_bare_sid8_call_already_uses_the_required_ir_shape() {
-    assert_sid_call("(00000101 (quote (A B)))", my_lisp::sid!(00000101));
+    assert_sid_call("(00000101 (quote (A B)))", sens::sid!(00000101));
 }

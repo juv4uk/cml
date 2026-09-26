@@ -2,7 +2,7 @@
 
 use cml::lisp_encoder_bridge::items_to_lisp_machine_forms;
 use cml::machine_inst::{AluOp, MachineInst, MachineItem, Provenance, X86Reg};
-use my_lisp::{Session, eval_program, load_core_library};
+use sens::{Session, eval_program, load_core_library};
 use std::fs;
 use std::path::PathBuf;
 

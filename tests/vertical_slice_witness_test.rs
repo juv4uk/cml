@@ -36,7 +36,7 @@ fn lisp_source_reaches_native_x86_without_c_or_rust_runtime() {
     assert_eq!(
         ir,
         vec![Ir::App {
-            func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
+            func: Box::new(Ir::Sid(sens::sid!(00001100))),
             args: vec![Ir::Int(10), Ir::Int(32)],
         }],
         "fixture must lower through admitted Lisp IR, not hand-built target bytes"
@@ -131,7 +131,7 @@ fn arithmetic_slice_fails_closed_outside_its_admitted_scope() {
     );
 
     let bad_arity = vec![Ir::App {
-        func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
+        func: Box::new(Ir::Sid(sens::sid!(00001100))),
         args: vec![Ir::Int(1)],
     }];
     assert_eq!(

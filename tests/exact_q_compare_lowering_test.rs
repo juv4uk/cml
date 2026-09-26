@@ -8,11 +8,11 @@ fn exact_q_compare_family_is_admitted_by_distinct_semantic_identity() {
     // Three GREEN slices promote 1014 (<), 1017 (<=), and 1018 (>=) to
     // explicit comparison IR; 1015/1016 remain admitted-but-partial generic Apps.
     let cases = [
-        ("<", my_lisp::sid!(00011010)),
-        (">", my_lisp::sid!(00011011)),
-        ("=", my_lisp::sid!(00011100)),
-        ("<=", my_lisp::sid!(00011101)),
-        (">=", my_lisp::sid!(00011110)),
+        ("<", sens::sid!(00011010)),
+        (">", sens::sid!(00011011)),
+        ("=", sens::sid!(00011100)),
+        ("<=", sens::sid!(00011101)),
+        (">=", sens::sid!(00011110)),
     ];
 
     for (surface, semantic_id) in cases {

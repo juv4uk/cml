@@ -14,12 +14,12 @@ cudarc = { version = "0.19.9", default-features = false, features = ["std", "dri
 pollster = { version = "1.0.1", optional = true }
 wgpu = { version = "30.0.0", default-features = false, features = ["std", "wgsl", "vulkan", "gles"], optional = true }
 wsm-os-target = { git = "https://github.com/juv4uk/wsm-target-contract.git", rev = "7b47a8dcc2da8e05d60b0ed1177ef6f9e55c081d" }
-my-lisp = { path = "external/my-lisp/crates/my-lisp" }
+sens = { path = "external/sens/crates/sens" }
 
 [dev-dependencies]
 # #84 supported-pin channel:
-# cml's tests read my-lisp's own .lisp source tree directly (the encoder
+# cml's tests read sens's own .lisp source tree directly (the encoder
 # bridge triple-oracle check, CPU profile contracts, conformance fixtures)
 # in addition to its Rust API. This contract dependency is resolved from
-# external/my-lisp; observed-current is evidence/drift input, not Cargo authority.
-my-lisp = { path = "external/my-lisp/crates/my-lisp" }
+# external/sens; observed-current is evidence/drift input, not Cargo authority.
+sens = { path = "external/sens/crates/sens" }

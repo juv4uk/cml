@@ -1,26 +1,26 @@
-use my_lisp::Sid8;
+use sens::Sid8;
 use std::fs;
 
 use cml::canon::find_operation_by_id;
 use cml::coverage::{BackendEvidenceState, CoverageLedger};
 
-const EXPECTED: &[(my_lisp::Sid8, BackendEvidenceState)] = &[
-    (my_lisp::sid!(00000001), BackendEvidenceState::Executable),
+const EXPECTED: &[(sens::Sid8, BackendEvidenceState)] = &[
+    (sens::sid!(00000001), BackendEvidenceState::Executable),
     (
-        my_lisp::sid!(00000010),
+        sens::sid!(00000010),
         BackendEvidenceState::AssemblyWitness,
     ),
-    (my_lisp::sid!(00000011), BackendEvidenceState::Executable),
-    (my_lisp::sid!(00000100), BackendEvidenceState::Executable),
+    (sens::sid!(00000011), BackendEvidenceState::Executable),
+    (sens::sid!(00000100), BackendEvidenceState::Executable),
     (
-        my_lisp::sid!(00000101),
+        sens::sid!(00000101),
         BackendEvidenceState::AssemblyWitness,
     ),
     (
-        my_lisp::sid!(00000110),
+        sens::sid!(00000110),
         BackendEvidenceState::AssemblyWitness,
     ),
-    (my_lisp::sid!(00000111), BackendEvidenceState::Executable),
+    (sens::sid!(00000111), BackendEvidenceState::Executable),
 ];
 
 fn read_repo(path: &str) -> String {

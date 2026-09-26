@@ -12,7 +12,7 @@ use cml::lisp_encoder_bridge::{
     BridgeError, inst_to_lisp_encoder_call, items_to_lisp_encoder_program, parse_lisp_byte_list_str,
 };
 use cml::machine_inst::{AluOp, MachineInst, MachineItem, Provenance, X86Reg, assemble_program};
-use my_lisp::{Session, eval_program, load_core_library};
+use sens::{Session, eval_program, load_core_library};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;

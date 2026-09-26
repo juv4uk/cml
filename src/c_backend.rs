@@ -819,7 +819,7 @@ impl CBackend {
 
     fn compile_sid8_runtime_apply(
         &mut self,
-        sid: my_lisp::Sid8,
+        sid: sens::Sid8,
         args: &[Ir],
         env: &str,
     ) -> Result<String, CompileError> {
@@ -833,11 +833,11 @@ impl CBackend {
 
     fn compile_sid8_call(
         &mut self,
-        sid: my_lisp::Sid8,
+        sid: sens::Sid8,
         args: &[Ir],
         env: &str,
     ) -> Result<String, CompileError> {
-        if args.is_empty() && sid == my_lisp::sid!(00100111) {
+        if args.is_empty() && sid == sens::sid!(00100111) {
             return Ok("&NIL_V".to_string());
         }
 
@@ -853,34 +853,34 @@ impl CBackend {
         // first-class and higher-order application. The callable identity is
         // the Sid8 payload; arity/type rules live in the existing runtime
         // mechanism selected only after that SID dispatch.
-        if sid == my_lisp::sid!(00000010)
-            || sid == my_lisp::sid!(00000011)
-            || sid == my_lisp::sid!(00000100)
-            || sid == my_lisp::sid!(00000101)
-            || sid == my_lisp::sid!(00000110)
-            || sid == my_lisp::sid!(00001100)
-            || sid == my_lisp::sid!(00001101)
-            || sid == my_lisp::sid!(00001110)
-            || sid == my_lisp::sid!(00001111)
-            || sid == my_lisp::sid!(00011010)
-            || sid == my_lisp::sid!(00011100)
-            || sid == my_lisp::sid!(00100010)
+        if sid == sens::sid!(00000010)
+            || sid == sens::sid!(00000011)
+            || sid == sens::sid!(00000100)
+            || sid == sens::sid!(00000101)
+            || sid == sens::sid!(00000110)
+            || sid == sens::sid!(00001100)
+            || sid == sens::sid!(00001101)
+            || sid == sens::sid!(00001110)
+            || sid == sens::sid!(00001111)
+            || sid == sens::sid!(00011010)
+            || sid == sens::sid!(00011100)
+            || sid == sens::sid!(00100010)
         {
             return self.compile_sid8_runtime_apply(sid, args, env);
         }
 
-        if sid == my_lisp::sid!(01011001) {
+        if sid == sens::sid!(01011001) {
             require_arity(2)?;
             let function = self.compile_expr(&args[0], env)?;
             let buffer = self.compile_expr(&args[1], env)?;
             return Ok(format!("v_map_i32_buffer({function}, {buffer})"));
         }
 
-        if sid == my_lisp::sid!(00010100) {
+        if sid == sens::sid!(00010100) {
             return Err(CompileError::UnsupportedVariant("quotient in C backend"));
         }
 
-        if sid == my_lisp::sid!(00011101) {
+        if sid == sens::sid!(00011101) {
             require_arity(2)?;
             let a = self.compile_expr(&args[0], env)?;
             let b = self.compile_expr(&args[1], env)?;
@@ -889,7 +889,7 @@ impl CBackend {
             ));
         }
 
-        if sid == my_lisp::sid!(00011110) {
+        if sid == sens::sid!(00011110) {
             require_arity(2)?;
             let a = self.compile_expr(&args[0], env)?;
             let b = self.compile_expr(&args[1], env)?;
@@ -898,7 +898,7 @@ impl CBackend {
             ));
         }
 
-        if sid == my_lisp::sid!(00100111) {
+        if sid == sens::sid!(00100111) {
             // Variadic list: build a chain of mk_cons ending in &NIL_V.
             let mut list = "&NIL_V".to_string();
             for arg in args.iter().rev() {
@@ -908,25 +908,25 @@ impl CBackend {
             return Ok(list);
         }
 
-        if sid == my_lisp::sid!(00110011) {
+        if sid == sens::sid!(00110011) {
             require_arity(1)?;
             let x = self.compile_expr(&args[0], env)?;
             return Ok(format!("v_car(v_car({x}))"));
         }
 
-        if sid == my_lisp::sid!(00110100) {
+        if sid == sens::sid!(00110100) {
             require_arity(1)?;
             let x = self.compile_expr(&args[0], env)?;
             return Ok(format!("v_car(v_cdr({x}))"));
         }
 
-        if sid == my_lisp::sid!(00110101) {
+        if sid == sens::sid!(00110101) {
             require_arity(1)?;
             let x = self.compile_expr(&args[0], env)?;
             return Ok(format!("v_cdr(v_cdr({x}))"));
         }
 
-        if sid == my_lisp::sid!(00110110) {
+        if sid == sens::sid!(00110110) {
             require_arity(1)?;
             let x = self.compile_expr(&args[0], env)?;
             return Ok(format!("v_car(v_cdr(v_cdr(v_cdr({x}))))"));

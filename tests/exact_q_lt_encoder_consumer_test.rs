@@ -13,7 +13,7 @@ fn assert_exact_q_lt_surface(source: &str) {
     match node {
         Ir::App { func, args } => {
             assert!(
-                matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00011010)),
+                matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00011010)),
                 "source: {source}"
             );
             assert_eq!(args, &[Ir::Int(42), Ir::Int(512)], "source: {source}");

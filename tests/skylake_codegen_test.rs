@@ -30,7 +30,7 @@ use cml::x86_avx2::{
 use cml::x86_isel::{ScalarIselConfig, emit_machine_items_with_isel};
 use cml::x86_lir::lower_ir_to_lir;
 use cml::{lower, parser};
-use my_lisp::{Session, eval_program, load_core_library};
+use sens::{Session, eval_program, load_core_library};
 
 fn parse_and_lower_one(source: &str) -> cml::ir::Ir {
     let exprs = parser::parse(source).expect("valid source");

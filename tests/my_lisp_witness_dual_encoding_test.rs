@@ -18,7 +18,7 @@ use cml::machine_inst::{MachineItem, assemble_program};
 use cml::macros::MacroExpander;
 use cml::witness_bridge::canonical_actual_from_word;
 use cml::{lower, parser};
-use my_lisp::{Session, eval_program, load_core_library};
+use sens::{Session, eval_program, load_core_library};
 
 fn upstream_path(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

@@ -40,10 +40,10 @@ pub fn callable_semantic_id(name: &str) -> Option<Sid8> {
     // a second callable allowlist. Exact Unicode names are tried first; the
     // ASCII-lowercase fallback preserves ordinary Lisp case-insensitivity for
     // English surfaces without changing Ukrainian/Sanskrit identity.
-    my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(name).or_else(|| {
+    sens::semantic_registry_export::semantic_id_for_admitted_surface(name).or_else(|| {
         let folded = name.to_ascii_lowercase();
         (folded != name)
-            .then(|| my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(&folded))?
+            .then(|| sens::semantic_registry_export::semantic_id_for_admitted_surface(&folded))?
     })
 }
 
@@ -58,15 +58,15 @@ pub fn canonical_builtin_name(semantic_id: Sid8) -> Option<&'static str> {
 pub fn find_operation_by_surface(name: &str) -> Option<&'static CanonOperation> {
     let id = callable_semantic_id(name).or_else(|| {
         if is_canon_form(name, CANON_QUOTE_UPPER, CANON_QUOTE_EXACT) {
-            Some(my_lisp::sid!(00000001))
+            Some(sens::sid!(00000001))
         } else if is_canon_form(name, CANON_COND_UPPER, CANON_COND_EXACT) {
-            Some(my_lisp::sid!(00000111))
+            Some(sens::sid!(00000111))
         } else if is_canon_form(name, CANON_LAMBDA_UPPER, CANON_LAMBDA_EXACT) {
-            Some(my_lisp::sid!(00001000))
+            Some(sens::sid!(00001000))
         } else if is_canon_form(name, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT) {
-            Some(my_lisp::sid!(00001001))
+            Some(sens::sid!(00001001))
         } else if is_canon_form(name, CANON_DEFMACRO_UPPER, CANON_DEFMACRO_EXACT) {
-            Some(my_lisp::sid!(00001010))
+            Some(sens::sid!(00001010))
         } else {
             None
         }
@@ -98,21 +98,21 @@ pub fn collect_program_operations(program: &[crate::ir::Ir]) -> Vec<&'static Can
     fn walk(ir: &Ir, ids: &mut Vec<Sid8>, seen: &mut HashSet<Sid8>) {
         match ir {
             Ir::Quote(_) => {
-                record(my_lisp::sid!(00000001), ids, seen);
+                record(sens::sid!(00000001), ids, seen);
             }
             Ir::Cond { branches } => {
-                record(my_lisp::sid!(00000111), ids, seen);
+                record(sens::sid!(00000111), ids, seen);
                 for (test, body) in branches {
                     walk(test, ids, seen);
                     walk(body, ids, seen);
                 }
             }
             Ir::Lambda { body, .. } => {
-                record(my_lisp::sid!(00001000), ids, seen);
+                record(sens::sid!(00001000), ids, seen);
                 walk(body, ids, seen);
             }
             Ir::Def { value, .. } => {
-                record(my_lisp::sid!(00001001), ids, seen);
+                record(sens::sid!(00001001), ids, seen);
                 walk(value, ids, seen);
             }
             Ir::Let { bindings, body } => {

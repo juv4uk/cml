@@ -14,14 +14,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: cml
-          # external/my-lisp is a real submodule now (SUBMODULE-DEPENDENCY-
-          # MODEL-2026-09-16): my-lisp is a contract dependency (cml reads
-          # its .lisp source tree directly for the encoder bridge, CPU
+          # external/sens is a real submodule now: sens is the contract dependency
+          # (cml reads its .lisp source tree directly for the encoder bridge, CPU
           # profile, and conformance corpus), so it travels with cml's own
           # checkout instead of a separately pinned sibling checkout.
           submodules: true
 
-      - name: Resolve my-lisp revision channels
+      - name: Resolve sens revision channels
         id: upstream_revisions
         working-directory: cml
         shell: bash
@@ -40,7 +39,7 @@ jobs:
           test "${#supported_pin_sha}" -eq 40
           test "${#observed_current_sha}" -eq 40
           test "${#bootstrap_core1_sha}" -eq 40
-          actual_build_source_sha="$(git -C external/my-lisp rev-parse HEAD)"
+          actual_build_source_sha="$(git -C external/sens rev-parse HEAD)"
           if [[ "$build_source_sha" != "$actual_build_source_sha" ]]; then
             echo "build-source mismatch: manifest=$build_source_sha gitlink=$actual_build_source_sha" >&2
             exit 1
@@ -54,38 +53,38 @@ jobs:
           echo "upstream-channel observed-current sha=$observed_current_sha"
           echo "upstream-channel bootstrap-core1-source sha=$bootstrap_core1_sha"
 
-      - name: Checkout my-lisp (supported evidence)
+      - name: Checkout sens (supported evidence)
         uses: actions/checkout@v4
         with:
-          repository: juv4uk/my-lisp
+          repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.supported_pin_sha }}
-          path: my-lisp-supported
+          path: sens-supported
 
-      - name: Checkout my-lisp (observed-current)
+      - name: Checkout sens (observed-current)
         uses: actions/checkout@v4
         with:
-          repository: juv4uk/my-lisp
+          repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
-          path: my-lisp
+          path: sens
 
-      - name: Checkout my-lisp (Core1 bootstrap source)
+      - name: Checkout sens (Core1 bootstrap source)
         uses: actions/checkout@v4
         with:
-          repository: juv4uk/my-lisp
+          repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}
-          path: my-lisp-bootstrap
+          path: sens-bootstrap
 
       - name: Validate Core1 bootstrap source
         working-directory: cml
         shell: bash
         run: |
           set -euo pipefail
-          test -f ../my-lisp-bootstrap/lib/core1-compiler-prelude.lisp
-          test -f ../my-lisp-bootstrap/contracts/core1-historical-sid-map.lisp
+          test -f ../sens-bootstrap/lib/core1-compiler-prelude.lisp
+          test -f ../sens-bootstrap/contracts/core1-historical-sid-map.lisp
           echo "bootstrap-core1-source sha=${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}"
-          echo "bootstrap-core1-prelude blob=$(git -C ../my-lisp-bootstrap hash-object lib/core1-compiler-prelude.lisp)"
+          echo "bootstrap-core1-prelude blob=$(git -C ../sens-bootstrap hash-object lib/core1-compiler-prelude.lisp)"
 
-      - name: Report my-lisp revision drift
+      - name: Report sens revision drift
         working-directory: cml
         shell: bash
         run: |
@@ -94,11 +93,11 @@ jobs:
           supported_math=absent
           observed_math=absent
           bootstrap_prelude=absent
-          [[ -f external/my-lisp/tests/fixtures/mathematical-result-v1.lisp ]] && build_math=present
-          [[ -f ../my-lisp-supported/tests/fixtures/mathematical-result-v1.lisp ]] && supported_math=present
-          [[ -f ../my-lisp/tests/fixtures/mathematical-result-v1.lisp ]] && observed_math=present
-          [[ -f ../my-lisp-bootstrap/lib/core1-compiler-prelude.lisp ]] && bootstrap_prelude=present
-          echo "((kind . cml-upstream-revision-drift) (build-source-sha . \"${{ steps.upstream_revisions.outputs.build_source_sha }}\") (supported-pin-sha . \"${{ steps.upstream_revisions.outputs.supported_pin_sha }}\") (observed-current-sha . \"${{ steps.upstream_revisions.outputs.observed_current_sha }}\") (bootstrap-core1-source-sha . \"${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}\") (bootstrap-core1-prelude . ${bootstrap_prelude}) (mathematical-result-v1 . ((build-source . ${build_math}) (supported-pin . ${supported_math}) (observed-current . ${observed_math})))))"
+          [[ -f external/sens/tests/fixtures/mathematical-result-v1.lisp ]] && build_math=present
+          [[ -f ../sens-supported/tests/fixtures/mathematical-result-v1.lisp ]] && supported_math=present
+          [[ -f ../sens/tests/fixtures/mathematical-result-v1.lisp ]] && observed_math=present
+          [[ -f ../sens-bootstrap/lib/core1-compiler-prelude.lisp ]] && bootstrap_prelude=present
+          echo "((kind . cml-upstream-revision-drift) (build-source-sha . \"${{ steps.upstream_revisions.outputs.build_source_sha }}\") (supported-pin-sha . \"${{ steps.upstream_revisions.outputs.supported_pin_sha }}\") (observed-current-sha . \"${{ steps.upstream_revisions.outputs.observed_current_sha }}\") (bootstrap-core1-source-sha . \"${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}\") (bootstrap-core1-prelude . ${bootstrap_prelude}) (mathematical-result-v1 . ((build-source . ${build_math}) (supported-pin . ${supported_math}) (observed-current . ${observed_math}))))"
 
       - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
         uses: actions/checkout@v4

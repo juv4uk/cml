@@ -9,22 +9,22 @@
 //! (`lib/surface/semantic-registry.lisp`). CML не винаходить власних імен
 //! функцій: для registry-admitted поверхонь (`list`, `reverse`, `not`, ...)
 //! ідентичність у IR — це саме бітовий ключ `Sid8`, отриманий через
-//! `my_lisp::semantic_registry_export::semantic_id_for_admitted_surface`.
+//! `sens::semantic_registry_export::semantic_id_for_admitted_surface`.
 //! Локальні/модульні функції без registry-запису (напр. `reverse-onto`,
 //! `utf8-continuation-byte?`) лишаються під своїми спейлінгами — вони не є
 //! мовними семантичними ідентичностями.
 
 use crate::ast::Expr as CExpr;
-use my_lisp::Sid8;
-use my_lisp::semantic_registry_export::semantic_id_bits;
+use sens::Sid8;
+use sens::semantic_registry_export::semantic_id_bits;
 
 /// Convert one raw my-lisp S-expression into a CML `Expr`.
 ///
 /// `Sid` leaves remain typed exact `Sid8` values. They are never converted
 /// to surface names, strings, symbols, integers, or other aliases; symbols
 /// survive verbatim; numbers/rationals/strings pass through; lists recurse.
-pub fn convert_lisp_expr(expr: &my_lisp::Expr) -> Result<CExpr, BridgeError> {
-    use my_lisp::ExprKind;
+pub fn convert_lisp_expr(expr: &sens::Expr) -> Result<CExpr, BridgeError> {
+    use sens::ExprKind;
     match &expr.kind {
         ExprKind::Sid(sid) => Ok(CExpr::Sid(*sid)),
         ExprKind::Symbol(s) => Ok(CExpr::Symbol(s.to_string())),
@@ -52,7 +52,7 @@ pub fn address_of(sid: Sid8) -> String {
 /// `en` (or fallback first) admitted surface row. This is registry-owned
 /// identity, never a CML hardcoded table.
 pub fn surface_of(sid: Sid8) -> String {
-    use my_lisp::semantic_registry_export::admitted_surfaces_for_semantic_id;
+    use sens::semantic_registry_export::admitted_surfaces_for_semantic_id;
     let rows = admitted_surfaces_for_semantic_id(sid);
     rows.iter()
         .find(|r| r.namespace == "en")
@@ -72,12 +72,12 @@ pub fn key_definition_by_sid(mut expr: CExpr) -> CExpr {
     if let CExpr::List(items) = &mut expr {
         let is_define_sid = matches!(
             items.first(),
-            Some(CExpr::Sid(sid)) if *sid == my_lisp::sid!(00001001)
+            Some(CExpr::Sid(sid)) if *sid == sens::sid!(00001001)
         );
         if is_define_sid {
             if let Some(CExpr::Symbol(name)) = items.get(1) {
                 if let Some(sid) =
-                    my_lisp::semantic_registry_export::semantic_id_for_admitted_surface(name)
+                    sens::semantic_registry_export::semantic_id_for_admitted_surface(name)
                 {
                     items[1] = CExpr::Sid(sid);
                 }
@@ -107,13 +107,13 @@ impl std::error::Error for BridgeError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use my_lisp::parse;
+    use sens::parse;
 
     #[test]
     fn bare_sid_leaf_never_becomes_surface_name_or_bit_string_symbol() {
         let exprs = parse("00000101").expect("bare SID8 must parse upstream");
         let converted = convert_lisp_expr(&exprs[0]).expect("SID8 bridge conversion");
-        assert_eq!(converted, CExpr::Sid(my_lisp::sid!(00000101)));
+        assert_eq!(converted, CExpr::Sid(sens::sid!(00000101)));
         assert_ne!(converted, CExpr::Symbol("car".to_string()));
         assert_ne!(converted, CExpr::Symbol("00000101".to_string()));
     }
@@ -134,12 +134,12 @@ mod tests {
         };
         assert_eq!(
             items[0],
-            CExpr::Sid(my_lisp::sid!(00001001)),
+            CExpr::Sid(sens::sid!(00001001)),
             "define identity must remain the exact typed SID8"
         );
         assert_eq!(
             items[1],
-            CExpr::Sid(my_lisp::sid!(00100111)),
+            CExpr::Sid(sens::sid!(00100111)),
             "registry-admitted name `list` must resolve once to exact typed SID8"
         );
     }

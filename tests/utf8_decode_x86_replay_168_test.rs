@@ -29,7 +29,7 @@ use cml::ast::Expr as CExpr;
 use cml::lower::lower_program;
 use cml::upstream_sid_bridge::{BridgeError, convert_lisp_expr, key_definition_by_sid};
 use cml::x86_freestanding::X86FreestandingBackend;
-use my_lisp::parse;
+use sens::parse;
 
 fn upstream_path(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -44,14 +44,14 @@ fn lisp_owned_define(source: &str, name: &str) -> Result<Vec<CExpr>, BridgeError
     let mut out = Vec::new();
     for expr in parsed {
         // a define row: (Sid(00001001) <name> <value>)
-        if let my_lisp::ExprKind::List(items) = &expr.kind {
+        if let sens::ExprKind::List(items) = &expr.kind {
             let head_is_define = matches!(
                 items.first().map(|h| &h.kind),
-                Some(my_lisp::ExprKind::Sid(s)) if s.to_string() == "00001001"
+                Some(sens::ExprKind::Sid(s)) if s.to_string() == "00001001"
             );
             let name_matches = matches!(
                 items.get(1).map(|n| &n.kind),
-                Some(my_lisp::ExprKind::Symbol(s)) if s.as_ref() == name
+                Some(sens::ExprKind::Symbol(s)) if s.as_ref() == name
             );
             if head_is_define && name_matches {
                 out.push(key_definition_by_sid(convert_lisp_expr(&expr)?));
@@ -78,7 +78,7 @@ fn pinned_list_row_reaches_x86_with_sid_identity() {
     let CExpr::List(items) = &list_defs[0] else {
         panic!("expected a define list form");
     };
-    assert_eq!(items[1], CExpr::Sid(my_lisp::sid!(00100111)));
+    assert_eq!(items[1], CExpr::Sid(sens::sid!(00100111)));
 
     let program = match lower_program(&list_defs) {
         Ok(program) => program,

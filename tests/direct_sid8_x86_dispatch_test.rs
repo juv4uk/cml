@@ -13,7 +13,7 @@ fn bare_sid8_call_reaches_x86_without_name_or_primop_identity() {
     let [Ir::App { func, args }] = program.as_slice() else {
         panic!("direct SID call must remain Ir::App, got {program:?}");
     };
-    assert_eq!(func.as_ref(), &Ir::Sid(my_lisp::sid!(00000101)));
+    assert_eq!(func.as_ref(), &Ir::Sid(sens::sid!(00000101)));
     assert_eq!(args.len(), 1);
 
     let assembly = X86FreestandingBackend::new()
@@ -31,7 +31,7 @@ fn bare_sid8_cons_call_uses_exact_sid_dispatch() {
     let [Ir::App { func, args }] = program.as_slice() else {
         panic!("direct SID call must remain Ir::App, got {program:?}");
     };
-    assert_eq!(func.as_ref(), &Ir::Sid(my_lisp::sid!(00000100)));
+    assert_eq!(func.as_ref(), &Ir::Sid(sens::sid!(00000100)));
     assert_eq!(args.len(), 2);
 
     let assembly = X86FreestandingBackend::new()
@@ -51,6 +51,6 @@ fn unsupported_sid8_call_fails_closed_without_name_fallback() {
         .expect_err("unimplemented SID8 must fail closed");
     assert_eq!(
         error,
-        CompileError::UnimplementedSid8(my_lisp::sid!(11111111))
+        CompileError::UnimplementedSid8(sens::sid!(11111111))
     );
 }

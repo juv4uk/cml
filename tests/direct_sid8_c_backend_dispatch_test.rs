@@ -13,7 +13,7 @@ fn bare_sid8_car_call_reaches_c_backend_without_name_or_primop_identity() {
     let [Ir::App { func, args }] = program.as_slice() else {
         panic!("direct SID call must remain Ir::App, got {program:?}");
     };
-    assert_eq!(func.as_ref(), &Ir::Sid(my_lisp::sid!(00000101)));
+    assert_eq!(func.as_ref(), &Ir::Sid(sens::sid!(00000101)));
     assert_eq!(args.len(), 1);
 
     let c = CBackend::new()
@@ -33,7 +33,7 @@ fn bare_sid8_cons_call_uses_exact_sid_dispatch_in_c_backend() {
     let [Ir::App { func, args }] = program.as_slice() else {
         panic!("direct SID call must remain Ir::App, got {program:?}");
     };
-    assert_eq!(func.as_ref(), &Ir::Sid(my_lisp::sid!(00000100)));
+    assert_eq!(func.as_ref(), &Ir::Sid(sens::sid!(00000100)));
     assert_eq!(args.len(), 2);
 
     let c = CBackend::new()

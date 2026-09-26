@@ -74,11 +74,11 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "literal_encoding"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/canon_dispatch_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/canon_dispatch_test.rs",
     },
     OperationSpec {
-        canonical_name: "atom",
+        canonical_name: "atom?",
         formal_action: "primitive:atom",
         cml_ir_projection: "Ir::App(Sid(00000010))",
         backend_projections: &[
@@ -87,11 +87,11 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "wsm_atom"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/registry_driven_canon_callables_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/registry_driven_canon_callables_test.rs",
     },
     OperationSpec {
-        canonical_name: "eq",
+        canonical_name: "eq?",
         formal_action: "primitive:eq",
         cml_ir_projection: "Ir::App(Sid(00000011))",
         backend_projections: &[
@@ -100,8 +100,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "wsm_eq"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/registry_driven_canon_callables_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/registry_driven_canon_callables_test.rs",
     },
     OperationSpec {
         canonical_name: "cons",
@@ -113,8 +113,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "wsm_cons"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/registry_driven_canon_callables_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/registry_driven_canon_callables_test.rs",
     },
     OperationSpec {
         canonical_name: "car",
@@ -126,8 +126,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "wsm_car"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/registry_driven_canon_callables_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/registry_driven_canon_callables_test.rs",
     },
     OperationSpec {
         canonical_name: "cdr",
@@ -139,8 +139,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "wsm_cdr"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/registry_driven_canon_callables_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/registry_driven_canon_callables_test.rs",
     },
     OperationSpec {
         canonical_name: "cond",
@@ -152,8 +152,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "testq/jz"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/canon_dispatch_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/canon_dispatch_test.rs",
     },
     OperationSpec {
         canonical_name: "lambda",
@@ -165,8 +165,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "closure_alloc/direct_call"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/canon_dispatch_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/canon_dispatch_test.rs",
     },
     OperationSpec {
         canonical_name: "define",
@@ -178,8 +178,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "top_level_symbol"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/canon_dispatch_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/canon_dispatch_test.rs",
     },
     OperationSpec {
         canonical_name: "def",
@@ -191,8 +191,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "top_level_symbol"),
         ],
         status: "compatibility",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/canon_dispatch_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/canon_dispatch_test.rs",
     },
     OperationSpec {
         canonical_name: "defmacro",
@@ -204,11 +204,11 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "frontend_macro_expand"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/macro_pipeline_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/macro_pipeline_test.rs",
     },
     OperationSpec {
-        canonical_name: "+",
+        canonical_name: "plus",
         formal_action: "primitive:add",
         cml_ir_projection: "Ir::App(Sid(00001100))",
         backend_projections: &[
@@ -217,11 +217,11 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "addq"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/registry_driven_canon_callables_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/registry_driven_canon_callables_test.rs",
     },
     OperationSpec {
-        canonical_name: "-",
+        canonical_name: "difference",
         formal_action: "primitive:sub",
         cml_ir_projection: "Ir::App(Sid(00001101))",
         backend_projections: &[
@@ -230,11 +230,11 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "subq"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/registry_driven_canon_callables_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/registry_driven_canon_callables_test.rs",
     },
     OperationSpec {
-        canonical_name: "*",
+        canonical_name: "times",
         formal_action: "primitive:exact-q-mul",
         cml_ir_projection: "Ir::App(Sid(00001110))",
         backend_projections: &[
@@ -243,8 +243,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "unsupported"),
         ],
         status: "partial",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/exact_q_mul_admission_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/exact_q_mul_admission_test.rs",
     },
     OperationSpec {
         canonical_name: "mod",
@@ -256,11 +256,11 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "unsupported"),
         ],
         status: "partial",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/exact_q_mod_admission_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/exact_q_mod_admission_test.rs",
     },
     OperationSpec {
-        canonical_name: "/",
+        canonical_name: "divide",
         formal_action: "primitive:exact-q-div",
         cml_ir_projection: "Ir::App(Sid(00001111))",
         backend_projections: &[
@@ -269,8 +269,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "unsupported"),
         ],
         status: "partial",
-        authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
-        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_div_admission_test.rs",
+        authority_owner: "sens:exact-q-binary cml:compiler-middle-end",
+        provenance_witness: "sens/contracts/exact-q-binary-contract.lisp tests/exact_q_div_admission_test.rs",
     },
     OperationSpec {
         canonical_name: "quotient",
@@ -282,11 +282,11 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "unsupported"),
         ],
         status: "partial",
-        authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
-        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_quotient_admission_test.rs",
+        authority_owner: "sens:exact-q-binary cml:compiler-middle-end",
+        provenance_witness: "sens/contracts/exact-q-binary-contract.lisp tests/exact_q_quotient_admission_test.rs",
     },
     OperationSpec {
-        canonical_name: "<",
+        canonical_name: "lessp?",
         formal_action: "primitive:exact-q-less-than",
         cml_ir_projection: "Ir::App(Sid(00011010))",
         backend_projections: &[
@@ -295,11 +295,11 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "unsupported"),
         ],
         status: "partial",
-        authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
-        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs tests/exact_q_lt_encoder_consumer_test.rs",
+        authority_owner: "sens:exact-q-binary cml:compiler-middle-end",
+        provenance_witness: "sens/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs tests/exact_q_lt_encoder_consumer_test.rs",
     },
     OperationSpec {
-        canonical_name: ">",
+        canonical_name: "greaterp?",
         formal_action: "primitive:exact-q-greater-than",
         cml_ir_projection: "Ir::App(Sid(00011011))",
         backend_projections: &[
@@ -308,11 +308,11 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "unsupported"),
         ],
         status: "partial",
-        authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
-        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs",
+        authority_owner: "sens:exact-q-binary cml:compiler-middle-end",
+        provenance_witness: "sens/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs",
     },
     OperationSpec {
-        canonical_name: "=",
+        canonical_name: "equalp?",
         formal_action: "primitive:exact-q-equal",
         cml_ir_projection: "Ir::App(Sid(00011100))",
         backend_projections: &[
@@ -321,11 +321,11 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "unsupported"),
         ],
         status: "partial",
-        authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
-        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs",
+        authority_owner: "sens:exact-q-binary cml:compiler-middle-end",
+        provenance_witness: "sens/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs",
     },
     OperationSpec {
-        canonical_name: "<=",
+        canonical_name: "not-greaterp?",
         formal_action: "primitive:exact-q-less-equal",
         cml_ir_projection: "Ir::App(Sid(00011101))",
         backend_projections: &[
@@ -334,11 +334,11 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "bounded-fixnum/numeric-0-or-1"),
         ],
         status: "partial",
-        authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
-        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs",
+        authority_owner: "sens:exact-q-binary cml:compiler-middle-end",
+        provenance_witness: "sens/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs",
     },
     OperationSpec {
-        canonical_name: ">=",
+        canonical_name: "not-lessp?",
         formal_action: "primitive:exact-q-greater-equal",
         cml_ir_projection: "Ir::App(Sid(00011110))",
         backend_projections: &[
@@ -347,8 +347,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "bounded-fixnum/numeric-0-or-1"),
         ],
         status: "partial",
-        authority_owner: "my-lisp:exact-q-binary cml:compiler-middle-end",
-        provenance_witness: "my-lisp/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs",
+        authority_owner: "sens:exact-q-binary cml:compiler-middle-end",
+        provenance_witness: "sens/contracts/exact-q-binary-contract.lisp tests/exact_q_compare_lowering_test.rs",
     },
     OperationSpec {
         canonical_name: "equal?",
@@ -360,8 +360,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "unsupported"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/registry_driven_canon_callables_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/registry_driven_canon_callables_test.rs",
     },
     OperationSpec {
         canonical_name: "numeric-buffer-map",
@@ -373,8 +373,8 @@ const OPERATIONS: &[OperationSpec] = &[
             ("x86_freestanding", "unsupported"),
         ],
         status: "supported",
-        authority_owner: "my-lisp:language-core cml:compiler-middle-end",
-        provenance_witness: "lib/surface/semantic-registry.wsm tests/c_backend_test.rs",
+        authority_owner: "sens:language-core cml:compiler-middle-end",
+        provenance_witness: "lib/surface/semantic-registry.lisp tests/c_backend_test.rs",
     },
 ];
 
@@ -622,17 +622,17 @@ fn collect_surfaces(root: &[Sexp], ids: &[&str]) -> (Vec<String>, Vec<String>) {
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set");
     // #84 build-source channel: semantic build inputs come from the
-    // external/my-lisp gitlink, never from the observed-current sibling checkout.
+    // external/sens gitlink, never from the observed-current sibling checkout.
     let mut registry_path = PathBuf::from(&manifest_dir)
         .join("external")
-        .join("my-lisp")
+        .join("sens")
         .join("lib")
         .join("surface")
         .join("semantic-registry.lisp");
     if !registry_path.exists() {
         registry_path = PathBuf::from(&manifest_dir)
             .join("external")
-            .join("my-lisp")
+            .join("sens")
             .join("lib")
             .join("surface")
             .join("semantic-registry.wsm");
@@ -642,7 +642,7 @@ fn main() {
     let source = fs::read_to_string(&registry_path).unwrap_or_else(|e| {
         panic!(
             "cml#14: could not read the real semantic-registry at {} ({e}). \
-             This build depends on the external/my-lisp submodule being \
+             This build depends on the external/sens submodule being \
              checked out (`git submodule update --init`).",
             registry_path.display()
         )
@@ -732,9 +732,9 @@ fn main() {
     let (upper_surfaces, exact_surfaces) = collect_surfaces(root, TARGET_IDS);
 
     let mut generated = String::new();
-    generated.push_str("// @generated by build.rs from my-lisp/lib/surface/semantic-registry.wsm (cml#14). Do not edit by hand.\n\n");
+    generated.push_str("// @generated by build.rs from sens/lib/surface/semantic-registry.wsm (cml#14). Do not edit by hand.\n\n");
 
-    generated.push_str("use my_lisp::Sid8;\n\n");
+    generated.push_str("use sens::Sid8;\n\n");
     generated.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
     generated.push_str("pub struct CanonOperation {\n");
     generated.push_str("    pub canonical_name: &'static str,\n");
@@ -759,7 +759,7 @@ fn main() {
             op.canonical_name
         ));
         generated.push_str(&format!(
-            "        semantic_id: my_lisp::sid!({}),\n",
+            "        semantic_id: sens::sens!({}),\n",
             sid_text
         ));
         generated.push_str(&format!("        formal_action: {:?},\n", op.formal_action));
@@ -792,7 +792,7 @@ fn main() {
 
     generated.push_str("pub const CANON_BUILD_SOURCE_SEMANTIC_IDS: &[Sid8] = &[\n");
     for id in &build_source_semantic_ids {
-        generated.push_str(&format!("    my_lisp::sid!({:08b}),\n", id));
+        generated.push_str(&format!("    sens::sens!({:08b}),\n", id));
     }
     generated.push_str("];\n\n");
     generated.push_str(&format!(
@@ -801,7 +801,7 @@ fn main() {
 
     generated.push_str("pub const CANON_BUILTIN_NAMES: &[(Sid8, &str)] = &[\n");
     for (id, name) in BUILTIN_PROJECTIONS {
-        generated.push_str(&format!("    (my_lisp::sid!({id}), {name:?}),\n"));
+        generated.push_str(&format!("    (sens::sens!({id}), {name:?}),\n"));
     }
     generated.push_str("];\n\n");
 
@@ -840,7 +840,7 @@ fn main() {
     s_expr.push_str(
         "; cml-operations.lisp — machine-readable table of CML operations and Canon projections\n",
     );
-    s_expr.push_str("; Generated at build time from my-lisp/lib/surface/semantic-registry.lisp. DO NOT EDIT BY HAND.\n\n");
+    s_expr.push_str("; Generated at build time from sens/lib/surface/semantic-registry.lisp. DO NOT EDIT BY HAND.\n\n");
     s_expr.push_str("((kind . cml-operations-table)\n");
     s_expr.push_str(" (version . (1 0))\n");
     s_expr.push_str(" (authority . ((language . juv4uk/my-lisp)\n");

@@ -97,19 +97,19 @@ pub fn analyze_program(exprs: &[Expr]) -> Result<(), SemanticError> {
 /// add 00001100 · sub 00001101 · mul 00001110 · div 00001111 ·
 /// mod 00010011 · quotient 00010100 · lt 00011010 · gt 00011011 ·
 /// le 00011101 · ge 00011110 · eq_numeric 00011100.
-fn is_math_operation(sid: my_lisp::Sid8) -> bool {
-    const MATH_SIDS: [my_lisp::Sid8; 11] = [
-        my_lisp::sid!(00001100),
-        my_lisp::sid!(00001101),
-        my_lisp::sid!(00001110),
-        my_lisp::sid!(00001111),
-        my_lisp::sid!(00010011),
-        my_lisp::sid!(00010100),
-        my_lisp::sid!(00011010),
-        my_lisp::sid!(00011011),
-        my_lisp::sid!(00011100),
-        my_lisp::sid!(00011101),
-        my_lisp::sid!(00011110),
+fn is_math_operation(sid: sens::Sid8) -> bool {
+    const MATH_SIDS: [sens::Sid8; 11] = [
+        sens::sid!(00001100),
+        sens::sid!(00001101),
+        sens::sid!(00001110),
+        sens::sid!(00001111),
+        sens::sid!(00010011),
+        sens::sid!(00010100),
+        sens::sid!(00011010),
+        sens::sid!(00011011),
+        sens::sid!(00011100),
+        sens::sid!(00011101),
+        sens::sid!(00011110),
     ];
     MATH_SIDS.iter().any(|&s| s == sid)
 }
@@ -275,7 +275,7 @@ mod reserved_canon_unit {
     #[test]
     fn latin_canon_names_are_reserved() {
         for name in [
-            "car", "CAR", "Car", "quote", "cond", "atom", "eq", "cons", "cdr",
+            "car", "CAR", "Car", "quote", "cond", "atom?", "eq?", "cons", "cdr",
         ] {
             assert!(is_reserved_canon_surface(name), "{name}");
         }

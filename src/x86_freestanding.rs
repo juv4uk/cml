@@ -29,7 +29,7 @@ const CANONICAL_T: wsm_os_target::Word =
 pub enum CompileError {
     EmptyProgram,
     UnsupportedVariant(&'static str),
-    UnimplementedSid8(my_lisp::Sid8),
+    UnimplementedSid8(sens::Sid8),
     InvalidArity {
         operation: &'static str,
         expected: usize,
@@ -1421,39 +1421,39 @@ fn preflight_quoted(
     Ok(())
 }
 
-fn sid8_call_contract(sid: my_lisp::Sid8) -> Option<(Option<usize>, &'static str)> {
-    if sid == my_lisp::sid!(00000010) {
+fn sid8_call_contract(sid: sens::Sid8) -> Option<(Option<usize>, &'static str)> {
+    if sid == sens::sid!(00000010) {
         Some((Some(1), "wsm_atom"))
-    } else if sid == my_lisp::sid!(00000011)
-        || sid == my_lisp::sid!(00011100)
-        || sid == my_lisp::sid!(00100010)
+    } else if sid == sens::sid!(00000011)
+        || sid == sens::sid!(00011100)
+        || sid == sens::sid!(00100010)
     {
         // `eq` (00000011), numeric `=` (00011100) and `equal?` (00100010)
         // are all word equality on the target representation.
         Some((Some(2), "wsm_eq"))
-    } else if sid == my_lisp::sid!(00000100) {
+    } else if sid == sens::sid!(00000100) {
         Some((Some(2), "wsm_cons"))
-    } else if sid == my_lisp::sid!(00000101) {
+    } else if sid == sens::sid!(00000101) {
         Some((Some(1), "wsm_car"))
-    } else if sid == my_lisp::sid!(00000110) {
+    } else if sid == sens::sid!(00000110) {
         Some((Some(1), "wsm_cdr"))
-    } else if sid == my_lisp::sid!(00100111) {
+    } else if sid == sens::sid!(00100111) {
         Some((None, "wsm_cons"))
-    } else if sid == my_lisp::sid!(00001100)
-        || sid == my_lisp::sid!(00001101)
-        || sid == my_lisp::sid!(00001110)
-        || sid == my_lisp::sid!(00010011)
-        || sid == my_lisp::sid!(00011010)
-        || sid == my_lisp::sid!(00011101)
-        || sid == my_lisp::sid!(00011110)
-        || sid == my_lisp::sid!(00010100)
+    } else if sid == sens::sid!(00001100)
+        || sid == sens::sid!(00001101)
+        || sid == sens::sid!(00001110)
+        || sid == sens::sid!(00010011)
+        || sid == sens::sid!(00011010)
+        || sid == sens::sid!(00011101)
+        || sid == sens::sid!(00011110)
+        || sid == sens::sid!(00010100)
     {
         // Inline arithmetic / mod / exact-Q / quotient: arity 2, no runtime name.
         Some((Some(2), ""))
-    } else if sid == my_lisp::sid!(00110011)
-        || sid == my_lisp::sid!(00110100)
-        || sid == my_lisp::sid!(00110101)
-        || sid == my_lisp::sid!(00110110)
+    } else if sid == sens::sid!(00110011)
+        || sid == sens::sid!(00110100)
+        || sid == sens::sid!(00110101)
+        || sid == sens::sid!(00110110)
     {
         // Composed car/cdr accessors: arity 1, no runtime name.
         Some((Some(1), ""))
@@ -2504,7 +2504,7 @@ impl Emitter {
         }
     }
 
-    fn emit_sid8_call(&mut self, sid: my_lisp::Sid8, args: &[Ir]) -> Result<(), CompileError> {
+    fn emit_sid8_call(&mut self, sid: sens::Sid8, args: &[Ir]) -> Result<(), CompileError> {
         let Some((expected, runtime)) = sid8_call_contract(sid) else {
             return Err(CompileError::UnimplementedSid8(sid));
         };
@@ -2513,50 +2513,50 @@ impl Emitter {
         }
 
         // Inline or backend-composed mechanisms selected directly from SID8.
-        if sid == my_lisp::sid!(00001100) {
+        if sid == sens::sid!(00001100) {
             return self.emit_arithmetic(X86ArithmeticKind::Add, args);
         }
-        if sid == my_lisp::sid!(00001101) {
+        if sid == sens::sid!(00001101) {
             return self.emit_arithmetic(X86ArithmeticKind::Sub, args);
         }
-        if sid == my_lisp::sid!(00001110) {
+        if sid == sens::sid!(00001110) {
             return self.emit_arithmetic(X86ArithmeticKind::Mul, args);
         }
-        if sid == my_lisp::sid!(00011010) {
+        if sid == sens::sid!(00011010) {
             return self.emit_exact_q_lt(args);
         }
-        if sid == my_lisp::sid!(00011101) {
+        if sid == sens::sid!(00011101) {
             return self.emit_exact_q_le(args);
         }
-        if sid == my_lisp::sid!(00011110) {
+        if sid == sens::sid!(00011110) {
             return self.emit_exact_q_ge(args);
         }
-        if sid == my_lisp::sid!(00010100) {
+        if sid == sens::sid!(00010100) {
             return self.emit_quotient(args);
         }
-        if sid == my_lisp::sid!(00010011) {
+        if sid == sens::sid!(00010011) {
             return self.emit_mod(args);
         }
 
-        if sid == my_lisp::sid!(00110011) {
+        if sid == sens::sid!(00110011) {
             self.emit_ir(&args[0])?;
             self.line("    call wsm_car");
             self.line("    call wsm_car");
             return Ok(());
         }
-        if sid == my_lisp::sid!(00110100) {
+        if sid == sens::sid!(00110100) {
             self.emit_ir(&args[0])?;
             self.line("    call wsm_cdr");
             self.line("    call wsm_car");
             return Ok(());
         }
-        if sid == my_lisp::sid!(00110101) {
+        if sid == sens::sid!(00110101) {
             self.emit_ir(&args[0])?;
             self.line("    call wsm_cdr");
             self.line("    call wsm_cdr");
             return Ok(());
         }
-        if sid == my_lisp::sid!(00110110) {
+        if sid == sens::sid!(00110110) {
             self.emit_ir(&args[0])?;
             self.line("    call wsm_cdr");
             self.line("    call wsm_cdr");
@@ -2565,7 +2565,7 @@ impl Emitter {
             return Ok(());
         }
 
-        if sid == my_lisp::sid!(00100111) {
+        if sid == sens::sid!(00100111) {
             return self.emit_primitive_list(args);
         }
 

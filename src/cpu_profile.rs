@@ -23,13 +23,13 @@ use std::collections::{HashMap, HashSet};
 use crate::ast::Expr;
 use crate::parser::parse;
 
-/// The i5-6400 CPU profile, compiled in directly from the `external/my-lisp`
+/// The i5-6400 CPU profile, compiled in directly from the `external/sens`
 /// submodule (SUBMODULE-DEPENDENCY-MODEL-2026-09-16) — never a hand-copied
 /// duplicate. `include_str!` also means a missing/uninitialized submodule
 /// fails the *build*, not silently at runtime with stale data: this repo's
 /// own architecture explicitly forbids a silent fallback for CPU profiles.
 pub const CANONICAL_I5_6400_PROFILE_LISP: &str =
-    include_str!("../external/my-lisp/lib/machine/cpu/intel-core-i5-6400.lisp");
+    include_str!("../external/sens/lib/machine/cpu/intel-core-i5-6400.lisp");
 
 /// Structured model of a CPU capability profile.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,7 +202,7 @@ impl CpuProfile {
         })
     }
 
-    /// Loads the canonical i5-6400 profile compiled in from `external/my-lisp`
+    /// Loads the canonical i5-6400 profile compiled in from `external/sens`
     /// (see `CANONICAL_I5_6400_PROFILE_LISP`) — one channel, no path guessing.
     pub fn load_skylake_i5_6400() -> Result<Self, String> {
         Self::parse(CANONICAL_I5_6400_PROFILE_LISP)

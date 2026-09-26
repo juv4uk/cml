@@ -17,7 +17,7 @@ use cml::x86_inline::{InlineConfig, inline_program};
 use cml::x86_lir::{lir_to_machine_items, lower_ir_to_lir};
 use cml::x86_opt::{LocalOptConfig, optimize_lir};
 use cml::{lower, parser};
-use my_lisp::{Session, eval_program, load_core_library};
+use sens::{Session, eval_program, load_core_library};
 
 fn parse_and_lower_ir(source: &str) -> cml::ir::Ir {
     let exprs =

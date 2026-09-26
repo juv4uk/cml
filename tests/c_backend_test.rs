@@ -291,12 +291,12 @@ fn c_backend_supports_i32_buffers_and_rejects_f32_by_name() {
 #[test]
 fn c_backend_executes_numeric_buffer_map_as_i32_reference_path() {
     let program = [Ir::App {
-        func: Box::new(Ir::Sid(my_lisp::sid!(01011001))),
+        func: Box::new(Ir::Sid(sens::sid!(01011001))),
         args: vec![
             Ir::Lambda {
                 params: Params::Fixed(vec!["x".into()]),
                 body: Box::new(Ir::App {
-                    func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
+                    func: Box::new(Ir::Sid(sens::sid!(00001100))),
                     args: vec![Ir::Var("x".into()), Ir::Int(1)],
                 }),
             },
@@ -341,12 +341,12 @@ fn c_backend_i32_map_matches_cpu_reference_for_source_fixtures() {
 #[test]
 fn c_backend_numeric_buffer_map_fails_closed_on_i32_overflow() {
     let program = [Ir::App {
-        func: Box::new(Ir::Sid(my_lisp::sid!(01011001))),
+        func: Box::new(Ir::Sid(sens::sid!(01011001))),
         args: vec![
             Ir::Lambda {
                 params: Params::Fixed(vec!["x".into()]),
                 body: Box::new(Ir::App {
-                    func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
+                    func: Box::new(Ir::Sid(sens::sid!(00001100))),
                     args: vec![Ir::Var("x".into()), Ir::Int(1)],
                 }),
             },

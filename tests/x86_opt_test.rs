@@ -27,7 +27,7 @@ use cml::x86_lir::{
 };
 use cml::x86_opt::{LocalOptConfig, optimize_lir};
 use cml::{lower, parser};
-use my_lisp::{Session, eval_program};
+use sens::{Session, eval_program};
 
 fn parse_and_lower_ir(source: &str) -> cml::ir::Ir {
     let exprs =

@@ -9,7 +9,7 @@
 use crate::canon::{
     CANON_BUILD_SOURCE_REGISTRY_FNV1A64, CANON_BUILD_SOURCE_SEMANTIC_IDS, find_operation_by_id,
 };
-use my_lisp::Sid8;
+use sens::Sid8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdmissionState {
@@ -59,37 +59,37 @@ pub struct CoverageLedger {
 }
 
 fn x86_canon_evidence(semantic_id: Sid8) -> Vec<BackendEvidence> {
-    let (state, evidence) = if semantic_id == my_lisp::sid!(00000001) {
+    let (state, evidence) = if semantic_id == sens::sid!(00000001) {
         (
             BackendEvidenceState::Executable,
             "x86_freestanding_test.rs: compiler_corpus_quote_radio_returns_the_interned_symbol",
         )
-    } else if semantic_id == my_lisp::sid!(00000010) {
+    } else if semantic_id == sens::sid!(00000010) {
         (
             BackendEvidenceState::AssemblyWitness,
             "x86_freestanding_test.rs: primitive_slice_uses_only_ratified_runtime_imports",
         )
-    } else if semantic_id == my_lisp::sid!(00000011) {
+    } else if semantic_id == sens::sid!(00000011) {
         (
             BackendEvidenceState::Executable,
             "x86_freestanding_test.rs: compiler_corpus_eq_on_matching_and_differing_quoted_symbols",
         )
-    } else if semantic_id == my_lisp::sid!(00000100) {
+    } else if semantic_id == sens::sid!(00000100) {
         (
             BackendEvidenceState::Executable,
             "x86_freestanding_test.rs: frozen_cons_fixture_is_deterministic_and_assembles; named_definition_allocates_a_list_through_the_asm_nucleus",
         )
-    } else if semantic_id == my_lisp::sid!(00000101) {
+    } else if semantic_id == sens::sid!(00000101) {
         (
             BackendEvidenceState::AssemblyWitness,
             "x86_freestanding_test.rs: primitive_slice_uses_only_ratified_runtime_imports",
         )
-    } else if semantic_id == my_lisp::sid!(00000110) {
+    } else if semantic_id == sens::sid!(00000110) {
         (
             BackendEvidenceState::AssemblyWitness,
             "x86_freestanding_test.rs: primitive_slice_uses_only_ratified_runtime_imports",
         )
-    } else if semantic_id == my_lisp::sid!(00000111) {
+    } else if semantic_id == sens::sid!(00000111) {
         (
             BackendEvidenceState::Executable,
             "x86_freestanding_test.rs: standalone_cond_true_false_branch_selection_witness",
@@ -107,9 +107,9 @@ fn x86_canon_evidence(semantic_id: Sid8) -> Vec<BackendEvidence> {
 }
 
 fn x86_fixnum_arithmetic_evidence(semantic_id: Sid8) -> Vec<BackendEvidence> {
-    let evidence = if semantic_id == my_lisp::sid!(00001100) {
+    let evidence = if semantic_id == sens::sid!(00001100) {
         "x86_freestanding_test.rs: named_definition_uses_a_lexical_let_binding; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract"
-    } else if semantic_id == my_lisp::sid!(00001101) {
+    } else if semantic_id == sens::sid!(00001101) {
         "x86_freestanding_test.rs: out_of_line_named_self_tail_recursion_reuses_its_native_frame; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract"
     } else {
         return Vec::new();

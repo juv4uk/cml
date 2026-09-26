@@ -14,10 +14,10 @@ fn lower_one(source: &str) -> cml::ir::Ir {
 #[test]
 fn map_and_reduce_lower_to_exact_sid8_identity() {
     for (source, expected) in [
-        ("(map (lambda (x) (+ x 1)) data)", my_lisp::sid!(00110111)),
+        ("(map (lambda (x) (+ x 1)) data)", sens::sid!(00110111)),
         (
             "(reduce (lambda (acc x) (+ acc x)) 0 data)",
-            my_lisp::sid!(00111001),
+            sens::sid!(00111001),
         ),
     ] {
         let ir = lower_one(source);

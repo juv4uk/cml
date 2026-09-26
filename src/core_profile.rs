@@ -5,7 +5,7 @@
 //! This module carries an explicit Core profile and exact upstream law
 //! provenance without defining any SID -> meaning or Core -> meaning table.
 
-use my_lisp::Sid8;
+use sens::Sid8;
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

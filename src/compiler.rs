@@ -413,35 +413,35 @@ impl Compiler {
         self.emit("CDR R1");
     }
 
-    fn compile_sid_call(&mut self, sid: my_lisp::Sid8, args: &[Ir], target_reg: &str) {
+    fn compile_sid_call(&mut self, sid: sens::Sid8, args: &[Ir], target_reg: &str) {
         // Exact Sid8 is the callable identity. Dispatch directly from that
         // identity to the private fpga-lisp mechanism; do not translate it
         // through PrimOp or any surface/backend name.
-        if sid == my_lisp::sid!(00000010) {
+        if sid == sens::sid!(00000010) {
             self.compile_atom_mechanism(args, target_reg);
-        } else if sid == my_lisp::sid!(00000011) || sid == my_lisp::sid!(00011100) {
+        } else if sid == sens::sid!(00000011) || sid == sens::sid!(00011100) {
             self.compile_eq_mechanism(args, target_reg);
-        } else if sid == my_lisp::sid!(00100010) {
+        } else if sid == sens::sid!(00100010) {
             self.compile_equal_mechanism(args, target_reg);
-        } else if sid == my_lisp::sid!(00000100) {
+        } else if sid == sens::sid!(00000100) {
             self.compile_cons_mechanism(args, target_reg);
-        } else if sid == my_lisp::sid!(00000101) {
+        } else if sid == sens::sid!(00000101) {
             self.compile_car_mechanism(args, target_reg);
-        } else if sid == my_lisp::sid!(00000110) {
+        } else if sid == sens::sid!(00000110) {
             self.compile_cdr_mechanism(args, target_reg);
-        } else if sid == my_lisp::sid!(00001100) {
+        } else if sid == sens::sid!(00001100) {
             self.compile_add_mechanism(args, target_reg);
-        } else if sid == my_lisp::sid!(00001101) {
+        } else if sid == sens::sid!(00001101) {
             self.compile_sub_mechanism(args, target_reg);
-        } else if sid == my_lisp::sid!(00100111) {
+        } else if sid == sens::sid!(00100111) {
             self.compile_list_mechanism(args, target_reg);
-        } else if sid == my_lisp::sid!(00110011) {
+        } else if sid == sens::sid!(00110011) {
             self.compile_caar_mechanism(args);
-        } else if sid == my_lisp::sid!(00110100) {
+        } else if sid == sens::sid!(00110100) {
             self.compile_cadr_mechanism(args);
-        } else if sid == my_lisp::sid!(00110101) {
+        } else if sid == sens::sid!(00110101) {
             self.compile_cddr_mechanism(args);
-        } else if sid == my_lisp::sid!(00110110) {
+        } else if sid == sens::sid!(00110110) {
             self.compile_cadddr_mechanism(args);
         } else {
             panic!("unsupported SID8 call in fpga-lisp compiler: {sid:?}");

@@ -15,7 +15,7 @@ use cml::machine_inst::assemble_program;
 use cml::native_baseline::NativeExecutable;
 use cml::x86_lir::{LirLowerError, lir_to_machine_items, lower_ir_to_lir};
 use cml::{lower, parser};
-use my_lisp::{Session, eval_program};
+use sens::{Session, eval_program};
 
 fn parse_and_lower_ir(source: &str) -> cml::ir::Ir {
     let exprs =

@@ -451,9 +451,9 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
         }
         Ir::App { func, args }
             if matches!(func.as_ref(), Ir::Sid(sid)
-            if *sid == my_lisp::sid!(00001100) || *sid == my_lisp::sid!(00001101)) =>
+            if *sid == sens::sid!(00001100) || *sid == sens::sid!(00001101)) =>
         {
-            let lir_op = if *func.as_ref() == Ir::Sid(my_lisp::sid!(00001100)) {
+            let lir_op = if *func.as_ref() == Ir::Sid(sens::sid!(00001100)) {
                 LirAluOp::Add
             } else {
                 LirAluOp::Sub
@@ -492,7 +492,7 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
                 // identity for this scalar branch test. Legacy PrimOp host
                 // enums are not callable identity in the LIR boundary.
                 let normalized_test = match test_expr {
-                    Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00000011)) => {
+                    Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00000011)) => {
                         Some(args.as_slice())
                     }
                     _ => None,
@@ -695,7 +695,7 @@ mod tests {
     #[test]
     fn test_lower_arithmetic_witness() {
         let ir = Ir::App {
-            func: Box::new(Ir::Sid(my_lisp::sid!(00001100))),
+            func: Box::new(Ir::Sid(sens::sid!(00001100))),
             args: vec![Ir::Int(10), Ir::Int(32)],
         };
         let func = lower_ir_to_lir(&ir).expect("lower arithmetic witness");
@@ -711,7 +711,7 @@ mod tests {
             branches: vec![
                 (
                     Ir::App {
-                        func: Box::new(Ir::Sid(my_lisp::sid!(00000011))),
+                        func: Box::new(Ir::Sid(sens::sid!(00000011))),
                         args: vec![Ir::Int(5), Ir::Int(5)],
                     },
                     Ir::Int(42),

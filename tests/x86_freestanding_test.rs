@@ -1,4 +1,4 @@
-use my_lisp::Sid8;
+use sens::Sid8;
 use std::collections::BTreeSet;
 use std::fs;
 use std::process::Command;
@@ -83,15 +83,15 @@ fn frozen_cons_fixture_is_deterministic_and_assembles() {
 fn primitive_slice_uses_only_ratified_runtime_imports() {
     let program = vec![
         sid_call(
-            my_lisp::sid!(00000101),
+            sens::sid!(00000101),
             vec![Ir::Quote(Quoted::List(vec![Quoted::Int(1)]))],
         ),
         sid_call(
-            my_lisp::sid!(00000110),
+            sens::sid!(00000110),
             vec![Ir::Quote(Quoted::List(vec![Quoted::Int(1)]))],
         ),
-        sid_call(my_lisp::sid!(00000011), vec![Ir::Int(1), Ir::Int(1)]),
-        sid_call(my_lisp::sid!(00000010), vec![Ir::Int(1)]),
+        sid_call(sens::sid!(00000011), vec![Ir::Int(1), Ir::Int(1)]),
+        sid_call(sens::sid!(00000010), vec![Ir::Int(1)]),
     ];
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
@@ -395,7 +395,7 @@ fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
         Err(CompileError::UnsupportedVariant("Var (unbound)"))
     );
     assert_eq!(
-        backend.compile_program(&[sid_call(my_lisp::sid!(00000101), vec![])]),
+        backend.compile_program(&[sid_call(sens::sid!(00000101), vec![])]),
         Err(CompileError::InvalidArity {
             operation: "SID8",
             expected: 1,
@@ -403,7 +403,7 @@ fn unsupported_ir_and_bad_arity_fail_before_output_exists() {
         })
     );
     let result = backend.compile_program(&[sid_call(
-        my_lisp::sid!(00100010),
+        sens::sid!(00100010),
         vec![Ir::Int(1), Ir::Int(1)],
     )]);
     assert!(result.is_ok());
@@ -416,7 +416,7 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
     // Simple add: 1 + 2 = 3 — assembly must not call any runtime function.
     let add_asm = backend
         .compile_program(&[sid_call(
-            my_lisp::sid!(00001100),
+            sens::sid!(00001100),
             vec![Ir::Int(1), Ir::Int(2)],
         )])
         .unwrap();
@@ -428,7 +428,7 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
     // Simple sub: 5 - 3 = 2 — assembly must not call any runtime function.
     let sub_asm = backend
         .compile_program(&[sid_call(
-            my_lisp::sid!(00001101),
+            sens::sid!(00001101),
             vec![Ir::Int(5), Ir::Int(3)],
         )])
         .unwrap();
@@ -453,7 +453,7 @@ fn checked_add_and_sub_produce_inline_arithmetic() {
     // *runtime* overflow, not a preflight error, since both inputs are in range.
     let overflow_asm = backend
         .compile_program(&[sid_call(
-            my_lisp::sid!(00001100),
+            sens::sid!(00001100),
             vec![Ir::Int(wsm_os_target::FIXNUM_MAX), Ir::Int(1)],
         )])
         .unwrap();
@@ -1645,12 +1645,12 @@ fn retired_semantic_id_1153_is_not_an_active_language_callable() {
         "rdtsc must not exist as an active canonical callable builtin"
     );
     assert_eq!(
-        cml::canon::canonical_builtin_name(my_lisp::sid!(11111111)),
+        cml::canon::canonical_builtin_name(sens::sid!(11111111)),
         None,
         "1153 must not map to any canonical builtin name"
     );
     assert!(
-        cml::canon::find_operation_by_id(my_lisp::sid!(11111111)).is_none(),
+        cml::canon::find_operation_by_id(sens::sid!(11111111)).is_none(),
         "semantic ID 1153 is retired and MUST NOT appear in CANON_OPERATIONS_TABLE"
     );
 }

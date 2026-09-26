@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use cml::witness_bridge::execute_x86_actual;
 use cml::x86_freestanding::X86FreestandingBackend;
 use cml::{lower, parser};
-use my_lisp::{Session, eval_program, load_core_library};
+use sens::{Session, eval_program, load_core_library};
 
 fn upstream_path(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

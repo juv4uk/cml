@@ -219,11 +219,11 @@ fn parse_expr(tokens: &mut Tokens) -> Result<Expr, ParseError> {
             } else if token.text.len() == 8
                 && token.text.bytes().all(|byte| matches!(byte, b'0' | b'1'))
             {
-                let upstream = my_lisp::parse(&token.text)
+                let upstream = sens::parse(&token.text)
                     .map_err(|_| ParseError::unexpected_token("invalid SID8", token.location))?;
                 match upstream.as_slice() {
                     [expr] => match expr.kind {
-                        my_lisp::ExprKind::Sid(sid) => Ok(Expr::Sid(sid)),
+                        sens::ExprKind::Sid(sid) => Ok(Expr::Sid(sid)),
                         _ => Err(ParseError::unexpected_token(
                             "exact eight-bit binary token must be SID8",
                             token.location,
@@ -521,7 +521,7 @@ mod sid8_identity_tests {
     #[test]
     fn exact_bare_eight_bit_binary_token_parses_as_typed_sid8() {
         let exprs = parse("00000101").expect("exact bare SID8 must parse");
-        assert_eq!(exprs, vec![Expr::Sid(my_lisp::sid!(00000101))]);
+        assert_eq!(exprs, vec![Expr::Sid(sens::sid!(00000101))]);
     }
 
     #[test]

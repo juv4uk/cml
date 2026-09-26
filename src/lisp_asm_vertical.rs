@@ -74,16 +74,16 @@ pub fn select_arithmetic_slice(program: &[Ir]) -> Result<Vec<MachineItem>, Verti
         }
         Ir::App { func, args }
             if matches!(func.as_ref(), Ir::Sid(sid)
-                if *sid == my_lisp::sid!(00001100) || *sid == my_lisp::sid!(00001101)) =>
+                if *sid == sens::sid!(00001100) || *sid == sens::sid!(00001101)) =>
         {
-            let alu_op = if *func.as_ref() == Ir::Sid(my_lisp::sid!(00001100)) {
+            let alu_op = if *func.as_ref() == Ir::Sid(sens::sid!(00001100)) {
                 AluOp::Add
             } else {
                 AluOp::Sub
             };
             emit_literal_arithmetic(&mut items, alu_op, args, &prov)?;
         }
-        Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == my_lisp::sid!(00010011)) =>
+        Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00010011)) =>
         {
             if args.len() != 2 {
                 return Err(VerticalSliceError::InvalidArity {

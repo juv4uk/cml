@@ -1,6 +1,6 @@
 use cml::upstream_sid_bridge::{convert_lisp_expr, key_definition_by_sid};
 use cml::{ast::Expr as CExpr, lower::lower_program, x86_freestanding::X86FreestandingBackend};
-use my_lisp::parse;
+use sens::parse;
 use std::fs;
 
 fn main() {
@@ -14,10 +14,10 @@ fn main() {
 
     let mut forms = Vec::new();
     for expr in parsed {
-        if let my_lisp::ExprKind::List(items) = &expr.kind {
-            if let Some(my_lisp::ExprKind::Sid(sid)) = items.first().map(|h| &h.kind) {
+        if let sens::ExprKind::List(items) = &expr.kind {
+            if let Some(sens::ExprKind::Sid(sid)) = items.first().map(|h| &h.kind) {
                 if sid.to_string() == "00001001" {
-                    if let Some(my_lisp::ExprKind::Symbol(name)) = items.get(1).map(|n| &n.kind) {
+                    if let Some(sens::ExprKind::Symbol(name)) = items.get(1).map(|n| &n.kind) {
                         if needed.contains(&name.as_ref()) {
                             let converted = convert_lisp_expr(&expr).unwrap();
                             let keyed = key_definition_by_sid(converted);
@@ -66,8 +66,8 @@ fn main() {
     let compiler_parsed = parse(&compiler_source).unwrap();
 
     for expr in compiler_parsed {
-        if let my_lisp::ExprKind::List(items) = &expr.kind {
-            if let Some(my_lisp::ExprKind::Symbol(s)) = items.first().map(|h| &h.kind) {
+        if let sens::ExprKind::List(items) = &expr.kind {
+            if let Some(sens::ExprKind::Symbol(s)) = items.first().map(|h| &h.kind) {
                 if s.as_ref() == "def" || s.as_ref() == "defmacro" {
                     let converted = convert_lisp_expr(&expr).unwrap();
                     forms.push(converted);
@@ -105,8 +105,8 @@ fn main() {
 
     // Add compiler.lisp defs (already SID-rewritten)
     for expr in parse(&compiler_source).unwrap() {
-        if let my_lisp::ExprKind::List(items) = &expr.kind {
-            if let Some(my_lisp::ExprKind::Symbol(s)) = items.first().map(|h| &h.kind) {
+        if let sens::ExprKind::List(items) = &expr.kind {
+            if let Some(sens::ExprKind::Symbol(s)) = items.first().map(|h| &h.kind) {
                 if s.as_ref() == "def" || s.as_ref() == "defmacro" {
                     let converted = convert_lisp_expr(&expr).unwrap();
                     gen1_forms.push(converted);
