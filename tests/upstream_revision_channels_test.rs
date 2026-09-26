@@ -46,6 +46,10 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         "#84 revision manifest must declare its kind"
     );
     assert!(
+        manifest.contains("(repository . \"juv4uk/sens\")"),
+        "#310 active upstream revision channels must follow the renamed juv4uk/sens repository"
+    );
+    assert!(
         manifest.contains("(supported-pin-source . external/my-lisp-gitlink)"),
         "#84 supported-pin must be the checked-in external/my-lisp gitlink"
     );
@@ -69,7 +73,18 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         "observed-current-sha must be a full git SHA"
     );
 
-    let supported_checkout = Path::new(env!("CARGO_MANIFEST_DIR")).join("external/my-lisp");
+    let gitmodules = fs::read_to_string(".gitmodules")
+        .expect("#310 requires the active upstream submodule declaration");
+    assert!(
+        gitmodules.contains("url = https://github.com/juv4uk/sens.git"),
+        "#310 external/my-lisp may remain the local path, but its fetch URL must be juv4uk/sens"
+    );
+    assert!(
+        !gitmodules.contains("github.com/juv4uk/my-lisp"),
+        "#310 the retired repository URL must not remain active in .gitmodules"
+    );
+
+    let supported_checkout = Path::new(env!("CARGO_MANIFEST_DIR")).join("external/sens");
     assert_eq!(
         head(&supported_checkout),
         supported,
@@ -185,7 +200,7 @@ fn historical_reader_contract_workflow_is_not_an_active_my_lisp_channel() {
         "#84 Reader Contract 4 must initialize the supported-pin submodule required by Cargo"
     );
     assert!(
-        !workflow.contains("repository: juv4uk/my-lisp"),
+        !workflow.contains("repository: juv4uk/sens"),
         "#84 Reader Contract 4 historical evidence must not create a third active my-lisp checkout"
     );
     assert!(

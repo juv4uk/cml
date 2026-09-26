@@ -8,7 +8,7 @@
 ((kind . cml-semantic-export-consumer)
  (version . (0 2))
  (status . consuming-slice-1)
- (producer . ((repository . juv4uk/my-lisp)
+ (producer . ((repository . juv4uk/sens)
               (task . MYLISP-CML-SEMANTIC-EXPORT-V1)
               (commit . f142e55)
               (binary . cml-export)

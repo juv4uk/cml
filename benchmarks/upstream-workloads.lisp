@@ -4,13 +4,13 @@
 
 ((kind . cml-upstream-workload)
  (id . my-lisp-meta-registry-generator-317)
- (upstream-repository . "juv4uk/my-lisp")
+ (upstream-repository . "juv4uk/sens")
  (upstream-channel . observed-current)
  (upstream-pr . 317)
  (upstream-ref . "ed1ef28928df1db0cc83f17ae993527635b6256d")
  (workload . "scripts/generate-meta-semantic-registry.lisp --check")
  (semantic-authority . upstream-lisp)
- (verdict-source . "juv4uk/my-lisp#76")
+ (verdict-source . "juv4uk/sens#76")
  (status . observed-performance-blocked)
  (profile-evidence
    ((workflow-run . 35253773341)
@@ -32,18 +32,18 @@
  (routing
    ((parser-hypothesis . falsified)
     (bootstrap-hypothesis . falsified-for-this-workload)
-    (primary-upstream . "juv4uk/my-lisp#333")
+    (primary-upstream . "juv4uk/sens#333")
     (compiler-parent . "juv4uk/cml#79"))))
 
 ((kind . cml-upstream-workload)
  (id . my-lisp-cli-cold-bootstrap-332)
- (upstream-repository . "juv4uk/my-lisp")
+ (upstream-repository . "juv4uk/sens")
  (upstream-channel . observed-current)
  (upstream-issue . 332)
  (upstream-ref . "50cf6d60b4c6803487c8e0165a49de49da76519f")
  (workload . canonical-cli-language-bootstrap)
  (semantic-authority . upstream-lisp)
- (verdict-source . "juv4uk/my-lisp#332")
+ (verdict-source . "juv4uk/sens#332")
  (status . measured-not-bottleneck)
  (evidence
    ((workflow-run . 35259445959)
@@ -54,14 +54,14 @@
 
 ((kind . cml-upstream-workload)
  (id . my-lisp-text-pipeline-333)
- (upstream-repository . "juv4uk/my-lisp")
+ (upstream-repository . "juv4uk/sens")
  (upstream-channel . observed-current)
  (upstream-issue . 333)
  (observed-ref . "ed1ef28928df1db0cc83f17ae993527635b6256d")
  (workload-file . "lib/surface/semantic-registry.lisp")
  (file-bytes . 24104)
  (semantic-authority . upstream-lisp)
- (verdict-source . "juv4uk/my-lisp#333")
+ (verdict-source . "juv4uk/sens#333")
  (status . compiler-p0)
  (stage-evidence
    ((workflow-run . 35261854943)
@@ -74,7 +74,7 @@
     (public-read-file-ns . 15376918321)))
  (dominant-observation . "utf8 validation plus decode consume approximately 98.46 percent of public read-file time")
  (rejected-candidate
-   ((source . "juv4uk/my-lisp#326")
+   ((source . "juv4uk/sens#326")
     (candidate . balanced-unicode-string-materialization)
     (base-seconds . 87.330)
     (candidate-seconds . 93.870)
@@ -85,12 +85,12 @@
 
 ((kind . cml-upstream-workload)
  (id . my-lisp-filemode-340)
- (upstream-repository . "juv4uk/my-lisp")
+ (upstream-repository . "juv4uk/sens")
  (upstream-channel . observed-current)
  (upstream-issue . 340)
  (observed-ref . "ed1ef28928df1db0cc83f17ae993527635b6256d")
  (semantic-authority . upstream-lisp)
- (verdict-source . "juv4uk/my-lisp#340")
+ (verdict-source . "juv4uk/sens#340")
  (status . root-cause-assigned)
  (evidence
    ((workflow-run . 35260299900)

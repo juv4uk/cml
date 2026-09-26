@@ -3,7 +3,7 @@
 
 ((kind . cml-operations-table)
  (version . (1 0))
- (authority . ((language . juv4uk/my-lisp)
+ (authority . ((language . juv4uk/sens)
                (compiler . juv4uk/cml)))
  (operations
   . (((canonical-name . "quote")

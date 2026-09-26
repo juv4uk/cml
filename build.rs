@@ -843,7 +843,7 @@ fn main() {
     s_expr.push_str("; Generated at build time from sens/lib/surface/semantic-registry.lisp. DO NOT EDIT BY HAND.\n\n");
     s_expr.push_str("((kind . cml-operations-table)\n");
     s_expr.push_str(" (version . (1 0))\n");
-    s_expr.push_str(" (authority . ((language . juv4uk/my-lisp)\n");
+    s_expr.push_str(" (authority . ((language . juv4uk/sens)\n");
     s_expr.push_str("               (compiler . juv4uk/cml)))\n");
     s_expr.push_str(" (operations\n  . (");
     for (i, (index, id)) in operation_ids.iter().enumerate() {

@@ -17,10 +17,10 @@ jobs:
     if: github.event_name != 'pull_request'
     permissions:
       contents: write
-    uses: juv4uk/my-lisp/.github/workflows/sync-language-contract.yml@main
+    uses: juv4uk/sens/.github/workflows/sync-language-contract.yml@main
 
   verify:
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
-    uses: juv4uk/my-lisp/.github/workflows/verify-language-contract.yml@main
+    uses: juv4uk/sens/.github/workflows/verify-language-contract.yml@main
