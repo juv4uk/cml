@@ -3,7 +3,7 @@
 ; machine-form meaning, or instruction encoding.
 (machine-form-bridge-provenance
   (schema cml-machine-form-bridge-provenance/1)
-  (upstream-repository "juv4uk/my-lisp")
+  (upstream-repository "juv4uk/sens")
   (revision-channel supported-pin)
   (revision-sha "8088e9f88d845ba0edb2197d44da3dbbe57eca0e")
   (contract-path "lib/machine/lowering/semantic-x86-64.lisp")
