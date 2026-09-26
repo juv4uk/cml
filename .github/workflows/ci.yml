@@ -57,21 +57,21 @@ jobs:
       - name: Checkout my-lisp (supported evidence)
         uses: actions/checkout@v4
         with:
-          repository: juv4uk/my-lisp
+          repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.supported_pin_sha }}
           path: my-lisp-supported
 
       - name: Checkout my-lisp (observed-current)
         uses: actions/checkout@v4
         with:
-          repository: juv4uk/my-lisp
+          repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
           path: my-lisp
 
       - name: Checkout my-lisp (Core1 bootstrap source)
         uses: actions/checkout@v4
         with:
-          repository: juv4uk/my-lisp
+          repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}
           path: my-lisp-bootstrap
 
