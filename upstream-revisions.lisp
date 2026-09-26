@@ -16,7 +16,7 @@
 
 ((kind . cml-upstream-revision-channels)
  (version . (1 2))
- (repository . "juv4uk/my-lisp")
+ (repository . "juv4uk/sens")
  (build-source . external/my-lisp-gitlink)
  (build-source-sha . "42691cb26c9c4a2a2506b4ce571db57e94b63192")
  (supported-pin-source . exact-github-commit)
