@@ -22,7 +22,7 @@ jobs:
       - name: Checkout exact Core1 bootstrap source
         uses: actions/checkout@v5
         with:
-          repository: juv4uk/my-lisp
+          repository: juv4uk/sens
           ref: d359c4885e0609a6c8350daf45de157b40cf48f3
           path: upstream-my-lisp
           fetch-depth: 1
