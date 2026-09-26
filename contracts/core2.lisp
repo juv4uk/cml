@@ -2,7 +2,7 @@
 ; for my-lisp Core2 / Language Contract 6.0.
 ;
 ; This is a provisional placement in CML per owner direction 2026-09-22.
-; Authoritative version belongs in juv4uk/my-lisp (issue #1133).
+; Authoritative version belongs in juv4uk/sens (issue #1133).
 ;
 ; Baseline: my-lisp commit 35c88142548dad137689cd69ca91c430da148bea
 ;            Last commit before f5947ee5 activates structural atom/eq results.
@@ -10,7 +10,7 @@
 
 (core2-profile/1
   (authority
-    (repository . "juv4uk/my-lisp")
+    (repository . "juv4uk/sens")
     (baseline-sha . "35c88142548dad137689cd69ca91c430da148bea")
     (contract-version . (6 0))
     (ratified . "2026-09-08")
