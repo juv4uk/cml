@@ -120,3 +120,66 @@ fn linear_cuda_chain_keeps_semantics_and_materializes_every_graph_output() {
         );
     }
 }
+
+#[test]
+#[ignore = "requires a live NVIDIA CUDA device"]
+fn selective_cuda_chain_materializes_only_requested_final_output() {
+    let device = discover_devices()
+        .expect("CUDA discovery failed")
+        .into_iter()
+        .next()
+        .expect("no CUDA device found");
+    let backend = format!("cuda:{}", device.ordinal);
+    let add_one = admitted_add_one();
+    let mut nodes = Vec::new();
+    for index in 0..4u32 {
+        nodes.push(PlanNode {
+            id: NodeId(index + 1),
+            operation: ExecutionOperation::NumericBufferMap {
+                function: add_one.clone(),
+                input: BufferId(index),
+            },
+            output: BufferId(index + 1),
+            dependencies: if index == 0 {
+                vec![]
+            } else {
+                vec![NodeId(index)]
+            },
+            target: ExecutionTarget::Gpu {
+                backend: backend.clone(),
+            },
+        });
+    }
+
+    let graph = ExecutionGraph {
+        inputs: vec![(
+            BufferId(0),
+            GraphValue::Buffer(BufferLiteral::I32(vec![1, 2, 3])),
+        )],
+        nodes,
+    };
+    let mut executor = HeterogeneousGraphExecutor::default();
+    executor.register_gpu(
+        backend,
+        CudaNodeExecutor {
+            device_ordinal: device.ordinal,
+        },
+    );
+
+    let result = executor
+        .execute_requested(&graph, &[BufferId(4)])
+        .expect("CUDA selective resident graph chain failed");
+
+    assert_eq!(
+        result.execution_order(),
+        &[NodeId(1), NodeId(2), NodeId(3), NodeId(4)]
+    );
+    assert_eq!(result.buffer(BufferId(0)), None);
+    assert_eq!(result.buffer(BufferId(1)), None);
+    assert_eq!(result.buffer(BufferId(2)), None);
+    assert_eq!(result.buffer(BufferId(3)), None);
+    assert_eq!(
+        result.buffer(BufferId(4)),
+        Some(&BufferLiteral::I32(vec![5, 6, 7]))
+    );
+}
