@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use cudarc::driver::{CudaContext, CudaFunction, LaunchConfig, PushKernelArg};
+use cudarc::driver::{CudaContext, CudaFunction, CudaSlice, LaunchConfig, PushKernelArg};
 
 use crate::accelerator::{
     AcceleratorApi, AcceleratorClass, AcceleratorDescriptor, AcceleratorVendor,
@@ -43,6 +43,13 @@ fn nvrtc_arch_from_compute_capability((major, minor): (i32, i32)) -> String {
     format!("compute_{major}{minor}")
 }
 
+#[derive(Debug)]
+struct ReusableBuffers<T> {
+    len: usize,
+    input: CudaSlice<T>,
+    output: CudaSlice<T>,
+}
+
 /// Long-lived CUDA mechanism state for one device.
 ///
 /// This owns no language semantics. It only keeps driver objects that are
@@ -53,6 +60,8 @@ pub struct CudaSession {
     context: Arc<CudaContext>,
     device: CudaDevice,
     kernels: Mutex<HashMap<String, CudaFunction>>,
+    i32_buffers: Mutex<Option<ReusableBuffers<i32>>>,
+    f32_buffers: Mutex<Option<ReusableBuffers<f32>>>,
 }
 
 impl CudaSession {
@@ -64,6 +73,8 @@ impl CudaSession {
             context,
             device,
             kernels: Mutex::new(HashMap::new()),
+            i32_buffers: Mutex::new(None),
+            f32_buffers: Mutex::new(None),
         })
     }
 
@@ -96,50 +107,71 @@ impl CudaSession {
 
         let output = match buffer {
             BufferLiteral::I32(input) => {
-                let input_device = stream
-                    .clone_htod(&input)
-                    .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
-                let mut output_device = stream
-                    .alloc_zeros::<i32>(input.len())
-                    .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
                 let length =
                     u32::try_from(input.len()).map_err(|_| CudaRuntimeError::UnsupportedInput)?;
+                let mut cache = self.i32_buffers.lock().map_err(|error| {
+                    CudaRuntimeError::Driver(format!("i32 buffer cache mutex poisoned: {error}"))
+                })?;
+                if cache.as_ref().map(|buffers| buffers.len) != Some(input.len()) {
+                    *cache = Some(ReusableBuffers {
+                        len: input.len(),
+                        input: unsafe { stream.alloc::<i32>(input.len()) }
+                            .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?,
+                        output: unsafe { stream.alloc::<i32>(input.len()) }
+                            .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?,
+                    });
+                }
+                let buffers = cache.as_mut().expect("buffer cache initialized");
+                stream
+                    .memcpy_htod(&input, &mut buffers.input)
+                    .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
                 unsafe {
                     stream
                         .launch_builder(&function)
-                        .arg(&input_device)
-                        .arg(&mut output_device)
+                        .arg(&buffers.input)
+                        .arg(&mut buffers.output)
                         .arg(&length)
                         .launch(LaunchConfig::for_num_elems(length))
                 }
                 .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
-                BufferLiteral::I32(
-                    stream
-                        .clone_dtoh(&output_device)
-                        .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?,
-                )
+                let mut output = vec![0i32; input.len()];
+                stream
+                    .memcpy_dtoh(&buffers.output, &mut output)
+                    .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+                BufferLiteral::I32(output)
             }
             BufferLiteral::F32(bits) => {
                 let input: Vec<f32> = bits.into_iter().map(f32::from_bits).collect();
-                let input_device = stream
-                    .clone_htod(&input)
-                    .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
-                let mut output_device = stream
-                    .alloc_zeros::<f32>(input.len())
-                    .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
                 let length =
                     u32::try_from(input.len()).map_err(|_| CudaRuntimeError::UnsupportedInput)?;
+                let mut cache = self.f32_buffers.lock().map_err(|error| {
+                    CudaRuntimeError::Driver(format!("f32 buffer cache mutex poisoned: {error}"))
+                })?;
+                if cache.as_ref().map(|buffers| buffers.len) != Some(input.len()) {
+                    *cache = Some(ReusableBuffers {
+                        len: input.len(),
+                        input: unsafe { stream.alloc::<f32>(input.len()) }
+                            .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?,
+                        output: unsafe { stream.alloc::<f32>(input.len()) }
+                            .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?,
+                    });
+                }
+                let buffers = cache.as_mut().expect("buffer cache initialized");
+                stream
+                    .memcpy_htod(&input, &mut buffers.input)
+                    .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
                 unsafe {
                     stream
                         .launch_builder(&function)
-                        .arg(&input_device)
-                        .arg(&mut output_device)
+                        .arg(&buffers.input)
+                        .arg(&mut buffers.output)
                         .arg(&length)
                         .launch(LaunchConfig::for_num_elems(length))
                 }
                 .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
-                let output: Vec<f32> = stream
-                    .clone_dtoh(&output_device)
+                let mut output = vec![0f32; input.len()];
+                stream
+                    .memcpy_dtoh(&buffers.output, &mut output)
                     .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
                 BufferLiteral::F32(output.into_iter().map(f32::to_bits).collect())
             }
