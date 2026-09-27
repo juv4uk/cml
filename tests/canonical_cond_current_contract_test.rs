@@ -8,7 +8,7 @@ fn current_three_part_cond_is_admitted_and_no_match_materializes_canon_zero() {
     // truthiness sentinel. With no matching clause the result is Canon 0 ().
     let source = r#"
         (cond
-          ((quote (identity-relation distinct)) (identity-relation same)
+          ((quote (0)) (1)
            (quote unreachable)))
     "#;
 

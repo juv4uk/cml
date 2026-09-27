@@ -50,7 +50,7 @@ fn string_eq_same() {
         return;
     }
     let v = value("(eq \"a\" \"a\")").unwrap();
-    assert_eq!(v.to_uppercase(), "T");
+    assert_eq!(v, "(1)");
 }
 
 #[test]

@@ -11,9 +11,9 @@ use cml::x86_freestanding::X86FreestandingBackend;
 
 const MATCH_SOURCE: &str = r#"
     (cond
-      ((quote (identity-relation distinct)) (identity-relation same)
+      ((quote (0)) (1)
        (quote wrong))
-      ((quote (identity-relation same)) (identity-relation same)
+      ((quote (1)) (1)
        (quote matched)))
 "#;
 

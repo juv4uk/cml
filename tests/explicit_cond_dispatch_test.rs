@@ -8,9 +8,9 @@ fn current_three_part_cond_clause_reaches_ir_without_truthiness_rewrite() {
     // and not a generic truthy/falsy sentinel.
     let source = r#"
         (cond
-          ((eq (quote a) (quote a)) (identity-relation same)
+          ((eq (quote a) (quote a)) (1)
            (quote matched))
-          ((eq (quote a) (quote b)) (identity-relation same)
+          ((eq (quote a) (quote b)) (1)
            (quote impossible)))
     "#;
 

@@ -36,7 +36,7 @@
      ((canonical-name . "cons")
       (semantic-id . "00000100")
       (formal-action . "primitive:cons")
-      (surfaces . ((en . "cons") (ук . "сполучити") (укр . "сполучити") (sa . "saṃyuj") (sym . ":")))
+      (surfaces . ((en . "cons") (ук . "сполучити") (укр . "сполучити") (sa . "saṃyuj")))
       (cml-ir-projection . "Ir::App(Sid(00000100))")
       (backend-projections . ((fpga-lisp . "OP_CONS") (c . "mk_cons") (x86_freestanding . "wsm_cons")))
       (status . supported)

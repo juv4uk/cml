@@ -222,22 +222,31 @@ static Value *relation_record(const char *kind, const char *value) {
     return mk_cons(mk_sym(kind), mk_cons(mk_sym(value), &NIL_V));
 }
 
+/// Truthy result for primitives per corpus: (1) for true, (0) for false, () for nil/false in atom?.
+static Value *truthy_val(int same) {
+    return same ? mk_cons(mk_int(1), &NIL_V) : mk_cons(mk_int(0), &NIL_V);
+}
+
+static Value *falsy_val(void) {
+    return &NIL_V;
+}
+
 static Value *v_structural_kind(Value *v) {
-    if (v->tag == TAG_NIL) return relation_record("STRUCTURAL-KIND", "EMPTY-LIST");
-    if (!is_atom(v)) return relation_record("STRUCTURAL-KIND", "PAIR");
-    return relation_record("STRUCTURAL-KIND", "ATOM");
+    if (v->tag == TAG_NIL) return &NIL_V;           // nil -> ()
+    if (!is_atom(v)) return truthy_val(0);          // pair -> (0)
+    return truthy_val(1);                           // atom -> (1)
 }
 
 static Value *identity_relation(int same) {
-    return relation_record("IDENTITY-RELATION", same ? "SAME" : "DISTINCT");
+    return truthy_val(same);
 }
 
 static Value *structural_relation(int same) {
-    return relation_record("STRUCTURAL-RELATION", same ? "SAME" : "DISTINCT");
+    return truthy_val(same);
 }
 
 static Value *v_eq(Value *a, Value *b) {
-    if (a->tag != b->tag) return identity_relation(0);
+    if (a->tag != b->tag) return truthy_val(0);
     int same = 0;
     switch (a->tag) {
         case TAG_NIL: same = 1; break;
@@ -250,7 +259,7 @@ static Value *v_eq(Value *a, Value *b) {
         case TAG_STRING: same = strcmp(a->u.str, b->u.str) == 0; break;
         default: same = a == b; break;
     }
-    return identity_relation(same);
+    return truthy_val(same);
 }
 
 static int v_equal_p(Value *a, Value *b) {
