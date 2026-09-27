@@ -113,6 +113,11 @@ impl ExecutionResult {
     pub fn execution_order(&self) -> &[NodeId] {
         &self.execution_order
     }
+
+    fn retain_requested(mut self, requested: &HashSet<BufferId>) -> Self {
+        self.values.retain(|id, _| requested.contains(id));
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,6 +125,7 @@ pub enum GraphExecutionError {
     DuplicateInput(BufferId),
     DuplicateNode(NodeId),
     DuplicateOutput(BufferId),
+    UnknownRequestedBuffer(BufferId),
     MissingDependency {
         node: NodeId,
         dependency: NodeId,
@@ -231,6 +237,33 @@ pub trait NodeExecutor: Send + Sync {
         Ok(None)
     }
 
+    /// Optional selective-materialization fast path. The default preserves
+    /// correctness by executing the ordinary chain and filtering host outputs.
+    fn execute_map_chain_selected(
+        &self,
+        functions: &[Ir],
+        input: &BufferLiteral,
+        requested_steps: &[usize],
+    ) -> Result<Option<Vec<(usize, BufferLiteral)>>, NodeChainError> {
+        let Some(outputs) = self.execute_map_chain(functions, input)? else {
+            return Ok(None);
+        };
+        let mut selected = Vec::with_capacity(requested_steps.len());
+        for &step in requested_steps {
+            let Some(output) = outputs.get(step) else {
+                return Err(NodeChainError {
+                    step,
+                    message: format!(
+                        "requested chain step {step} is outside {} outputs",
+                        outputs.len()
+                    ),
+                });
+            };
+            selected.push((step, output.clone()));
+        }
+        Ok(Some(selected))
+    }
+
     /// Mechanism concurrency profile. Defaults to single-inflight Serial if not overridden.
     fn concurrency_profile(&self) -> ConcurrencyProfile {
         ConcurrencyProfile::serial("unspecified-node-executor")
@@ -339,6 +372,41 @@ impl HeterogeneousGraphExecutor {
         self.execute_mode(graph, ExecutionMode::Concurrent)
     }
 
+    /// Execute the complete graph but expose only explicitly requested host
+    /// values. Backends may use this policy to avoid unnecessary readback.
+    ///
+    /// The ordinary execute() contract remains unchanged and materializes all
+    /// graph outputs.
+    pub fn execute_requested(
+        &self,
+        graph: &ExecutionGraph,
+        requested: &[BufferId],
+    ) -> Result<ExecutionResult, GraphExecutionError> {
+        validate_graph(graph)?;
+        let available: HashSet<BufferId> = graph
+            .inputs
+            .iter()
+            .map(|(id, _)| *id)
+            .chain(graph.nodes.iter().map(|node| node.output))
+            .collect();
+        for &id in requested {
+            if !available.contains(&id) {
+                return Err(GraphExecutionError::UnknownRequestedBuffer(id));
+            }
+        }
+        let requested: HashSet<BufferId> = requested.iter().copied().collect();
+
+        if let Some(result) =
+            self.try_execute_linear_gpu_map_chain_requested(graph, Some(&requested))?
+        {
+            return Ok(result);
+        }
+
+        Ok(self
+            .execute_mode(graph, ExecutionMode::Concurrent)?
+            .retain_requested(&requested))
+    }
+
     pub fn execute_sequential(
         &self,
         graph: &ExecutionGraph,
@@ -435,6 +503,14 @@ impl HeterogeneousGraphExecutor {
         &self,
         graph: &ExecutionGraph,
     ) -> Result<Option<ExecutionResult>, GraphExecutionError> {
+        self.try_execute_linear_gpu_map_chain_requested(graph, None)
+    }
+
+    fn try_execute_linear_gpu_map_chain_requested(
+        &self,
+        graph: &ExecutionGraph,
+        requested: Option<&HashSet<BufferId>>,
+    ) -> Result<Option<ExecutionResult>, GraphExecutionError> {
         if graph.nodes.len() < 2 {
             return Ok(None);
         }
@@ -486,6 +562,16 @@ impl HeterogeneousGraphExecutor {
             functions.push(function.clone());
         }
 
+        let requested_steps: Vec<usize> = match requested {
+            Some(requested) => graph
+                .nodes
+                .iter()
+                .enumerate()
+                .filter_map(|(step, node)| requested.contains(&node.output).then_some(step))
+                .collect(),
+            None => (0..graph.nodes.len()).collect(),
+        };
+
         let executor =
             self.gpu
                 .get(backend)
@@ -493,37 +579,55 @@ impl HeterogeneousGraphExecutor {
                     node: first.id,
                     target: first.target.clone(),
                 })?;
-        let outputs = match executor.execute_map_chain(&functions, input_buffer) {
-            Ok(Some(outputs)) => outputs,
-            Ok(None) => return Ok(None),
-            Err(error) => {
-                let node = graph.nodes.get(error.step).unwrap_or(first);
-                return Err(GraphExecutionError::Backend {
-                    node: node.id,
-                    target: node.target.clone(),
-                    message: error.message,
-                });
-            }
-        };
-        if outputs.len() != graph.nodes.len() {
+        let outputs =
+            match executor.execute_map_chain_selected(&functions, input_buffer, &requested_steps) {
+                Ok(Some(outputs)) => outputs,
+                Ok(None) => return Ok(None),
+                Err(error) => {
+                    let node = graph.nodes.get(error.step).unwrap_or(first);
+                    return Err(GraphExecutionError::Backend {
+                        node: node.id,
+                        target: node.target.clone(),
+                        message: error.message,
+                    });
+                }
+            };
+        if outputs.len() != requested_steps.len() {
             return Err(GraphExecutionError::Backend {
                 node: first.id,
                 target: first.target.clone(),
                 message: format!(
-                    "map-chain executor returned {} outputs for {} nodes",
+                    "selected map-chain executor returned {} outputs for {} requested steps",
                     outputs.len(),
-                    graph.nodes.len()
+                    requested_steps.len()
                 ),
             });
         }
 
-        let mut values: HashMap<BufferId, GraphValue> = graph.inputs.iter().cloned().collect();
-        let mut execution_order = Vec::with_capacity(graph.nodes.len());
-        for (node, output) in graph.nodes.iter().zip(outputs) {
+        let mut values: HashMap<BufferId, GraphValue> = match requested {
+            Some(requested) => graph
+                .inputs
+                .iter()
+                .filter(|(id, _)| requested.contains(id))
+                .cloned()
+                .collect(),
+            None => graph.inputs.iter().cloned().collect(),
+        };
+        for (expected_step, (step, output)) in requested_steps.iter().copied().zip(outputs) {
+            if step != expected_step {
+                return Err(GraphExecutionError::Backend {
+                    node: first.id,
+                    target: first.target.clone(),
+                    message: format!(
+                        "selected map-chain executor returned step {step}, expected {expected_step}"
+                    ),
+                });
+            }
+            let node = &graph.nodes[step];
             values.insert(node.output, GraphValue::Buffer(output));
-            execution_order.push(node.id);
         }
 
+        let execution_order = graph.nodes.iter().map(|node| node.id).collect();
         Ok(Some(ExecutionResult::from_store(values, execution_order)))
     }
 
@@ -790,6 +894,31 @@ impl NodeExecutor for CudaNodeExecutor {
                     error.step, error.source
                 ),
             })
+    }
+
+    fn execute_map_chain_selected(
+        &self,
+        functions: &[Ir],
+        input: &BufferLiteral,
+        requested_steps: &[usize],
+    ) -> Result<Option<Vec<(usize, BufferLiteral)>>, NodeChainError> {
+        if !matches!(input, BufferLiteral::I32(_)) {
+            return Ok(None);
+        }
+        crate::gpu_cuda_runtime::execute_map_chain_i32_selected(
+            functions,
+            input,
+            requested_steps,
+            self.device_ordinal,
+        )
+        .map(|execution| Some(execution.outputs))
+        .map_err(|error| NodeChainError {
+            step: error.step,
+            message: format!(
+                "CUDA selective resident map chain failed at step {}: {:?}",
+                error.step, error.source
+            ),
+        })
     }
 
     fn concurrency_profile(&self) -> ConcurrencyProfile {

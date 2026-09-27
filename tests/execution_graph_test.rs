@@ -248,6 +248,63 @@ fn linear_same_backend_map_chain_uses_chain_fast_path_and_preserves_all_outputs(
     );
 }
 
+#[test]
+fn execute_requested_exposes_only_requested_chain_outputs() {
+    let single_calls = Arc::new(AtomicUsize::new(0));
+    let chain_calls = Arc::new(AtomicUsize::new(0));
+    let mut first = map_node(1, 0, 1, &[], 1);
+    first.target = ExecutionTarget::Gpu {
+        backend: "chain-witness".into(),
+    };
+    let mut second = map_node(2, 1, 2, &[1], 10);
+    second.target = first.target.clone();
+    let graph = ExecutionGraph {
+        inputs: vec![(
+            BufferId(0),
+            GraphValue::Buffer(BufferLiteral::I32(vec![1, 2, 3])),
+        )],
+        nodes: vec![first, second],
+    };
+    let mut executor = HeterogeneousGraphExecutor::default();
+    executor.register_gpu(
+        "chain-witness",
+        ChainWitnessExecutor {
+            single_calls: single_calls.clone(),
+            chain_calls: chain_calls.clone(),
+        },
+    );
+
+    let result = executor.execute_requested(&graph, &[BufferId(2)]).unwrap();
+    assert_eq!(chain_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(single_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(result.execution_order(), &[NodeId(1), NodeId(2)]);
+    assert_eq!(result.buffer(BufferId(0)), None);
+    assert_eq!(result.buffer(BufferId(1)), None);
+    assert_eq!(
+        result.buffer(BufferId(2)),
+        Some(&BufferLiteral::I32(vec![12, 13, 14]))
+    );
+}
+
+#[test]
+fn execute_requested_rejects_unknown_buffer_id() {
+    let graph = ExecutionGraph {
+        inputs: vec![(
+            BufferId(0),
+            GraphValue::Buffer(BufferLiteral::I32(vec![1, 2, 3])),
+        )],
+        nodes: vec![map_node(1, 0, 1, &[], 1)],
+    };
+
+    let error = HeterogeneousGraphExecutor::default()
+        .execute_requested(&graph, &[BufferId(999)])
+        .unwrap_err();
+    assert_eq!(
+        error,
+        GraphExecutionError::UnknownRequestedBuffer(BufferId(999))
+    );
+}
+
 struct BoundedDummyExecutor {
     profile: ConcurrencyProfile,
 }

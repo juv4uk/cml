@@ -37,11 +37,16 @@ jobs:
     runs-on: [self-hosted, i5-6400]
     timeout-minutes: 30
     env:
-      # WSL: драйвер Windows має йти перед застарілим /usr/lib/x86_64-linux-gnu/libcuda.so.535,
-      # інакше cudarc бачить CUDA_ERROR_NO_DEVICE при живій карті.
-      LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/lib64
+      # WSL: драйвер Windows має йти першим. NVRTC 12.6 також потребує
+      # реальний target lib directory і вузький libstdc++/libgcc shim.
+      LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/lib/wsm-gcc-runtime
       CUDA_PATH: /usr/local/cuda-12.6
-      RUSTC_WRAPPER: ""
+      CUDA_HOME: /usr/local/cuda-12.6
+      RUSTC_WRAPPER: /usr/bin/sccache
+      SCCACHE_DIR: /home/agents/.cache/sccache
+      SCCACHE_CACHE_SIZE: 30G
+      CARGO_BUILD_JOBS: 4
+      CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v4
       - name: external/sens from the local clone

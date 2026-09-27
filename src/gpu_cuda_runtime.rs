@@ -1,6 +1,6 @@
 //! Optional NVIDIA CUDA execution for admitted map regions.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use cudarc::driver::{CudaContext, CudaFunction, CudaSlice, LaunchConfig, PushKernelArg};
@@ -32,6 +32,13 @@ pub struct CudaChainExecution {
     pub device: CudaDevice,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CudaSelectedChainExecution {
+    /// Host-materialized outputs paired with their zero-based chain step.
+    pub outputs: Vec<(usize, BufferLiteral)>,
+    pub device: CudaDevice,
+}
+
 #[derive(Debug)]
 pub enum CudaRuntimeError {
     Emit(CudaEmitError),
@@ -39,6 +46,10 @@ pub enum CudaRuntimeError {
     InsufficientDeviceMemory {
         required_bytes: usize,
         free_bytes: usize,
+    },
+    InvalidMaterializationStep {
+        step: usize,
+        chain_len: usize,
     },
     Nvrtc(String),
     Driver(String),
@@ -203,11 +214,36 @@ impl CudaSession {
     /// Execute a linear i32 map chain while intermediate buffers remain on the
     /// selected CUDA device. Every step is re-admitted from a carried range
     /// proof; no kernel is allowed to bypass the checked-add overflow guard.
+    ///
+    /// Compatibility path: every chain step is materialized on the host.
     pub fn execute_map_chain_i32(
         &self,
         functions: &[Ir],
         input: &BufferLiteral,
     ) -> Result<CudaChainExecution, CudaChainRuntimeError> {
+        let requested_steps: Vec<usize> = (0..functions.len()).collect();
+        let selected = self.execute_map_chain_i32_selected(functions, input, &requested_steps)?;
+        Ok(CudaChainExecution {
+            outputs: selected
+                .outputs
+                .into_iter()
+                .map(|(_, output)| output)
+                .collect(),
+            device: selected.device,
+        })
+    }
+
+    /// Execute a linear i32 map chain and materialize only selected chain steps.
+    ///
+    /// Device storage is bounded to the original input plus two ping-pong
+    /// scratch buffers, independent of chain length. requested_steps is a host
+    /// execution policy only; it does not alter SENS semantics or admission.
+    pub fn execute_map_chain_i32_selected(
+        &self,
+        functions: &[Ir],
+        input: &BufferLiteral,
+        requested_steps: &[usize],
+    ) -> Result<CudaSelectedChainExecution, CudaChainRuntimeError> {
         let fail = |step, source| CudaChainRuntimeError { step, source };
         let BufferLiteral::I32(input_values) = input else {
             return Err(fail(0, CudaRuntimeError::UnsupportedInput));
@@ -216,18 +252,26 @@ impl CudaSession {
             return Err(fail(0, CudaRuntimeError::UnsupportedInput));
         }
 
+        let requested: HashSet<usize> = requested_steps.iter().copied().collect();
+        if let Some(&step) = requested.iter().find(|&&step| step >= functions.len()) {
+            return Err(fail(
+                step,
+                CudaRuntimeError::InvalidMaterializationStep {
+                    step,
+                    chain_len: functions.len(),
+                },
+            ));
+        }
+
         let length = u32::try_from(input_values.len())
             .map_err(|_| fail(0, CudaRuntimeError::UnsupportedInput))?;
         let element_bytes = input_values
             .len()
             .checked_mul(std::mem::size_of::<i32>())
             .ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
-        let resident_buffers = functions
-            .len()
-            .checked_add(1)
-            .ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
+        // One immutable uploaded input plus two ping-pong scratch buffers.
         let required_bytes = element_bytes
-            .checked_mul(resident_buffers)
+            .checked_mul(3)
             .ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
 
         self.context
@@ -245,10 +289,7 @@ impl CudaSession {
             ));
         }
 
-        // Re-admit the complete chain before the first kernel launch. The
-        // carried range proof makes later checked-add admission independent of
-        // host materialization, while an unsupported later step fails before
-        // any device execution begins.
+        // Re-admit the complete chain before the first kernel launch.
         let mut range =
             i32_buffer_range(input).ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
         let mut prepared = Vec::with_capacity(functions.len());
@@ -269,36 +310,68 @@ impl CudaSession {
         let input_device = stream
             .clone_htod(input_values.as_slice())
             .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
-        let mut device_outputs: Vec<CudaSlice<i32>> = Vec::with_capacity(functions.len());
+        let mut ping = unsafe { stream.alloc::<i32>(input_values.len()) }
+            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
+        let mut pong = unsafe { stream.alloc::<i32>(input_values.len()) }
+            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
 
+        let mut outputs = Vec::with_capacity(requested.len());
         for (step, function) in prepared.iter().enumerate() {
-            let mut output_device = unsafe { stream.alloc::<i32>(input_values.len()) }
+            if step == 0 {
+                unsafe {
+                    stream
+                        .launch_builder(function)
+                        .arg(&input_device)
+                        .arg(&mut ping)
+                        .arg(&length)
+                        .launch(LaunchConfig::for_num_elems(length))
+                }
                 .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
-            let current_input = device_outputs.last().unwrap_or(&input_device);
-
-            unsafe {
-                stream
-                    .launch_builder(function)
-                    .arg(current_input)
-                    .arg(&mut output_device)
-                    .arg(&length)
-                    .launch(LaunchConfig::for_num_elems(length))
+                if requested.contains(&step) {
+                    let mut output = vec![0i32; input_values.len()];
+                    stream
+                        .memcpy_dtoh(&ping, &mut output)
+                        .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+                    outputs.push((step, BufferLiteral::I32(output)));
+                }
+            } else if step % 2 == 1 {
+                unsafe {
+                    stream
+                        .launch_builder(function)
+                        .arg(&ping)
+                        .arg(&mut pong)
+                        .arg(&length)
+                        .launch(LaunchConfig::for_num_elems(length))
+                }
+                .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+                if requested.contains(&step) {
+                    let mut output = vec![0i32; input_values.len()];
+                    stream
+                        .memcpy_dtoh(&pong, &mut output)
+                        .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+                    outputs.push((step, BufferLiteral::I32(output)));
+                }
+            } else {
+                unsafe {
+                    stream
+                        .launch_builder(function)
+                        .arg(&pong)
+                        .arg(&mut ping)
+                        .arg(&length)
+                        .launch(LaunchConfig::for_num_elems(length))
+                }
+                .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+                if requested.contains(&step) {
+                    let mut output = vec![0i32; input_values.len()];
+                    stream
+                        .memcpy_dtoh(&ping, &mut output)
+                        .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+                    outputs.push((step, BufferLiteral::I32(output)));
+                }
             }
-            .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
-
-            device_outputs.push(output_device);
         }
 
-        let mut outputs = Vec::with_capacity(device_outputs.len());
-        for (step, output_device) in device_outputs.iter().enumerate() {
-            let mut output = vec![0i32; input_values.len()];
-            stream
-                .memcpy_dtoh(output_device, &mut output)
-                .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
-            outputs.push(BufferLiteral::I32(output));
-        }
-
-        Ok(CudaChainExecution {
+        Ok(CudaSelectedChainExecution {
             outputs,
             device: self.device.clone(),
         })
@@ -361,6 +434,17 @@ pub fn execute_map_chain_i32(
     let session = session_for_device(device_ordinal)
         .map_err(|source| CudaChainRuntimeError { step: 0, source })?;
     session.execute_map_chain_i32(functions, input)
+}
+
+pub fn execute_map_chain_i32_selected(
+    functions: &[Ir],
+    input: &BufferLiteral,
+    requested_steps: &[usize],
+    device_ordinal: usize,
+) -> Result<CudaSelectedChainExecution, CudaChainRuntimeError> {
+    let session = session_for_device(device_ordinal)
+        .map_err(|source| CudaChainRuntimeError { step: 0, source })?;
+    session.execute_map_chain_i32_selected(functions, input, requested_steps)
 }
 
 fn session_for_device(device_ordinal: usize) -> Result<Arc<CudaSession>, CudaRuntimeError> {
