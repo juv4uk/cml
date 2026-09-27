@@ -1,0 +1,67 @@
+name: GPU CUDA live (GTX 1050 Ti)
+
+# CUDA — лише механізм виконання; семантику допускає CML/sens.
+# Ці тести в `cargo test` позначені #[ignore], бо потребують живої карти.
+# Тут вони запускаються на машині власника: i5-6400 + GTX 1050 Ti (compute 6.1),
+# WSL: драйвер іде з Windows через /dev/dxg і /usr/lib/wsl/lib/libcuda.so.1.
+#
+# Правильність (CPU = GPU) — у кожному PR. Калібрування швидкості (crossover) —
+# лише на master і вручну: час на карті шумить, це не поріг для червоного.
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "src/gpu_cuda*.rs"
+      - "src/gpu*.rs"
+      - "src/execution_graph*.rs"
+      - "src/ir.rs"
+      - "tests/gpu_cuda*.rs"
+      - "tests/execution_graph_cuda*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/gpu-cuda-live.yml"
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Одна карта на 4 ГБ, кілька runner-процесів на машині: GPU-задачі — по одній.
+concurrency:
+  group: gpu-gtx-1050-ti
+  cancel-in-progress: false
+
+jobs:
+  cuda-live:
+    # Єдина машина з міткою i5-6400 — це машина з GTX 1050 Ti.
+    # Коли runner отримає мітку `gpu`, замінити на [self-hosted, gpu].
+    runs-on: [self-hosted, i5-6400]
+    timeout-minutes: 30
+    env:
+      # WSL: драйвер Windows має йти перед застарілим /usr/lib/x86_64-linux-gnu/libcuda.so.535,
+      # інакше cudarc бачить CUDA_ERROR_NO_DEVICE при живій карті.
+      LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/lib64
+      CUDA_PATH: /usr/local/cuda-12.6
+      RUSTC_WRAPPER: ""
+    steps:
+      - uses: actions/checkout@v4
+      - name: external/sens from the local clone
+        # juv4uk/sens приватний: GITHUB_TOKEN репо cml не може його клонувати.
+        # На власному runner-і беремо закріплений коміт з локального клону.
+        run: |
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens || {
+            echo "закріплений коміт external/sens відсутній у /home/agents/GitHub/sens — оновіть клон (git fetch)" >&2
+            exit 1
+          }
+          git -C external/sens log -1 --format='external/sens %H'
+      - name: Probe the card
+        run: |
+          ls -l /dev/dxg
+          /usr/lib/wsl/lib/nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
+      - name: CUDA emitter (no device needed)
+        run: cargo test --release --features gpu-cuda --test gpu_cuda_test
+      - name: CUDA on the card — CPU = GPU
+        run: cargo test --release --features gpu-cuda --test gpu_cuda_live_test -- --include-ignored
+      - name: Crossover calibration (master / manual only)
+        if: ${{ github.event_name != 'pull_request' }}
+        run: cargo test --release --features gpu-cuda --test gpu_cuda_crossover_live_test -- --include-ignored --nocapture
