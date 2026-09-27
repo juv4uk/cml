@@ -5,12 +5,16 @@ use cml::execution::{
     HeterogeneousGraphExecutor, NodeId, PlanNode,
 };
 use cml::gpu_cuda_runtime::discover_devices;
-use cml::ir::{BufferLiteral, Ir};
-use cml::{lower, parser};
+use cml::ir::{BufferLiteral, Ir, Params};
 
-fn lower_one(source: &str) -> Ir {
-    let expressions = parser::parse(source).unwrap();
-    lower::lower_program(&expressions).unwrap().remove(0)
+fn admitted_add_one() -> Ir {
+    Ir::Lambda {
+        params: Params::Fixed(vec!["X".to_string()]),
+        body: Box::new(Ir::App {
+            func: Box::new(Ir::Sid(sens::sens!(00001100))),
+            args: vec![Ir::Var("X".to_string()), Ir::Int(1)],
+        }),
+    }
 }
 
 #[test]
@@ -19,7 +23,7 @@ fn graph_dispatches_a_node_to_live_cuda_and_matches_cpu_semantics() {
     let devices = discover_devices().expect("CUDA discovery failed");
     let device = devices.first().expect("no CUDA device found");
     let backend = format!("cuda:{}", device.ordinal);
-    let function = lower_one("(lambda (x) (+ x 1))");
+    let function = admitted_add_one();
     let graph = ExecutionGraph {
         inputs: vec![(
             BufferId(0),
