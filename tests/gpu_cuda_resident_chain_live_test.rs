@@ -86,6 +86,31 @@ fn resident_chain_rejects_later_i32_overflow_before_execution() {
 
 #[test]
 #[ignore = "requires a live NVIDIA CUDA device"]
+fn fused_final_only_chain_matches_resident_semantics() {
+    let session = CudaSession::new(0).expect("CUDA session creation failed");
+    let add_one = lower_one("(lambda (x) (+ x 1))");
+    let input = BufferLiteral::I32((0..100_000).collect());
+
+    for &chain_len in &[2usize, 4, 8] {
+        let functions = vec![add_one.clone(); chain_len];
+        let all = session
+            .execute_map_chain_i32(&functions, &input)
+            .expect("resident CUDA chain failed");
+        let final_step = chain_len - 1;
+        let selected = session
+            .execute_map_chain_i32_selected(&functions, &input, &[final_step])
+            .expect("fused final-only CUDA chain failed");
+        assert_eq!(selected.outputs.len(), 1);
+        assert_eq!(selected.outputs[0].0, final_step);
+        assert_eq!(
+            &selected.outputs[0].1,
+            all.outputs.last().expect("resident final output")
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires a live NVIDIA CUDA device"]
 fn owner_gtx_1050_ti_resident_chain_witness() {
     let session = CudaSession::new(0).expect("CUDA session creation failed");
     let add_one = lower_one("(lambda (x) (+ x 1))");
