@@ -8,8 +8,8 @@ use cudarc::driver::{CudaContext, CudaFunction, CudaSlice, LaunchConfig, PushKer
 use crate::accelerator::{
     AcceleratorApi, AcceleratorClass, AcceleratorDescriptor, AcceleratorVendor,
 };
-use crate::compute::{I32Range, i32_buffer_range, prove_i32_map_range};
-use crate::gpu_cuda::{CudaEmitError, emit_map_kernel};
+use crate::compute::{I32Range, fuse_i32_map_chain, i32_buffer_range, prove_i32_map_range};
+use crate::gpu_cuda::{CudaEmitError, emit_i32_compute_kernel, emit_map_kernel};
 use crate::ir::{BufferLiteral, Ir};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -263,6 +263,15 @@ impl CudaSession {
             ));
         }
 
+        let final_step = functions.len() - 1;
+        if functions.len() > 1
+            && requested.len() == 1
+            && requested.contains(&final_step)
+            && let Some(fused) = self.try_execute_fused_i32_final(functions, input)?
+        {
+            return Ok(fused);
+        }
+
         let length = u32::try_from(input_values.len())
             .map_err(|_| fail(0, CudaRuntimeError::UnsupportedInput))?;
         let element_bytes = input_values
@@ -375,6 +384,82 @@ impl CudaSession {
             outputs,
             device: self.device.clone(),
         })
+    }
+
+    fn try_execute_fused_i32_final(
+        &self,
+        functions: &[Ir],
+        input: &BufferLiteral,
+    ) -> Result<Option<CudaSelectedChainExecution>, CudaChainRuntimeError> {
+        let fail = |step, source| CudaChainRuntimeError { step, source };
+        let BufferLiteral::I32(input_values) = input else {
+            return Ok(None);
+        };
+        let Some(input_range) = i32_buffer_range(input) else {
+            return Ok(None);
+        };
+        let Some((kernel, _output_range)) = fuse_i32_map_chain(functions, input_range) else {
+            return Ok(None);
+        };
+
+        let final_step = functions.len() - 1;
+        let source = emit_i32_compute_kernel(&kernel)
+            .map_err(|error| fail(final_step, CudaRuntimeError::Emit(error)))?;
+        let function = self
+            .function_for_source(source)
+            .map_err(|error| fail(final_step, error))?;
+
+        let length = u32::try_from(input_values.len())
+            .map_err(|_| fail(0, CudaRuntimeError::UnsupportedInput))?;
+        let element_bytes = input_values
+            .len()
+            .checked_mul(std::mem::size_of::<i32>())
+            .ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
+        let required_bytes = element_bytes
+            .checked_mul(2)
+            .ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
+
+        self.context
+            .bind_to_thread()
+            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
+        let (free_bytes, _) = cudarc::driver::result::mem_get_info()
+            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
+        if required_bytes > free_bytes {
+            return Err(fail(
+                0,
+                CudaRuntimeError::InsufficientDeviceMemory {
+                    required_bytes,
+                    free_bytes,
+                },
+            ));
+        }
+
+        let stream = self.context.default_stream();
+        let input_device = stream
+            .clone_htod(input_values.as_slice())
+            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
+        let mut output_device = unsafe { stream.alloc::<i32>(input_values.len()) }
+            .map_err(|error| fail(final_step, CudaRuntimeError::Driver(error.to_string())))?;
+
+        unsafe {
+            stream
+                .launch_builder(&function)
+                .arg(&input_device)
+                .arg(&mut output_device)
+                .arg(&length)
+                .launch(LaunchConfig::for_num_elems(length))
+        }
+        .map_err(|error| fail(final_step, CudaRuntimeError::Driver(error.to_string())))?;
+
+        let mut output = vec![0i32; input_values.len()];
+        stream
+            .memcpy_dtoh(&output_device, &mut output)
+            .map_err(|error| fail(final_step, CudaRuntimeError::Driver(error.to_string())))?;
+
+        Ok(Some(CudaSelectedChainExecution {
+            outputs: vec![(final_step, BufferLiteral::I32(output))],
+            device: self.device.clone(),
+        }))
     }
 
     fn function_for_source(&self, source: String) -> Result<CudaFunction, CudaRuntimeError> {

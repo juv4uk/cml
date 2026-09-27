@@ -388,6 +388,51 @@ pub(crate) fn prove_i32_map_range(function: &Ir, input: I32Range) -> Option<I32R
     })
 }
 
+fn substitute_parameter_zero(
+    expression: &ScalarExpr,
+    replacement: &ScalarExpr,
+) -> Option<ScalarExpr> {
+    match expression {
+        ScalarExpr::Parameter(0) => Some(replacement.clone()),
+        ScalarExpr::Parameter(_) => None,
+        ScalarExpr::ExactInteger(value) => Some(ScalarExpr::ExactInteger(*value)),
+        ScalarExpr::CheckedAdd(left, right) => Some(ScalarExpr::CheckedAdd(
+            Box::new(substitute_parameter_zero(left, replacement)?),
+            Box::new(substitute_parameter_zero(right, replacement)?),
+        )),
+    }
+}
+
+/// Compose a linear unary i32 map chain without changing its evaluation
+/// grouping. Every step is range-proven before its body is substituted, so
+/// fusion cannot bypass the same checked-add admission used by resident chains.
+#[cfg(feature = "gpu-cuda")]
+pub(crate) fn fuse_i32_map_chain(
+    functions: &[Ir],
+    input: I32Range,
+) -> Option<(ComputeKernel, I32Range)> {
+    if functions.is_empty() {
+        return None;
+    }
+
+    let mut body = ScalarExpr::Parameter(0);
+    let mut range = input;
+    for function in functions {
+        let next_range = prove_i32_map_range(function, range)?;
+        let kernel = lower_kernel(function, 1)?;
+        body = substitute_parameter_zero(&kernel.body, &body)?;
+        range = next_range;
+    }
+
+    Some((
+        ComputeKernel {
+            parameter_count: 1,
+            body,
+        },
+        range,
+    ))
+}
+
 fn f32_rounding_proven(region: &ComputeRegion) -> bool {
     let (Some(kernel), Ir::Buffer(BufferLiteral::F32(input))) = (&region.kernel, &region.input)
     else {
@@ -1097,5 +1142,42 @@ mod resident_range_tests {
         assert_eq!(first.min, i32::MAX);
         assert_eq!(first.max, i32::MAX);
         assert_eq!(prove_i32_map_range(&add_one, first), None);
+    }
+
+    #[cfg(feature = "gpu-cuda")]
+    #[test]
+    fn fused_i32_chain_preserves_sequential_grouping() {
+        let (kernel, range) = fuse_i32_map_chain(
+            &[add_constant(1), add_constant(2)],
+            I32Range { min: -5, max: 10 },
+        )
+        .expect("bounded add chain should fuse");
+        assert_eq!(kernel.parameter_count, 1);
+        assert_eq!(
+            kernel.body,
+            ScalarExpr::CheckedAdd(
+                Box::new(ScalarExpr::CheckedAdd(
+                    Box::new(ScalarExpr::Parameter(0)),
+                    Box::new(ScalarExpr::ExactInteger(1)),
+                )),
+                Box::new(ScalarExpr::ExactInteger(2)),
+            )
+        );
+        assert_eq!(range, I32Range { min: -2, max: 13 });
+    }
+
+    #[cfg(feature = "gpu-cuda")]
+    #[test]
+    fn fused_i32_chain_rejects_intermediate_overflow() {
+        assert_eq!(
+            fuse_i32_map_chain(
+                &[add_constant(1), add_constant(1)],
+                I32Range {
+                    min: i32::MAX - 1,
+                    max: i32::MAX - 1,
+                },
+            ),
+            None
+        );
     }
 }
