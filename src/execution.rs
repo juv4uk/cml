@@ -430,7 +430,7 @@ impl HeterogeneousGraphExecutor {
                     });
                 };
                 let ir = Ir::App {
-                    func: Box::new(Ir::Var("NUMERIC-BUFFER-MAP".into())),
+                    func: Box::new(Ir::Sid(sens::sens!(01011001))),
                     args: vec![function.clone(), Ir::Buffer(buffer.clone())],
                 };
                 Ok(GraphValue::Buffer(self.execute_map(node, &ir)?))
