@@ -96,8 +96,8 @@ impl CudaSession {
     pub fn execute_map(&self, ir: &Ir) -> Result<CudaExecution, CudaRuntimeError> {
         let source = emit_map_kernel(ir)?;
         let buffer = map_input(ir).ok_or(CudaRuntimeError::UnsupportedInput)?;
-        if matches!(&buffer, BufferLiteral::I32(values) if values.is_empty())
-            || matches!(&buffer, BufferLiteral::F32(values) if values.is_empty())
+        if matches!(buffer, BufferLiteral::I32(values) if values.is_empty())
+            || matches!(buffer, BufferLiteral::F32(values) if values.is_empty())
         {
             return Err(CudaRuntimeError::UnsupportedInput);
         }
@@ -123,7 +123,7 @@ impl CudaSession {
                 }
                 let buffers = cache.as_mut().expect("buffer cache initialized");
                 stream
-                    .memcpy_htod(&input, &mut buffers.input)
+                    .memcpy_htod(input.as_slice(), &mut buffers.input)
                     .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
                 unsafe {
                     stream
@@ -141,7 +141,7 @@ impl CudaSession {
                 BufferLiteral::I32(output)
             }
             BufferLiteral::F32(bits) => {
-                let input: Vec<f32> = bits.into_iter().map(f32::from_bits).collect();
+                let input: Vec<f32> = bits.iter().copied().map(f32::from_bits).collect();
                 let length =
                     u32::try_from(input.len()).map_err(|_| CudaRuntimeError::UnsupportedInput)?;
                 let mut cache = self.f32_buffers.lock().map_err(|error| {
@@ -269,14 +269,14 @@ fn device_evidence(context: &CudaContext) -> Result<CudaDevice, CudaRuntimeError
     })
 }
 
-fn map_input(ir: &Ir) -> Option<BufferLiteral> {
+fn map_input(ir: &Ir) -> Option<&BufferLiteral> {
     let Ir::App { args, .. } = ir else {
         return None;
     };
     let [_, Ir::Buffer(buffer)] = args.as_slice() else {
         return None;
     };
-    Some(buffer.clone())
+    Some(buffer)
 }
 
 #[cfg(test)]
