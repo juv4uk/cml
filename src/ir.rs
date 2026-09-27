@@ -78,6 +78,11 @@ pub enum PrimOp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MachineOp {
     Rdtsc,
+    PciConfigCapability,
+    PciConfigRead16,
+    MmioCapability,
+    MmioRead32,
+    MmioWrite32,
 }
 
 /// Fixed vs. variadic parameter lists, mirroring `compile_lambda`'s three

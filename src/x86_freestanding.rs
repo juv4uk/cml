@@ -1465,6 +1465,11 @@ fn sid8_call_contract(sid: sens::Sid8) -> Option<(Option<usize>, &'static str)> 
 fn machine_primitive_contract(operation: MachineOp) -> Result<(&'static str, usize), CompileError> {
     match operation {
         MachineOp::Rdtsc => Ok(("rdtsc", 0)),
+        MachineOp::PciConfigCapability => Ok(("pci-config-capability", 0)),
+        MachineOp::PciConfigRead16 => Ok(("pci-config-read16", 5)),
+        MachineOp::MmioCapability => Ok(("mmio-capability", 0)),
+        MachineOp::MmioRead32 => Ok(("mmio-read32", 2)),
+        MachineOp::MmioWrite32 => Ok(("mmio-write32", 3)),
     }
 }
 
@@ -2499,6 +2504,39 @@ impl Emitter {
                     "    orq ${}, %rax",
                     wsm_os_target::Tag::Fixnum as u64
                 ));
+                Ok(())
+            }
+            MachineOp::PciConfigCapability
+            | MachineOp::PciConfigRead16
+            | MachineOp::MmioCapability
+            | MachineOp::MmioRead32
+            | MachineOp::MmioWrite32 => {
+                // Emit as platform call to WSM runtime (same calling convention)
+                let runtime = match operation {
+                    MachineOp::PciConfigCapability => "wsm_pci_config_capability",
+                    MachineOp::PciConfigRead16 => "wsm_pci_config_read16",
+                    MachineOp::MmioCapability => "wsm_mmio_capability",
+                    MachineOp::MmioRead32 => "wsm_mmio_read32",
+                    MachineOp::MmioWrite32 => "wsm_mmio_write32",
+                    MachineOp::Rdtsc => unreachable!("handled above"),
+                };
+                let slots: Vec<usize> = args
+                    .iter()
+                    .map(|argument| {
+                        self.emit_ir(argument)?;
+                        let slot = self.allocate_slot();
+                        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
+                        Ok(slot)
+                    })
+                    .collect::<Result<_, CompileError>>()?;
+                self.line("    movq %r12, %rdi");
+                for (slot, register) in slots.iter().zip(["%rsi", "%rdx", "%rcx", "%r8", "%r9"]) {
+                    self.line(&format!(
+                        "    movq {}(%rsp), {register}",
+                        Self::slot_offset(*slot)
+                    ));
+                }
+                self.line(&format!("    call {runtime}"));
                 Ok(())
             }
         }
