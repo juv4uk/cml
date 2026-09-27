@@ -56,3 +56,67 @@ fn graph_dispatches_a_node_to_live_cuda_and_matches_cpu_semantics() {
         Some(&BufferLiteral::I32(vec![2, 3, 4]))
     );
 }
+
+#[test]
+#[ignore = "requires a live NVIDIA CUDA device"]
+fn linear_cuda_chain_keeps_semantics_and_materializes_every_graph_output() {
+    let device = discover_devices()
+        .expect("CUDA discovery failed")
+        .into_iter()
+        .next()
+        .expect("no CUDA device found");
+    let backend = format!("cuda:{}", device.ordinal);
+    let add_one = admitted_add_one();
+    let mut nodes = Vec::new();
+    for index in 0..4u32 {
+        nodes.push(PlanNode {
+            id: NodeId(index + 1),
+            operation: ExecutionOperation::NumericBufferMap {
+                function: add_one.clone(),
+                input: BufferId(index),
+            },
+            output: BufferId(index + 1),
+            dependencies: if index == 0 {
+                vec![]
+            } else {
+                vec![NodeId(index)]
+            },
+            target: ExecutionTarget::Gpu {
+                backend: backend.clone(),
+            },
+        });
+    }
+
+    let graph = ExecutionGraph {
+        inputs: vec![(
+            BufferId(0),
+            GraphValue::Buffer(BufferLiteral::I32(vec![1, 2, 3])),
+        )],
+        nodes,
+    };
+    let mut executor = HeterogeneousGraphExecutor::default();
+    executor.register_gpu(
+        backend,
+        CudaNodeExecutor {
+            device_ordinal: device.ordinal,
+        },
+    );
+
+    let result = executor
+        .execute(&graph)
+        .expect("CUDA resident graph chain failed");
+    assert_eq!(
+        result.execution_order(),
+        &[NodeId(1), NodeId(2), NodeId(3), NodeId(4)]
+    );
+    for step in 1..=4u32 {
+        assert_eq!(
+            result.buffer(BufferId(step)),
+            Some(&BufferLiteral::I32(vec![
+                1 + step as i32,
+                2 + step as i32,
+                3 + step as i32,
+            ]))
+        );
+    }
+}

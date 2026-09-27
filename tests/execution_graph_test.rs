@@ -5,7 +5,7 @@ use std::time::Duration;
 use cml::execution::{
     BufferId, ConcurrencyModel, ConcurrencyProfile, CpuGraphExecutor, ExecutionGraph,
     ExecutionMode, ExecutionOperation, ExecutionTarget, GraphExecutionError, GraphValue,
-    HeterogeneousGraphExecutor, NodeExecutor, NodeId, PlanNode,
+    HeterogeneousGraphExecutor, NodeChainError, NodeExecutor, NodeId, PlanNode,
 };
 use cml::ir::{BufferLiteral, Ir};
 use cml::{lower, parser};
@@ -165,6 +165,86 @@ fn registered_backend_executes_without_vendor_logic_in_the_graph() {
     assert_eq!(
         result.buffer(BufferId(1)),
         Some(&BufferLiteral::I32(vec![5, 6]))
+    );
+}
+
+struct ChainWitnessExecutor {
+    single_calls: Arc<AtomicUsize>,
+    chain_calls: Arc<AtomicUsize>,
+}
+
+impl NodeExecutor for ChainWitnessExecutor {
+    fn execute_map(&self, ir: &Ir) -> Result<BufferLiteral, String> {
+        use cml::compute::{ComputeBackend, CpuComputeBackend};
+        self.single_calls.fetch_add(1, Ordering::SeqCst);
+        CpuComputeBackend
+            .execute(ir)
+            .map_err(|error| format!("{error:?}"))
+    }
+
+    fn execute_map_chain(
+        &self,
+        functions: &[Ir],
+        input: &BufferLiteral,
+    ) -> Result<Option<Vec<BufferLiteral>>, NodeChainError> {
+        use cml::compute::{ComputeBackend, CpuComputeBackend};
+        self.chain_calls.fetch_add(1, Ordering::SeqCst);
+        let mut current = input.clone();
+        let mut outputs = Vec::with_capacity(functions.len());
+        for (step, function) in functions.iter().enumerate() {
+            let ir = Ir::App {
+                func: Box::new(Ir::Sid(sens::sens!(01011001))),
+                args: vec![function.clone(), Ir::Buffer(current)],
+            };
+            current = CpuComputeBackend
+                .execute(&ir)
+                .map_err(|error| NodeChainError {
+                    step,
+                    message: format!("{error:?}"),
+                })?;
+            outputs.push(current.clone());
+        }
+        Ok(Some(outputs))
+    }
+}
+
+#[test]
+fn linear_same_backend_map_chain_uses_chain_fast_path_and_preserves_all_outputs() {
+    let single_calls = Arc::new(AtomicUsize::new(0));
+    let chain_calls = Arc::new(AtomicUsize::new(0));
+    let mut first = map_node(1, 0, 1, &[], 1);
+    first.target = ExecutionTarget::Gpu {
+        backend: "chain-witness".into(),
+    };
+    let mut second = map_node(2, 1, 2, &[1], 10);
+    second.target = first.target.clone();
+    let graph = ExecutionGraph {
+        inputs: vec![(
+            BufferId(0),
+            GraphValue::Buffer(BufferLiteral::I32(vec![1, 2, 3])),
+        )],
+        nodes: vec![first, second],
+    };
+    let mut executor = HeterogeneousGraphExecutor::default();
+    executor.register_gpu(
+        "chain-witness",
+        ChainWitnessExecutor {
+            single_calls: single_calls.clone(),
+            chain_calls: chain_calls.clone(),
+        },
+    );
+
+    let result = executor.execute(&graph).unwrap();
+    assert_eq!(chain_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(single_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(result.execution_order(), &[NodeId(1), NodeId(2)]);
+    assert_eq!(
+        result.buffer(BufferId(1)),
+        Some(&BufferLiteral::I32(vec![2, 3, 4]))
+    );
+    assert_eq!(
+        result.buffer(BufferId(2)),
+        Some(&BufferLiteral::I32(vec![12, 13, 14]))
     );
 }
 
