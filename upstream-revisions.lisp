@@ -1,15 +1,22 @@
-; upstream-revisions.lisp — canonical my-lisp revision channels for CML.
+; upstream-revisions.lisp — canonical upstream revision channels for CML
+; (juv4uk/sens, renamed from juv4uk/my-lisp per #310).
 ; Revision roles are evidence metadata, not language-semantic authority.
 ;
 ; build-source:
-;   exact my-lisp crate/registry-format revision used by the CML Rust build.
+;   the external/sens gitlink the CML Rust build compiles against.
 ;   This is mechanism/API provenance, not a semantic compatibility claim.
 ; supported-pin:
-;   exact revision used as the frozen semantic compatibility/evidence denominator.
-;   It need not be the Rust build substrate.
+;   the checked-in external/sens gitlink, used as the semantic
+;   compatibility/evidence denominator (#84). It MUST equal the submodule
+;   checkout, and it currently coincides with build-source: the two roles
+;   are still distinct in principle, but a single gitlink serves both.
+;   Collapsing them is a known tension — the denominator no longer moves
+;   independently of the build substrate, so compatibility evidence must be
+;   gathered per-pin rather than per-contract-version.
 ; observed-current:
-;   exact reproducible snapshot used for drift detection and forward workload intake.
-;   Moving it never upgrades CML's supported language contract.
+;   exact reproducible snapshot used for drift detection and forward workload
+;   intake. It stays an independent exact-github-commit and never follows the
+;   gitlink. Moving it never upgrades CML's supported language contract.
 ; bootstrap-core1-source:
 ;   exact profile-scoped source snapshot for the Core1 S3/S4/S5 bootstrap lane.
 ;   Moving it requires fresh bootstrap evidence and never promotes global support.
@@ -18,11 +25,11 @@
  (version . (1 2))
  (repository . "juv4uk/sens")
  (build-source . external/sens-gitlink)
- (build-source-sha . "e908b6934f0f9cfdc1bea132af399f636231be39")
- (supported-pin-source . exact-github-commit)
- (supported-pin-sha . "8088e9f88d845ba0edb2197d44da3dbbe57eca0e")
+ (build-source-sha . "d3e5b93d06cdc2889c214509f825b099c8a2c89e")
+ (supported-pin-source . external/sens-gitlink)
+ (supported-pin-sha . "d3e5b93d06cdc2889c214509f825b099c8a2c89e")
  (observed-current-source . exact-github-commit)
- (observed-current-sha . "d359c4885e0609a6c8350daf45de157b40cf48f3")
+ (observed-current-sha . "f21c802874f9479ae7056a9d951ea9a23f27b7ae")
  (bootstrap-core1-source . exact-github-commit)
  (bootstrap-core1-source-sha . "d359c4885e0609a6c8350daf45de157b40cf48f3")
  (historical

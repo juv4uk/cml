@@ -6,7 +6,7 @@
  (global-contract . (2 0))
  (partial-features-do-not-raise-claim . t)
  (enforced-by . "tests/contract_claim_authority_test.rs")
- (observed-upstream-contract . (6 0))
+ (observed-upstream-contract . (9 0))
  (claim-authority . ((global-contract . (2 0))
                      (partial-features-do-not-raise-claim . t)
                      (enforced-by . "tests/contract_claim_authority_test.rs")))

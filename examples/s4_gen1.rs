@@ -9,7 +9,7 @@ fn main() {
         "atom", "eq", "cons", "car", "cdr", "list", "cond", "def", "define", "lambda", "quote",
     ];
 
-    let core_source = fs::read_to_string("external/my-lisp/lib/core.lisp").unwrap();
+    let core_source = fs::read_to_string("external/sens/lib/core.lisp").unwrap();
     let parsed = parse(&core_source).unwrap();
 
     let mut forms = Vec::new();

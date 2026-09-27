@@ -4,9 +4,9 @@
 
 **Goal:** Prove CML's already-existing C-backend exact-rational execution against the pinned my-lisp Lisp-owned conformance corpus, then retire duplicated hard-coded rational expected values from Rust tests.
 
-**Architecture:** Keep production compiler/runtime code unchanged in this slice. Reuse the existing `external/my-lisp` pin and C backend pipeline (`parse -> lower_program_with_first_class_builtins -> CBackend -> gcc -> process output`). Select an upstream exact-rational `compiler-corpus` row, extract both source and expected value from that upstream row, and compare CML's actual output against it. This converts a local Rust semantic claim into a cross-repo evidence path without touching `src/ir.rs` or `src/lower.rs`, which are active write lanes for #91/#108.
+**Architecture:** Keep production compiler/runtime code unchanged in this slice. Reuse the existing `external/sens` pin and C backend pipeline (`parse -> lower_program_with_first_class_builtins -> CBackend -> gcc -> process output`). Select an upstream exact-rational `compiler-corpus` row, extract both source and expected value from that upstream row, and compare CML's actual output against it. This converts a local Rust semantic claim into a cross-repo evidence path without touching `src/ir.rs` or `src/lower.rs`, which are active write lanes for #91/#108.
 
-**Tech Stack:** Rust integration tests, CML parser/lowering/C backend, GCC, pinned `external/my-lisp` submodule.
+**Tech Stack:** Rust integration tests, CML parser/lowering/C backend, GCC, pinned `external/sens` submodule.
 
 **Spec:** GitHub issue `juv4uk/cml#105` plus witness-authority contract `juv4uk/cml#46`.
 
@@ -69,7 +69,7 @@ git commit -m "test(#105): demand upstream-owned exact-rational C witness"
 - Modify: `tests/c_backend_test.rs`
 
 **Interfaces:**
-- Consumes: `external/my-lisp/tests/fixtures/conformance.lisp` from the pinned submodule.
+- Consumes: `external/sens/tests/fixtures/conformance.lisp` from the pinned submodule.
 - Produces: `upstream_exact_rational_compiler_witness() -> (String, String)`.
 
 - [ ] **Step 1: Add a minimal upstream-corpus reader and selector**
@@ -85,7 +85,7 @@ Add helpers:
 ```rust
 fn upstream_conformance_corpus() -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("external/my-lisp/tests/fixtures/conformance.lisp");
+        .join("external/sens/tests/fixtures/conformance.lisp");
     fs::read_to_string(&path).unwrap_or_else(|error| {
         panic!("missing pinned upstream conformance corpus at {}: {error}", path.display())
     })

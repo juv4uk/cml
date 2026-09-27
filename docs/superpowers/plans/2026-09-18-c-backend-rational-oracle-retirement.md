@@ -33,7 +33,7 @@ For the staged preservation run, keep the same gate but name it `tests/zz_exact_
 
 ## Task 2 — preservation-first upstream witness matrix
 
-Extend `tests/exact_rational_upstream_authority_test.rs` so it selects rows from pinned `external/my-lisp/tests/fixtures/conformance.lisp`, takes both source and expected from that file, compiles the source through the real C backend, GCC and native execution, and compares runtime output only with the upstream expected field.
+Extend `tests/exact_rational_upstream_authority_test.rs` so it selects rows from pinned `external/sens/tests/fixtures/conformance.lisp`, takes both source and expected from that file, compiles the source through the real C backend, GCC and native execution, and compares runtime output only with the upstream expected field.
 
 Required semantic classes and pinned-source selectors:
 

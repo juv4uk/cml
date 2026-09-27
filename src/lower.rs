@@ -10,7 +10,7 @@
 //! `main.rs`: `MacroExpander::new().process(&exprs)` runs first).
 
 use crate::ast::{Expr, NumericBufferLiteral};
-use crate::ir::{BufferLiteral, Ir, Params, Quoted};
+use crate::ir::{BufferLiteral, Ir, MachineOp, Params, Quoted};
 use crate::semantic::{self, SemanticError};
 use std::fmt;
 
@@ -67,7 +67,7 @@ fn top_level_definition_name(expr: &Expr) -> Option<String> {
     };
     let is_define_head = match head {
         Expr::Symbol(form) => is_canon_form(form, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT),
-        Expr::Sid(sid) => *sid == sens::sid!(00001001) || *sid == sens::sid!(00001011),
+        Expr::Sid(sid) => *sid == sens::sens!(00001001) || *sid == sens::sens!(00001011),
         _ => false,
     };
     if !is_define_head {
@@ -76,7 +76,7 @@ fn top_level_definition_name(expr: &Expr) -> Option<String> {
     match name {
         Expr::Symbol(s) => Some(s.to_uppercase()),
         // A SID-keyed define (key_definition_by_sid after #239) uses the
-        // typed Sid8's own bit pattern as the def's internal key -- no
+        // typed Sens8's own bit pattern as the def's internal key -- no
         // surface/registry lookup.
         Expr::Sid(sid) => Some(sid.to_string()),
         _ => None,
@@ -84,8 +84,8 @@ fn top_level_definition_name(expr: &Expr) -> Option<String> {
 }
 
 /// Returns the SID used as a definition key, if this top-level form is a
-/// define whose name is a typed Sid8. Name-keyed surface defines return `None`.
-fn sid_keyed_definition_name(expr: &Expr) -> Option<sens::Sid8> {
+/// define whose name is a typed Sens8. Name-keyed surface defines return `None`.
+fn sid_keyed_definition_name(expr: &Expr) -> Option<sens::Sens8> {
     use crate::canon::{CANON_DEFINE_EXACT, CANON_DEFINE_UPPER, is_canon_form};
 
     let Expr::List(items) = expr else {
@@ -96,7 +96,7 @@ fn sid_keyed_definition_name(expr: &Expr) -> Option<sens::Sid8> {
     };
     let is_define_head = match head {
         Expr::Symbol(form) => is_canon_form(form, CANON_DEFINE_UPPER, CANON_DEFINE_EXACT),
-        Expr::Sid(sid) => *sid == sens::sid!(00001001) || *sid == sens::sid!(00001011),
+        Expr::Sid(sid) => *sid == sens::sens!(00001001) || *sid == sens::sens!(00001011),
         _ => false,
     };
     if !is_define_head {
@@ -123,7 +123,7 @@ pub fn lower_program(exprs: &[Expr]) -> Result<Vec<Ir>, LowerError> {
     let mut sid_keyed_defs = std::collections::HashSet::new();
     for expr in &folded {
         if let Some(sid) = sid_keyed_definition_name(expr) {
-            sid_keyed_defs.insert(sid.to_string());
+            sid_keyed_defs.insert(sid);
         }
     }
     let mut env = Env {
@@ -243,7 +243,7 @@ struct Env {
     /// byte-SID `define` rows). A name-keyed call is lowered to `App(Sid)`
     /// only when the target def is actually registered under that SID, so
     /// the call identity matches the def identity (#238).
-    sid_keyed_defs: std::collections::HashSet<String>,
+    sid_keyed_defs: std::collections::HashSet<sens::Sens8>,
 }
 
 impl Env {
@@ -251,8 +251,8 @@ impl Env {
         self.bound.iter().any(|b| b == name)
     }
 
-    fn has_sid_keyed_def(&self, sid: sens::Sid8) -> bool {
-        self.sid_keyed_defs.contains(&sid.to_string())
+    fn has_sid_keyed_def(&self, sid: sens::Sens8) -> bool {
+        self.sid_keyed_defs.contains(&sid)
     }
 }
 
@@ -313,7 +313,7 @@ fn lower_symbol(s: &str, env: &Env) -> Result<Ir, LowerError> {
 
     // Canon callable meaning comes from the semantic registry even when the
     // function appears as a first-class value rather than in call position.
-    // #246: the identity is the exact Sid8, never Builtin or surface text.
+    // #246: the identity is the exact Sens8, never Builtin or surface text.
     if !env.is_bound(&upper) {
         if let Some(semantic_id) = crate::canon::callable_semantic_id(s) {
             return Ok(Ir::Sid(semantic_id));
@@ -354,31 +354,31 @@ fn lower_list(list: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 /// rows such as `(00001000 args args)`) lowers through the same mechanism
 /// as the surface spellings. Only the special-form SIDs are intercepted
 /// here; every other SID remains a first-class call value and keeps
-/// `Ir::App { func: Ir::Sid(sid), .. }` for the direct-SID8 dispatch
+/// `Ir::App { func: Ir::Sid(sid), .. }` for the direct-SENS code dispatch
 /// (#238), never a SID-to-name fallback.
-fn lower_sid_head(sid: sens::Sid8, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
-    if sid == sens::sid!(00000001) {
+fn lower_sid_head(sid: sens::Sens8, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
+    if sid == sens::sens!(00000001) {
         return match args {
             [single] => Ok(Ir::Quote(lower_quoted(single)?)),
             _ => Err(LowerError::arity("quote expects exactly one argument")),
         };
     }
-    if sid == sens::sid!(00000111) {
+    if sid == sens::sens!(00000111) {
         return lower_cond(args, env);
     }
-    if sid == sens::sid!(00001000) && args.len() >= 2 {
+    if sid == sens::sens!(00001000) && args.len() >= 2 {
         return lower_lambda(args, env);
     }
-    if (sid == sens::sid!(00001001) || sid == sens::sid!(00001011)) && args.len() == 2 {
+    if (sid == sens::sens!(00001001) || sid == sens::sens!(00001011)) && args.len() == 2 {
         return lower_def(args, env);
     }
-    if sid == sens::sid!(10011101) && args.len() == 2 {
+    if sid == sens::sens!(10011101) && args.len() == 2 {
         return lower_let_star(args, env);
     }
-    if sid == sens::sid!(00010100) && args.len() == 2 {
+    if sid == sens::sens!(00010100) && args.len() == 2 {
         return lower_sid_call(sid, args, env);
     }
-    if sid == sens::sid!(00001010) {
+    if sid == sens::sens!(00001010) {
         return Err(LowerError::invalid_form(
             "defmacro must be expanded before IR lowering",
         ));
@@ -419,17 +419,14 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     let upper = func.to_uppercase();
     if !env.is_bound(&upper) {
         // Canon callable identity comes from my-lisp's registry. Every
-        // admitted callable lowers as an exact SID8 function call; backends
+        // admitted callable lowers as an exact SENS code function call; backends
         // select their private mechanism from the 8-bit identity directly.
         if let Some(semantic_id) = callable_semantic_id(func) {
-            if semantic_id == sens::sid!(01011001) {
-                if args.len() == 2 {
-                    return lower_generic_call(
-                        &Expr::Symbol("NUMERIC-BUFFER-MAP".to_string()),
-                        args,
-                        env,
-                    );
-                }
+            // cml#315: every admitted callable lowers to its exact SENS code.
+            // `numeric-buffer-map` is no longer re-materialised as a textual
+            // `NUMERIC-BUFFER-MAP` symbol for a backend to dispatch on; the
+            // eight bits travel unchanged from here to the backend.
+            if semantic_id == sens::sens!(01011001) && args.len() != 2 {
                 return Err(LowerError::arity(
                     "numeric-buffer-map expects exactly two arguments",
                 ));
@@ -438,7 +435,7 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
         }
         // (#238) Typed user-def call identity. A word with a Lisp-owned
         // registered semantic ID that is not a backend primitive projection
-        // dispatches by its Sid8 call key, but only when the current program
+        // dispatches by its Sens8 call key, but only when the current program
         // actually keys the definition under that SID. This keeps call
         // identity identical to def identity.
         if let Some(sid) = sens::semantic_registry_export::semantic_id_for_admitted_surface(func)
@@ -447,8 +444,8 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
                 return lower_generic_call(&Expr::Sid(sid), args, env);
             }
             // `quotient` is an admitted primitive that is not in the Canon
-            // callable table; it still lowers by its exact SID8.
-            if sid == sens::sid!(00010100) && args.len() == 2 {
+            // callable table; it still lowers by its exact SENS code.
+            if sid == sens::sens!(00010100) && args.len() == 2 {
                 return lower_sid_call(sid, args, env);
             }
         }
@@ -461,20 +458,78 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
             }
             let arg0 = lower_expr_admitted(&args[0], env)?;
             let cdr = |inner: Ir| Ir::App {
-                func: Box::new(Ir::Sid(sens::sid!(00000110))),
+                func: Box::new(Ir::Sid(sens::sens!(00000110))),
                 args: vec![inner],
             };
             let car = |inner: Ir| Ir::App {
-                func: Box::new(Ir::Sid(sens::sid!(00000101))),
+                func: Box::new(Ir::Sid(sens::sens!(00000101))),
                 args: vec![inner],
             };
             return Ok(car(cdr(cdr(arg0))));
+        }
+        // cml#315: target-ABI mechanism imports (`pci-config-*`, `mmio-*`).
+        // These are not language functions — they have no upstream registry
+        // identity and must not be given a synthesised SENS code. They lower
+        // to the closed compiler-owned `MachineOp` mechanism category so no
+        // backend ever selects a runtime by comparing a symbol's text.
+        if let Some(op) = target_abi_mechanism(func) {
+            let expected = target_abi_mechanism_arity(op);
+            if args.len() != expected {
+                return Err(LowerError::arity(format!(
+                    "{} expects exactly {expected} argument(s)",
+                    target_abi_mechanism_name(op)
+                )));
+            }
+            return Ok(Ir::MachinePrim {
+                op,
+                args: args
+                    .iter()
+                    .map(|e| lower_expr_admitted(e, env))
+                    .collect::<Result<_, _>>()?,
+            });
         }
     }
     lower_generic_call(&Expr::Symbol(func.to_string()), args, env)
 }
 
-fn lower_sid_call(sid: sens::Sid8, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
+/// Target-ABI mechanism import surfaces admitted by the x86 freestanding
+/// backend. cml#315: this is the *only* remaining place where a source
+/// spelling selects a mechanism, and it happens once, at the reader boundary.
+/// After this point the mechanism travels as a `MachineOp` value, never as
+/// text.
+fn target_abi_mechanism(func: &str) -> Option<MachineOp> {
+    match func {
+        "pci-config-capability" | "PCI-CONFIG-CAPABILITY" => Some(MachineOp::PciConfigCapability),
+        "pci-config-read16" | "PCI-CONFIG-READ16" => Some(MachineOp::PciConfigRead16),
+        "mmio-capability" | "MMIO-CAPABILITY" => Some(MachineOp::MmioCapability),
+        "mmio-read32" | "MMIO-READ32" => Some(MachineOp::MmioRead32),
+        "mmio-write32" | "MMIO-WRITE32" => Some(MachineOp::MmioWrite32),
+        _ => None,
+    }
+}
+
+fn target_abi_mechanism_name(op: MachineOp) -> &'static str {
+    match op {
+        MachineOp::PciConfigCapability => "pci-config-capability",
+        MachineOp::PciConfigRead16 => "pci-config-read16",
+        MachineOp::MmioCapability => "mmio-capability",
+        MachineOp::MmioRead32 => "mmio-read32",
+        MachineOp::MmioWrite32 => "mmio-write32",
+        MachineOp::Rdtsc => "rdtsc",
+    }
+}
+
+fn target_abi_mechanism_arity(op: MachineOp) -> usize {
+    match op {
+        MachineOp::PciConfigCapability | MachineOp::MmioCapability => 0,
+        MachineOp::PciConfigRead16 => 5,
+        MachineOp::MmioRead32 => 2,
+        MachineOp::MmioWrite32 => 3,
+        MachineOp::Rdtsc => 0,
+    }
+}
+
+fn lower_sid_call(sid: sens::Sens8, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     Ok(Ir::App {
         func: Box::new(Ir::Sid(sid)),
         args: args
@@ -685,12 +740,12 @@ fn lower_let_star(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 fn lower_def(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
     let name = match &args[0] {
         Expr::Symbol(name) => name.to_uppercase(),
-        // A SID-keyed define uses the typed Sid8's own bit pattern as the
+        // A SID-keyed define uses the typed Sens8's own bit pattern as the
         // def key (key_definition_by_sid, #239) -- no surface registry.
         Expr::Sid(sid) => sid.to_string(),
         _ => {
             return Err(LowerError::invalid_form(
-                "def expects a symbol or SID8 name",
+                "def expects a symbol or SENS code name",
             ));
         }
     };
@@ -704,7 +759,7 @@ fn lower_def(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
     match expr {
         Expr::Sid(_) => Err(LowerError::invalid_form(
-            "quoted SID8 is not a function identity; quoted/string/literal SID wrappers are forbidden",
+            "quoted SENS code is not a function identity; quoted/string/literal SID wrappers are forbidden",
         )),
         Expr::Integer(n) => Ok(Quoted::Int(*n)),
         Expr::Rational(num, den) => Ok(Quoted::Rational(*num, *den)),
@@ -744,7 +799,7 @@ mod sid_head_tests {
     #[test]
     fn sid_headed_lambda_lowers_like_surface_lambda() {
         let expr = Expr::List(vec![
-            Expr::Sid(sens::sid!(00001000)),
+            Expr::Sid(sens::sens!(00001000)),
             Expr::Symbol("args".into()),
             Expr::Symbol("args".into()),
         ]);
@@ -760,7 +815,7 @@ mod sid_head_tests {
 
     #[test]
     fn sid_headed_quote_lowers_to_quote() {
-        let expr = Expr::List(vec![Expr::Sid(sens::sid!(00000001)), Expr::List(vec![])]);
+        let expr = Expr::List(vec![Expr::Sid(sens::sens!(00000001)), Expr::List(vec![])]);
         let ir = lower_expr_admitted(&expr, &Env::default()).expect("SID quote lowers");
         assert!(matches!(ir, Ir::Quote(Quoted::Nil)));
     }
@@ -768,10 +823,10 @@ mod sid_head_tests {
     #[test]
     fn sid_headed_define_row_keys_def_by_typed_sid_bits() {
         let expr = Expr::List(vec![
-            Expr::Sid(sens::sid!(00001001)),
-            Expr::Sid(sens::sid!(00100111)),
+            Expr::Sid(sens::sens!(00001001)),
+            Expr::Sid(sens::sens!(00100111)),
             Expr::List(vec![
-                Expr::Sid(sens::sid!(00001000)),
+                Expr::Sid(sens::sens!(00001000)),
                 Expr::Symbol("args".into()),
                 Expr::Symbol("args".into()),
             ]),
@@ -795,8 +850,8 @@ mod sid_head_tests {
     #[test]
     fn top_level_sid_define_registers_env_binding() {
         let expr = Expr::List(vec![
-            Expr::Sid(sens::sid!(00001001)),
-            Expr::Sid(sens::sid!(00100111)),
+            Expr::Sid(sens::sens!(00001001)),
+            Expr::Sid(sens::sens!(00100111)),
             Expr::List(vec![]),
         ]);
         assert_eq!(
@@ -807,12 +862,12 @@ mod sid_head_tests {
 
     #[test]
     fn non_special_sid_head_stays_a_direct_call_value() {
-        let expr = Expr::List(vec![Expr::Sid(sens::sid!(00000101)), Expr::List(vec![])]);
+        let expr = Expr::List(vec![Expr::Sid(sens::sens!(00000101)), Expr::List(vec![])]);
         let ir = lower_expr_admitted(&expr, &Env::default()).expect("SID call lowers");
         assert!(matches!(
             ir,
             Ir::App { ref func, .. }
-                if matches!(func.as_ref(), Ir::Sid(s) if *s == sens::sid!(00000101))
+                if matches!(func.as_ref(), Ir::Sid(s) if *s == sens::sens!(00000101))
         ));
     }
 
@@ -820,12 +875,12 @@ mod sid_head_tests {
     fn user_word_call_resolves_to_registry_sid_identity() {
         // A user-defined word with a Lisp-owned registered semantic ID that is
         // neither a backend primitive nor a canonical builtin (e.g. `reverse`)
-        // dispatches by its typed Sid8 call key when the program keys the def
+        // dispatches by its typed Sens8 call key when the program keys the def
         // under that SID: `(reverse x)` -> App(Sid(...)).
         let mut env = Env::default();
         let sid = sens::semantic_registry_export::semantic_id_for_admitted_surface("reverse")
             .expect("reverse has an admitted surface SID");
-        env.sid_keyed_defs.insert(sid.to_string());
+        env.sid_keyed_defs.insert(sid);
         let expr = Expr::List(vec![
             Expr::Symbol("reverse".into()),
             Expr::Symbol("x".into()),
@@ -848,8 +903,8 @@ mod sid_head_tests {
     }
 
     #[test]
-    fn equality_builtin_lowers_to_sid8() {
-        // #246: every admitted callable is an exact SID8 function call.
+    fn equality_builtin_lowers_to_sens8() {
+        // #246: every admitted callable is an exact SENS code function call.
         // Numeric `=` is SID 00011100; it no longer keeps a Builtin identity.
         let expr = Expr::List(vec![
             Expr::Symbol("=".into()),
@@ -859,10 +914,10 @@ mod sid_head_tests {
         let ir = lower_expr_admitted(&expr, &Env::default()).expect("builtin call lowers");
         match ir {
             Ir::App { func, args } => {
-                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00011100)));
+                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sens!(00011100)));
                 assert_eq!(args.len(), 2);
             }
-            other => panic!("expected SID8 App, got {other:?}"),
+            other => panic!("expected SENS code App, got {other:?}"),
         }
     }
 
@@ -909,8 +964,8 @@ mod sid_head_tests {
     }
 
     #[test]
-    fn quotient_call_lowers_to_sid8() {
-        // Both surface `quotient` and SID 00010100 lower to an exact SID8 call.
+    fn quotient_call_lowers_to_sens8() {
+        // Both surface `quotient` and SID 00010100 lower to an exact SENS code call.
         let surface = Expr::List(vec![
             Expr::Symbol("quotient".into()),
             Expr::Integer(7),
@@ -919,29 +974,29 @@ mod sid_head_tests {
         let ir = lower_expr_admitted(&surface, &Env::default()).expect("quotient lowers");
         match ir {
             Ir::App { func, args } => {
-                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00010100)));
+                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sens!(00010100)));
                 assert_eq!(args.len(), 2);
             }
-            other => panic!("expected SID8 App, got {other:?}"),
+            other => panic!("expected SENS code App, got {other:?}"),
         }
 
         let sid_call = Expr::List(vec![
-            Expr::Sid(sens::sid!(00010100)),
+            Expr::Sid(sens::sens!(00010100)),
             Expr::Integer(7),
             Expr::Integer(2),
         ]);
         let ir = lower_expr_admitted(&sid_call, &Env::default()).expect("SID quotient lowers");
         match ir {
             Ir::App { func, args } => {
-                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00010100)));
+                assert!(matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sens!(00010100)));
                 assert_eq!(args.len(), 2);
             }
-            other => panic!("expected SID8 App, got {other:?}"),
+            other => panic!("expected SENS code App, got {other:?}"),
         }
     }
 
     #[test]
-    fn caddr_lowers_as_composite_sid8_accessor_nested_car_cdr_cdr() {
+    fn caddr_lowers_as_composite_sens8_accessor_nested_car_cdr_cdr() {
         // caddr has no canonical SID upstream; lowering must compose
         // car(cdr(cdr x)) out of the registered SIDs, never a name-keyed call.
         let surface = Expr::List(vec![Expr::Symbol("caddr".into()), Expr::Symbol("x".into())]);
@@ -949,21 +1004,21 @@ mod sid_head_tests {
         match ir {
             Ir::App { func, args } => {
                 assert!(
-                    matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00000101)),
+                    matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sens!(00000101)),
                     "outer must be car SID 00000101, got {func:?}"
                 );
                 assert_eq!(args.len(), 1);
                 match &args[0] {
                     Ir::App { func, args } => {
                         assert!(
-                            matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00000110)),
+                            matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sens!(00000110)),
                             "middle must be cdr SID 00000110, got {func:?}"
                         );
                         assert_eq!(args.len(), 1);
                         match &args[0] {
                             Ir::App { func, args } => {
                                 assert!(
-                                    matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00000110)),
+                                    matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sens!(00000110)),
                                     "inner must be cdr SID 00000110, got {func:?}"
                                 );
                                 assert!(matches!(args.as_slice(), [Ir::Var(name)] if name == "X"));
@@ -974,7 +1029,7 @@ mod sid_head_tests {
                     other => panic!("expected middle cdr App, got {other:?}"),
                 }
             }
-            other => panic!("expected SID8 car App, got {other:?}"),
+            other => panic!("expected SENS code car App, got {other:?}"),
         }
     }
 }
