@@ -126,30 +126,30 @@ out to another language for this:
 
 ```
 (join (capabilities (compiler rust lowering testing iverilog proof cml)) (roles (voter)))
-(sync-tasks (file "/mnt/c/GitHub/cml/tasks.my"))
+(sync-tasks (file "/mnt/c/GitHub/cml/tasks.lisp"))
 (next-best-action (from "cml-1"))
 ```
 
-`tasks.my` (this repo root) is the durable plan of record — edit it,
+`tasks.lisp` (this repo root) is the durable plan of record — edit it,
 re-`sync-tasks` after edits and after any node restart (in-memory swarm
 state resets on restart; the journal replays via anti-entropy from
-peers, but `tasks.my`'s `done`/`description` fields are what `sync-tasks`
+peers, but `tasks.lisp`'s `done`/`description` fields are what `sync-tasks`
 reconciles against). A swarm event is a doorbell, never the fact itself —
 verify against `evidence/`/a real commit before acting on one.
 
 ## The four repositories
 
 - **my-lisp** — the semantic source of truth. Defines the language: parser,
-  evaluator, exactness model (rationals, no floats), `lib/core.my` standard
+  evaluator, exactness model (rationals, no floats), `lib/core.lisp` standard
   library. Language contract version **2.0** as of 2026-08-15
-  (`language-contract.my`'s own `(major . 2) (minor . 0)` — **read that
+  (`language-contract.lisp`'s own `(major . 2) (minor . 0)` — **read that
   file directly**, never trust a number in prose, including this one; the
   1.0→2.0 break removed `'` as reader shorthand for `quote` — apostrophe
   is now a plain identifier character, see `src/parser.rs`'s own doc
   comment on `cml`'s side of that fix). Nothing else in the ecosystem may
   drift from what that repo says the language means.
 - **fpga-lisp** — hardware implementation of the same language on an FPGA.
-  Tracks an ISA contract (`isa-contract.my`, version **1.1**) against
+  Tracks an ISA contract (`isa-contract.lisp`, version **1.1**) against
   my-lisp's semantics. `docs/lisp-machine-plan.md` there is the current,
   authoritative status — don't infer progress from this file, which only
   describes timeless roles.
@@ -157,7 +157,7 @@ verify against `evidence/`/a real commit before acting on one.
   through a shared backend-neutral IR, to two targets today: fpga-lisp
   assembly (no runtime `eval`/`apply` loop on the hardware) and a minimal
   C emitter (`docs/heterogeneous-backends.md`). Tracks conformance
-  against both sibling repos via [`compatibility.my`](compatibility.my).
+  against both sibling repos via [`compatibility.lisp`](compatibility.lisp).
   Has CI (`.github/workflows/ci.yml`) checking out both sibling repos
   fresh and running a real `iverilog` E2E simulation on every push/PR —
   see [`docs/testing.md`](docs/testing.md) for the full pipeline.
@@ -170,14 +170,14 @@ verify against `evidence/`/a real commit before acting on one.
 [`ecosystem-status.md`](ecosystem-status.md) in this repo is an append-only
 chronological log of cross-session syncs (decisions, verification results,
 open questions) — read it before assuming anything is stale or unverified.
-my-lisp's `ecosystem-status.my` is the curated current-snapshot counterpart
+my-lisp's `ecosystem-status.lisp` is the curated current-snapshot counterpart
 (no history, just present state); prefer that one for "what's true right
 now," this repo's `.md` for "how did we get here."
 
-[`compatibility.my`](compatibility.my) is the actual contract: compiler
+[`compatibility.lisp`](compatibility.lisp) is the actual contract: compiler
 version, tested SHAs of my-lisp/fpga-lisp, supported language surface,
 per-feature mechanism notes (e.g. `defmacro`, `equal?`), and known
-limitations — a flat alist, read via `(read-file "compatibility.my")` from
+limitations — a flat alist, read via `(read-file "compatibility.lisp")` from
 my-lisp, never `(load ...)`-ed as executable source.
 
 ## Talking to my-lisp live
@@ -197,7 +197,7 @@ ports/protocols.
 
 - `defmacro` is a **compile-time-only** source transform
   ([`src/macros.rs`](src/macros.rs)) — it never reaches the FPGA compiler.
-  See `compatibility.my`'s `defmacro` entry for the mechanism.
+  See `compatibility.lisp`'s `defmacro` entry for the mechanism.
 - `equal?` is a **native FPGA subroutine** (`cml_equal` in
   [`src/compiler.rs`](src/compiler.rs)), deliberately worklist-based (no
   `CALL`/`RET` recursion) so it doesn't depend on the still-maturing letrec
@@ -205,7 +205,7 @@ ports/protocols.
 - The conformance test (`tests/conformance_test.rs`) is a **blind
   adapter**: one fixed pipeline runs unmodified against every fixture — no
   fixture-specific branches inside the adapter itself. Fixtures live in the
-  sibling `my-lisp` repo at `tests/fixtures/conformance.my`, not here.
+  sibling `my-lisp` repo at `tests/fixtures/conformance.lisp`, not here.
 - Requires, checked out as siblings of this repo: `../my-lisp` and
   `../fpga-lisp`, plus `python3` and `iverilog`/`vvp` on `PATH` to run the
   conformance test locally. CI provides all of this fresh on every run, so
@@ -217,10 +217,10 @@ ports/protocols.
   and `src/c_backend.rs` (a minimal C emitter) both consume it —
   `docs/heterogeneous-backends.md` is the design doc, `docs/abi.md` the
   register-discipline reference for the fpga-lisp side specifically.
-  `macros.my` is a from-scratch `.my`-hosted reimplementation of
+  `macros.lisp` is a from-scratch `.lisp`-hosted reimplementation of
   `src/macros.rs`'s `defmacro` expansion, proven correct by differential
   testing against the real my-lisp CLI but **not wired into the compile
-  pipeline** — same status as fpga-lisp's `assembler.my` relative to
+  pipeline** — same status as fpga-lisp's `assembler.lisp` relative to
   `assembler.py`. See `docs/tooling-language-priority.md` before
   proposing moving more of `cml` itself to `.my`.
 
@@ -247,7 +247,7 @@ profile instead of this repo's own declared manifest.
 
 ## Cross-session coordination protocol (agreed with my-lisp/fpga-lisp)
 
-1. Durable facts go in `ecosystem-status.md`/`ecosystem-status.my` —
+1. Durable facts go in `ecosystem-status.md`/`ecosystem-status.lisp` —
    written after the fact (commit done, CI green), not "plan to do X".
 2. Direct messages between sessions are for synchronous asks, not
    restating what's already in a status file.
