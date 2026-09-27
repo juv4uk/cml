@@ -69,6 +69,8 @@ jobs:
         run: cargo test --release --features gpu-cuda --test gpu_cuda_live_test -- --include-ignored
       - name: CUDA execution graph — CPU = GPU
         run: cargo test --release --features gpu-cuda --test execution_graph_cuda_live_test -- --include-ignored
+      - name: CUDA resident/fused chain — parity
+        run: cargo test --release --features gpu-cuda --test gpu_cuda_resident_chain_live_test fused_final_only_chain_matches_resident_semantics -- --ignored --nocapture
       - name: Crossover calibration (master / manual only)
         if: ${{ github.event_name != 'pull_request' }}
         run: cargo test --release --features gpu-cuda --test gpu_cuda_crossover_live_test -- --include-ignored --nocapture
