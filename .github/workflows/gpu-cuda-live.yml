@@ -32,9 +32,9 @@ concurrency:
 
 jobs:
   cuda-live:
-    # Єдина машина з міткою i5-6400 — це машина з GTX 1050 Ti.
-    # Коли runner отримає мітку `gpu`, замінити на [self-hosted, gpu].
-    runs-on: [self-hosted, i5-6400]
+    # GPU lane адресує клас механізму, а не конкретний CPU host.
+    # `gtx-1050-ti` гарантує живий Pascal/CUDA 6.1 witness на машині власника.
+    runs-on: [self-hosted, gpu, gtx-1050-ti]
     timeout-minutes: 30
     env:
       # WSL: драйвер Windows має йти першим. NVRTC 12.6 також потребує
