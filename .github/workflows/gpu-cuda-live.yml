@@ -38,7 +38,7 @@ jobs:
     env:
       # WSL: драйвер Windows має йти перед застарілим /usr/lib/x86_64-linux-gnu/libcuda.so.535,
       # інакше cudarc бачить CUDA_ERROR_NO_DEVICE при живій карті.
-      LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/lib64
+      LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/targets/x86_64-linux/lib
       CUDA_PATH: /usr/local/cuda-12.6
       RUSTC_WRAPPER: ""
     steps:
