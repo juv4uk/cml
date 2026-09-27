@@ -44,8 +44,16 @@ jobs:
       RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
+      - name: external/sens from the local clone
+        # juv4uk/sens приватний: GITHUB_TOKEN репо cml не може його клонувати.
+        # На власному runner-і беремо закріплений коміт з локального клону.
+        run: |
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens || {
+            echo "закріплений коміт external/sens відсутній у /home/agents/GitHub/sens — оновіть клон (git fetch)" >&2
+            exit 1
+          }
+          git -C external/sens log -1 --format='external/sens %H'
       - name: Probe the card
         run: |
           ls -l /dev/dxg
