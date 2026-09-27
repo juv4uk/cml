@@ -49,6 +49,12 @@ pub fn discover_devices() -> Result<Vec<CudaDevice>, CudaRuntimeError> {
         .collect()
 }
 
+// Derive NVRTC arch string from compute capability (major, minor).
+// Format: "compute_<major><minor>" e.g., compute_61, compute_75, compute_86.
+fn nvrtc_arch_from_compute_capability(cc: (i32, i32)) -> String {
+    format!("compute_{}{}", cc.0, cc.1)
+}
+
 pub fn execute_map(ir: &Ir, device_ordinal: usize) -> Result<CudaExecution, CudaRuntimeError> {
     let source = emit_map_kernel(ir)?;
     let buffer = map_input(ir).ok_or(CudaRuntimeError::UnsupportedInput)?;
@@ -58,17 +64,21 @@ pub fn execute_map(ir: &Ir, device_ordinal: usize) -> Result<CudaExecution, Cuda
         return Err(CudaRuntimeError::UnsupportedInput);
     }
 
+    // Create context first to get the actual device's compute capability.
+    let context = CudaContext::new(device_ordinal)
+        .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+    let device = device_evidence(&context)?;
+
+    // Derive NVRTC arch from the actual device's compute capability.
+    let arch = nvrtc_arch_from_compute_capability(device.compute_capability);
     let ptx = cudarc::nvrtc::compile_ptx_with_opts(
         source,
         cudarc::nvrtc::CompileOptions {
-            options: vec!["-arch=compute_61".to_string()],
+            options: vec![format!("-arch={}", arch)],
             ..Default::default()
         },
     )
     .map_err(|error| CudaRuntimeError::Nvrtc(error.to_string()))?;
-    let context = CudaContext::new(device_ordinal)
-        .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
-    let device = device_evidence(&context)?;
     let stream = context.default_stream();
     let module = context
         .load_module(ptx)
@@ -162,4 +172,34 @@ fn map_input(ir: &Ir) -> Option<BufferLiteral> {
         return None;
     };
     Some(buffer.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nvrtc_arch_from_compute_capability_known_archs() {
+        // GTX 1050 Ti / Pascal
+        assert_eq!(nvrtc_arch_from_compute_capability((6, 1)), "compute_61");
+        // V100 / Volta
+        assert_eq!(nvrtc_arch_from_compute_capability((7, 0)), "compute_70");
+        assert_eq!(nvrtc_arch_from_compute_capability((7, 5)), "compute_75");
+        // A100 / Ampere
+        assert_eq!(nvrtc_arch_from_compute_capability((8, 0)), "compute_80");
+        assert_eq!(nvrtc_arch_from_compute_capability((8, 6)), "compute_86");
+        assert_eq!(nvrtc_arch_from_compute_capability((8, 7)), "compute_87");
+        assert_eq!(nvrtc_arch_from_compute_capability((8, 9)), "compute_89");
+        // H100 / Hopper
+        assert_eq!(nvrtc_arch_from_compute_capability((9, 0)), "compute_90");
+    }
+
+    #[test]
+    fn nvrtc_arch_format_is_correct() {
+        // Format must be exactly "compute_<major><minor>" for NVRTC
+        let arch = nvrtc_arch_from_compute_capability((6, 1));
+        assert!(arch.starts_with("compute_"));
+        assert_eq!(arch.len(), "compute_61".len());
+        assert!(!arch.contains('.'));
+    }
 }
