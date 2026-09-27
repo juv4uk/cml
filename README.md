@@ -36,7 +36,7 @@ Freestanding x86_64 backend залежить від `wsm-os-target`, зафік�
 старий циклічний зв'язок репозиторіїв і не є заявою, що поточний рантайм чи
 boot-шлях `wsm-os` уже покритий.
 
-[`compatibility.my`](compatibility.my) фіксує точний language contract my-lisp, ISA contract fpga-lisp, перевірені SHA, підтриману поверхню й відомі прогалини цієї ревізії компілятора.
+[`compatibility.lisp`](compatibility.lisp) фіксує точний language contract my-lisp, ISA contract fpga-lisp, перевірені SHA, підтриману поверхню й відомі прогалини цієї ревізії компілятора.
 
 Freestanding x86_64 зріз окремо описаний у
 [`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). Наразі
@@ -88,7 +88,7 @@ CML emits code against it; `wsm-os-lisp` supplies its runtime and platform
 evidence. This replaces the legacy repository cycle and does not claim that
 the current `wsm-os` runtime or boot path is already covered.
 
-[`compatibility.my`](compatibility.my) records the exact my-lisp language contract, fpga-lisp ISA contract, tested SHAs, supported surface, and known gaps for this compiler revision.
+[`compatibility.lisp`](compatibility.lisp) records the exact my-lisp language contract, fpga-lisp ISA contract, tested SHAs, supported surface, and known gaps for this compiler revision.
 
 The freestanding x86_64 slice is documented separately in
 [`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). It
@@ -132,7 +132,7 @@ Der Compiler verarbeitet:
 - Quell-Strings werden zu `Ir::String` (separater IR-Variant) abgesenkt; fpga-lisp besitzt noch kein eigenes Laufzeit-String-Tag.
 - Inexakte Zahlen und exakte rationale Zahlen werden von der Zieldarstellung nicht unterstützt.
 
-[`compatibility.my`](compatibility.my) hält den genauen my-lisp-Sprachvertrag, fpga-lisp-ISA-Vertrag, geprüfte SHAs, die unterstützte Oberfläche und bekannte Lücken dieser Compilerrevision fest.
+[`compatibility.lisp`](compatibility.lisp) hält den genauen my-lisp-Sprachvertrag, fpga-lisp-ISA-Vertrag, geprüfte SHAs, die unterstützte Oberfläche und bekannte Lücken dieser Compilerrevision fest.
 
 Der freistehende x86_64-Slice ist separat dokumentiert in
 [`docs/x86-freestanding-backend.md`](docs/x86-freestanding-backend.md). Er
