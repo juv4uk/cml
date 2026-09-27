@@ -8,7 +8,8 @@ use cudarc::driver::{CudaContext, CudaFunction, CudaSlice, LaunchConfig, PushKer
 use crate::accelerator::{
     AcceleratorApi, AcceleratorClass, AcceleratorDescriptor, AcceleratorVendor,
 };
-use crate::gpu_cuda::{emit_map_kernel, CudaEmitError};
+use crate::compute::{I32Range, i32_buffer_range, prove_i32_map_range};
+use crate::gpu_cuda::{CudaEmitError, emit_map_kernel};
 use crate::ir::{BufferLiteral, Ir};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,12 +26,28 @@ pub struct CudaExecution {
     pub device: CudaDevice,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CudaChainExecution {
+    pub outputs: Vec<BufferLiteral>,
+    pub device: CudaDevice,
+}
+
 #[derive(Debug)]
 pub enum CudaRuntimeError {
     Emit(CudaEmitError),
     UnsupportedInput,
+    InsufficientDeviceMemory {
+        required_bytes: usize,
+        free_bytes: usize,
+    },
     Nvrtc(String),
     Driver(String),
+}
+
+#[derive(Debug)]
+pub struct CudaChainRuntimeError {
+    pub step: usize,
+    pub source: CudaRuntimeError,
 }
 
 impl From<CudaEmitError> for CudaRuntimeError {
@@ -183,6 +200,110 @@ impl CudaSession {
         })
     }
 
+    /// Execute a linear i32 map chain while intermediate buffers remain on the
+    /// selected CUDA device. Every step is re-admitted from a carried range
+    /// proof; no kernel is allowed to bypass the checked-add overflow guard.
+    pub fn execute_map_chain_i32(
+        &self,
+        functions: &[Ir],
+        input: &BufferLiteral,
+    ) -> Result<CudaChainExecution, CudaChainRuntimeError> {
+        let fail = |step, source| CudaChainRuntimeError { step, source };
+        let BufferLiteral::I32(input_values) = input else {
+            return Err(fail(0, CudaRuntimeError::UnsupportedInput));
+        };
+        if functions.is_empty() || input_values.is_empty() {
+            return Err(fail(0, CudaRuntimeError::UnsupportedInput));
+        }
+
+        let length = u32::try_from(input_values.len())
+            .map_err(|_| fail(0, CudaRuntimeError::UnsupportedInput))?;
+        let element_bytes = input_values
+            .len()
+            .checked_mul(std::mem::size_of::<i32>())
+            .ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
+        let resident_buffers = functions
+            .len()
+            .checked_add(1)
+            .ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
+        let required_bytes = element_bytes
+            .checked_mul(resident_buffers)
+            .ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
+
+        self.context
+            .bind_to_thread()
+            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
+        let (free_bytes, _) = cudarc::driver::result::mem_get_info()
+            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
+        if required_bytes > free_bytes {
+            return Err(fail(
+                0,
+                CudaRuntimeError::InsufficientDeviceMemory {
+                    required_bytes,
+                    free_bytes,
+                },
+            ));
+        }
+
+        // Re-admit the complete chain before the first kernel launch. The
+        // carried range proof makes later checked-add admission independent of
+        // host materialization, while an unsupported later step fails before
+        // any device execution begins.
+        let mut range =
+            i32_buffer_range(input).ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
+        let mut prepared = Vec::with_capacity(functions.len());
+        for (step, function_ir) in functions.iter().enumerate() {
+            let next_range = prove_i32_map_range(function_ir, range)
+                .ok_or_else(|| fail(step, CudaRuntimeError::UnsupportedInput))?;
+            let probe = i32_range_probe_ir(function_ir, range);
+            let source = emit_map_kernel(&probe)
+                .map_err(|error| fail(step, CudaRuntimeError::Emit(error)))?;
+            let function = self
+                .function_for_source(source)
+                .map_err(|error| fail(step, error))?;
+            prepared.push(function);
+            range = next_range;
+        }
+
+        let stream = self.context.default_stream();
+        let input_device = stream
+            .clone_htod(input_values.as_slice())
+            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
+        let mut device_outputs: Vec<CudaSlice<i32>> = Vec::with_capacity(functions.len());
+
+        for (step, function) in prepared.iter().enumerate() {
+            let mut output_device = unsafe { stream.alloc::<i32>(input_values.len()) }
+                .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+            let current_input = device_outputs.last().unwrap_or(&input_device);
+
+            unsafe {
+                stream
+                    .launch_builder(function)
+                    .arg(current_input)
+                    .arg(&mut output_device)
+                    .arg(&length)
+                    .launch(LaunchConfig::for_num_elems(length))
+            }
+            .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+
+            device_outputs.push(output_device);
+        }
+
+        let mut outputs = Vec::with_capacity(device_outputs.len());
+        for (step, output_device) in device_outputs.iter().enumerate() {
+            let mut output = vec![0i32; input_values.len()];
+            stream
+                .memcpy_dtoh(output_device, &mut output)
+                .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+            outputs.push(BufferLiteral::I32(output));
+        }
+
+        Ok(CudaChainExecution {
+            outputs,
+            device: self.device.clone(),
+        })
+    }
+
     fn function_for_source(&self, source: String) -> Result<CudaFunction, CudaRuntimeError> {
         let mut kernels = self.kernels.lock().map_err(|error| {
             CudaRuntimeError::Driver(format!("kernel cache mutex poisoned: {error}"))
@@ -232,6 +353,16 @@ pub fn execute_map(ir: &Ir, device_ordinal: usize) -> Result<CudaExecution, Cuda
     session_for_device(device_ordinal)?.execute_map(ir)
 }
 
+pub fn execute_map_chain_i32(
+    functions: &[Ir],
+    input: &BufferLiteral,
+    device_ordinal: usize,
+) -> Result<CudaChainExecution, CudaChainRuntimeError> {
+    let session = session_for_device(device_ordinal)
+        .map_err(|source| CudaChainRuntimeError { step: 0, source })?;
+    session.execute_map_chain_i32(functions, input)
+}
+
 fn session_for_device(device_ordinal: usize) -> Result<Arc<CudaSession>, CudaRuntimeError> {
     let sessions = CUDA_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()));
     let mut sessions = sessions.lock().map_err(|error| {
@@ -277,6 +408,18 @@ fn map_input(ir: &Ir) -> Option<&BufferLiteral> {
         return None;
     };
     Some(buffer)
+}
+
+fn i32_range_probe_ir(function: &Ir, range: I32Range) -> Ir {
+    let values = if range.min == range.max {
+        vec![range.min]
+    } else {
+        vec![range.min, range.max]
+    };
+    Ir::App {
+        func: Box::new(Ir::Sid(sens::sens!(01011001))),
+        args: vec![function.clone(), Ir::Buffer(BufferLiteral::I32(values))],
+    }
 }
 
 #[cfg(test)]

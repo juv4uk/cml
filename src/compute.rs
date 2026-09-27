@@ -64,6 +64,18 @@ pub enum ScalarExpr {
     CheckedAdd(Box<ScalarExpr>, Box<ScalarExpr>),
 }
 
+/// Mechanism-side proof summary for an admitted i32 buffer.
+///
+/// This is not a language value. It exists so an accelerator backend can carry
+/// enough evidence across a device-resident map chain to re-prove checked-add
+/// kernels without copying every element back to the host.
+#[cfg(any(feature = "gpu-cuda", test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct I32Range {
+    pub min: i32,
+    pub max: i32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputeKernel {
     pub parameter_count: usize,
@@ -341,6 +353,39 @@ fn eval_i32_range(expression: &ScalarExpr, parameters: &[i64]) -> Option<i64> {
         }
     }?;
     i32::try_from(value).ok().map(i64::from)
+}
+
+#[cfg(feature = "gpu-cuda")]
+pub(crate) fn i32_buffer_range(buffer: &BufferLiteral) -> Option<I32Range> {
+    let BufferLiteral::I32(values) = buffer else {
+        return None;
+    };
+    let (&first, rest) = values.split_first()?;
+    let (min, max) = rest
+        .iter()
+        .copied()
+        .fold((first, first), |(min, max), value| {
+            (min.min(value), max.max(value))
+        });
+    Some(I32Range { min, max })
+}
+
+/// Prove and propagate the value range for one i32 map kernel.
+///
+/// The admitted scalar subset is monotone in each parameter: it contains only
+/// parameters, exact constants, and checked addition. Therefore evaluating the
+/// current input extrema gives exact extrema for every value in the interval.
+/// Returning None means the next map must not execute through the resident fast
+/// path.
+#[cfg(any(feature = "gpu-cuda", test))]
+pub(crate) fn prove_i32_map_range(function: &Ir, input: I32Range) -> Option<I32Range> {
+    let kernel = lower_kernel(function, 1)?;
+    let min = eval_i32_range(&kernel.body, &[i64::from(input.min)])?;
+    let max = eval_i32_range(&kernel.body, &[i64::from(input.max)])?;
+    Some(I32Range {
+        min: i32::try_from(min).ok()?,
+        max: i32::try_from(max).ok()?,
+    })
 }
 
 fn f32_rounding_proven(region: &ComputeRegion) -> bool {
@@ -1012,5 +1057,45 @@ impl ParallelCpuComputeBackend {
 impl ComputeBackend for ParallelCpuComputeBackend {
     fn execute(&self, ir: &Ir) -> Result<BufferLiteral, ComputeExecutionError> {
         self.execute_diagnostic(ir).map(|report| report.output)
+    }
+}
+
+#[cfg(test)]
+mod resident_range_tests {
+    use super::*;
+
+    fn add_constant(offset: i64) -> Ir {
+        Ir::Lambda {
+            params: Params::Fixed(vec!["x".into()]),
+            body: Box::new(Ir::App {
+                func: Box::new(Ir::Sid(sens::sens!(00001100))),
+                args: vec![Ir::Var("x".into()), Ir::Int(offset)],
+            }),
+        }
+    }
+
+    #[test]
+    fn i32_resident_range_propagates_without_element_materialization() {
+        let input = I32Range { min: -10, max: 20 };
+        assert_eq!(
+            prove_i32_map_range(&add_constant(7), input),
+            Some(I32Range { min: -3, max: 27 })
+        );
+    }
+
+    #[test]
+    fn i32_resident_range_rejects_second_step_overflow() {
+        let add_one = add_constant(1);
+        let first = prove_i32_map_range(
+            &add_one,
+            I32Range {
+                min: i32::MAX - 1,
+                max: i32::MAX - 1,
+            },
+        )
+        .expect("first step remains in i32");
+        assert_eq!(first.min, i32::MAX);
+        assert_eq!(first.max, i32::MAX);
+        assert_eq!(prove_i32_map_range(&add_one, first), None);
     }
 }
