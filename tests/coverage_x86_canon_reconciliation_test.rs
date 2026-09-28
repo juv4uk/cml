@@ -1,10 +1,10 @@
-use sens::Sens8;
+use sens::Sid8;
 use std::fs;
 
 use cml::canon::find_operation_by_id;
 use cml::coverage::{BackendEvidenceState, CoverageLedger};
 
-const EXPECTED: &[(sens::Sens8, BackendEvidenceState)] = &[
+const EXPECTED: &[(sens::Sid8, BackendEvidenceState)] = &[
     (sens::sid!(00000001), BackendEvidenceState::Executable),
     (sens::sid!(00000010), BackendEvidenceState::AssemblyWitness),
     (sens::sid!(00000011), BackendEvidenceState::Executable),
