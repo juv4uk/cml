@@ -11,9 +11,7 @@ fn main() {
 
 #[cfg(feature = "gpu-cuda")]
 mod enabled {
-    use cml::gpu_cuda_runtime::{
-        discover_devices, execute_map, execute_map_chain_i32_selected,
-    };
+    use cml::gpu_cuda_runtime::{discover_devices, execute_map, execute_map_chain_i32_selected};
     use cml::ir::{BufferLiteral, Ir, Params};
     use std::env;
     use std::fs;
@@ -21,7 +19,7 @@ mod enabled {
     use std::os::unix::net::{UnixListener, UnixStream};
     use std::path::{Path, PathBuf};
     use std::time::Instant;
-    
+
     const MAGIC: &[u8; 4] = b"CMLG";
     const VERSION: u8 = 1;
     const OP_PING: u8 = 1;
@@ -30,28 +28,28 @@ mod enabled {
     const OP_CHAIN_FILE_I32: u8 = 4;
     const STATUS_OK: u8 = 0;
     const STATUS_ERR: u8 = 1;
-    
+
     fn socket_path() -> PathBuf {
         env::var_os("CML_GPU_WORKER_SOCKET")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/tmp/cml-gpu-worker.sock"))
     }
-    
+
     struct SocketGuard(PathBuf);
-    
+
     impl Drop for SocketGuard {
         fn drop(&mut self) {
             let _ = fs::remove_file(&self.0);
         }
     }
-    
+
     pub fn main() {
         if let Err(error) = run() {
             eprintln!("cml-gpu-worker: {error}");
             std::process::exit(1);
         }
     }
-    
+
     fn run() -> Result<(), String> {
         let mut args = env::args().skip(1);
         match args.next().as_deref() {
@@ -98,23 +96,25 @@ mod enabled {
             ),
         }
     }
-    
+
     fn serve(path: PathBuf) -> Result<(), String> {
         if path.exists() {
-            fs::remove_file(&path).map_err(|error| format!("remove stale socket {}: {error}", path.display()))?;
+            fs::remove_file(&path)
+                .map_err(|error| format!("remove stale socket {}: {error}", path.display()))?;
         }
         let listener = UnixListener::bind(&path)
             .map_err(|error| format!("bind {}: {error}", path.display()))?;
         let _guard = SocketGuard(path.clone());
         eprintln!("cml-gpu-worker listening on {}", path.display());
-    
+
         // Force discovery once so a bad CUDA/WSL setup fails before the runner submits work.
-        let devices = discover_devices().map_err(|error| format!("CUDA discovery failed: {error:?}"))?;
+        let devices =
+            discover_devices().map_err(|error| format!("CUDA discovery failed: {error:?}"))?;
         if devices.is_empty() {
             return Err("CUDA runtime reported zero devices".into());
         }
         eprintln!("cml-gpu-worker ready: {:?}", devices[0]);
-    
+
         for connection in listener.incoming() {
             match connection {
                 Ok(mut stream) => {
@@ -127,13 +127,14 @@ mod enabled {
         }
         Ok(())
     }
-    
+
     fn handle(stream: &mut UnixStream) -> Result<(), String> {
         let (opcode, payload) = read_request(stream)?;
         match opcode {
             OP_PING => write_response(stream, STATUS_OK, b"pong").map_err(io_error),
             OP_PROBE => {
-                let devices = discover_devices().map_err(|error| format!("CUDA probe failed: {error:?}"))?;
+                let devices =
+                    discover_devices().map_err(|error| format!("CUDA probe failed: {error:?}"))?;
                 let text = format!("{devices:?}");
                 write_response(stream, STATUS_OK, text.as_bytes()).map_err(io_error)
             }
@@ -154,15 +155,12 @@ mod enabled {
                 let functions: Vec<Ir> = offsets.iter().copied().map(add_i32_function).collect();
                 let input = BufferLiteral::I32(values);
                 let cuda_started = Instant::now();
-                let execution = execute_map_chain_i32_selected(
-                    &functions,
-                    &input,
-                    &[functions.len() - 1],
-                    0,
-                )
-                .map_err(|error| format!("CUDA chain execution failed: {error:?}"))?;
+                let execution =
+                    execute_map_chain_i32_selected(&functions, &input, &[functions.len() - 1], 0)
+                        .map_err(|error| format!("CUDA chain execution failed: {error:?}"))?;
                 let cuda_ns = cuda_started.elapsed().as_nanos();
-                let Some((_, BufferLiteral::I32(output))) = execution.outputs.into_iter().next() else {
+                let Some((_, BufferLiteral::I32(output))) = execution.outputs.into_iter().next()
+                else {
                     return Err("CUDA chain returned no final i32 buffer".into());
                 };
                 write_i32_file(&output_path, &output)?;
@@ -178,7 +176,7 @@ mod enabled {
             other => Err(format!("unknown opcode {other}")),
         }
     }
-    
+
     fn add_i32_function(offset: i64) -> Ir {
         Ir::Lambda {
             params: Params::Fixed(vec!["X".to_string()]),
@@ -211,8 +209,7 @@ mod enabled {
     }
 
     fn read_i32_file(path: &Path) -> Result<Vec<i32>, String> {
-        let bytes = fs::read(path)
-            .map_err(|error| format!("read {}: {error}", path.display()))?;
+        let bytes = fs::read(path).map_err(|error| format!("read {}: {error}", path.display()))?;
         if bytes.is_empty() || bytes.len() % 4 != 0 {
             return Err(format!(
                 "i32 input {} must be non-empty and a multiple of 4 bytes",
@@ -230,22 +227,21 @@ mod enabled {
         for value in values {
             bytes.extend_from_slice(&value.to_le_bytes());
         }
-        fs::write(path, bytes)
-            .map_err(|error| format!("write {}: {error}", path.display()))
+        fs::write(path, bytes).map_err(|error| format!("write {}: {error}", path.display()))
     }
-    
+
     fn client_ping(path: &Path) -> Result<(), String> {
         let body = transact(path, OP_PING, &[])?;
         println!("{}", String::from_utf8_lossy(&body));
         Ok(())
     }
-    
+
     fn client_probe(path: &Path) -> Result<(), String> {
         let body = transact(path, OP_PROBE, &[])?;
         println!("{}", String::from_utf8_lossy(&body));
         Ok(())
     }
-    
+
     fn client_add_i32(path: &Path, offset: i64, values: &[i32]) -> Result<(), String> {
         let mut payload = Vec::with_capacity(12 + values.len() * 4);
         payload.extend_from_slice(&offset.to_le_bytes());
@@ -255,7 +251,14 @@ mod enabled {
         }
         let body = transact(path, OP_ADD_I32, &payload)?;
         let values = decode_i32_values(&body)?;
-        println!("{}", values.iter().map(i32::to_string).collect::<Vec<_>>().join(" "));
+        println!(
+            "{}",
+            values
+                .iter()
+                .map(i32::to_string)
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
         Ok(())
     }
 
@@ -276,7 +279,7 @@ mod enabled {
         println!("{}", String::from_utf8_lossy(&body));
         Ok(())
     }
-    
+
     fn transact(path: &Path, opcode: u8, payload: &[u8]) -> Result<Vec<u8>, String> {
         let mut stream = UnixStream::connect(path)
             .map_err(|error| format!("connect {}: {error}", path.display()))?;
@@ -288,30 +291,30 @@ mod enabled {
             Err(String::from_utf8_lossy(&body).into_owned())
         }
     }
-    
+
     fn write_request(stream: &mut UnixStream, opcode: u8, payload: &[u8]) -> io::Result<()> {
         stream.write_all(MAGIC)?;
         stream.write_all(&[VERSION, opcode])?;
         stream.write_all(&(payload.len() as u32).to_le_bytes())?;
         stream.write_all(payload)
     }
-    
+
     fn read_request(stream: &mut UnixStream) -> Result<(u8, Vec<u8>), String> {
         let (kind, body) = read_frame(stream)?;
         Ok((kind, body))
     }
-    
+
     fn write_response(stream: &mut UnixStream, status: u8, payload: &[u8]) -> io::Result<()> {
         stream.write_all(MAGIC)?;
         stream.write_all(&[VERSION, status])?;
         stream.write_all(&(payload.len() as u32).to_le_bytes())?;
         stream.write_all(payload)
     }
-    
+
     fn read_response(stream: &mut UnixStream) -> Result<(u8, Vec<u8>), String> {
         read_frame(stream)
     }
-    
+
     fn read_frame(stream: &mut UnixStream) -> Result<(u8, Vec<u8>), String> {
         let mut header = [0u8; 10];
         stream.read_exact(&mut header).map_err(io_error)?;
@@ -319,7 +322,10 @@ mod enabled {
             return Err("bad GPU worker frame magic".into());
         }
         if header[4] != VERSION {
-            return Err(format!("unsupported GPU worker protocol version {}", header[4]));
+            return Err(format!(
+                "unsupported GPU worker protocol version {}",
+                header[4]
+            ));
         }
         let kind = header[5];
         let len = u32::from_le_bytes(header[6..10].try_into().unwrap()) as usize;
@@ -330,7 +336,7 @@ mod enabled {
         stream.read_exact(&mut body).map_err(io_error)?;
         Ok((kind, body))
     }
-    
+
     fn encode_path(payload: &mut Vec<u8>, path: &Path) -> Result<(), String> {
         let text = path
             .to_str()
@@ -391,10 +397,14 @@ mod enabled {
         }
         let offset = i64::from_le_bytes(payload[..8].try_into().unwrap());
         let count = u32::from_le_bytes(payload[8..12].try_into().unwrap()) as usize;
-        let expected = 12usize.checked_add(count.checked_mul(4).ok_or("ADD_I32 count overflow")?)
+        let expected = 12usize
+            .checked_add(count.checked_mul(4).ok_or("ADD_I32 count overflow")?)
             .ok_or("ADD_I32 length overflow")?;
         if payload.len() != expected {
-            return Err(format!("ADD_I32 payload length mismatch: got {}, expected {expected}", payload.len()));
+            return Err(format!(
+                "ADD_I32 payload length mismatch: got {}, expected {expected}",
+                payload.len()
+            ));
         }
         let mut values = Vec::with_capacity(count);
         for chunk in payload[12..].chunks_exact(4) {
@@ -402,7 +412,7 @@ mod enabled {
         }
         Ok((offset, values))
     }
-    
+
     fn encode_i32_values(values: &[i32]) -> Vec<u8> {
         let mut body = Vec::with_capacity(4 + values.len() * 4);
         body.extend_from_slice(&(values.len() as u32).to_le_bytes());
@@ -411,25 +421,28 @@ mod enabled {
         }
         body
     }
-    
+
     fn decode_i32_values(body: &[u8]) -> Result<Vec<i32>, String> {
         if body.len() < 4 {
             return Err("i32 response too short".into());
         }
         let count = u32::from_le_bytes(body[..4].try_into().unwrap()) as usize;
-        let expected = 4usize.checked_add(count.checked_mul(4).ok_or("i32 count overflow")?)
+        let expected = 4usize
+            .checked_add(count.checked_mul(4).ok_or("i32 count overflow")?)
             .ok_or("i32 response length overflow")?;
         if body.len() != expected {
-            return Err(format!("i32 response length mismatch: got {}, expected {expected}", body.len()));
+            return Err(format!(
+                "i32 response length mismatch: got {}, expected {expected}",
+                body.len()
+            ));
         }
         Ok(body[4..]
             .chunks_exact(4)
             .map(|chunk| i32::from_le_bytes(chunk.try_into().unwrap()))
             .collect())
     }
-    
+
     fn io_error(error: io::Error) -> String {
         error.to_string()
     }
-    
 }
