@@ -4,6 +4,7 @@ use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use cml::compute::{ComputeBackend, CpuComputeBackend, ParallelCpuComputeBackend};
+use cml::gpu_cuda::emit_map_kernel;
 use cml::gpu_cuda_runtime::CudaSession;
 use cml::ir::{BufferLiteral, Ir, Params};
 
@@ -57,11 +58,14 @@ fn owner_i5_6400_gtx_1050_ti_i32_map_crossover() {
     warm.execute_map(&prewarm).expect("CUDA prewarm failed");
     assert_eq!(warm.cached_kernel_count().unwrap(), 1);
 
-    println!("size,cpu1_ms,cpu4_ms,cuda_cold_ms,cuda_warm_ms,cpu4_over_cuda_warm");
+    println!(
+        "size,admit_emit_ms,cpu1_ms,cpu4_ms,cuda_cold_ms,cuda_warm_ms,cuda_prepared_ms,cpu4_over_cuda_prepared"
+    );
 
     for count in sizes {
         let ir = map_ir(count);
 
+        let (admit_emit_time, _) = measure(3, || emit_map_kernel(&ir).unwrap());
         let (cpu1_time, cpu1_output) = measure(3, || cpu1.execute(&ir).unwrap());
         let (cpu4_time, cpu4_output) = measure(3, || cpu4.execute(&ir).unwrap());
         assert_eq!(cpu1_output, cpu4_output);
@@ -76,13 +80,19 @@ fn owner_i5_6400_gtx_1050_ti_i32_map_crossover() {
         assert_eq!(cpu1_output, warm_output.output);
         assert_eq!(warm.cached_kernel_count().unwrap(), 1);
 
-        let speedup = cpu4_time.as_secs_f64() / warm_time.as_secs_f64();
+        let prepared = warm.prepare_map(&ir).expect("CUDA preparation failed");
+        let (prepared_time, prepared_output) = measure(5, || prepared.execute().unwrap());
+        assert_eq!(cpu1_output, prepared_output.output);
+
+        let speedup = cpu4_time.as_secs_f64() / prepared_time.as_secs_f64();
         println!(
-            "{count},{:.3},{:.3},{:.3},{:.3},{speedup:.3}",
+            "{count},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{speedup:.3}",
+            admit_emit_time.as_secs_f64() * 1_000.0,
             cpu1_time.as_secs_f64() * 1_000.0,
             cpu4_time.as_secs_f64() * 1_000.0,
             cold_time.as_secs_f64() * 1_000.0,
             warm_time.as_secs_f64() * 1_000.0,
+            prepared_time.as_secs_f64() * 1_000.0,
         );
     }
 }

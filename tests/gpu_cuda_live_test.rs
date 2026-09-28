@@ -1,7 +1,7 @@
 #![cfg(feature = "gpu-cuda")]
 
-use cml::accelerator::{select_accelerator, AcceleratorApi, AcceleratorVendor, SelectionPolicy};
-use cml::gpu_cuda_runtime::{discover_devices, execute_map, CudaSession};
+use cml::accelerator::{AcceleratorApi, AcceleratorVendor, SelectionPolicy, select_accelerator};
+use cml::gpu_cuda_runtime::{CudaSession, discover_devices, execute_map};
 use cml::ir::BufferLiteral;
 use cml::{lower, parser};
 
@@ -54,4 +54,21 @@ fn one_session_reuses_one_kernel_across_different_buffers() {
         1,
         "buffer values/length must not create a second compiled kernel"
     );
+}
+
+#[test]
+#[ignore = "requires a live NVIDIA CUDA device"]
+fn prepared_map_reuses_one_admission_witness_for_immutable_ir() {
+    let session = CudaSession::new(0).expect("CUDA session creation failed");
+    let ir = lower_one("(numeric-buffer-map (lambda (x) (+ x 1)) #i32(5 6 7 8))");
+    let prepared = session.prepare_map(&ir).expect("CUDA preparation failed");
+
+    let first = prepared.execute().expect("first prepared execution failed");
+    let second = prepared
+        .execute()
+        .expect("second prepared execution failed");
+
+    assert_eq!(first.output, BufferLiteral::I32(vec![6, 7, 8, 9]));
+    assert_eq!(second.output, first.output);
+    assert_eq!(session.cached_kernel_count().unwrap(), 1);
 }

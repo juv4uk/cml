@@ -92,6 +92,23 @@ pub struct CudaSession {
     f32_buffers: Mutex<Option<ReusableBuffers<f32>>>,
 }
 
+/// A semantic admission witness tied to the exact immutable IR that was
+/// admitted. The borrow prevents the input buffer from being mutated or
+/// replaced while repeated CUDA executions reuse this witness.
+#[derive(Debug)]
+pub struct PreparedCudaMap<'a> {
+    session: &'a CudaSession,
+    function: CudaFunction,
+    buffer: &'a BufferLiteral,
+}
+
+impl PreparedCudaMap<'_> {
+    pub fn execute(&self) -> Result<CudaExecution, CudaRuntimeError> {
+        self.session
+            .execute_prepared_buffer(&self.function, self.buffer)
+    }
+}
+
 impl CudaSession {
     pub fn new(device_ordinal: usize) -> Result<Self, CudaRuntimeError> {
         let context = CudaContext::new(device_ordinal)
@@ -121,7 +138,7 @@ impl CudaSession {
             })
     }
 
-    pub fn execute_map(&self, ir: &Ir) -> Result<CudaExecution, CudaRuntimeError> {
+    pub fn prepare_map<'a>(&'a self, ir: &'a Ir) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
         let source = emit_map_kernel(ir)?;
         let buffer = map_input(ir).ok_or(CudaRuntimeError::UnsupportedInput)?;
         if matches!(buffer, BufferLiteral::I32(values) if values.is_empty())
@@ -131,6 +148,22 @@ impl CudaSession {
         }
 
         let function = self.function_for_source(source)?;
+        Ok(PreparedCudaMap {
+            session: self,
+            function,
+            buffer,
+        })
+    }
+
+    pub fn execute_map(&self, ir: &Ir) -> Result<CudaExecution, CudaRuntimeError> {
+        self.prepare_map(ir)?.execute()
+    }
+
+    fn execute_prepared_buffer(
+        &self,
+        function: &CudaFunction,
+        buffer: &BufferLiteral,
+    ) -> Result<CudaExecution, CudaRuntimeError> {
         let stream = self.context.default_stream();
 
         let output = match buffer {
@@ -155,7 +188,7 @@ impl CudaSession {
                     .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
                 unsafe {
                     stream
-                        .launch_builder(&function)
+                        .launch_builder(function)
                         .arg(&buffers.input)
                         .arg(&mut buffers.output)
                         .arg(&length)
@@ -186,11 +219,11 @@ impl CudaSession {
                 }
                 let buffers = cache.as_mut().expect("buffer cache initialized");
                 stream
-                    .memcpy_htod(&input, &mut buffers.input)
+                    .memcpy_htod(input.as_slice(), &mut buffers.input)
                     .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
                 unsafe {
                     stream
-                        .launch_builder(&function)
+                        .launch_builder(function)
                         .arg(&buffers.input)
                         .arg(&mut buffers.output)
                         .arg(&length)
