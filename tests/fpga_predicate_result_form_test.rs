@@ -5,7 +5,9 @@ use cml::parser;
 fn compile(source: &str) -> String {
     let expressions = parser::parse(source).expect("SENS source must parse");
     let program = lower::lower_program(&expressions).expect("SENS source must lower");
-    Compiler::new().compile(&program).expect("FPGA source must compile")
+    Compiler::new()
+        .compile(&program)
+        .expect("FPGA source must compile")
 }
 
 #[test]
