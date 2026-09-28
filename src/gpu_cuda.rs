@@ -45,6 +45,13 @@ pub fn emit_map_kernel(ir: &Ir) -> Result<String, CudaEmitError> {
                 F32MapKernel::MulAdd(scale, offset) => {
                     format!("x * {} + {}", cuda_f32(scale), cuda_f32(offset))
                 }
+                // GPU-2 E2/E3 / #379: division and sqrt are IEEE operations
+                // in NVRTC's default mode; a closed constant is emitted as
+                // its exact stored bits, so canonical == backend bitwise
+                // even for NaN/Inf.
+                F32MapKernel::Div(divisor) => format!("x / {}", cuda_f32(divisor)),
+                F32MapKernel::Sqrt => "sqrtf(x)".to_string(),
+                F32MapKernel::Constant(bits) => format!("__int_as_float(0x{bits:08x})"),
             };
             ("float", expression)
         }
@@ -88,9 +95,13 @@ fn emit_i32_expr(expression: &ScalarExpr) -> Result<String, CudaEmitError> {
             emit_i32_expr(left)?,
             emit_i32_expr(right)?
         )),
-        // #368: outside the proven-integer subset; the float path owns
-        // these nodes (see `f32_scale_offset`).
-        ScalarExpr::Float32(_) | ScalarExpr::Mul(..) => Err(CudaEmitError::UnsupportedRegion),
+        // #368/#379: outside the proven-integer subset; the float path
+        // owns these nodes (see `F32MapKernel`).
+        ScalarExpr::Float32(_)
+        | ScalarExpr::Mul(..)
+        | ScalarExpr::Sub(..)
+        | ScalarExpr::Div(..)
+        | ScalarExpr::Sqrt(_) => Err(CudaEmitError::UnsupportedRegion),
     }
 }
 
