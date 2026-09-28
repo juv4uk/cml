@@ -1,0 +1,69 @@
+name: GPU runner worker live
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "src/bin/cml-gpu-worker.rs"
+      - "src/gpu_cuda*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/gpu-worker-live.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: gpu-gtx-1050-ti
+  cancel-in-progress: false
+
+jobs:
+  worker-live:
+    runs-on: [self-hosted, gpu, gtx-1050-ti]
+    timeout-minutes: 20
+    env:
+      LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/lib/wsm-gcc-runtime
+      CUDA_PATH: /usr/local/cuda-12.6
+      CUDA_HOME: /usr/local/cuda-12.6
+      RUSTC_WRAPPER: /usr/bin/sccache
+      SCCACHE_DIR: /home/agents/.cache/sccache
+      SCCACHE_CACHE_SIZE: 30G
+      CARGO_BUILD_JOBS: 4
+      CARGO_INCREMENTAL: 0
+      CML_GPU_WORKER_SOCKET: /tmp/cml-gpu-worker-ci.sock
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Isolate Cargo target by rustc build
+        run: |
+          rustc_key="$(rustc -vV | sha256sum | cut -c1-16)"
+          echo "CARGO_TARGET_DIR=/home/agents/.cache/cargo-target/cml/rustc-$rustc_key" >> "$GITHUB_ENV"
+
+      - name: external/sens from the local clone
+        run: |
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
+
+      - name: Build persistent worker
+        run: cargo build --release --features gpu-cuda --bin cml-gpu-worker
+
+      - name: Runner to worker to CUDA round trip
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "$CML_GPU_WORKER_SOCKET"
+          "$CARGO_TARGET_DIR/release/cml-gpu-worker" serve >worker.out 2>worker.err &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true; wait "$worker_pid" 2>/dev/null || true; rm -f "$CML_GPU_WORKER_SOCKET"' EXIT
+
+          for _ in $(seq 1 50); do
+            [[ -S "$CML_GPU_WORKER_SOCKET" ]] && break
+            sleep 0.1
+          done
+          [[ -S "$CML_GPU_WORKER_SOCKET" ]]
+
+          test "$("$CARGO_TARGET_DIR/release/cml-gpu-worker" ping)" = "pong"
+          "$CARGO_TARGET_DIR/release/cml-gpu-worker" probe
+          result="$("$CARGO_TARGET_DIR/release/cml-gpu-worker" add-i32 7 1 2 3 4)"
+          test "$result" = "8 9 10 11"
+
+          echo "GPU worker round trip: $result"
+          cat worker.err
