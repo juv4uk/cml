@@ -50,8 +50,8 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         "#310 active upstream revision channels must follow the renamed juv4uk/sens repository"
     );
     assert!(
-        manifest.contains("(supported-pin-source . external/my-lisp-gitlink)"),
-        "#84 supported-pin must be the checked-in external/my-lisp gitlink"
+        manifest.contains("(supported-pin-source . external/sens-gitlink)"),
+        "#84 supported-pin must be the checked-in external/sens gitlink"
     );
     assert!(
         manifest.contains("(observed-current-source . exact-github-commit)"),
@@ -77,7 +77,7 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         .expect("#310 requires the active upstream submodule declaration");
     assert!(
         gitmodules.contains("url = https://github.com/juv4uk/sens.git"),
-        "#310 external/my-lisp may remain the local path, but its fetch URL must be juv4uk/sens"
+        "#310 external/sens may remain the local path, but its fetch URL must be juv4uk/sens"
     );
     assert!(
         !gitmodules.contains("github.com/juv4uk/my-lisp"),
@@ -88,7 +88,7 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
     assert_eq!(
         head(&supported_checkout),
         supported,
-        "#84 supported-pin declaration must match the external/my-lisp gitlink checkout"
+        "#84 supported-pin declaration must match the external/sens gitlink checkout"
     );
 
     let observed_checkout = sibling("my-lisp");

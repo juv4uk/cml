@@ -11,7 +11,7 @@ use cml::{lower, parser};
 
 fn upstream_conformance_corpus() -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("external/my-lisp/tests/fixtures/conformance.lisp");
+        .join("external/sens/tests/fixtures/conformance.lisp");
     fs::read_to_string(&path).unwrap_or_else(|error| {
         panic!(
             "#123 requires pinned upstream conformance corpus at {}: {error}",

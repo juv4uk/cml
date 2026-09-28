@@ -1,5 +1,5 @@
 //! Generated Canon surface tables and machine-readable operations, read
-//! from the real, vendored my-lisp `lib/surface/semantic-registry.wsm`
+//! from the real, vendored my-lisp `lib/surface/semantic-registry.lisp`
 //! at build time (see `build.rs`).
 //!
 //! `CANON_UPPER_SURFACES` / `CANON_EXACT_SURFACES` feed `semantic.rs`'s

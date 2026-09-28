@@ -20,11 +20,11 @@ fn get_head_commit() -> String {
     "unknown-head".to_string()
 }
 
-/// Reads the external/my-lisp submodule's actual checked-out commit —
+/// Reads the external/sens submodule's actual checked-out commit —
 /// never a hardcoded constant (SUBMODULE-DEPENDENCY-MODEL-2026-09-16).
 fn get_mylisp_pin() -> String {
     let output = Command::new("git")
-        .args(["-C", "external/my-lisp", "rev-parse", "HEAD"])
+        .args(["-C", "external/sens", "rev-parse", "HEAD"])
         .output();
     if let Ok(out) = output {
         if out.status.success() {
