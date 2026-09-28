@@ -5,8 +5,8 @@
 //! to the optional CUDA runtime layer.
 
 use crate::compute::{
-    AdmissionBlocker, BulkOperation, ComputeKernel, NumericDomain, ScalarExpr, analyze,
-    f32_scale_offset,
+    AdmissionBlocker, BulkOperation, ComputeKernel, F32MapKernel, NumericDomain, ScalarExpr,
+    analyze,
 };
 use crate::ir::Ir;
 
@@ -30,22 +30,21 @@ pub fn emit_map_kernel(ir: &Ir) -> Result<String, CudaEmitError> {
     let (element_type, expression) = match analysis.numeric_domain {
         NumericDomain::FixedWidthInteger => ("int", emit_i32_expr(&kernel.body)?),
         NumericDomain::InexactFloat => {
-            let (scale, offset) =
-                f32_scale_offset(&kernel.body).ok_or(CudaEmitError::UnsupportedRegion)?;
-            // GPU-2-E1 / #368: the scale-affine shape rounds twice by
-            // contract (A1, sens#1585). `__fmul_rn` blocks FFMA contraction
-            // in every mode, so production and witness modes agree bitwise
-            // with the CPU backend; the mode-level `-fmad=false` of
-            // `CudaKernelMode::BitwiseEquality` (PR #366) stays as that
-            // mode's blanket guarantee.
-            let expression = if scale == 1.0 {
-                format!("x + {}", cuda_f32(offset))
-            } else {
-                format!(
-                    "__fmul_rn(x, {}) + {}",
-                    cuda_f32(scale),
-                    cuda_f32(offset)
-                )
+            let form =
+                F32MapKernel::lower(&kernel.body).ok_or(CudaEmitError::UnsupportedRegion)?;
+            // GPU-2-E1 / #368: two plain operators. FFMA contraction is
+            // controlled by the kernel mode (`-fmad=false` in
+            // `CudaKernelMode::BitwiseEquality`, PR #366), not by the
+            // emitter; the production-mode FMA policy is a separate
+            // language-owner decision (sens#1585).
+            let expression = match form {
+                F32MapKernel::AffineAdd(offset) | F32MapKernel::Add(offset) => {
+                    format!("x + {}", cuda_f32(offset))
+                }
+                F32MapKernel::Mul(scale) => format!("x * {}", cuda_f32(scale)),
+                F32MapKernel::MulAdd(scale, offset) => {
+                    format!("x * {} + {}", cuda_f32(scale), cuda_f32(offset))
+                }
             };
             ("float", expression)
         }
