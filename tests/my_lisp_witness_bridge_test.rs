@@ -104,7 +104,7 @@ fn executed_cml_actual_is_judged_only_by_lisp_owned_witness_logic() {
     // Select the committed compiler-corpus row by source expression only.
     // Its expected outcome is never copied into this Rust test.
     let corpus = upstream_corpus();
-    let source = "(atom (quote radio))";
+    let source = "(00000010 (quote radio))";
     let row = compiler_witness_row(&corpus, source);
 
     let expressions =
