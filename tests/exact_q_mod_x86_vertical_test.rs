@@ -13,10 +13,10 @@ use cml::{lower, parser};
 
 fn upstream_corpus() -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("external/my-lisp/tests/fixtures/conformance.lisp");
+        .join("external/sens/tests/fixtures/conformance.lisp");
     fs::read_to_string(&path).unwrap_or_else(|error| {
         panic!(
-            "#111 requires pinned external/my-lisp conformance corpus at {}: {error}",
+            "#111 requires pinned external/sens conformance corpus at {}: {error}",
             path.display()
         )
     })

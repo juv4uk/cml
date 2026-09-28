@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 fn upstream_path(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("external/my-lisp")
+        .join("external/sens")
         .join(relative)
 }
 
