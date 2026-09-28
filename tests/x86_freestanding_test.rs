@@ -518,7 +518,7 @@ fn explicit_self_tail_call_loop_lowers_without_calls() {
 #[test]
 fn literal_true_emits_the_canonical_symbol_word_not_the_manufactured_tag_true_immediate() {
     // Regression for WSM-OS-TARGET-TAG-TRUE-MANUFACTURED-PRIMITIVE
-    // (ecosystem/plans/tasks.my, 2026-09-04): before this fix, `Ir::True`
+    // (ecosystem/plans/tasks.lisp, 2026-09-04): before this fix, `Ir::True`
     // compiled to `emit_immediate(wsm_os_target::TRUE)` -- the raw
     // manufactured Tag::True immediate wsm-os-runtime's own eq/atom
     // stopped producing back on 2026-09-02 (see wsm-os-runtime::CANONICAL_T's
@@ -1207,7 +1207,7 @@ fn standalone_cond_true_false_branch_selection_witness() {
 
 #[test]
 fn compiler_corpus_quote_radio_returns_the_interned_symbol() {
-    // tests/fixtures/conformance.my (my-lisp, compiler-corpus tag):
+    // tests/fixtures/conformance.lisp (my-lisp, compiler-corpus tag):
     // (expr . "(quote radio)") (expected . "radio"). No primitive call
     // involved -- a bare quoted symbol is a real cml frontend fixture this
     // backend already admits end to end, real parse+lower+compile+link+run.
@@ -1254,7 +1254,7 @@ fn compiler_corpus_quote_radio_returns_the_interned_symbol() {
 
 #[test]
 fn compiler_corpus_eq_on_matching_and_differing_quoted_symbols() {
-    // conformance.my compiler-corpus fixtures:
+    // conformance.lisp compiler-corpus fixtures:
     // (eq (quote radio) (quote radio)) => t
     // (eq (quote radio) (quote antenna)) => ()
     // wsm_eq is real word-equality (same convention this file's other eq
