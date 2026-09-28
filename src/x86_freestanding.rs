@@ -1538,7 +1538,15 @@ impl Emitter {
 
     fn emit_ir(&mut self, ir: &Ir) -> Result<(), CompileError> {
         match ir {
-            Ir::Sid(_) => Err(CompileError::UnsupportedVariant("standalone SID8 value")),
+            Ir::Sid(sid) => {
+                // Exact resolved SENS identity is a first-class target value.
+                // Materialize it only through the ratified target ABI; never
+                // alias it through a symbol, spelling, string, or fixnum.
+                self.line("    movq %r12, %rdi");
+                self.line(&format!("    movq ${}, %rsi", sid.packed_byte()));
+                self.line("    call wsm_sid8_new");
+                Ok(())
+            }
             Ir::Int(value) => {
                 let word = wsm_os_target::encode_fixnum(*value)
                     .ok_or(CompileError::FixnumOutOfRange(*value))?;
