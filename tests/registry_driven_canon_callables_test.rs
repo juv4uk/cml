@@ -3,7 +3,7 @@ use cml::canon::{
 };
 use cml::ir::{Ir, PrimOp};
 use cml::{lower, parser};
-use sens::Sid8;
+use sens::Sens8;
 
 fn lower_one(source: &str) -> Ir {
     let expressions = parser::parse(source).expect("source must parse");
@@ -56,13 +56,13 @@ fn list_sid_is_generated_as_a_callable_and_lowers_through_sid_identity() {
     let lowered = lower_one("(list (quote A) (quote B) (quote C))");
     assert!(
         matches!(lowered, Ir::App { ref func, ref args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00100111)) && args.len() == 3),
-        "LIST call must lower to Ir::App with Sid8 function key (SID8 contract #246); got {lowered:?}"
+        "LIST call must lower to Ir::App with Sens8 function key (SID8 contract #246); got {lowered:?}"
     );
 
     let empty = lower_one("(list)");
     assert!(
         matches!(empty, Ir::App { ref func, ref args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00100111)) && args.is_empty()),
-        "zero-arity LIST must lower to Ir::App with Sid8 function key (SID8 contract #246); got {empty:?}"
+        "zero-arity LIST must lower to Ir::App with Sens8 function key (SID8 contract #246); got {empty:?}"
     );
 }
 
@@ -71,7 +71,7 @@ fn every_admitted_canon_callable_surface_lowers_to_one_semantic_operation() {
     // Registry-driven Canon dispatch:
     // These peer spellings are the stable surfaces of semantic IDs 0002..0006, 0104, 1001, 1022
     // in my-lisp/lib/surface/semantic-registry.wsm.
-    let cases: &[(sens::Sid8, &str, &str, &[&str])] = &[
+    let cases: &[(sens::Sens8, &str, &str, &[&str])] = &[
         (sens::sid!(00000010), "atom", "1", &["атом?", "aṇu", ".?"]),
         (
             sens::sid!(00000011),
@@ -124,7 +124,7 @@ fn every_admitted_canon_callable_surface_is_the_same_first_class_value() {
     // Call-position identity is not enough: Canon callables are first-class.
     // A peer surface used as a value must therefore lower to the same builtin
     // identity as its English peer instead of becoming a spelling-named Var.
-    let cases: &[(sens::Sid8, &str, &[&str])] = &[
+    let cases: &[(sens::Sens8, &str, &[&str])] = &[
         (sens::sid!(00000010), "atom", &["атом?", "aṇu", ".?"]),
         (sens::sid!(00000011), "eq", &["тотожне?", "abheda", "=?"]),
         (sens::sid!(00000100), "cons", &["сполучити", "saṃyuj", ":"]),
@@ -239,7 +239,7 @@ fn operations_table_file_matches_compiled_canon_table() {
     assert!(file_content.contains("(version . (1 0))"));
 
     // Ensure every compiled operation ID is present in the machine-readable file
-    // The file uses string format "00000001" not Rust Debug format "Sid8(00000001)"
+    // The file uses string format "00000001" not Rust Debug format "Sens8(00000001)"
     for op in CANON_OPERATIONS_TABLE {
         let sid_spelling = op.semantic_id.to_string(); // exact 8-bit spelling
         assert!(
