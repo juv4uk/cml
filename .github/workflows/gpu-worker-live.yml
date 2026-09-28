@@ -66,4 +66,28 @@ jobs:
           test "$result" = "8 9 10 11"
 
           echo "GPU worker round trip: $result"
+
+          # File-backed workload: 32 MiB / 8,388,608 i32 values and 64
+          # admitted map steps. Only paths + offsets cross the socket; the
+          # worker keeps the CUDA session and compiled kernel cache alive.
+          dd if=/dev/zero of=worker-input.i32 bs=1M count=32 status=none
+          offsets=()
+          for _ in $(seq 1 64); do offsets+=(1); done
+
+          for iteration in 1 2 3; do
+            evidence="$("$CARGO_TARGET_DIR/release/cml-gpu-worker"               chain-file-i32 worker-input.i32 worker-output.i32 "${offsets[@]}")"
+            echo "heavy iteration $iteration: $evidence"
+          done
+
+          test "$(stat -c %s worker-output.i32)" = "33554432"
+          python3 - <<'PY'
+import struct
+with open("worker-output.i32", "rb") as f:
+    first = struct.unpack("<i", f.read(4))[0]
+    f.seek(-4, 2)
+    last = struct.unpack("<i", f.read(4))[0]
+assert first == 64 and last == 64, (first, last)
+print(f"file-backed CUDA witness: first={first} last={last}")
+PY
+
           cat worker.err
