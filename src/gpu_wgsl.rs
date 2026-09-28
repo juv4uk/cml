@@ -4,7 +4,7 @@
 //! and readback belong to the later `wgpu` runtime slice.
 
 use crate::compute::{
-    AdmissionBlocker, BulkOperation, NumericDomain, ScalarExpr, analyze, f32_affine_offset,
+    AdmissionBlocker, BulkOperation, NumericDomain, ScalarExpr, analyze, f32_scale_offset,
 };
 use crate::ir::Ir;
 
@@ -28,8 +28,17 @@ pub fn emit_map_shader(ir: &Ir) -> Result<String, WgslError> {
     let (element_type, expression) = match analysis.numeric_domain {
         NumericDomain::FixedWidthInteger => ("i32", emit_i32_expr(&kernel.body)?),
         NumericDomain::InexactFloat => {
-            let offset = f32_affine_offset(&kernel.body).ok_or(WgslError::UnsupportedRegion)?;
-            ("f32", format!("x + {}", wgsl_f32(offset as f32)))
+            let (scale, offset) =
+                f32_scale_offset(&kernel.body).ok_or(WgslError::UnsupportedRegion)?;
+            // WGSL f32 arithmetic rounds per operation (no contraction),
+            // so the plain two-operator form already carries the two-rounding
+            // A1 semantics (sens#1585; GPU-2-E1 / #368).
+            let expression = if scale == 1.0 {
+                format!("x + {}", wgsl_f32(offset))
+            } else {
+                format!("x * {} + {}", wgsl_f32(scale), wgsl_f32(offset))
+            };
+            ("f32", expression)
         }
         _ => return Err(WgslError::UnsupportedRegion),
     };
@@ -57,6 +66,9 @@ fn emit_i32_expr(expression: &ScalarExpr) -> Result<String, WgslError> {
             emit_i32_expr(left)?,
             emit_i32_expr(right)?
         )),
+        // #366/#368: outside the proven-integer subset; the float path owns
+        // these nodes (see `f32_scale_offset`).
+        ScalarExpr::Float32(_) | ScalarExpr::Mul(..) => Err(WgslError::UnsupportedRegion),
     }
 }
 
