@@ -16,11 +16,11 @@ on:
 jobs:
   sync:
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, guix]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
-      UPSTREAM_CLONE: /home/agents/GitHub/sens
+      UPSTREAM_CLONE: .upstream/sens
       UPSTREAM_REF: origin/main
       UPSTREAM_PATH: language-contract.lisp
       TARGET_PATH: contracts/my-lisp/language-contract.lisp
@@ -32,6 +32,14 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
 
+      - name: Check out public sens authority
+        uses: actions/checkout@v4
+        with:
+          repository: juv4uk/sens
+          ref: main
+          fetch-depth: 0
+          path: .upstream/sens
+
       - name: Observe exact sens contract revision
         id: sync
         shell: bash
@@ -39,9 +47,8 @@ jobs:
           set -euo pipefail
           test -d "$UPSTREAM_CLONE/.git"
 
-          git -C "$UPSTREAM_CLONE" fetch --quiet origin main
           contract_revision="$(
-            git -C "$UPSTREAM_CLONE" log -1 --format=%H "$UPSTREAM_REF" -- "$UPSTREAM_PATH"
+            git -C "$UPSTREAM_CLONE" log -1 --format=%H HEAD -- "$UPSTREAM_PATH"
           )"
           [[ "$contract_revision" =~ ^[0-9a-f]{40}$ ]]
 
@@ -92,17 +99,25 @@ jobs:
 
   verify:
     if: github.event_name == 'pull_request'
-    runs-on: [self-hosted, guix]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     env:
-      UPSTREAM_CLONE: /home/agents/GitHub/sens
+      UPSTREAM_CLONE: .upstream/sens
       UPSTREAM_PATH: language-contract.lisp
       TARGET_PATH: contracts/my-lisp/language-contract.lisp
       LOCK_PATH: contracts/my-lisp/lock.lisp
     steps:
       - name: Check out consumer repository
         uses: actions/checkout@v4
+
+      - name: Check out public sens authority
+        uses: actions/checkout@v4
+        with:
+          repository: juv4uk/sens
+          ref: main
+          fetch-depth: 0
+          path: .upstream/sens
 
       - name: Verify digest and exact pinned sens source
         shell: bash
@@ -117,7 +132,6 @@ jobs:
           [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
           [[ "$locked_digest" =~ ^[0-9a-f]{64}$ ]]
 
-          git -C "$UPSTREAM_CLONE" fetch --quiet origin main
           git -C "$UPSTREAM_CLONE" cat-file -e "${revision}^{commit}"
 
           actual_digest="$(sha256sum "$TARGET_PATH" | awk '{print $1}')"
