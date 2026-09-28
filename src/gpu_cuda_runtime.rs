@@ -39,6 +39,28 @@ pub struct CudaSelectedChainExecution {
     pub device: CudaDevice,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CudaDriverStage {
+    DeviceCount,
+    ContextCreate { ordinal: usize },
+    ContextBind,
+    DeviceEvidence,
+    MemoryQuery,
+    Allocation,
+    HostToDeviceCopy,
+    ModuleLoad,
+    FunctionLoad,
+    Launch,
+    DeviceToHostCopy,
+    InternalState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CudaCapabilityStatus {
+    RuntimePresentNoDevices,
+    Live(Vec<CudaDevice>),
+}
+
 #[derive(Debug)]
 pub enum CudaRuntimeError {
     Emit(CudaEmitError),
@@ -52,7 +74,10 @@ pub enum CudaRuntimeError {
         chain_len: usize,
     },
     Nvrtc(String),
-    Driver(String),
+    Driver {
+        stage: CudaDriverStage,
+        message: String,
+    },
 }
 
 #[derive(Debug)]
@@ -64,6 +89,15 @@ pub struct CudaChainRuntimeError {
 impl From<CudaEmitError> for CudaRuntimeError {
     fn from(error: CudaEmitError) -> Self {
         Self::Emit(error)
+    }
+}
+
+impl CudaRuntimeError {
+    fn driver(stage: CudaDriverStage, error: impl ToString) -> Self {
+        Self::Driver {
+            stage,
+            message: error.to_string(),
+        }
     }
 }
 
@@ -111,8 +145,14 @@ impl PreparedCudaMap<'_> {
 
 impl CudaSession {
     pub fn new(device_ordinal: usize) -> Result<Self, CudaRuntimeError> {
-        let context = CudaContext::new(device_ordinal)
-            .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+        let context = CudaContext::new(device_ordinal).map_err(|error| {
+            CudaRuntimeError::driver(
+                CudaDriverStage::ContextCreate {
+                    ordinal: device_ordinal,
+                },
+                error,
+            )
+        })?;
         let device = device_evidence(&context)?;
         Ok(Self {
             context,
@@ -134,7 +174,10 @@ impl CudaSession {
             .lock()
             .map(|kernels| kernels.len())
             .map_err(|error| {
-                CudaRuntimeError::Driver(format!("kernel cache mutex poisoned: {error}"))
+                CudaRuntimeError::driver(
+                    CudaDriverStage::InternalState,
+                    format!("kernel cache mutex poisoned: {error}"),
+                )
             })
     }
 
@@ -171,21 +214,28 @@ impl CudaSession {
                 let length =
                     u32::try_from(input.len()).map_err(|_| CudaRuntimeError::UnsupportedInput)?;
                 let mut cache = self.i32_buffers.lock().map_err(|error| {
-                    CudaRuntimeError::Driver(format!("i32 buffer cache mutex poisoned: {error}"))
+                    CudaRuntimeError::driver(
+                        CudaDriverStage::InternalState,
+                        format!("i32 buffer cache mutex poisoned: {error}"),
+                    )
                 })?;
                 if cache.as_ref().map(|buffers| buffers.len) != Some(input.len()) {
                     *cache = Some(ReusableBuffers {
                         len: input.len(),
-                        input: unsafe { stream.alloc::<i32>(input.len()) }
-                            .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?,
-                        output: unsafe { stream.alloc::<i32>(input.len()) }
-                            .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?,
+                        input: unsafe { stream.alloc::<i32>(input.len()) }.map_err(|error| {
+                            CudaRuntimeError::driver(CudaDriverStage::Allocation, error)
+                        })?,
+                        output: unsafe { stream.alloc::<i32>(input.len()) }.map_err(|error| {
+                            CudaRuntimeError::driver(CudaDriverStage::Allocation, error)
+                        })?,
                     });
                 }
                 let buffers = cache.as_mut().expect("buffer cache initialized");
                 stream
                     .memcpy_htod(input.as_slice(), &mut buffers.input)
-                    .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+                    .map_err(|error| {
+                        CudaRuntimeError::driver(CudaDriverStage::HostToDeviceCopy, error)
+                    })?;
                 unsafe {
                     stream
                         .launch_builder(function)
@@ -194,11 +244,13 @@ impl CudaSession {
                         .arg(&length)
                         .launch(LaunchConfig::for_num_elems(length))
                 }
-                .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+                .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Launch, error))?;
                 let mut output = vec![0i32; input.len()];
                 stream
                     .memcpy_dtoh(&buffers.output, &mut output)
-                    .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+                    .map_err(|error| {
+                        CudaRuntimeError::driver(CudaDriverStage::DeviceToHostCopy, error)
+                    })?;
                 BufferLiteral::I32(output)
             }
             BufferLiteral::F32(bits) => {
@@ -206,21 +258,28 @@ impl CudaSession {
                 let length =
                     u32::try_from(input.len()).map_err(|_| CudaRuntimeError::UnsupportedInput)?;
                 let mut cache = self.f32_buffers.lock().map_err(|error| {
-                    CudaRuntimeError::Driver(format!("f32 buffer cache mutex poisoned: {error}"))
+                    CudaRuntimeError::driver(
+                        CudaDriverStage::InternalState,
+                        format!("f32 buffer cache mutex poisoned: {error}"),
+                    )
                 })?;
                 if cache.as_ref().map(|buffers| buffers.len) != Some(input.len()) {
                     *cache = Some(ReusableBuffers {
                         len: input.len(),
-                        input: unsafe { stream.alloc::<f32>(input.len()) }
-                            .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?,
-                        output: unsafe { stream.alloc::<f32>(input.len()) }
-                            .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?,
+                        input: unsafe { stream.alloc::<f32>(input.len()) }.map_err(|error| {
+                            CudaRuntimeError::driver(CudaDriverStage::Allocation, error)
+                        })?,
+                        output: unsafe { stream.alloc::<f32>(input.len()) }.map_err(|error| {
+                            CudaRuntimeError::driver(CudaDriverStage::Allocation, error)
+                        })?,
                     });
                 }
                 let buffers = cache.as_mut().expect("buffer cache initialized");
                 stream
                     .memcpy_htod(input.as_slice(), &mut buffers.input)
-                    .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+                    .map_err(|error| {
+                        CudaRuntimeError::driver(CudaDriverStage::HostToDeviceCopy, error)
+                    })?;
                 unsafe {
                     stream
                         .launch_builder(function)
@@ -229,11 +288,13 @@ impl CudaSession {
                         .arg(&length)
                         .launch(LaunchConfig::for_num_elems(length))
                 }
-                .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+                .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Launch, error))?;
                 let mut output = vec![0f32; input.len()];
                 stream
                     .memcpy_dtoh(&buffers.output, &mut output)
-                    .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+                    .map_err(|error| {
+                        CudaRuntimeError::driver(CudaDriverStage::DeviceToHostCopy, error)
+                    })?;
                 BufferLiteral::F32(output.into_iter().map(f32::to_bits).collect())
             }
         };
@@ -316,11 +377,18 @@ impl CudaSession {
             .checked_mul(3)
             .ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
 
-        self.context
-            .bind_to_thread()
-            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
-        let (free_bytes, _) = cudarc::driver::result::mem_get_info()
-            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
+        self.context.bind_to_thread().map_err(|error| {
+            fail(
+                0,
+                CudaRuntimeError::driver(CudaDriverStage::ContextBind, error),
+            )
+        })?;
+        let (free_bytes, _) = cudarc::driver::result::mem_get_info().map_err(|error| {
+            fail(
+                0,
+                CudaRuntimeError::driver(CudaDriverStage::MemoryQuery, error),
+            )
+        })?;
         if required_bytes > free_bytes {
             return Err(fail(
                 0,
@@ -351,11 +419,24 @@ impl CudaSession {
         let stream = self.context.default_stream();
         let input_device = stream
             .clone_htod(input_values.as_slice())
-            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
-        let mut ping = unsafe { stream.alloc::<i32>(input_values.len()) }
-            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
-        let mut pong = unsafe { stream.alloc::<i32>(input_values.len()) }
-            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
+            .map_err(|error| {
+                fail(
+                    0,
+                    CudaRuntimeError::driver(CudaDriverStage::HostToDeviceCopy, error),
+                )
+            })?;
+        let mut ping = unsafe { stream.alloc::<i32>(input_values.len()) }.map_err(|error| {
+            fail(
+                0,
+                CudaRuntimeError::driver(CudaDriverStage::Allocation, error),
+            )
+        })?;
+        let mut pong = unsafe { stream.alloc::<i32>(input_values.len()) }.map_err(|error| {
+            fail(
+                0,
+                CudaRuntimeError::driver(CudaDriverStage::Allocation, error),
+            )
+        })?;
 
         let mut outputs = Vec::with_capacity(requested.len());
         for (step, function) in prepared.iter().enumerate() {
@@ -368,12 +449,20 @@ impl CudaSession {
                         .arg(&length)
                         .launch(LaunchConfig::for_num_elems(length))
                 }
-                .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+                .map_err(|error| {
+                    fail(
+                        step,
+                        CudaRuntimeError::driver(CudaDriverStage::Launch, error),
+                    )
+                })?;
                 if requested.contains(&step) {
                     let mut output = vec![0i32; input_values.len()];
-                    stream
-                        .memcpy_dtoh(&ping, &mut output)
-                        .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+                    stream.memcpy_dtoh(&ping, &mut output).map_err(|error| {
+                        fail(
+                            step,
+                            CudaRuntimeError::driver(CudaDriverStage::DeviceToHostCopy, error),
+                        )
+                    })?;
                     outputs.push((step, BufferLiteral::I32(output)));
                 }
             } else if step % 2 == 1 {
@@ -385,12 +474,20 @@ impl CudaSession {
                         .arg(&length)
                         .launch(LaunchConfig::for_num_elems(length))
                 }
-                .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+                .map_err(|error| {
+                    fail(
+                        step,
+                        CudaRuntimeError::driver(CudaDriverStage::Launch, error),
+                    )
+                })?;
                 if requested.contains(&step) {
                     let mut output = vec![0i32; input_values.len()];
-                    stream
-                        .memcpy_dtoh(&pong, &mut output)
-                        .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+                    stream.memcpy_dtoh(&pong, &mut output).map_err(|error| {
+                        fail(
+                            step,
+                            CudaRuntimeError::driver(CudaDriverStage::DeviceToHostCopy, error),
+                        )
+                    })?;
                     outputs.push((step, BufferLiteral::I32(output)));
                 }
             } else {
@@ -402,12 +499,20 @@ impl CudaSession {
                         .arg(&length)
                         .launch(LaunchConfig::for_num_elems(length))
                 }
-                .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+                .map_err(|error| {
+                    fail(
+                        step,
+                        CudaRuntimeError::driver(CudaDriverStage::Launch, error),
+                    )
+                })?;
                 if requested.contains(&step) {
                     let mut output = vec![0i32; input_values.len()];
-                    stream
-                        .memcpy_dtoh(&ping, &mut output)
-                        .map_err(|error| fail(step, CudaRuntimeError::Driver(error.to_string())))?;
+                    stream.memcpy_dtoh(&ping, &mut output).map_err(|error| {
+                        fail(
+                            step,
+                            CudaRuntimeError::driver(CudaDriverStage::DeviceToHostCopy, error),
+                        )
+                    })?;
                     outputs.push((step, BufferLiteral::I32(output)));
                 }
             }
@@ -452,11 +557,18 @@ impl CudaSession {
             .checked_mul(2)
             .ok_or_else(|| fail(0, CudaRuntimeError::UnsupportedInput))?;
 
-        self.context
-            .bind_to_thread()
-            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
-        let (free_bytes, _) = cudarc::driver::result::mem_get_info()
-            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
+        self.context.bind_to_thread().map_err(|error| {
+            fail(
+                0,
+                CudaRuntimeError::driver(CudaDriverStage::ContextBind, error),
+            )
+        })?;
+        let (free_bytes, _) = cudarc::driver::result::mem_get_info().map_err(|error| {
+            fail(
+                0,
+                CudaRuntimeError::driver(CudaDriverStage::MemoryQuery, error),
+            )
+        })?;
         if required_bytes > free_bytes {
             return Err(fail(
                 0,
@@ -470,9 +582,19 @@ impl CudaSession {
         let stream = self.context.default_stream();
         let input_device = stream
             .clone_htod(input_values.as_slice())
-            .map_err(|error| fail(0, CudaRuntimeError::Driver(error.to_string())))?;
-        let mut output_device = unsafe { stream.alloc::<i32>(input_values.len()) }
-            .map_err(|error| fail(final_step, CudaRuntimeError::Driver(error.to_string())))?;
+            .map_err(|error| {
+                fail(
+                    0,
+                    CudaRuntimeError::driver(CudaDriverStage::HostToDeviceCopy, error),
+                )
+            })?;
+        let mut output_device =
+            unsafe { stream.alloc::<i32>(input_values.len()) }.map_err(|error| {
+                fail(
+                    final_step,
+                    CudaRuntimeError::driver(CudaDriverStage::Allocation, error),
+                )
+            })?;
 
         unsafe {
             stream
@@ -482,12 +604,22 @@ impl CudaSession {
                 .arg(&length)
                 .launch(LaunchConfig::for_num_elems(length))
         }
-        .map_err(|error| fail(final_step, CudaRuntimeError::Driver(error.to_string())))?;
+        .map_err(|error| {
+            fail(
+                final_step,
+                CudaRuntimeError::driver(CudaDriverStage::Launch, error),
+            )
+        })?;
 
         let mut output = vec![0i32; input_values.len()];
         stream
             .memcpy_dtoh(&output_device, &mut output)
-            .map_err(|error| fail(final_step, CudaRuntimeError::Driver(error.to_string())))?;
+            .map_err(|error| {
+                fail(
+                    final_step,
+                    CudaRuntimeError::driver(CudaDriverStage::DeviceToHostCopy, error),
+                )
+            })?;
 
         Ok(Some(CudaSelectedChainExecution {
             outputs: vec![(final_step, BufferLiteral::I32(output))],
@@ -497,7 +629,10 @@ impl CudaSession {
 
     fn function_for_source(&self, source: String) -> Result<CudaFunction, CudaRuntimeError> {
         let mut kernels = self.kernels.lock().map_err(|error| {
-            CudaRuntimeError::Driver(format!("kernel cache mutex poisoned: {error}"))
+            CudaRuntimeError::driver(
+                CudaDriverStage::InternalState,
+                format!("kernel cache mutex poisoned: {error}"),
+            )
         })?;
         if let Some(function) = kernels.get(&source) {
             return Ok(function.clone());
@@ -515,10 +650,10 @@ impl CudaSession {
         let module = self
             .context
             .load_module(ptx)
-            .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+            .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::ModuleLoad, error))?;
         let function = module
             .load_function("cml_map")
-            .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+            .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::FunctionLoad, error))?;
         kernels.insert(source, function.clone());
         Ok(function)
     }
@@ -527,15 +662,26 @@ impl CudaSession {
 static CUDA_SESSIONS: OnceLock<Mutex<HashMap<usize, Arc<CudaSession>>>> = OnceLock::new();
 
 pub fn discover_devices() -> Result<Vec<CudaDevice>, CudaRuntimeError> {
-    let count =
-        CudaContext::device_count().map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+    let count = CudaContext::device_count()
+        .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::DeviceCount, error))?;
     (0..count)
         .map(|ordinal| {
-            let context = CudaContext::new(ordinal as usize)
-                .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+            let ordinal = ordinal as usize;
+            let context = CudaContext::new(ordinal).map_err(|error| {
+                CudaRuntimeError::driver(CudaDriverStage::ContextCreate { ordinal }, error)
+            })?;
             device_evidence(&context)
         })
         .collect()
+}
+
+pub fn probe_capability() -> Result<CudaCapabilityStatus, CudaRuntimeError> {
+    let devices = discover_devices()?;
+    if devices.is_empty() {
+        Ok(CudaCapabilityStatus::RuntimePresentNoDevices)
+    } else {
+        Ok(CudaCapabilityStatus::Live(devices))
+    }
 }
 
 /// Compatibility entrypoint. Repeated calls for the same ordinal now share a
@@ -568,7 +714,10 @@ pub fn execute_map_chain_i32_selected(
 fn session_for_device(device_ordinal: usize) -> Result<Arc<CudaSession>, CudaRuntimeError> {
     let sessions = CUDA_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()));
     let mut sessions = sessions.lock().map_err(|error| {
-        CudaRuntimeError::Driver(format!("CUDA session cache mutex poisoned: {error}"))
+        CudaRuntimeError::driver(
+            CudaDriverStage::InternalState,
+            format!("CUDA session cache mutex poisoned: {error}"),
+        )
     })?;
     if let Some(session) = sessions.get(&device_ordinal) {
         return Ok(session.clone());
@@ -582,13 +731,13 @@ fn session_for_device(device_ordinal: usize) -> Result<Arc<CudaSession>, CudaRun
 fn device_evidence(context: &CudaContext) -> Result<CudaDevice, CudaRuntimeError> {
     let name = context
         .name()
-        .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+        .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::DeviceEvidence, error))?;
     let compute_capability = context
         .compute_capability()
-        .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+        .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::DeviceEvidence, error))?;
     let total_memory_bytes = context
         .total_mem()
-        .map_err(|error| CudaRuntimeError::Driver(error.to_string()))?;
+        .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::DeviceEvidence, error))?;
     Ok(CudaDevice {
         descriptor: AcceleratorDescriptor {
             name,
@@ -646,5 +795,17 @@ mod tests {
         assert!(arch.starts_with("compute_"));
         assert_eq!(arch.len(), "compute_61".len());
         assert!(!arch.contains('.'));
+    }
+
+    #[test]
+    fn driver_failure_stage_is_machine_readable() {
+        let error = CudaRuntimeError::driver(CudaDriverStage::Launch, "boom");
+        assert!(matches!(
+            error,
+            CudaRuntimeError::Driver {
+                stage: CudaDriverStage::Launch,
+                ..
+            }
+        ));
     }
 }

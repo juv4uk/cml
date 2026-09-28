@@ -1,13 +1,26 @@
 #![cfg(feature = "gpu-cuda")]
 
 use cml::accelerator::{AcceleratorApi, AcceleratorVendor, SelectionPolicy, select_accelerator};
-use cml::gpu_cuda_runtime::{CudaSession, discover_devices, execute_map};
+use cml::gpu_cuda_runtime::{
+    CudaCapabilityStatus, CudaSession, discover_devices, execute_map, probe_capability,
+};
 use cml::ir::BufferLiteral;
 use cml::{lower, parser};
 
 fn lower_one(source: &str) -> cml::ir::Ir {
     let expressions = parser::parse(source).unwrap();
     lower::lower_expr(&expressions[0]).unwrap()
+}
+
+#[test]
+#[ignore = "requires a live NVIDIA CUDA device"]
+fn capability_probe_reports_live_cuda_devices() {
+    let status = probe_capability().expect("CUDA capability probe failed");
+    let CudaCapabilityStatus::Live(devices) = status else {
+        panic!("CUDA runtime was present but reported zero devices");
+    };
+    assert!(!devices.is_empty());
+    eprintln!("CUDA capability evidence: {devices:?}");
 }
 
 #[test]
