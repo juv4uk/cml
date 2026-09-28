@@ -105,6 +105,47 @@ fn nvrtc_arch_from_compute_capability((major, minor): (i32, i32)) -> String {
     format!("compute_{major}{minor}")
 }
 
+/// NVRTC switch that disables FMA contraction (`a*b+c` stays mul+add).
+///
+/// Ratified precondition A1 of the sens bitwise f32 witness (sens#1585,
+/// 2026-09-28): in the witness slice both sides must round twice, so the
+/// CUDA side must not let NVRTC contract separate mul+add into FFMA.
+pub const NVRTC_NO_FMA_CONTRACTION: &str = "-fmad=false";
+
+/// Named NVRTC compile mode for map kernels (cml#360).
+///
+/// The variant name `BitwiseEquality` is the cross-repo contract: the sens
+/// witness (sens#1585 E1, `experiments/gpu2-e1e3/witness.py`) references
+/// this name as a stable constant and never reads cml's implementation.
+/// `Production` keeps NVRTC defaults (FMA contraction allowed); kernels
+/// compiled under different modes never share a cache slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CudaKernelMode {
+    /// Default production mode: NVRTC defaults, FMA contraction allowed.
+    Production,
+    /// Witness mode: NVRTC also receives `-fmad=false` so `a*b+c` lowers
+    /// to separate mul+add with two roundings, matching CPU semantics.
+    BitwiseEquality,
+}
+
+impl Default for CudaKernelMode {
+    fn default() -> Self {
+        Self::Production
+    }
+}
+
+/// NVRTC options for a kernel compiled in `mode` for `compute_capability`.
+/// Pure mechanism: no device access, unit-testable without CUDA hardware.
+pub fn nvrtc_options_for(mode: CudaKernelMode, compute_capability: (i32, i32)) -> Vec<String> {
+    let arch = nvrtc_arch_from_compute_capability(compute_capability);
+    match mode {
+        CudaKernelMode::Production => vec![format!("-arch={arch}")],
+        CudaKernelMode::BitwiseEquality => {
+            vec![format!("-arch={arch}"), NVRTC_NO_FMA_CONTRACTION.to_string()]
+        }
+    }
+}
+
 #[derive(Debug)]
 struct ReusableBuffers<T> {
     len: usize,
@@ -121,7 +162,7 @@ struct ReusableBuffers<T> {
 pub struct CudaSession {
     context: Arc<CudaContext>,
     device: CudaDevice,
-    kernels: Mutex<HashMap<String, CudaFunction>>,
+    kernels: Mutex<HashMap<(CudaKernelMode, String), CudaFunction>>,
     i32_buffers: Mutex<Option<ReusableBuffers<i32>>>,
     f32_buffers: Mutex<Option<ReusableBuffers<f32>>>,
 }
@@ -182,6 +223,16 @@ impl CudaSession {
     }
 
     pub fn prepare_map<'a>(&'a self, ir: &'a Ir) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
+        self.prepare_map_with_mode(ir, CudaKernelMode::Production)
+    }
+
+    /// Witness variant of [`CudaSession::prepare_map`]: the kernel is
+    /// compiled by NVRTC with `-fmad=false` (cml#360, sens#1585 A1).
+    pub fn prepare_map_with_mode<'a>(
+        &'a self,
+        ir: &'a Ir,
+        mode: CudaKernelMode,
+    ) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
         let source = emit_map_kernel(ir)?;
         let buffer = map_input(ir).ok_or(CudaRuntimeError::UnsupportedInput)?;
         if matches!(buffer, BufferLiteral::I32(values) if values.is_empty())
@@ -190,7 +241,7 @@ impl CudaSession {
             return Err(CudaRuntimeError::UnsupportedInput);
         }
 
-        let function = self.function_for_source(source)?;
+        let function = self.function_for_source(mode, source)?;
         Ok(PreparedCudaMap {
             session: self,
             function,
@@ -200,6 +251,16 @@ impl CudaSession {
 
     pub fn execute_map(&self, ir: &Ir) -> Result<CudaExecution, CudaRuntimeError> {
         self.prepare_map(ir)?.execute()
+    }
+
+    /// Witness variant of [`CudaSession::execute_map`]: the kernel is
+    /// compiled by NVRTC with `-fmad=false` (cml#360, sens#1585 A1).
+    pub fn execute_map_with_mode(
+        &self,
+        ir: &Ir,
+        mode: CudaKernelMode,
+    ) -> Result<CudaExecution, CudaRuntimeError> {
+        self.prepare_map_with_mode(ir, mode)?.execute()
     }
 
     fn execute_prepared_buffer(
@@ -410,7 +471,7 @@ impl CudaSession {
             let source = emit_map_kernel(&probe)
                 .map_err(|error| fail(step, CudaRuntimeError::Emit(error)))?;
             let function = self
-                .function_for_source(source)
+                .function_for_source(CudaKernelMode::Production, source)
                 .map_err(|error| fail(step, error))?;
             prepared.push(function);
             range = next_range;
@@ -544,7 +605,7 @@ impl CudaSession {
         let source = emit_i32_compute_kernel(&kernel)
             .map_err(|error| fail(final_step, CudaRuntimeError::Emit(error)))?;
         let function = self
-            .function_for_source(source)
+            .function_for_source(CudaKernelMode::Production, source)
             .map_err(|error| fail(final_step, error))?;
 
         let length = u32::try_from(input_values.len())
@@ -627,22 +688,27 @@ impl CudaSession {
         }))
     }
 
-    fn function_for_source(&self, source: String) -> Result<CudaFunction, CudaRuntimeError> {
+    fn function_for_source(
+        &self,
+        mode: CudaKernelMode,
+        source: String,
+    ) -> Result<CudaFunction, CudaRuntimeError> {
         let mut kernels = self.kernels.lock().map_err(|error| {
             CudaRuntimeError::driver(
                 CudaDriverStage::InternalState,
                 format!("kernel cache mutex poisoned: {error}"),
             )
         })?;
-        if let Some(function) = kernels.get(&source) {
+        let cache_key = (mode, source.clone());
+        if let Some(function) = kernels.get(&cache_key) {
             return Ok(function.clone());
         }
 
-        let arch = nvrtc_arch_from_compute_capability(self.device.compute_capability);
+        let options = nvrtc_options_for(mode, self.device.compute_capability);
         let ptx = cudarc::nvrtc::compile_ptx_with_opts(
             source.clone(),
             cudarc::nvrtc::CompileOptions {
-                options: vec![format!("-arch={arch}")],
+                options,
                 ..Default::default()
             },
         )
@@ -654,7 +720,7 @@ impl CudaSession {
         let function = module
             .load_function("cml_map")
             .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::FunctionLoad, error))?;
-        kernels.insert(source, function.clone());
+        kernels.insert(cache_key, function.clone());
         Ok(function)
     }
 }
@@ -787,6 +853,26 @@ mod tests {
         assert_eq!(nvrtc_arch_from_compute_capability((8, 7)), "compute_87");
         assert_eq!(nvrtc_arch_from_compute_capability((8, 9)), "compute_89");
         assert_eq!(nvrtc_arch_from_compute_capability((9, 0)), "compute_90");
+    }
+
+    #[test]
+    fn bitwise_equality_mode_compiles_nvrtc_without_fma_contraction() {
+        let options = nvrtc_options_for(CudaKernelMode::BitwiseEquality, (6, 1));
+        assert!(
+            options.contains(&NVRTC_NO_FMA_CONTRACTION.to_string()),
+            "witness mode must pass {NVRTC_NO_FMA_CONTRACTION} to NVRTC, got {options:?}"
+        );
+        assert!(options.contains(&"-arch=compute_61".to_string()));
+    }
+
+    #[test]
+    fn production_mode_keeps_nvrtc_defaults() {
+        let options = nvrtc_options_for(CudaKernelMode::Production, (6, 1));
+        assert_eq!(
+            options,
+            vec!["-arch=compute_61".to_string()],
+            "production mode must not change the NVRTC options it had before cml#360"
+        );
     }
 
     #[test]
