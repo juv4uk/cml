@@ -1,5 +1,3 @@
-[Reading 185 lines from start (total: 185 lines, 0 remaining)]
-
 #![cfg(feature = "gpu-cuda")]
 
 use cml::accelerator::{AcceleratorApi, AcceleratorVendor, SelectionPolicy, select_accelerator};
@@ -185,5 +183,3 @@ fn live_cuda_cannot_bypass_failed_admission() {
         "rejected IR must not compile or cache a CUDA kernel"
     );
 }
-
-[executed on device: desktop (4fe47fce-cddf-44b3-9f53-0350f286048d)]
