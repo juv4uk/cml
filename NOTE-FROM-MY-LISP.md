@@ -29,7 +29,7 @@ was actually tested," a contract version is "what's semantically
 compatible."
 
 **What already exists, as of this note:**
-- `my-lisp` repo root: [`language-contract.my`](https://github.com/juv4uk/my-lisp/blob/main/language-contract.my) —
+- `my-lisp` repo root: [`language-contract.lisp`](https://github.com/juv4uk/my-lisp/blob/main/language-contract.lisp) —
   `((major . 0) (minor . 1) ...)`. Covers exactly axiom Level 1 (CORE
   SEMANTICS: seven primitives, lambda, truth/NIL, symbols, pairs) and
   Level 2 (LANGUAGE CONTRACT: exactness, def/defmacro, errors, read/eval)
@@ -39,7 +39,7 @@ compatible."
   breaking semantic change; `minor` on an additive, backward-compatible
   one (e.g. `\r` joining `\n`/`\t` as a real string escape, same day).
   Full rationale: `my-lisp`'s `docs/versioning.md`, section
-  "`language-contract.my`: a second, independent version axis".
+  "`language-contract.lisp`: a second, independent version axis".
 - Proposed to `fpga-lisp` (not yet built there as of this note): an
   `ISA.md` plus a machine-readable ISA manifest, versioned separately
   from `fpga-lisp`'s own implementation version — an internal heap
@@ -59,7 +59,7 @@ compatible."
   ```
 
 **What's proposed for `cml` specifically (this repo, not built yet):**
-- A `compatibility.my` pinning three things together: the `my-lisp`
+- A `compatibility.lisp` pinning three things together: the `my-lisp`
   language-contract version this compiler targets, the `fpga-lisp` ISA
   version it emits code for, and the specific tested commit SHAs of each
   — the file that actually says "this compiler build is known to work
@@ -85,7 +85,7 @@ compatible."
   development in any one repo.
 - A shared conformance harness (long-term direction, not urgent): the
   same fixture (`expr`/`expected` from `my-lisp`'s `tests/fixtures/
-  conformance.my`) run through three routes — (A) `my-lisp`'s own Rust
+  conformance.lisp`) run through three routes — (A) `my-lisp`'s own Rust
   evaluator, (B) `fpga-lisp`'s hardware evaluator, (C) source → `cml` →
   assembler → `fpga-lisp` native — and all three checked against the
   same expected value. That's the thing that would actually cement all
@@ -100,7 +100,7 @@ contracts between them should refuse to let that happen unnoticed.
 ## Not a mandate
 
 None of this is telling you to stop what you're working on and implement
-`compatibility.my` right now. It's context, left here because there was no
+`compatibility.lisp` right now. It's context, left here because there was no
 other way to hand it to you. Do with it what makes sense for wherever
 `cml` actually is today.
 
