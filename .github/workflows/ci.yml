@@ -18,7 +18,15 @@ jobs:
           # (cml reads its .lisp source tree directly for the encoder bridge, CPU
           # profile, and conformance corpus), so it travels with cml's own
           # checkout instead of a separately pinned sibling checkout.
-          submodules: true
+          submodules: false
+
+      - name: Initialize build-source SENS from the local clone
+        working-directory: cml
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
 
       - name: Resolve sens revision channels
         id: upstream_revisions
@@ -53,26 +61,31 @@ jobs:
           echo "upstream-channel observed-current sha=$observed_current_sha"
           echo "upstream-channel bootstrap-core1-source sha=$bootstrap_core1_sha"
 
-      - name: Checkout sens (supported evidence)
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/sens
-          ref: ${{ steps.upstream_revisions.outputs.supported_pin_sha }}
-          path: sens-supported
+      - name: Materialize exact SENS evidence revisions from the local clone
+        shell: bash
+        env:
+          SUPPORTED_PIN_SHA: ${{ steps.upstream_revisions.outputs.supported_pin_sha }}
+          OBSERVED_CURRENT_SHA: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
+          BOOTSTRAP_CORE1_SHA: ${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}
+        run: |
+          set -euo pipefail
+          source_repo=/home/agents/GitHub/sens
+          test -d "$source_repo/.git"
+          git -C "$source_repo" fetch --quiet origin main
 
-      - name: Checkout sens (observed-current)
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/sens
-          ref: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
-          path: sens
+          materialize() {
+            local revision="$1"
+            local destination="$2"
+            git -C "$source_repo" cat-file -e "${revision}^{commit}"
+            rm -rf "$destination"
+            git clone --quiet --no-checkout "$source_repo" "$destination"
+            git -C "$destination" checkout --quiet --detach "$revision"
+            test "$(git -C "$destination" rev-parse HEAD)" = "$revision"
+          }
 
-      - name: Checkout sens (Core1 bootstrap source)
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/sens
-          ref: ${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}
-          path: sens-bootstrap
+          materialize "$SUPPORTED_PIN_SHA" sens-supported
+          materialize "$OBSERVED_CURRENT_SHA" sens
+          materialize "$BOOTSTRAP_CORE1_SHA" sens-bootstrap
 
       - name: Validate Core1 bootstrap source
         working-directory: cml
@@ -99,19 +112,27 @@ jobs:
           [[ -f ../sens-bootstrap/lib/core1-compiler-prelude.lisp ]] && bootstrap_prelude=present
           echo "((kind . cml-upstream-revision-drift) (build-source-sha . \"${{ steps.upstream_revisions.outputs.build_source_sha }}\") (supported-pin-sha . \"${{ steps.upstream_revisions.outputs.supported_pin_sha }}\") (observed-current-sha . \"${{ steps.upstream_revisions.outputs.observed_current_sha }}\") (bootstrap-core1-source-sha . \"${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}\") (bootstrap-core1-prelude . ${bootstrap_prelude}) (mathematical-result-v1 . ((build-source . ${build_math}) (supported-pin . ${supported_math}) (observed-current . ${observed_math}))))"
 
-      - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/fpga-lisp
-          ref: b5d68bba109b972122f92fa10d237f81ce90aa87
-          path: fpga-lisp
+      - name: Materialize pinned private sibling witnesses from local clones
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Checkout wsm-my-lisp (provides x86 asm nucleus witness)
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/wsm-my-lisp
-          ref: 1fe661664479c92da1968d60914b512320678ac2
-          path: wsm-my-lisp
+          materialize() {
+            local source_repo="$1"
+            local revision="$2"
+            local destination="$3"
+            test -d "$source_repo/.git"
+            git -C "$source_repo" cat-file -e "${revision}^{commit}"
+            rm -rf "$destination"
+            git clone --quiet --no-checkout "$source_repo" "$destination"
+            git -C "$destination" checkout --quiet --detach "$revision"
+            test "$(git -C "$destination" rev-parse HEAD)" = "$revision"
+          }
+
+          materialize /home/agents/GitHub/fpga-lisp \
+            b5d68bba109b972122f92fa10d237f81ce90aa87 fpga-lisp
+          materialize /home/agents/GitHub/wsm-my-lisp \
+            1fe661664479c92da1968d60914b512320678ac2 wsm-my-lisp
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
