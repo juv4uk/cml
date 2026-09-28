@@ -85,7 +85,7 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
 /// the explicit observed-current revision channel.
 #[test]
 fn compatibility_my_contract_version_matches_observed_current_language_contract() {
-    let my_lisp = sibling("my-lisp");
+    let my_lisp = sibling("sens");
     let lang_file = if my_lisp.join("language-contract.lisp").exists() {
         my_lisp.join("language-contract.lisp")
     } else {

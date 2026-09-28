@@ -1,7 +1,7 @@
 //! #116 cross-repo witness bridge.
 //!
 //! Upstream channel: supported-pin.
-//! CML consumes the committed my-lisp conformance corpus from external/my-lisp.
+//! CML consumes the committed my-lisp conformance corpus from external/sens.
 //! This adapter deliberately does not contain an expected value: semantic truth
 //! stays in my-lisp's Lisp-authored witness row.
 
@@ -17,7 +17,7 @@ use sens::{Session, eval_program, load_core_library};
 
 fn upstream_path(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("external/my-lisp")
+        .join("external/sens")
         .join(relative)
 }
 
@@ -25,7 +25,7 @@ fn upstream_corpus() -> String {
     let path = upstream_path("tests/fixtures/conformance.lisp");
     fs::read_to_string(&path).unwrap_or_else(|error| {
         panic!(
-            "#116 requires the external/my-lisp submodule's conformance corpus at {}: {error}",
+            "#116 requires the external/sens submodule's conformance corpus at {}: {error}",
             path.display()
         )
     })

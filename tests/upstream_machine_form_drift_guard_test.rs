@@ -25,7 +25,7 @@ fn upstream_machine_form_bridge_pin_and_blob_fail_closed_on_drift() {
 
     let expected_revision = field(&contract, "revision-sha");
     let expected_blob = field(&contract, "contract-git-blob");
-    let upstream = root.join("external/my-lisp");
+    let upstream = root.join("external/sens");
 
     let head = Command::new("git")
         .arg("-C")
