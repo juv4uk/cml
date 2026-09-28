@@ -6,5 +6,5 @@
     (repository juv4uk/sens)
     (branch main)
     (path language-contract.lisp))
-  (revision "fa42bdb69739712588702a091e352a9f7f692929")
-  (sha256 "d031a9835b77a3453be5fbd7c4336b509329e3e5bf44834954931a68850310e3"))
+  (revision "7283342213ff78c483eed20b5f72dafeb56a5916")
+  (sha256 "aaaa9fecf72da3cf30e30cc52a0b6e379913f4e0ec788e367453838680cb493f"))
