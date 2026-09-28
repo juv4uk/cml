@@ -1,6 +1,6 @@
 // CML-C-BACKEND-CONFORMANCE: c_backend.rs had only ever been run against
 // a handful of hand-picked fixtures (tests/c_backend_test.rs), never the
-// shared tests/fixtures/conformance.my suite. Every tier-1 fixture must now
+// shared tests/fixtures/conformance.lisp suite. Every tier-1 fixture must now
 // be accounted for as executed or as one explicit unsupported category;
 // parser/admission failures are failures, never silent `continue`s.
 use std::fs;
@@ -134,7 +134,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         if std::path::Path::new("external/sens/tests/fixtures/conformance.lisp").exists() {
             "external/sens/tests/fixtures/conformance.lisp"
         } else {
-            "external/sens/tests/fixtures/conformance.my"
+            "external/sens/tests/fixtures/conformance.lisp"
         };
     let fixture_content =
         fs::read_to_string(fixture_path).expect("Failed to read conformance fixture");
@@ -203,7 +203,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
             continue;
         }
         // fpga-lisp/c_backend have no inexact-number tag; compiler_test/
-        // conformance_test skip these too (compatibility.my's
+        // conformance_test skip these too (compatibility.lisp's
         // tier-1-skip-reason).
         if line.contains("3.0") {
             unsupported_inexact += 1;
