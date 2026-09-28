@@ -6,7 +6,7 @@
 
 There is a single test: [`tests/conformance_test.rs`](../tests/conformance_test.rs). It is a *blind* adapter — one fixed `parse → macro-expand → compile → assemble → simulate → decode → compare` pipeline that runs against every fixture unmodified, rather than a bespoke check per fixture. This mirrors fpga-lisp's [First Blind Fixture](https://github.com/juv4uk/fpga-lisp) discipline: no fixture-specific branches are allowed inside the adapter itself.
 
-Fixtures are not owned by this repo — they live in the sibling [`my-lisp`](https://github.com/juv4uk/sens) repository at `tests/fixtures/conformance.my`, one alist per line: `((expr . "(quote radio)") (expected . "radio") (tier . 1))`, or for fixtures that must fail statically or at runtime, `((expr . "...") (error . "Arity") (tier . 1))`.
+Fixtures are not owned by this repo — they live in the sibling [`my-lisp`](https://github.com/juv4uk/sens) repository at `tests/fixtures/conformance.lisp`, one alist per line: `((expr . "(quote radio)") (expected . "radio") (tier . 1))`, or for fixtures that must fail statically or at runtime, `((expr . "...") (error . "Arity") (tier . 1))`.
 
 Pipeline, in order:
 1. **Filter** — only lines tagged `(tier . 1)` run today; `3.0`-bearing fixtures are skipped (fpga-lisp's ISA has no inexact/rational tag yet — [plan item 25](https://github.com/juv4uk/fpga-lisp/blob/master/docs/lisp-machine-plan.md), not started).
@@ -26,7 +26,7 @@ cargo test --test conformance_test
 ```
 
 This requires, checked out as siblings of this repo (matching the `.github/workflows/ci.yml` layout):
-- `../my-lisp` — provides `tests/fixtures/conformance.my`
+- `../my-lisp` — provides `tests/fixtures/conformance.lisp`
 - `../fpga-lisp` — provides `assembler.py` and the compiled `tb_cml_e2e.vvp` testbench
 - `python3` and `iverilog` on `PATH`
 
@@ -36,7 +36,7 @@ CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) checks out both s
 
 Є один тест: [`tests/conformance_test.rs`](../tests/conformance_test.rs). Це *сліпий* адаптер — один незмінний конвеєр `parse → macro-expand → compile → assemble → simulate → decode → compare`, що прогонить кожну фікстуру без модифікацій, а не окрема перевірка під кожну фікстуру. Це дзеркалить дисципліну fpga-lisp "First Blind Fixture": усередині самого адаптера не допускаються гілки під конкретну фікстуру.
 
-Фікстури не належать цьому репозиторію — вони живуть у сусідньому [`my-lisp`](https://github.com/juv4uk/sens) за шляхом `tests/fixtures/conformance.my`, по одному alist на рядок: `((expr . "(quote radio)") (expected . "radio") (tier . 1))`, або для фікстур, що мають статично чи в рантаймі впасти: `((expr . "...") (error . "Arity") (tier . 1))`.
+Фікстури не належать цьому репозиторію — вони живуть у сусідньому [`my-lisp`](https://github.com/juv4uk/sens) за шляхом `tests/fixtures/conformance.lisp`, по одному alist на рядок: `((expr . "(quote radio)") (expected . "radio") (tier . 1))`, або для фікстур, що мають статично чи в рантаймі впасти: `((expr . "...") (error . "Arity") (tier . 1))`.
 
 Конвеєр по кроках:
 1. **Фільтр** — сьогодні прогоняються лише рядки з тегом `(tier . 1)`; фікстури з `3.0` пропускаються (в ISA fpga-lisp ще немає inexact/rational тегу — [пункт 25 плану](https://github.com/juv4uk/fpga-lisp/blob/master/docs/lisp-machine-plan.md), ще не почато).
@@ -56,7 +56,7 @@ cargo test --test conformance_test
 ```
 
 Це вимагає, як сусідні репозиторії поряд із цим (той самий layout, що й у `.github/workflows/ci.yml`):
-- `../my-lisp` — надає `tests/fixtures/conformance.my`
+- `../my-lisp` — надає `tests/fixtures/conformance.lisp`
 - `../fpga-lisp` — надає `assembler.py` і зібраний testbench `tb_cml_e2e.vvp`
 - `python3` і `iverilog` у `PATH`
 
@@ -66,7 +66,7 @@ CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) заново че
 
 Es gibt einen Test: [`tests/conformance_test.rs`](../tests/conformance_test.rs). Es ist ein *blinder* Adapter — eine feste Pipeline `parse → macro-expand → compile → assemble → simulate → decode → compare`, die für jede Fixture unverändert läuft, statt einer maßgeschneiderten Prüfung pro Fixture. Das spiegelt die "First Blind Fixture"-Disziplin von fpga-lisp: Innerhalb des Adapters selbst sind keine Fixture-spezifischen Verzweigungen erlaubt.
 
-Fixtures gehören nicht zu diesem Repository — sie liegen im benachbarten [`my-lisp`](https://github.com/juv4uk/sens)-Repository unter `tests/fixtures/conformance.my`, eine Alist pro Zeile: `((expr . "(quote radio)") (expected . "radio") (tier . 1))`, oder für Fixtures, die statisch oder zur Laufzeit fehlschlagen müssen: `((expr . "...") (error . "Arity") (tier . 1))`.
+Fixtures gehören nicht zu diesem Repository — sie liegen im benachbarten [`my-lisp`](https://github.com/juv4uk/sens)-Repository unter `tests/fixtures/conformance.lisp`, eine Alist pro Zeile: `((expr . "(quote radio)") (expected . "radio") (tier . 1))`, oder für Fixtures, die statisch oder zur Laufzeit fehlschlagen müssen: `((expr . "...") (error . "Arity") (tier . 1))`.
 
 Pipeline, der Reihe nach:
 1. **Filter** — heute laufen nur Zeilen mit Tag `(tier . 1)`; Fixtures mit `3.0` werden übersprungen (fpga-lisps ISA hat noch kein inexact/rational-Tag — [Planpunkt 25](https://github.com/juv4uk/fpga-lisp/blob/master/docs/lisp-machine-plan.md), noch nicht begonnen).
@@ -86,7 +86,7 @@ cargo test --test conformance_test
 ```
 
 Dies erfordert, als Geschwister dieses Repos ausgecheckt (gleiches Layout wie `.github/workflows/ci.yml`):
-- `../my-lisp` — liefert `tests/fixtures/conformance.my`
+- `../my-lisp` — liefert `tests/fixtures/conformance.lisp`
 - `../fpga-lisp` — liefert `assembler.py` und den gebauten Testbench `tb_cml_e2e.vvp`
 - `python3` und `iverilog` im `PATH`
 
