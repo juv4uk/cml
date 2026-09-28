@@ -790,6 +790,9 @@ static int seen_before(uint64_t word) {
     return 0;
 }
 
+static int dump_value(uint64_t word, uint64_t arena_begin, uint64_t arena_next,
+                      uint64_t arena_end, size_t depth);
+
 static int dump_cons(uint64_t word, uint64_t arena_begin, uint64_t arena_next,
                      uint64_t arena_end, size_t depth) {
     if (depth > MAX_SEEN) {
