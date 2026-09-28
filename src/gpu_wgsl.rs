@@ -4,7 +4,7 @@
 //! and readback belong to the later `wgpu` runtime slice.
 
 use crate::compute::{
-    AdmissionBlocker, BulkOperation, NumericDomain, ScalarExpr, analyze, f32_scale_offset,
+    AdmissionBlocker, BulkOperation, F32MapKernel, NumericDomain, ScalarExpr, analyze,
 };
 use crate::ir::Ir;
 
@@ -28,15 +28,18 @@ pub fn emit_map_shader(ir: &Ir) -> Result<String, WgslError> {
     let (element_type, expression) = match analysis.numeric_domain {
         NumericDomain::FixedWidthInteger => ("i32", emit_i32_expr(&kernel.body)?),
         NumericDomain::InexactFloat => {
-            let (scale, offset) =
-                f32_scale_offset(&kernel.body).ok_or(WgslError::UnsupportedRegion)?;
+            let form = F32MapKernel::lower(&kernel.body).ok_or(WgslError::UnsupportedRegion)?;
             // WGSL f32 arithmetic rounds per operation (no contraction),
             // so the plain two-operator form already carries the two-rounding
             // A1 semantics (sens#1585; GPU-2-E1 / #368).
-            let expression = if scale == 1.0 {
-                format!("x + {}", wgsl_f32(offset))
-            } else {
-                format!("x * {} + {}", wgsl_f32(scale), wgsl_f32(offset))
+            let expression = match form {
+                F32MapKernel::AffineAdd(offset) | F32MapKernel::Add(offset) => {
+                    format!("x + {}", wgsl_f32(offset))
+                }
+                F32MapKernel::Mul(scale) => format!("x * {}", wgsl_f32(scale)),
+                F32MapKernel::MulAdd(scale, offset) => {
+                    format!("x * {} + {}", wgsl_f32(scale), wgsl_f32(offset))
+                }
             };
             ("f32", expression)
         }
