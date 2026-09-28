@@ -438,8 +438,7 @@ fn lower_call(func: &str, args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
         // dispatches by its Sens8 call key, but only when the current program
         // actually keys the definition under that SID. This keeps call
         // identity identical to def identity.
-        if let Some(sid) = sens::semantic_registry_export::semantic_id_for_admitted_surface(func)
-        {
+        if let Some(sid) = sens::semantic_registry_export::semantic_id_for_admitted_surface(func) {
             if env.has_sid_keyed_def(sid) {
                 return lower_generic_call(&Expr::Sid(sid), args, env);
             }

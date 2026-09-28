@@ -32,10 +32,7 @@ fn assert_sid_call(source: &str, expected_sid: sens::Sid8) {
 fn admitted_surface_calls_keep_sid8_as_the_ir_function_key() {
     assert_sid_call("(car (quote (A B)))", sens::sid!(00000101));
     assert_sid_call("(cons (quote A) (quote B))", sens::sid!(00000100));
-    assert_sid_call(
-        "(list (quote A) (quote B) (quote C))",
-        sens::sid!(00100111),
-    );
+    assert_sid_call("(list (quote A) (quote B) (quote C))", sens::sid!(00100111));
     assert_sid_call("(+ 1 2)", sens::sid!(00001100));
 }
 

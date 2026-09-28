@@ -49,8 +49,5 @@ fn unsupported_sid8_call_fails_closed_without_name_fallback() {
     let error = X86FreestandingBackend::new()
         .compile_program(&program)
         .expect_err("unimplemented SID8 must fail closed");
-    assert_eq!(
-        error,
-        CompileError::UnimplementedSid8(sens::sid!(11111111))
-    );
+    assert_eq!(error, CompileError::UnimplementedSid8(sens::sid!(11111111)));
 }

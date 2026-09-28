@@ -1226,7 +1226,9 @@ pub fn select_machine_primitive(op: MachineOp, fixnum_tag: u64) -> Vec<MachineIn
             // Platform calls (PCI config, MMIO) are not direct machine primitives;
             // they are emitted as calls to the WSM runtime via the platform call mechanism.
             // This function is for direct machine primitives only (e.g., rdtsc).
-            panic!("{op:?} is a platform call, not a direct machine primitive; use emit_machine_primitive / platform call mechanism instead")
+            panic!(
+                "{op:?} is a platform call, not a direct machine primitive; use emit_machine_primitive / platform call mechanism instead"
+            )
         }
     }
 }
