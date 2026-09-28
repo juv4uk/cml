@@ -335,56 +335,44 @@ impl Compiler {
         self.emit(&format!("CDR {} R1", target_reg));
     }
 
-    /// Materialize the pinned SENS predicate result form from the target's
-    /// internal TRUE/NIL control value.  FPGA EQ/ATOM stay unchanged as
-    /// mechanism primitives; only a language-visible predicate result crosses
-    /// this boundary as the authority-prescribed singleton list (1)/(0).
-    fn materialize_predicate_result(&mut self, raw_reg: &str, target_reg: &str) {
-        let false_label = self.next_label("predicate_false");
-        let end_label = self.next_label("predicate_end");
-
-        // R9 = canonical NIL, built without depending on a published name.
-        self.emit("LOADI R7 0");
-        self.emit("LOADI R8 1");
-        self.emit("EQ R9 R7 R8");
+    fn materialize_relation_result(&mut self, raw_reg: &str, target_reg: &str) {
+        let false_label = self.next_label("relation_false");
+        let end_label = self.next_label("relation_end");
 
         self.emit(&format!("JF {} {}", raw_reg, false_label));
-        self.emit("LOADI R7 1");
-        self.emit(&format!("CONS {} R7 R9", target_reg));
+        self.compile_quoted(&Quoted::List(vec![Quoted::Int(1)]), target_reg);
         self.emit(&format!("JMP {}", end_label));
-
         self.emit(&format!("{}:", false_label));
-        self.emit("LOADI R7 0");
-        self.emit(&format!("CONS {} R7 R9", target_reg));
+        self.compile_quoted(&Quoted::List(vec![Quoted::Int(0)]), target_reg);
         self.emit(&format!("{}:", end_label));
     }
 
     fn compile_eq_mechanism(&mut self, args: &[Ir], target_reg: &str) {
         self.compile_expr(&args[0], "R1");
         self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-        self.emit("EQ R6 R1 R2");
-        self.materialize_predicate_result("R6", target_reg);
+        self.emit("EQ R3 R1 R2");
+        self.materialize_relation_result("R3", target_reg);
     }
 
     fn compile_atom_mechanism(&mut self, args: &[Ir], target_reg: &str) {
-        let non_nil_label = self.next_label("atom_non_nil");
-        let end_label = self.next_label("atom_end");
-
         self.compile_expr(&args[0], "R1");
 
-        // The pinned corpus gives NIL its own ATOM result: ().
-        self.emit("LOADI R7 0");
-        self.emit("LOADI R8 1");
-        self.emit("EQ R9 R7 R8"); // R9 = NIL
-        self.emit("EQ R6 R1 R9"); // raw TRUE iff the operand itself is NIL
-        self.emit(&format!("JF R6 {}", non_nil_label));
-        self.emit(&format!("MOV {} R9", target_reg));
+        // Корпус розрізняє три спостережувані результати:
+        // NIL -> (), інший атом -> (1), пара -> (0).
+        self.emit("LOADI R13 0");
+        self.emit("LOADI R12 1");
+        self.emit("EQ R9 R12 R13"); // R9 = NIL
+        self.emit("EQ R2 R1 R9"); // R2 = raw TRUE лише для NIL
+
+        let non_nil_label = self.next_label("atom_non_nil");
+        let end_label = self.next_label("atom_result_end");
+        self.emit(&format!("JF R2 {}", non_nil_label));
+        self.compile_expr(&Ir::Nil, target_reg);
         self.emit(&format!("JMP {}", end_label));
 
-        // Non-NIL atoms become (1); cons cells become (0).
         self.emit(&format!("{}:", non_nil_label));
-        self.emit("ATOM R6 R1");
-        self.materialize_predicate_result("R6", target_reg);
+        self.emit("ATOM R3 R1");
+        self.materialize_relation_result("R3", target_reg);
         self.emit(&format!("{}:", end_label));
     }
 
@@ -393,7 +381,7 @@ impl Compiler {
         self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
         self.used_equal = true;
         self.call_subroutine("cml_equal");
-        self.materialize_predicate_result("R15", target_reg);
+        self.materialize_relation_result("R15", target_reg);
     }
 
     fn compile_add_mechanism(&mut self, args: &[Ir], target_reg: &str) {
@@ -776,8 +764,9 @@ impl Compiler {
 
     // Structural equality without letrec/recursion: an explicit worklist of
     // (a . b) pairs pushed onto the shared stack register R11, drained
-    // iteratively. Type mismatches stop pushing new work but keep draining
-    // so R11 always returns balanced to its caller.
+    // iteratively back to the R11 value observed on entry. The caller may
+    // already have saved its link register on R11; that caller-owned prefix
+    // is a stack base, never part of this subroutine's worklist.
     // Структурна рівність без letrec/рекурсії: явний worklist пар (a . b)
     // на спільному регістрі-стеку R11.
     // Strukturelle Gleichheit ohne letrec/Rekursion: explizite Arbeitsliste
