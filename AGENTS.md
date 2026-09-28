@@ -137,6 +137,11 @@ peers, but `tasks.lisp`'s `done`/`description` fields are what `sync-tasks`
 reconciles against). A swarm event is a doorbell, never the fact itself —
 verify against `evidence/`/a real commit before acting on one.
 
+
+### Connector-only federation fallback
+
+If this agent can use GitHub but cannot reach the owner WSL or `swarm-node`, do **not** work blind and do not invent a second coordination log. Read the canonical discovery board `juv4uk/sens#1599` before CLAIM. Post material findings/handoffs there with a unique `agent`/lane field plus `kind / claim / evidence / status / action`. The owner-WSL federation bridge mirrors that board into local durable inboxes and `AGENTS-LIVE-BUS`; local discoveries are mirrored back to #1599. Claims still belong to the repo task/swarm authority when that plane is reachable.
+
 ## The four repositories
 
 - **my-lisp** — the semantic source of truth. Defines the language: parser,
