@@ -89,7 +89,7 @@ it is the architectural precondition for multi-target execution.
   - **CUDA (`src/gpu_cuda.rs` / `src/gpu_cuda_runtime.rs`)**: Emits and launches PTX compute kernels based on explicit execution graph analysis.
   - **WGPU (`src/gpu_wgsl.rs` / `src/gpu_wgpu_runtime.rs`)**: Portable WGSL compute backend (optional).
 - `Ir` covers: literals, `nil`/`t`, variables, `quote`, `lambda`, application, `cond`, `let`, `def`, primitives, and new Compute representations (`Map`, `Reduce`, `Scan`, `Index`, `ParallelRegion`). It also features `Buffer` (I32/F32) and `TailSelfCall`.
-- Neither backend supports rationals/bignums/inexact numbers yet (`compatibility.my`'s `limitations`).
+- Neither backend supports rationals/bignums/inexact numbers yet (`compatibility.lisp`'s `limitations`).
 - Backends explicitly fail-closed in a preflight validation step (`validate_ir`), meaning if an IR variant (like `Ir::Builtin`) is not supported, it is rejected with a typed `CompileError` rather than silently admitted and panicked upon.
 
 The Execution Graph (in `src/execution*.rs`) now orchestrates these nodes, ensuring typed buffers correctly map between CPU host logic and GPU compute kernels, without claiming direct GPU-to-FPGA transfers.
@@ -131,7 +131,7 @@ new members to join with a single `--connect` (see my-lisp
 `docs/swarm-mesh-v2.md`).
 
 All backends are judged against the same semantic contract
-(`language-contract.my` / `isa-contract.my` / `compatibility.my`), not
+(`language-contract.lisp` / `isa-contract.my` / `compatibility.lisp`), not
 against each other's implementation.
 
 ## Non-goals for now
@@ -234,7 +234,7 @@ against each other's implementation.
   - **CUDA (`src/gpu_cuda.rs` / `src/gpu_cuda_runtime.rs`)**: Генерує та запускає PTX обчислювальні ядра (compute kernels) на базі явного аналізу графа виконання.
   - **WGPU (`src/gpu_wgsl.rs` / `src/gpu_wgpu_runtime.rs`)**: Портативний WGSL compute backend (опціонально).
 - `Ir` покриває: літерали, `nil`/`t`, змінні, `quote`, `lambda`, аплікацію, `cond`, `let`, `def`, примітиви, а також нові Compute-представлення (`Map`, `Reduce`, `Scan`, `Index`, `ParallelRegion`). Також має `Buffer` (I32/F32) і `TailSelfCall`.
-- Жоден з бекендів поки не підтримує rationals/bignums/неточні числа (`limitations` у `compatibility.my`).
+- Жоден з бекендів поки не підтримує rationals/bignums/неточні числа (`limitations` у `compatibility.lisp`).
 - Бекенди явно fail-closed на етапі попередньої перевірки (`validate_ir`), що означає: якщо варіант IR не підтримується, він відхиляється через типізований `CompileError`, а не мовчки допускається і викликає паніку.
 
 Граф виконання (в `src/execution*.rs`) тепер керує цими вузлами, гарантуючи, що
