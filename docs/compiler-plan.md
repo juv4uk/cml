@@ -2,7 +2,7 @@
 
 Status: executable roadmap for turning ordinary my-lisp source into standalone native binaries. This is the compiler track for `cml`, not a side experiment.
 
-Authoritative machine-readable queue: `compiler-tasks.my`.
+Authoritative machine-readable queue: `compiler-tasks.lisp`.
 
 ---
 
