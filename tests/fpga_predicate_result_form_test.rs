@@ -39,4 +39,6 @@ fn structural_equal_materializes_the_same_corpus_relation_shape() {
 
     assert!(assembly.contains("CALL R14 cml_equal"));
     assert!(assembly.contains("JF R15 relation_false_"));
+    assert!(assembly.contains("MOV R10 R11"));
+    assert!(assembly.contains("EQ R6 R11 R10"));
 }
