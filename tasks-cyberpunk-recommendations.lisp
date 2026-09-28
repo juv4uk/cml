@@ -1,5 +1,5 @@
 ; CML-local recommendations derived from CROSS-REPO-TASK-RECOMMENDATIONS-2026-09-10.
-; Parallel to compiler-tasks.my.
+; Parallel to compiler-tasks.lisp.
 
 ((kind . cml-cyberpunk-recommendations)
  (version . 2)
