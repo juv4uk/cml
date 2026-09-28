@@ -5,7 +5,7 @@
 //! This module carries an explicit Core profile and exact upstream law
 //! provenance without defining any SID -> meaning or Core -> meaning table.
 
-use sens::Sid8;
+use sens::Sens8;
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -51,7 +51,7 @@ impl FromStr for CoreProfile {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProfileCompileRequest {
-    pub semantic_id: Sid8,
+    pub semantic_id: Sens8,
     pub core_profile: CoreProfile,
     pub upstream_commit: String,
     pub upstream_law_ref: String,
@@ -63,7 +63,7 @@ pub struct ProfileCompileRequest {
 impl ProfileCompileRequest {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        semantic_id: Sid8,
+        semantic_id: Sens8,
         core_profile: CoreProfile,
         upstream_commit: impl Into<String>,
         upstream_law_ref: impl Into<String>,
