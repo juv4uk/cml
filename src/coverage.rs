@@ -9,7 +9,7 @@
 use crate::canon::{
     CANON_BUILD_SOURCE_REGISTRY_FNV1A64, CANON_BUILD_SOURCE_SEMANTIC_IDS, find_operation_by_id,
 };
-use sens::Sid8;
+use sens::Sens8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdmissionState {
@@ -34,7 +34,7 @@ pub struct BackendEvidence {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemanticCoverageRow {
-    pub semantic_id: Sid8,
+    pub semantic_id: Sens8,
     pub admission: AdmissionState,
     pub operation_status: Option<&'static str>,
     pub evidence: Option<&'static str>,
@@ -58,7 +58,7 @@ pub struct CoverageLedger {
     pub rows: Vec<SemanticCoverageRow>,
 }
 
-fn x86_canon_evidence(semantic_id: Sid8) -> Vec<BackendEvidence> {
+fn x86_canon_evidence(semantic_id: Sens8) -> Vec<BackendEvidence> {
     let (state, evidence) = if semantic_id == sens::sid!(00000001) {
         (
             BackendEvidenceState::Executable,
@@ -106,7 +106,7 @@ fn x86_canon_evidence(semantic_id: Sid8) -> Vec<BackendEvidence> {
     }]
 }
 
-fn x86_fixnum_arithmetic_evidence(semantic_id: Sid8) -> Vec<BackendEvidence> {
+fn x86_fixnum_arithmetic_evidence(semantic_id: Sens8) -> Vec<BackendEvidence> {
     let evidence = if semantic_id == sens::sid!(00001100) {
         "x86_freestanding_test.rs: named_definition_uses_a_lexical_let_binding; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract"
     } else if semantic_id == sens::sid!(00001101) {
@@ -162,7 +162,7 @@ impl CoverageLedger {
         }
     }
 
-    pub fn row(&self, semantic_id: Sid8) -> Option<&SemanticCoverageRow> {
+    pub fn row(&self, semantic_id: Sens8) -> Option<&SemanticCoverageRow> {
         self.rows.iter().find(|row| row.semantic_id == semantic_id)
     }
 
