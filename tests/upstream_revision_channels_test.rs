@@ -50,8 +50,8 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         "#310 active upstream revision channels must follow the renamed juv4uk/sens repository"
     );
     assert!(
-        manifest.contains("(supported-pin-source . external/my-lisp-gitlink)"),
-        "#84 supported-pin must be the checked-in external/my-lisp gitlink"
+        manifest.contains("(supported-pin-source . external/sens-gitlink)"),
+        "#84 supported-pin must be the checked-in external/sens gitlink"
     );
     assert!(
         manifest.contains("(observed-current-source . exact-github-commit)"),
