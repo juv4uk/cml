@@ -106,7 +106,7 @@ pub enum BufferLiteral {
 pub enum Ir {
     /// Exact Lisp-owned semantic/function identity after surface resolution.
     /// Backends must route this value by its exact 8 bits, never by a name.
-    Sid(sens::Sid8),
+    Sid(sens::Sens8),
     Int(i64),
     Float(f64),
     Rational(i64, u64),
