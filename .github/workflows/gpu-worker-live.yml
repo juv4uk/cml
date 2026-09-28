@@ -1,14 +1,7 @@
 name: GPU runner worker live
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "src/bin/cml-gpu-worker.rs"
-      - "src/gpu_cuda*.rs"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".github/workflows/gpu-worker-live.yml"
+  # Local GitHub Actions runners were retired by owner directive 2026-09-28.
   workflow_dispatch:
 
 concurrency:
