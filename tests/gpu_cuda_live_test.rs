@@ -190,7 +190,6 @@ fn live_cuda_cannot_bypass_failed_admission() {
     );
 }
 
-
 struct WorkerGuard {
     child: Child,
     socket: PathBuf,
