@@ -1,6 +1,6 @@
 ; macros.lisp — a from-scratch, .lisp-hosted reimplementation of cml's
 ; macros.rs defmacro-expansion algorithm (a compile-time-only source
-; transform, never reaching fpga-lisp -- see compatibility.my's `defmacro`
+; transform, never reaching fpga-lisp -- see compatibility.lisp's `defmacro`
 ; entry). Same status as fpga-lisp's assembler.my relative to
 ; assembler.py (docs/tooling-language-priority.md): a parallel
 ; implementation proven correct by differential testing, NOT wired into
@@ -17,7 +17,7 @@
 ; reference's own AST shapes -- real my-lisp forms, since this runs
 ; inside actual my-lisp, not cml):
 ;   (defmacro my-list items (cons 'quote (cons items '())))
-;     (my-list 1 2 3) -> (quote (1 2 3))  -- matches compatibility.my's
+;     (my-list 1 2 3) -> (quote (1 2 3))  -- matches compatibility.lisp's
 ;     own documented example and cml's compiled output for the same
 ;     source.
 ;   (defmacro my-if (test then else) (cons 'cond (cons (cons test (cons then ()))
@@ -60,7 +60,7 @@
                (bind-params (cdr params) (cdr args)))))))
 
 ; --- eval-macro-body: the restricted meta-evaluator (quote/cons/car/cdr/
-; atom/eq/cond only -- compatibility.my's `meta-evaluator-primitives`),
+; atom/eq/cond only -- compatibility.lisp's `meta-evaluator-primitives`),
 ; over unevaluated call-site ASTs bound in `env`. ---
 
 (def eval-macro-body
