@@ -67,11 +67,28 @@ impl std::error::Error for SemanticError {}
 /// that convention. Empty list `()` is a ground value, not a binder name, so
 /// it is absent.
 fn is_reserved_canon_surface(name: &str) -> bool {
-    crate::canon::is_canon_form(
+    if crate::canon::is_canon_form(
         name,
         crate::canon::CANON_UPPER_SURFACES,
         crate::canon::CANON_EXACT_SURFACES,
-    )
+    ) {
+        return true;
+    }
+
+    let Some(semantic_id) = crate::canon::callable_semantic_id(name) else {
+        return false;
+    };
+    let Some(operation) = crate::canon::find_operation_by_id(semantic_id) else {
+        return false;
+    };
+
+    operation.surfaces.iter().any(|(_, surface)| {
+        crate::canon::is_canon_form(
+            surface,
+            crate::canon::CANON_UPPER_SURFACES,
+            crate::canon::CANON_EXACT_SURFACES,
+        )
+    })
 }
 
 fn reject_if_reserved(name: &str) -> Result<(), SemanticError> {
@@ -275,7 +292,8 @@ mod reserved_canon_unit {
     #[test]
     fn latin_canon_names_are_reserved() {
         for name in [
-            "car", "CAR", "Car", "quote", "cond", "atom?", "eq?", "cons", "cdr",
+            "car", "CAR", "Car", "quote", "cond", "atom?", "atom", "ATOM", "eq?", "eq", "EQ",
+            "cons", "cdr",
         ] {
             assert!(is_reserved_canon_surface(name), "{name}");
         }
@@ -314,6 +332,7 @@ mod reserved_canon_unit {
             "f",
             "+",
             "numeric-buffer-map",
+            "equal",
             "відобразити",
         ] {
             assert!(!is_reserved_canon_surface(name), "{name}");
