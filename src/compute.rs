@@ -68,7 +68,7 @@ pub enum ScalarExpr {
     CheckedAdd(Box<ScalarExpr>, Box<ScalarExpr>),
     /// Language multiplication (`*`). Admission is domain-scoped: the
     /// integer fast paths reject it (no overflow proof), the binary32 path
-    /// admits it only inside the scale-affine shape (`f32_scale_offset`).
+    /// admits it only inside the scale-affine shapes (`F32MapKernel`).
     /// GPU-2-E1 / #368.
     Mul(Box<ScalarExpr>, Box<ScalarExpr>),
 }
@@ -456,19 +456,19 @@ fn f32_rounding_proven(region: &ComputeRegion) -> bool {
     else {
         return false;
     };
-    let Some((scale, offset)) = f32_scale_offset(&kernel.body) else {
+    let Some(form) = F32MapKernel::lower(&kernel.body) else {
         return false;
     };
     input.iter().all(|bits| {
         let element = f32::from_bits(*bits);
-        // Canonical evaluator, per shape (GPU-2-E1 / #368):
-        // * pure additive-integer trees keep their proven single-rounding
-        //   parity (`eval_f64` + one narrowing, 53 >= 2*24+2);
-        // * scale-affine shapes (multiplication or float constants) use the
-        //   step-wise binary32 evaluator: A1 (sens#1585) requires two
-        //   roundings, and a single narrowing would implement FFMA
-        //   semantics instead.
-        let canonical = if f32_affine_offset(&kernel.body).is_some() {
+        // Canonical evaluator, per form (GPU-2-E1 / #368):
+        // * the historical additive-integer form keeps its proven
+        //   single-rounding parity (`eval_f64` + one narrowing);
+        // * step-wise forms (float constants, multiplication) use the
+        //   step-wise binary32 evaluator: A1 (sens#1585) requires every
+        //   operation to round, and a single narrowing would implement
+        //   FFMA semantics instead.
+        let canonical = if matches!(form, F32MapKernel::AffineAdd(_)) {
             eval_f64(&kernel.body, &[f64::from(element)]).map(|value| value as f32)
         } else {
             eval_f32_stepwise(&kernel.body, &[element])
@@ -476,7 +476,7 @@ fn f32_rounding_proven(region: &ComputeRegion) -> bool {
         let Some(canonical) = canonical else {
             return false;
         };
-        let backend = apply_f32_scale_offset(element, scale, offset);
+        let backend = form.apply(element);
         canonical.is_finite()
             && backend.is_finite()
             && canonical.to_bits() == backend.to_bits()
@@ -545,7 +545,7 @@ pub(crate) fn f32_affine_offset(expression: &ScalarExpr) -> Option<i64> {
                 ))
             }
             // #368: float constants and multiplication leave the proven
-            // affine-integer shape; see `f32_scale_offset` below.
+            // affine-integer shape; see `F32MapKernel` below.
             ScalarExpr::Float32(_) | ScalarExpr::Mul(..) => None,
         }
     }
@@ -553,74 +553,83 @@ pub(crate) fn f32_affine_offset(expression: &ScalarExpr) -> Option<i64> {
     (parameters == 1).then_some(constant)
 }
 
-/// Returns `(B, C)` for the scale-affine form `parameter-0 * B + C` (each
-/// part optional: `x`, `x + C`, `x * B`, `x * B + C`, either operand order,
-/// constants from `Float32` bits or exact integers). The backend performs
-/// exactly two binary32 roundings -- one multiply, one add -- matching the
-/// step-wise canonical evaluator and the ratified A1 contract (sens#1585:
-/// FFMA contraction is forbidden in the witness slice; the production-mode
-/// FMA policy is a separate language-owner decision, so emitters keep the
-/// two-rounding shape in every mode). Pure additive-integer trees keep
-/// their flattened single-add form (scale 1.0) via `f32_affine_offset`.
-/// Anything outside these shapes returns None: the region is not admitted
-/// to the float fast path. GPU-2-E1 / #368.
+/// The admitted binary32 form of one numeric-buffer-map kernel
+/// (GPU-2-E1 / #368). Every variant reproduces EXACTLY the operations
+/// present in the kernel body -- no phantom `+ 0.0` or `* 1.0`: the sign of
+/// zero and NaN payloads depend on each single operation, so a degenerate
+/// `(B, C)` pair would silently flip bits (`x * 0.0` must stay `-0.0` for
+/// negative x; an implicit `+ 0.0` would return `+0.0` instead -- the E3
+/// case of sens#1585). Anything outside these forms is a named refusal.
 /// CML-GPU-CUDA-INT-FLOAT-ADMISSION-DOCS.
-pub(crate) fn f32_scale_offset(expression: &ScalarExpr) -> Option<(f32, f32)> {
-    fn parameter_zero(expression: &ScalarExpr) -> bool {
-        matches!(expression, ScalarExpr::Parameter(0))
-    }
-    fn constant(expression: &ScalarExpr) -> Option<f32> {
-        match expression {
-            ScalarExpr::ExactInteger(value) => Some(*value as f32),
-            ScalarExpr::Float32(bits) => Some(f32::from_bits(*bits)),
-            _ => None,
-        }
-    }
-    fn scale(expression: &ScalarExpr) -> Option<f32> {
-        match expression {
-            ScalarExpr::Mul(left, right) if parameter_zero(left) => constant(right),
-            ScalarExpr::Mul(left, right) if parameter_zero(right) => constant(left),
-            _ => None,
-        }
-    }
-    if let Some(offset) = f32_affine_offset(expression) {
-        return Some((1.0, offset as f32));
-    }
-    match expression {
-        ScalarExpr::Parameter(0) => Some((1.0, 0.0)),
-        ScalarExpr::CheckedAdd(left, right) => {
-            if parameter_zero(left) {
-                return constant(right).map(|offset| (1.0, offset));
-            }
-            if parameter_zero(right) {
-                return constant(left).map(|offset| (1.0, offset));
-            }
-            if let Some(scale) = scale(left) {
-                if let Some(offset) = constant(right) {
-                    return Some((scale, offset));
-                }
-            }
-            if let Some(scale) = scale(right) {
-                if let Some(offset) = constant(left) {
-                    return Some((scale, offset));
-                }
-            }
-            None
-        }
-        ScalarExpr::Mul(..) => scale(expression).map(|scale| (scale, 0.0)),
-        _ => None,
-    }
+pub(crate) enum F32MapKernel {
+    /// Historical additive-integer form `x + C` (flattened tree). Its
+    /// rounding parity is the proven `eval_f64` + single narrowing.
+    AffineAdd(f32),
+    /// `x + F` with one Float32 constant: a single step-wise operation.
+    Add(f32),
+    /// `x * F`: a single step-wise operation (E3: `-1.0 * 0.0` stays -0.0).
+    Mul(f32),
+    /// `x * F + G`: exactly two step-wise roundings. A1 (sens#1585):
+    /// FFMA contraction is forbidden in the witness slice; the emitters
+    /// emit the two plain operators, and contraction is controlled by the
+    /// kernel mode (`-fmad=false` in `CudaKernelMode::BitwiseEquality`,
+    /// PR #366), not by the emitter -- the production-mode FMA policy is a
+    /// separate language-owner decision.
+    MulAdd(f32, f32),
 }
 
-/// Apply the admitted scale-affine shape with exactly two binary32
-/// roundings. `scale == 1.0` keeps the historical single-add form bitwise
-/// (including NaN payloads, which a multiply by 1.0 could disturb).
-/// GPU-2-E1 / #368.
-fn apply_f32_scale_offset(element: f32, scale: f32, offset: f32) -> f32 {
-    if scale == 1.0 {
-        element + offset
-    } else {
-        element * scale + offset
+impl F32MapKernel {
+    /// Classify an admitted kernel body. None: the region is not admitted
+    /// to the float fast path.
+    pub(crate) fn lower(body: &ScalarExpr) -> Option<F32MapKernel> {
+        fn parameter_zero(expression: &ScalarExpr) -> bool {
+            matches!(expression, ScalarExpr::Parameter(0))
+        }
+        fn constant(expression: &ScalarExpr) -> Option<f32> {
+            match expression {
+                ScalarExpr::ExactInteger(value) => Some(*value as f32),
+                ScalarExpr::Float32(bits) => Some(f32::from_bits(*bits)),
+                _ => None,
+            }
+        }
+        fn mul(expression: &ScalarExpr) -> Option<f32> {
+            match expression {
+                ScalarExpr::Mul(left, right) if parameter_zero(left) => constant(right),
+                ScalarExpr::Mul(left, right) if parameter_zero(right) => constant(left),
+                _ => None,
+            }
+        }
+        if let Some(offset) = f32_affine_offset(body) {
+            return Some(F32MapKernel::AffineAdd(offset as f32));
+        }
+        match body {
+            ScalarExpr::CheckedAdd(left, right) => {
+                if parameter_zero(left) {
+                    return constant(right).map(F32MapKernel::Add);
+                }
+                if parameter_zero(right) {
+                    return constant(left).map(F32MapKernel::Add);
+                }
+                if let (Some(scale), Some(offset)) = (mul(left), constant(right)) {
+                    return Some(F32MapKernel::MulAdd(scale, offset));
+                }
+                if let (Some(scale), Some(offset)) = (mul(right), constant(left)) {
+                    return Some(F32MapKernel::MulAdd(scale, offset));
+                }
+                None
+            }
+            ScalarExpr::Mul(..) => mul(body).map(F32MapKernel::Mul),
+            _ => None,
+        }
+    }
+
+    /// Apply the form with exactly its own operations.
+    pub(crate) fn apply(&self, element: f32) -> f32 {
+        match self {
+            F32MapKernel::AffineAdd(offset) | F32MapKernel::Add(offset) => element + offset,
+            F32MapKernel::Mul(scale) => element * scale,
+            F32MapKernel::MulAdd(scale, offset) => element * scale + offset,
+        }
     }
 }
 
@@ -686,7 +695,7 @@ fn lower_scalar_expr(ir: &Ir, parameters: &[String]) -> Option<ScalarExpr> {
         }
         // Language multiplication: identity comes from the registry (see
         // `multiplication_sid`); admission is domain-scoped and lives in
-        // `f32_scale_offset` / the integer paths. GPU-2-E1 / #368.
+        // `F32MapKernel` / the integer paths. GPU-2-E1 / #368.
         Ir::App { func, args }
             if args.len() == 2
                 && matches!(&**func, Ir::Sid(sid)
@@ -896,15 +905,12 @@ impl ComputeBackend for CpuComputeBackend {
                     Ok(BufferLiteral::I32(output))
                 }
                 Ir::Buffer(BufferLiteral::F32(input)) => {
-                    let (scale, offset) = f32_scale_offset(&kernel.body)
+                    let form = F32MapKernel::lower(&kernel.body)
                         .ok_or(ComputeExecutionError::InternalInvariant)?;
                     Ok(BufferLiteral::F32(
                         input
                             .into_iter()
-                            .map(|bits| {
-                                apply_f32_scale_offset(f32::from_bits(bits), scale, offset)
-                                    .to_bits()
-                            })
+                            .map(|bits| form.apply(f32::from_bits(bits)).to_bits())
                             .collect(),
                     ))
                 }
@@ -1099,7 +1105,7 @@ impl ParallelCpuComputeBackend {
                             unique_threads: 0,
                         });
                     }
-                    let (scale, offset) = f32_scale_offset(&kernel.body)
+                    let form = F32MapKernel::lower(&kernel.body)
                         .ok_or(ComputeExecutionError::InternalInvariant)?;
 
                     if self.workers <= 1 || input.len() == 1 {
@@ -1107,10 +1113,7 @@ impl ParallelCpuComputeBackend {
                             output: BufferLiteral::F32(
                                 input
                                     .into_iter()
-                                    .map(|bits| {
-                                        apply_f32_scale_offset(f32::from_bits(bits), scale, offset)
-                                            .to_bits()
-                                    })
+                                    .map(|bits| form.apply(f32::from_bits(bits)).to_bits())
                                     .collect(),
                             ),
                             workers_configured: self.workers,
@@ -1132,14 +1135,7 @@ impl ParallelCpuComputeBackend {
                                     s.spawn(move || -> (Vec<u32>, std::thread::ThreadId) {
                                         let out: Vec<u32> = chunk
                                             .iter()
-                                            .map(|&bits| {
-                                                apply_f32_scale_offset(
-                                                    f32::from_bits(bits),
-                                                    scale,
-                                                    offset,
-                                                )
-                                                .to_bits()
-                                            })
+                                            .map(|&bits| form.apply(f32::from_bits(bits)).to_bits())
                                             .collect();
                                         (out, std::thread::current().id())
                                     });
@@ -1346,7 +1342,7 @@ mod resident_range_tests {
 }
 
 #[cfg(test)]
-mod f32_scale_offset_tests {
+mod f32_map_kernel_tests {
     use super::*;
 
     /// Ratified §1 constants (sens#1585 E1) as stored binary32 bits.
@@ -1365,14 +1361,18 @@ mod f32_scale_offset_tests {
     }
 
     #[test]
-    fn scale_offset_extracts_the_e1_shape() {
-        let (scale, offset) = f32_scale_offset(&e1_body()).expect("E1 shape is scale-affine");
-        assert_eq!(scale.to_bits(), E1_B);
-        assert_eq!(offset.to_bits(), E1_C);
+    fn map_kernel_classifies_the_e1_shape() {
+        match F32MapKernel::lower(&e1_body()) {
+            Some(F32MapKernel::MulAdd(scale, offset)) => {
+                assert_eq!(scale.to_bits(), E1_B);
+                assert_eq!(offset.to_bits(), E1_C);
+            }
+            other => panic!("E1 body must classify as MulAdd, got {other:?}"),
+        }
     }
 
     #[test]
-    fn affine_trees_keep_the_single_add_shape() {
+    fn affine_trees_keep_the_single_add_form() {
         let nested = ScalarExpr::CheckedAdd(
             Box::new(ScalarExpr::CheckedAdd(
                 Box::new(ScalarExpr::Parameter(0)),
@@ -1380,7 +1380,28 @@ mod f32_scale_offset_tests {
             )),
             Box::new(ScalarExpr::ExactInteger(2)),
         );
-        assert_eq!(f32_scale_offset(&nested), Some((1.0, 3.0)));
+        match F32MapKernel::lower(&nested) {
+            Some(F32MapKernel::AffineAdd(offset)) => assert_eq!(offset, 3.0),
+            other => panic!("additive tree must classify as AffineAdd, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pure_multiplication_preserves_negative_zero() {
+        // E3 (sens#1585): (-1.0) * (+0.0) = -0.0. A degenerate form with an
+        // implicit `+ 0.0` would flip it to +0.0, so a bare multiply must
+        // stay a bare multiply.
+        let body = ScalarExpr::Mul(
+            Box::new(ScalarExpr::Parameter(0)),
+            Box::new(ScalarExpr::Float32(0x00000000)),
+        );
+        let form = F32MapKernel::lower(&body).expect("pure multiply is admitted");
+        assert!(matches!(form, F32MapKernel::Mul(scale) if scale.to_bits() == 0));
+        let element = f32::from_bits(0xbf800000); // -1.0
+        let canonical =
+            eval_f32_stepwise(&body, &[element]).expect("stepwise evaluates the multiply");
+        assert_eq!(canonical.to_bits(), 0x80000000, "(-1.0)*(+0.0) is -0.0");
+        assert_eq!(form.apply(element).to_bits(), 0x80000000);
     }
 
     #[test]
