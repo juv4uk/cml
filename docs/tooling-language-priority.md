@@ -35,7 +35,7 @@ transplanted rule.
 
 **`macros.rs` — highest priority, real self-hosting candidate.**
 `defmacro` expansion is a tree-walking meta-evaluator over `quote`/
-`cons`/`car`/`cdr`/`atom`/`eq`/`cond` (`compatibility.my`'s own
+`cons`/`car`/`cdr`/`atom`/`eq`/`cond` (`compatibility.lisp`'s own
 description) that never reaches fpga-lisp at all (`never-reaches-fpga .
 true`). It is, structurally, a small Lisp interpreter written in Rust —
 the exact shape `assembler.py`→`assembler.my` already proved worth
@@ -135,7 +135,7 @@ register discipline in an untyped host).
 
 **`macros.rs` — найвищий пріоритет, справжній кандидат на самохостинг.**
 Розширення `defmacro` — це мета-обчислювач, що обходить дерево поверх `quote`/
-`cons`/`car`/`cdr`/`atom`/`eq`/`cond` (як описано у `compatibility.my`), який ніколи 
+`cons`/`car`/`cdr`/`atom`/`eq`/`cond` (як описано у `compatibility.lisp`), який ніколи 
 не досягає fpga-lisp (`never-reaches-fpga . true`). Структурно це невеликий 
 Lisp-інтерпретатор, написаний на Rust — точно така форма, яку `assembler.py`→`assembler.my` 
 вже довели як варту портування, і, ймовірно, це ще вагоміший випадок: розширювач 
