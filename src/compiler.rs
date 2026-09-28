@@ -764,8 +764,9 @@ impl Compiler {
 
     // Structural equality without letrec/recursion: an explicit worklist of
     // (a . b) pairs pushed onto the shared stack register R11, drained
-    // iteratively. Type mismatches stop pushing new work but keep draining
-    // so R11 always returns balanced to its caller.
+    // iteratively back to the R11 value observed on entry. The caller may
+    // already have saved its link register on R11; that caller-owned prefix
+    // is a stack base, never part of this subroutine's worklist.
     // Структурна рівність без letrec/рекурсії: явний worklist пар (a . b)
     // на спільному регістрі-стеку R11.
     // Strukturelle Gleichheit ohne letrec/Rekursion: explizite Arbeitsliste
@@ -775,16 +776,14 @@ impl Compiler {
         self.emit("cml_equal:");
         self.emit("; input: R1 = a, R2 = b");
         self.emit("; output: R15 = TRUE/NIL");
+        self.emit("MOV R10 R11"); // caller-owned stack base; do not consume it
         self.emit("CONS R12 R1 R2");
         self.emit("CONS R11 R12 R11"); // push initial (a . b)
         self.emit("LOADI R15 0");
         self.emit("ATOM R15 R15"); // R15 = TRUE (running result)
 
         self.emit("cml_equal_loop:");
-        self.emit("LOADI R9 0");
-        self.emit("LOADI R8 1");
-        self.emit("EQ R7 R8 R9"); // R7 = NIL
-        self.emit("EQ R6 R11 R7"); // R6 = TRUE if worklist empty
+        self.emit("EQ R6 R11 R10"); // TRUE iff our worklist returned to entry base
         self.emit("JF R6 cml_equal_pop");
         self.emit("JMP cml_equal_done");
 
