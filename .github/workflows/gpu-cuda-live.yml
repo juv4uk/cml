@@ -9,20 +9,8 @@ name: GPU CUDA live (GTX 1050 Ti)
 # лише на master і вручну: час на карті шумить, це не поріг для червоного.
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "src/gpu_cuda*.rs"
-      - "src/gpu*.rs"
-      - "src/execution_graph*.rs"
-      - "src/ir.rs"
-      - "tests/gpu_cuda*.rs"
-      - "tests/execution_graph_cuda*.rs"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".github/workflows/gpu-cuda-live.yml"
-  push:
-    branches: [master]
+  # Local GitHub Actions runners were retired by owner directive 2026-09-28.
+  # Keep this physical-GPU witness manual-only until a GPU-capable CI lane exists.
   workflow_dispatch:
 
 # Одна карта на 4 ГБ, кілька runner-процесів на машині: GPU-задачі — по одній.
