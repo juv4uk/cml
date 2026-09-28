@@ -17,10 +17,7 @@ fn callable_resolution_is_owned_by_my_lisp_registry_not_a_cml_allowlist() {
     // FILTER was never present in CML's historical CALLABLE_IDS allowlist.
     // Its identity must nevertheless be available because my-lisp owns the
     // admitted surface -> SID projection.
-    assert_eq!(
-        callable_semantic_id("filter"),
-        Some(sens::sid!(00111000))
-    );
+    assert_eq!(callable_semantic_id("filter"), Some(sens::sid!(00111000)));
     assert_eq!(
         callable_semantic_id("FILTER"),
         Some(sens::sid!(00111000)),
@@ -75,12 +72,7 @@ fn every_admitted_canon_callable_surface_lowers_to_one_semantic_operation() {
     // These peer spellings are the stable surfaces of semantic IDs 0002..0006, 0104, 1001, 1022
     // in my-lisp/lib/surface/semantic-registry.wsm.
     let cases: &[(sens::Sid8, &str, &str, &[&str])] = &[
-        (
-            sens::sid!(00000010),
-            "atom",
-            "1",
-            &["атом?", "aṇu", ".?"],
-        ),
+        (sens::sid!(00000010), "atom", "1", &["атом?", "aṇu", ".?"]),
         (
             sens::sid!(00000011),
             "eq",
@@ -135,11 +127,7 @@ fn every_admitted_canon_callable_surface_is_the_same_first_class_value() {
     let cases: &[(sens::Sid8, &str, &[&str])] = &[
         (sens::sid!(00000010), "atom", &["атом?", "aṇu", ".?"]),
         (sens::sid!(00000011), "eq", &["тотожне?", "abheda", "=?"]),
-        (
-            sens::sid!(00000100),
-            "cons",
-            &["сполучити", "saṃyuj", ":"],
-        ),
+        (sens::sid!(00000100), "cons", &["сполучити", "saṃyuj", ":"]),
         (sens::sid!(00000101), "car", &["перше", "ādi", ":п"]),
         (sens::sid!(00000110), "cdr", &["решта", "śeṣa", ":р"]),
         (sens::sid!(00001100), "+", &["додати", "yoga"]),

@@ -40,24 +40,27 @@ pub fn callable_semantic_id(name: &str) -> Option<Sid8> {
     // a second callable allowlist. Exact Unicode names are tried first; the
     // ASCII-lowercase fallback preserves ordinary Lisp case-insensitivity for
     // English surfaces without changing Ukrainian/Sanskrit identity.
-    sens::semantic_registry_export::semantic_id_for_admitted_surface(name).or_else(|| {
-        let folded = name.to_ascii_lowercase();
-        (folded != name)
-            .then(|| sens::semantic_registry_export::semantic_id_for_admitted_surface(&folded))?
-    }).or_else(|| {
-        // Traditional Lisp names that map to registry entries with `?` suffix.
-        // The registry uses `atom?`, `eq?`, `equal?` but Lisp tradition is
-        // `atom`, `eq`, `equal`. This is a CML-local surface spelling concern;
-        // the upstream registry authority remains unchanged.
-        const TRADITIONAL_TO_REGISTRY: &[(&str, &str)] = &[
-            ("atom", "atom?"),
-            ("eq", "eq?"),
-            ("equal", "equal?"),
-        ];
-        TRADITIONAL_TO_REGISTRY.iter()
-            .find_map(|(trad, reg)| (name.eq_ignore_ascii_case(trad)).then_some(*reg))
-            .and_then(|reg| sens::semantic_registry_export::semantic_id_for_admitted_surface(reg))
-    })
+    sens::semantic_registry_export::semantic_id_for_admitted_surface(name)
+        .or_else(|| {
+            let folded = name.to_ascii_lowercase();
+            (folded != name).then(|| {
+                sens::semantic_registry_export::semantic_id_for_admitted_surface(&folded)
+            })?
+        })
+        .or_else(|| {
+            // Traditional Lisp names that map to registry entries with `?` suffix.
+            // The registry uses `atom?`, `eq?`, `equal?` but Lisp tradition is
+            // `atom`, `eq`, `equal`. This is a CML-local surface spelling concern;
+            // the upstream registry authority remains unchanged.
+            const TRADITIONAL_TO_REGISTRY: &[(&str, &str)] =
+                &[("atom", "atom?"), ("eq", "eq?"), ("equal", "equal?")];
+            TRADITIONAL_TO_REGISTRY
+                .iter()
+                .find_map(|(trad, reg)| (name.eq_ignore_ascii_case(trad)).then_some(*reg))
+                .and_then(|reg| {
+                    sens::semantic_registry_export::semantic_id_for_admitted_surface(reg)
+                })
+        })
 }
 
 /// Map an admitted semantic ID to its canonical uppercase target builtin name.
