@@ -49,11 +49,24 @@ jobs:
       CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v4
-      - name: Isolate Cargo target by rustc build
+      - name: Isolate Cargo target by rustc build and profile
         run: |
+          # rustc_key рахується тим самим rustc, який потім збере проєкт
+          # (без окремого install-step тут беруться PATH/sccache-інструменти
+          # локального runner-а), тому ключ завжди описує реальний компілятор.
+          # profile додано тому, що --release і debug ділять rmeta в одному
+          # target-dir: крок "CUDA emitter (no device needed)" здав
+          # E0514 (crate `sens` / `cudarc` compiled by an incompatible
+          # version of rustc) на debug-артефактах, зібраних іншим профілем.
           rustc_key="$(rustc -vV | sha256sum | cut -c1-16)"
           test -n "$rustc_key"
-          echo "CARGO_TARGET_DIR=/home/agents/.cache/cargo-target/cml/rustc-$rustc_key" >> "$GITHUB_ENV"
+          target="/home/agents/.cache/cargo-target/cml/rustc-$rustc_key"
+          # Cargo бере CARGO_TARGET_DIR_<profile> переважніше за
+          # CARGO_TARGET_DIR, тому release і debug більше не ділять один
+          # каталог (див. коментар у кроці нижче про E0514).
+          echo "CARGO_TARGET_DIR=$target" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR_DEBUG=$target/debug" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR_RELEASE=$target/release" >> "$GITHUB_ENV"
       - name: external/sens from the local clone
         # juv4uk/sens приватний: GITHUB_TOKEN репо cml не може його клонувати.
         # На власному runner-і беремо закріплений коміт з локального клону.
