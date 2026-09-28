@@ -144,4 +144,6 @@ jobs:
 
       - name: cargo test
         working-directory: cml
-        run: cargo test --verbose
+        # Preserve a failing exit status, but continue through later test binaries
+        # so one known blocker cannot hide independent REDs.
+        run: cargo test --verbose --no-fail-fast
