@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 /// The fpga-lisp target's hard limits, checked before any assembly is
-/// emitted (docs/abi.md / isa-contract.my). Both are silent-corruption
+/// emitted (docs/abi.md / isa-contract.lisp). Both are silent-corruption
 /// risks if left unchecked: extra call args past MAX_ARGS are never even
 /// evaluated (compile_generic_call only compiles args[..MAX_ARGS]), and an
 /// out-of-range literal truncates into LOADI's 16-bit immediate.
@@ -11,7 +11,7 @@ const MAX_CALL_ARGS: usize = 8;
 const MAX_LOADI_MAGNITUDE: i64 = 0xFFFF;
 
 /// Errors caught before emission by validating the IR against fpga-lisp's
-/// target limits -- see docs/abi.md and isa-contract.my.
+/// target limits -- see docs/abi.md and isa-contract.lisp.
 #[derive(Debug, Clone)]
 pub enum CompileError {
     /// A call site passes more arguments than the target's fixed register

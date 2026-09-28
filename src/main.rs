@@ -21,7 +21,7 @@ fn main() {
         usage();
     }
 
-    // COMPILER-01: cml build <file.my> [-o out] [--keep-c]
+    // COMPILER-01: cml build <file.lisp> [-o out] [--keep-c]
     if args.get(1).map(|s| s.as_str()) == Some("build") {
         run_build(&args[2..]);
         return;
@@ -120,7 +120,7 @@ fn run_build(args: &[String]) {
         i += 1;
     }
     let file = file.unwrap_or_else(|| {
-        eprintln!("build: missing <file.my>");
+        eprintln!("build: missing <file.lisp>");
         usage();
     });
     let opts = BuildOptions {

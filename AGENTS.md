@@ -222,7 +222,7 @@ ports/protocols.
   testing against the real my-lisp CLI but **not wired into the compile
   pipeline** — same status as fpga-lisp's `assembler.lisp` relative to
   `assembler.py`. See `docs/tooling-language-priority.md` before
-  proposing moving more of `cml` itself to `.my`.
+  proposing moving more of `cml` itself to `.lisp`.
 
 ## Environment: WSL2 + Guix
 
