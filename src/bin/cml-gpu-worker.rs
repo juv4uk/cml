@@ -27,6 +27,7 @@ mod enabled {
     const OP_PING: u8 = 1;
     const OP_PROBE: u8 = 2;
     const OP_ADD_I32: u8 = 3;
+    const OP_CHAIN_FILE_I32: u8 = 4;
     const STATUS_OK: u8 = 0;
     const STATUS_ERR: u8 = 1;
     
@@ -347,7 +348,7 @@ mod enabled {
         }
         let len = u32::from_le_bytes(payload[*cursor..*cursor + 4].try_into().unwrap()) as usize;
         *cursor += 4;
-        let end = cursor.checked_add(len).ok_or("path length overflow")?;
+        let end = (*cursor).checked_add(len).ok_or("path length overflow")?;
         if end > payload.len() {
             return Err("path payload truncated".into());
         }
