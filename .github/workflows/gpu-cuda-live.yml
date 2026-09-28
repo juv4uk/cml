@@ -49,6 +49,11 @@ jobs:
       CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v4
+      - name: Isolate Cargo target by rustc build
+        run: |
+          rustc_key="$(rustc -vV | sha256sum | cut -c1-16)"
+          test -n "$rustc_key"
+          echo "CARGO_TARGET_DIR=/home/agents/.cache/cargo-target/cml/rustc-$rustc_key" >> "$GITHUB_ENV"
       - name: external/sens from the local clone
         # juv4uk/sens приватний: GITHUB_TOKEN репо cml не може його клонувати.
         # На власному runner-і беремо закріплений коміт з локального клону.

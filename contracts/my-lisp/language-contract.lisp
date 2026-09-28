@@ -1,7 +1,7 @@
 ; language-contract.lisp — current machine-readable Level 1/2 contract.
 ;
 ; Contract 9.0 ratified by owner 2026-09-24.
-; Breaking conceptual change: my-lisp has exactly one function-identity space.
+; Breaking conceptual change: sens (СЕНС) has exactly one function-identity space.
 ; Every function identity is exactly eight bits: 00000000..11111111.
 ; No word, symbol, string, enum label, historical name, opcode, backend name or
 ; host mechanism is a second function identity.
@@ -9,12 +9,12 @@
 ; Core profiles may assign different laws/results/mechanisms to the same SID.
 ; They do not create new identities.
 ;
-; Migration debt: the current implementation still reuses 00000000 for the
-; historical empty-list ground value. Contract 9 forbids that final state;
-; #1332 migrates () outside the function-SID space without allocating a new SID.
+; Current executable reality after #1332: () is a structural empty value outside
+; the complete 00000000..11111111 function space. Function 00000000 is not ().
+; The remaining SID/Sid8 -> SENS vocabulary migration is tracked by #1384.
 
 ((major . 9) (minor . 0)
- (note . "RATIFIED by owner 2026-09-24. Contract 9.0 establishes one and only one function-identity space: exact eight-bit SIDs 00000000..11111111. Human surfaces and implementation labels are non-authoritative projections only. Core profiles select laws over the same SID. The historical 00000000/empty-list collision is explicit migration debt tracked by #1332 and must not be copied into new code.")
+ (note . "RATIFIED by owner 2026-09-24. Contract 9.0 establishes sens (СЕНС) with one and only one function-identity space: exact eight-bit SIDs 00000000..11111111. Human surfaces and implementation labels are non-authoritative projections only. Core profiles select laws over the same SID. #1332 is complete in current executable reality: () is a structural value outside the function space and 00000000 is not the empty-list value. Vocabulary reconciliation to SENS-native terms continues under #1384.")
  (covers . (G1 G2 G3 G4 G5 G6 G7 G8 S1 S2 S3))
  (invariants
    . ((sid8-function-space
@@ -26,7 +26,7 @@
       (core-profile-law
        . "Core1/Core2/Core3/Core4 are law profiles over the same Sid8 identities. Profile selection may change the admitted law/result/mechanism for a SID, but never its eight-bit identity and never the global function-ID space.")
       (kernel-archipelago
-       . "Execution kernels may own native mechanisms and observations. They consume an already-selected Sid8 plus arguments/context and may return native observations. Kernel operator names, opcodes and native types never acquire my-lisp function identity by themselves.")
+       . "Execution kernels may own native mechanisms and observations. They consume an already-selected Sid8 plus arguments/context and may return native observations. Kernel operator names, opcodes and native types never acquire sens function identity by themselves.")
       (sid-00000111-control
        . "For the current Core4 law of SID 00000111, clauses have exactly three fields: (query expected-result expression), are checked left-to-right, evaluate only the first matching expression, and fail with UnsatisfiedConditional on exhaustion. Older Core profiles may retain their separately pinned law for the same SID.")
       (reader-apostrophe
@@ -38,4 +38,4 @@
       (error-classification
        . "ErrorKind remains observable semantics. UnsatisfiedConditional is the exhaustion failure for the current Core4 law of SID 00000111; existing named error categories remain observable until separately migrated.")
       (migration-debt-00000000
-       . "The current implementation still maps the historical empty-list ground value onto SID 00000000. This violates the final Contract-9 function-space model and is temporary migration debt owned by #1332. () must end outside the function SID space and must not receive a replacement SID."))))
+       . "Historical #1332 migration debt is complete in the current runtime: () is represented as a structural empty value outside the function space, and function 00000000 is not the empty-list value and receives no replacement ground-value identity."))))
