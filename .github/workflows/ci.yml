@@ -8,17 +8,26 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: [self-hosted, author, guix]
     steps:
       - name: Checkout cml
         uses: actions/checkout@v4
         with:
           path: cml
-          # external/sens is a real submodule now: sens is the contract dependency
-          # (cml reads its .lisp source tree directly for the encoder bridge, CPU
-          # profile, and conformance corpus), so it travels with cml's own
-          # checkout instead of a separately pinned sibling checkout.
-          submodules: true
+
+      - name: Materialize external/sens gitlink from canonical local clone
+        working-directory: cml
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_clone=/home/agents/GitHub/sens
+          test -d "$source_clone/.git"
+          mkdir -p /home/agents/.cache
+          flock /home/agents/.cache/sens-fetch.lock             git -C "$source_clone" fetch --quiet origin main
+          git config submodule.external/sens.url "$source_clone"
+          git -c protocol.file.allow=always submodule update --init external/sens
+          test "$(git -C external/sens rev-parse HEAD)" = "$(git ls-tree HEAD external/sens | awk '{print $3}')"
 
       - name: Resolve sens revision channels
         id: upstream_revisions
@@ -53,26 +62,23 @@ jobs:
           echo "upstream-channel observed-current sha=$observed_current_sha"
           echo "upstream-channel bootstrap-core1-source sha=$bootstrap_core1_sha"
 
-      - name: Checkout sens (supported evidence)
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/sens
-          ref: ${{ steps.upstream_revisions.outputs.supported_pin_sha }}
-          path: sens-supported
-
-      - name: Checkout sens (observed-current)
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/sens
-          ref: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
-          path: sens
-
-      - name: Checkout sens (Core1 bootstrap source)
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/sens
-          ref: ${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}
-          path: sens-bootstrap
+      - name: Materialize exact sens evidence revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_clone=/home/agents/GitHub/sens
+          materialize() {
+            local sha="$1"
+            local dest="$2"
+            git -C "$source_clone" cat-file -e "${sha}^{commit}"
+            rm -rf "$dest"
+            git clone --quiet --shared --no-checkout "$source_clone" "$dest"
+            git -C "$dest" checkout --quiet --detach "$sha"
+            test "$(git -C "$dest" rev-parse HEAD)" = "$sha"
+          }
+          materialize "${{ steps.upstream_revisions.outputs.supported_pin_sha }}" sens-supported
+          materialize "${{ steps.upstream_revisions.outputs.observed_current_sha }}" sens
+          materialize "${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}" sens-bootstrap
 
       - name: Validate Core1 bootstrap source
         working-directory: cml
@@ -99,25 +105,38 @@ jobs:
           [[ -f ../sens-bootstrap/lib/core1-compiler-prelude.lisp ]] && bootstrap_prelude=present
           echo "((kind . cml-upstream-revision-drift) (build-source-sha . \"${{ steps.upstream_revisions.outputs.build_source_sha }}\") (supported-pin-sha . \"${{ steps.upstream_revisions.outputs.supported_pin_sha }}\") (observed-current-sha . \"${{ steps.upstream_revisions.outputs.observed_current_sha }}\") (bootstrap-core1-source-sha . \"${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}\") (bootstrap-core1-prelude . ${bootstrap_prelude}) (mathematical-result-v1 . ((build-source . ${build_math}) (supported-pin . ${supported_math}) (observed-current . ${observed_math}))))"
 
-      - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/fpga-lisp
-          ref: b5d68bba109b972122f92fa10d237f81ce90aa87
-          path: fpga-lisp
-
-      - name: Checkout wsm-my-lisp (provides x86 asm nucleus witness)
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/wsm-my-lisp
-          ref: 1fe661664479c92da1968d60914b512320678ac2
-          path: wsm-my-lisp
+      - name: Materialize exact sibling witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          materialize() {
+            local source_clone="$1"
+            local sha="$2"
+            local dest="$3"
+            test -d "$source_clone/.git"
+            git -C "$source_clone" cat-file -e "${sha}^{commit}"
+            rm -rf "$dest"
+            git clone --quiet --shared --no-checkout "$source_clone" "$dest"
+            git -C "$dest" checkout --quiet --detach "$sha"
+            test "$(git -C "$dest" rev-parse HEAD)" = "$sha"
+          }
+          materialize /home/agents/GitHub/fpga-lisp b5d68bba109b972122f92fa10d237f81ce90aa87 fpga-lisp
+          materialize /home/agents/GitHub/wsm-my-lisp 1fe661664479c92da1968d60914b512320678ac2 wsm-my-lisp
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Icarus Verilog
-        run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Verify Icarus Verilog from Guix profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          iverilog_path="$(command -v iverilog)"
+          test -n "$iverilog_path"
+          case "$(readlink -f "$iverilog_path")" in
+            /gnu/store/*) ;;
+            *) echo "iverilog is not provided by Guix: $iverilog_path" >&2; exit 1 ;;
+          esac
+          iverilog -V
 
       - name: cargo fmt
         working-directory: cml
