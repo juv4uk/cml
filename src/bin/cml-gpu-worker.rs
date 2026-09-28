@@ -11,13 +11,16 @@ fn main() {
 
 #[cfg(feature = "gpu-cuda")]
 mod enabled {
-    use cml::gpu_cuda_runtime::{\n        discover_devices, execute_map, execute_map_chain_i32_selected,\n    };
+    use cml::gpu_cuda_runtime::{
+        discover_devices, execute_map, execute_map_chain_i32_selected,
+    };
     use cml::ir::{BufferLiteral, Ir, Params};
     use std::env;
     use std::fs;
     use std::io::{self, Read, Write};
     use std::os::unix::net::{UnixListener, UnixStream};
-    use std::path::{Path, PathBuf};\n    use std::time::Instant;
+    use std::path::{Path, PathBuf};
+    use std::time::Instant;
     
     const MAGIC: &[u8; 4] = b"CMLG";
     const VERSION: u8 = 1;
