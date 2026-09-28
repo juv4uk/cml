@@ -6,20 +6,11 @@ use cml::coverage::{BackendEvidenceState, CoverageLedger};
 
 const EXPECTED: &[(sens::Sid8, BackendEvidenceState)] = &[
     (sens::sid!(00000001), BackendEvidenceState::Executable),
-    (
-        sens::sid!(00000010),
-        BackendEvidenceState::AssemblyWitness,
-    ),
+    (sens::sid!(00000010), BackendEvidenceState::AssemblyWitness),
     (sens::sid!(00000011), BackendEvidenceState::Executable),
     (sens::sid!(00000100), BackendEvidenceState::Executable),
-    (
-        sens::sid!(00000101),
-        BackendEvidenceState::AssemblyWitness,
-    ),
-    (
-        sens::sid!(00000110),
-        BackendEvidenceState::AssemblyWitness,
-    ),
+    (sens::sid!(00000101), BackendEvidenceState::AssemblyWitness),
+    (sens::sid!(00000110), BackendEvidenceState::AssemblyWitness),
     (sens::sid!(00000111), BackendEvidenceState::Executable),
 ];
 

@@ -1,8 +1,8 @@
 use cml::compute::AdmissionBlocker;
 use cml::gpu_cuda::{CudaEmitError, emit_map_kernel};
 use cml::ir::{BufferLiteral, Ir, Params};
-use sens::Sens8;
 use cml::{lower, parser};
+use sens::Sens8;
 
 fn lower_one(source: &str) -> Ir {
     let expressions = parser::parse(source).unwrap();
@@ -44,10 +44,7 @@ fn dormant_f32_ir_emits_one_binary32_add() {
         &[1.0, 2.0],
         Ir::App {
             func: Box::new(Ir::Sid(sens::sens!(00001100))),
-            args: vec![
-                Ir::Var("X".to_string()),
-                Ir::Int(3),
-            ],
+            args: vec![Ir::Var("X".to_string()), Ir::Int(3)],
         },
     ))
     .unwrap();
