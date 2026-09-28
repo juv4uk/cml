@@ -1,3 +1,5 @@
+[Reading 85 lines from start (total: 85 lines, 0 remaining)]
+
 name: GPU CUDA live (GTX 1050 Ti)
 
 # CUDA — лише механізм виконання; семантику допускає CML/sens.
@@ -49,6 +51,13 @@ jobs:
       CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v4
+      - name: Isolate Cargo target by rustc build
+        run: |
+          rustc_release="$(rustc -vV | sed -n 's/^release: //p')"
+          rustc_commit="$(rustc -vV | sed -n 's/^commit-hash: //p' | cut -c1-12)"
+          test -n "$rustc_release"
+          test -n "$rustc_commit"
+          echo "CARGO_TARGET_DIR=/home/agents/.cache/cargo-target/cml/rustc-${rustc_release}-${rustc_commit}" >> "$GITHUB_ENV"
       - name: external/sens from the local clone
         # juv4uk/sens приватний: GITHUB_TOKEN репо cml не може його клонувати.
         # На власному runner-і беремо закріплений коміт з локального клону.
@@ -67,6 +76,8 @@ jobs:
         run: cargo test --release --features gpu-cuda --test gpu_cuda_test
       - name: CUDA on the card — CPU = GPU
         run: cargo test --release --features gpu-cuda --test gpu_cuda_live_test -- --include-ignored
+      - name: CUDA live conformance matrix — CPU = GPU
+        run: cargo test --release --features gpu-cuda --test gpu_cuda_conformance_live_test -- --include-ignored --nocapture
       - name: CUDA execution graph — CPU = GPU
         run: cargo test --release --features gpu-cuda --test execution_graph_cuda_live_test -- --include-ignored
       - name: CUDA resident/fused chain — parity
@@ -74,3 +85,5 @@ jobs:
       - name: Crossover calibration (master / manual only)
         if: ${{ github.event_name != 'pull_request' }}
         run: cargo test --release --features gpu-cuda --test gpu_cuda_crossover_live_test -- --include-ignored --nocapture
+
+[executed on device: desktop (4fe47fce-cddf-44b3-9f53-0350f286048d)]
