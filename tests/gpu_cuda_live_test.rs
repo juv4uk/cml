@@ -64,7 +64,9 @@ fn prepared_map_reuses_one_admission_witness_for_immutable_ir() {
     let prepared = session.prepare_map(&ir).expect("CUDA preparation failed");
 
     let first = prepared.execute().expect("first prepared execution failed");
-    let second = prepared.execute().expect("second prepared execution failed");
+    let second = prepared
+        .execute()
+        .expect("second prepared execution failed");
 
     assert_eq!(first.output, BufferLiteral::I32(vec![6, 7, 8, 9]));
     assert_eq!(second.output, first.output);

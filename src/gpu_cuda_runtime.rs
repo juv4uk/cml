@@ -138,10 +138,7 @@ impl CudaSession {
             })
     }
 
-    pub fn prepare_map<'a>(
-        &'a self,
-        ir: &'a Ir,
-    ) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
+    pub fn prepare_map<'a>(&'a self, ir: &'a Ir) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
         let source = emit_map_kernel(ir)?;
         let buffer = map_input(ir).ok_or(CudaRuntimeError::UnsupportedInput)?;
         if matches!(buffer, BufferLiteral::I32(values) if values.is_empty())

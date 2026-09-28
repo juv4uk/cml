@@ -58,7 +58,9 @@ fn owner_i5_6400_gtx_1050_ti_i32_map_crossover() {
     warm.execute_map(&prewarm).expect("CUDA prewarm failed");
     assert_eq!(warm.cached_kernel_count().unwrap(), 1);
 
-    println!("size,admit_emit_ms,cpu1_ms,cpu4_ms,cuda_cold_ms,cuda_warm_ms,cuda_prepared_ms,cpu4_over_cuda_prepared");
+    println!(
+        "size,admit_emit_ms,cpu1_ms,cpu4_ms,cuda_cold_ms,cuda_warm_ms,cuda_prepared_ms,cpu4_over_cuda_prepared"
+    );
 
     for count in sizes {
         let ir = map_ir(count);
