@@ -6,7 +6,7 @@
 
 use crate::compute::{
     AdmissionBlocker, BulkOperation, ComputeKernel, NumericDomain, ScalarExpr, analyze,
-    f32_affine_offset,
+    f32_scale_offset,
 };
 use crate::ir::Ir;
 
@@ -30,9 +30,24 @@ pub fn emit_map_kernel(ir: &Ir) -> Result<String, CudaEmitError> {
     let (element_type, expression) = match analysis.numeric_domain {
         NumericDomain::FixedWidthInteger => ("int", emit_i32_expr(&kernel.body)?),
         NumericDomain::InexactFloat => {
-            let offset =
-                f32_affine_offset(&kernel.body).ok_or(CudaEmitError::UnsupportedRegion)? as f32;
-            ("float", format!("x + {}", cuda_f32(offset)))
+            let (scale, offset) =
+                f32_scale_offset(&kernel.body).ok_or(CudaEmitError::UnsupportedRegion)?;
+            // GPU-2-E1 / #368: the scale-affine shape rounds twice by
+            // contract (A1, sens#1585). `__fmul_rn` blocks FFMA contraction
+            // in every mode, so production and witness modes agree bitwise
+            // with the CPU backend; the mode-level `-fmad=false` of
+            // `CudaKernelMode::BitwiseEquality` (PR #366) stays as that
+            // mode's blanket guarantee.
+            let expression = if scale == 1.0 {
+                format!("x + {}", cuda_f32(offset))
+            } else {
+                format!(
+                    "__fmul_rn(x, {}) + {}",
+                    cuda_f32(scale),
+                    cuda_f32(offset)
+                )
+            };
+            ("float", expression)
         }
         _ => return Err(CudaEmitError::UnsupportedRegion),
     };
@@ -74,6 +89,9 @@ fn emit_i32_expr(expression: &ScalarExpr) -> Result<String, CudaEmitError> {
             emit_i32_expr(left)?,
             emit_i32_expr(right)?
         )),
+        // #368: outside the proven-integer subset; the float path owns
+        // these nodes (see `f32_scale_offset`).
+        ScalarExpr::Float32(_) | ScalarExpr::Mul(..) => Err(CudaEmitError::UnsupportedRegion),
     }
 }
 
