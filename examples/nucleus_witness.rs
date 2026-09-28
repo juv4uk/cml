@@ -7,7 +7,7 @@ use cml::parser;
 use cml::x86_freestanding::X86FreestandingBackend;
 
 fn main() {
-    // Same expression as my-lisp/tests/fixtures/conformance.my's
+    // Same expression as my-lisp/tests/fixtures/conformance.lisp's
     // "(atom (quote ()))" tier-1/G2 fixture (expected: t).
     let source = "(atom (quote ()))";
     let expressions = parser::parse(source).expect("parse");

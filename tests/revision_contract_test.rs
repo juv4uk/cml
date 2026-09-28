@@ -89,7 +89,7 @@ fn compatibility_my_contract_version_matches_observed_current_language_contract(
     let lang_file = if my_lisp.join("language-contract.lisp").exists() {
         my_lisp.join("language-contract.lisp")
     } else {
-        my_lisp.join("language-contract.my")
+        my_lisp.join("language-contract.lisp")
     };
     let language_contract =
         fs::read_to_string(lang_file).expect("my-lisp language contract should be readable");

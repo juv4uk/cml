@@ -1,13 +1,13 @@
 //! CML-CONTRACT-SCOPE-REALIGN-M1 + CML-AUTO-CHECK-CONTRACT-VERSION-CLAIM
 //!
-//! Fail-closed guard: the global language contract claim in compatibility.my
+//! Fail-closed guard: the global language contract claim in compatibility.lisp
 //! must stay (2 0) until an explicit, evidence-backed claim upgrade. Partial
 //! higher-contract features are allowed only when their status tokens contain
 //! "partial" (or are explicitly subset-supported like reader 4.0) and never
 //! silently imply a raised global claim.
 //!
 //! Secondary authority: claim-authority.my is merged when present so partial
-//! status can land before the full compatibility.my rewrite is pushed.
+//! status can land before the full compatibility.lisp rewrite is pushed.
 
 use std::fs;
 use std::path::PathBuf;
@@ -17,7 +17,7 @@ fn compatibility_path() -> PathBuf {
     if p.exists() {
         p
     } else {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("compatibility.my")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("compatibility.lisp")
     }
 }
 
@@ -43,7 +43,7 @@ fn parse_global_contract(text: &str) -> (u32, u32) {
     }
     let lang = text
         .find("(language .")
-        .expect("compatibility.my must contain (language .");
+        .expect("compatibility.lisp must contain (language .");
     let after = &text[lang..];
     let marker = "(contract . (";
     let cidx = after
@@ -131,7 +131,7 @@ fn claim_authority_block_is_present() {
     let text = load_compat();
     assert!(
         text.contains("claim-authority"),
-        "compatibility.my or claim-authority.my must declare claim-authority"
+        "compatibility.lisp or claim-authority.my must declare claim-authority"
     );
     assert!(
         text.contains("partial-features-do-not-raise-claim"),

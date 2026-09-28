@@ -27,7 +27,7 @@ fn run_assembler(asm_code: &str, test_name: &str) {
     let asm_abs = env::current_dir().unwrap().join(&asm_path);
     let bin_abs = env::current_dir().unwrap().join(&bin_path);
     let configured = env::var("MY_LISP_BIN")
-        .unwrap_or_else(|_| "/home/agents/GitHub/my-lisp/target/release/my-lisp".to_string());
+        .unwrap_or_else(|_| "/home/agents/GitHub/sens/target/release/my-lisp".to_string());
     let output = if std::path::Path::new(&configured).is_file() {
         // Prefer the self-hosted my-lisp assembler. Run from fpga-lisp so its
         // canonical core.my load resolves; keep Python as explicit fallback.
@@ -126,7 +126,7 @@ fn test_compile_with_symbols_matches_self_hosted_my_lisp_assembler() {
     );
 
     let my_lisp = env::var("MY_LISP_BIN")
-        .unwrap_or_else(|_| "/home/agents/GitHub/my-lisp/target/release/my-lisp".to_string());
+        .unwrap_or_else(|_| "/home/agents/GitHub/sens/target/release/my-lisp".to_string());
     if !std::path::Path::new(&my_lisp).is_file() {
         let _ = fs::remove_file(&asm_path);
         let _ = fs::remove_file(&python_bin);
@@ -217,7 +217,7 @@ fn test_compile_nested_apply() {
 
 #[test]
 fn test_compile_quoted_list() {
-    // Explicit (quote ...), not '-shorthand: language-contract.my 2.0
+    // Explicit (quote ...), not '-shorthand: language-contract.lisp 2.0
     // (commit d287a16) removed ' as quote sugar -- it's a plain
     // identifier character now, see src/parser.rs's own doc comment.
     let code = "(quote (a (b c) d))";

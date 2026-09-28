@@ -1,7 +1,7 @@
 ; capability-matrix.my — machine-readable per-backend contract/capability matrix
 ; Машинно-читабельна матриця можливостей/контракту на бекенд.
 ; THIS IS THE SINGLE SOURCE OF TRUTH for what each backend supports.
-; compatibility.my's global `supported` list is DEPRECATED for backend-specific
+; compatibility.lisp's global `supported` list is DEPRECATED for backend-specific
 ; queries; this matrix is authoritative for CI gates and per-backend contracts.
 ;
 ; Structure:
@@ -189,7 +189,7 @@
 
 
  ; Global (backend-independent) admission gates — not backend capabilities.
- ; These never raise global-contract above 2.0 (see claim-authority in compatibility.my).
+ ; These never raise global-contract above 2.0 (see claim-authority in compatibility.lisp).
  (global-admission
   . ((reader-apostrophe-4.0 . ((status . supported)
                                (evidence . "tests/reader_contract_test.rs")))

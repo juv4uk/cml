@@ -1,6 +1,6 @@
 ; CML claim-authority fragment (CML-CONTRACT-SCOPE-REALIGN-M1)
-; Secondary source of truth for global contract claim until compatibility.my is fully synced.
-; tests/contract_claim_authority_test.rs merges this file with compatibility.my.
+; Secondary source of truth for global contract claim until compatibility.lisp is fully synced.
+; tests/contract_claim_authority_test.rs merges this file with compatibility.lisp.
 
 ((kind . cml-claim-authority)
  (global-contract . (2 0))

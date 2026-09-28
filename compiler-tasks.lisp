@@ -1,4 +1,4 @@
-; compiler-tasks.my — execution queue for the native my-lisp compiler.
+; compiler-tasks.lisp — execution queue for the native my-lisp compiler.
 ; This file is authoritative for the standalone compiler track inside cml.
 ; `done . t` requires executable in-repo evidence. Unsupported is never pass.
 ;

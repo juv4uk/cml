@@ -83,11 +83,11 @@ fn machine_readable_compute_contract_matches_implementation() {
     let compat_path = if std::path::Path::new("compatibility.lisp").exists() {
         "compatibility.lisp"
     } else {
-        "compatibility.my"
+        "compatibility.lisp"
     };
     let compatibility = fs::read_to_string(compat_path).unwrap();
     assert!(
         compatibility.contains("(compute-analysis . ((contract . (0 28))"),
-        "compatibility.my compute contract version drifted from compute-contract.my"
+        "compatibility.lisp compute contract version drifted from compute-contract.my"
     );
 }

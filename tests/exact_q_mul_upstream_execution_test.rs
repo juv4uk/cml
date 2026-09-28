@@ -7,7 +7,7 @@ use cml::{lower, parser};
 
 fn upstream_mul_witness() -> (String, String) {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("external/my-lisp/tests/fixtures/conformance.lisp");
+        .join("external/sens/tests/fixtures/conformance.lisp");
     let corpus = fs::read_to_string(&path).unwrap_or_else(|error| {
         panic!(
             "#103 requires the pinned my-lisp conformance corpus at {}: {error}",

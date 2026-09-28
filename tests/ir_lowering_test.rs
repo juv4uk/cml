@@ -26,10 +26,10 @@ fn parse_error_line(line: &str) -> bool {
 #[test]
 fn lowers_every_tier1_conformance_fixture() {
     let fixture_path =
-        if std::path::Path::new("external/my-lisp/tests/fixtures/conformance.lisp").exists() {
-            "external/my-lisp/tests/fixtures/conformance.lisp"
+        if std::path::Path::new("external/sens/tests/fixtures/conformance.lisp").exists() {
+            "external/sens/tests/fixtures/conformance.lisp"
         } else {
-            "external/my-lisp/tests/fixtures/conformance.my"
+            "external/sens/tests/fixtures/conformance.lisp"
         };
     let fixture_content =
         fs::read_to_string(fixture_path).expect("Failed to read conformance fixture");
@@ -49,7 +49,7 @@ fn lowers_every_tier1_conformance_fixture() {
             continue;
         }
         // fpga-lisp has no inexact-number tag; compiler_test/conformance_test
-        // skip these too (compatibility.my's tier-1-skip-reason).
+        // skip these too (compatibility.lisp's tier-1-skip-reason).
         if line.contains("3.0") {
             continue;
         }

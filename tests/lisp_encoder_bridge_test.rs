@@ -23,7 +23,7 @@ fn test_prov() -> Provenance {
 }
 
 /// Upstream channel: supported-pin.
-/// The `external/my-lisp` gitlink owns this encoder authority; the
+/// The `external/sens` gitlink owns this encoder authority; the
 /// observed-current sibling is not an encoder compatibility denominator.
 fn submodule_repo(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -155,7 +155,7 @@ fn test_external_my_lisp_submodule_is_checked_out() {
     let encoder_path = submodule_repo("my-lisp").join("lib/machine/encoding/x86-64.lisp");
     assert!(
         encoder_path.exists(),
-        "external/my-lisp submodule not checked out at {} — run `git submodule update --init`",
+        "external/sens submodule not checked out at {} — run `git submodule update --init`",
         encoder_path.display()
     );
 }

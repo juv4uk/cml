@@ -1,4 +1,4 @@
-; compatibility.my — the explicit boundary tested by this CML revision
+; compatibility.lisp — the explicit boundary tested by this CML revision
 ; Явна межа, яку перевіряє ця ревізія CML.
 ; Die von dieser CML-Revision geprüfte explizite Grenze.
 
@@ -151,11 +151,11 @@
                                                        (supported . 3)
                                                        (unsupported-capability . 0)))
                                (verified-by . "tests/c_backend_conformance_test.rs")
-                               (verified-against . "my-lisp/tests/fixtures/conformance.my at supported contract 2.1")))
+                               (verified-against . "my-lisp/tests/fixtures/conformance.lisp at supported contract 2.1")))
                               (contract-2.1 . ((status . supported)
                                       (lowering . "lower_program_with_first_class_builtins reifies Prim as App(Var builtin, args) for the C backend only")
                                       (runtime . "builtins bootstrap into global_env as ordinary callable values")
-                                      (verified . "tests/c_backend_test.rs and conformance.my tier-1"))))
+                                      (verified . "tests/c_backend_test.rs and conformance.lisp tier-1"))))
                (known-gaps . (no-eight-argument-limit-enforced-unlike-fpga-lisp-register-file
                               typed-numeric-buffers-i32-literal-and-map-supported-f32-unsupported
                               defmacro-supported-only-via-shared-macros-rs-not-macros-my

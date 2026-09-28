@@ -520,7 +520,7 @@ static void bootstrap_builtins(void) {
 // Standard Lisp list printing (`(a b c)`, `(a b . c)` for a genuine
 // dotted tail), not a raw nested-dotted-pair dump -- lets a compiled
 // program's printed output be compared directly against my-lisp's own
-// printer / tests/fixtures/conformance.my's `expected` field.
+// printer / tests/fixtures/conformance.lisp's `expected` field.
 static void print_value(Value *v) {
     switch (v->tag) {
         case TAG_NIL: printf("()"); break;

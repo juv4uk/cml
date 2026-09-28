@@ -33,7 +33,7 @@ use sens::parse;
 
 fn upstream_path(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("external/my-lisp")
+        .join("external/sens")
         .join(relative)
 }
 
@@ -64,7 +64,7 @@ fn lisp_owned_define(source: &str, name: &str) -> Result<Vec<CExpr>, BridgeError
 #[test]
 fn pinned_list_row_reaches_x86_with_sid_identity() {
     let core = fs::read_to_string(upstream_path("lib/core.lisp"))
-        .expect("#168 requires the pinned external/my-lisp submodule core.lisp");
+        .expect("#168 requires the pinned external/sens submodule core.lisp");
     let list_defs = lisp_owned_define(&core, "list").expect("list row must project");
     assert_eq!(
         list_defs.len(),
@@ -110,9 +110,9 @@ fn pinned_list_row_reaches_x86_with_sid_identity() {
 #[test]
 fn full_decoder_closure_state_is_recorded_honestly() {
     let core = fs::read_to_string(upstream_path("lib/core.lisp"))
-        .expect("#168 requires the pinned external/my-lisp submodule core.lisp");
+        .expect("#168 requires the pinned external/sens submodule core.lisp");
     let utf8 = fs::read_to_string(upstream_path("lib/utf8.lisp"))
-        .expect("#168 requires the pinned external/my-lisp submodule utf8.lisp");
+        .expect("#168 requires the pinned external/sens submodule utf8.lisp");
 
     let mut program_forms = Vec::new();
     for name in ["list", "reverse", "reverse-onto", "not", "truthy?"] {

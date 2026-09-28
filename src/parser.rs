@@ -6,7 +6,7 @@ use crate::ast::{Expr, NumericBufferLiteral};
 // such as об'єкт, зв'язок and п'ять remain single identifiers.
 //
 // CML deliberately implements this reader invariant without claiming full
-// contract-4.0 conformance: compatibility.my still records older unsupported
+// contract-4.0 conformance: compatibility.lisp still records older unsupported
 // contract requirements separately.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -461,7 +461,7 @@ mod comment_tests {
     use super::*;
 
     // Real cml bug found while binary-searching why the whole of my-lisp's
-    // lib/meta-eval.my failed to compile ("special forms are not callable
+    // lib/meta-eval.lisp failed to compile ("special forms are not callable
     // values" on a bare Symbol("lambda")): the tokenizer had no `;`
     // line-comment handling at all, so ordinary prose in doc comments (e.g.
     // "... variadic/dotted lambda parameter binding ...") was tokenized as
