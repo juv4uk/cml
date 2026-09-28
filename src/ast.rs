@@ -9,7 +9,7 @@ pub enum NumericBufferLiteral {
 pub enum Expr {
     /// Exact Lisp-owned semantic/function identity. This is not a symbol,
     /// string, integer alias, or surface spelling.
-    Sid(sens::Sid8),
+    Sid(sens::Sens8),
     Integer(i64),
     /// Exact rational numeral `n/d` (d > 0, gcd-reduced at parse time).
     Rational(i64, u64),
