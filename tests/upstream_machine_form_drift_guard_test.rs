@@ -58,7 +58,7 @@ fn upstream_machine_form_bridge_pin_and_blob_fail_closed_on_drift() {
     let lowering = fs::read_to_string(upstream.join("lib/machine/lowering/semantic-x86-64.lisp"))
         .expect("pinned upstream lowering contract must be readable");
 
-    assert!(lowering.contains("(def x86-lower-add-u64-forms"));
+    assert!(lowering.contains("(00001001 x86-lower-add-u64-forms"));
     assert!(
         !lowering.contains("(x86-encode-program\n"),
         "semantic lowering must expose forms, not regain a byte-level bypass"

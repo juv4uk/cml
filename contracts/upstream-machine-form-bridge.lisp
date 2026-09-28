@@ -5,9 +5,9 @@
   (schema cml-machine-form-bridge-provenance/1)
   (upstream-repository "juv4uk/sens")
   (revision-channel supported-pin)
-  (revision-sha "8088e9f88d845ba0edb2197d44da3dbbe57eca0e")
+  (revision-sha "a69f4dd1246f668a4bfefa3bf11863a1def24af3")
   (contract-path "lib/machine/lowering/semantic-x86-64.lisp")
-  (contract-git-blob "dc3c8d446680a576d44b79e9939116fe4648194d")
+  (contract-git-blob "6f5444e25b287708605a7ca2f786926dcb1b06ba")
   (bridge-slice (mov-r64-imm64 add-r64-r64 ret))
   (authority
     (semantic my-lisp)
