@@ -309,7 +309,7 @@ mod tests {
         ];
         let compiled = backend.compile_program_with_metadata(&program).unwrap();
         assert!(compiled.validate_operation_metadata());
-        let op_ids: Vec<sens::Sid8> = compiled
+        let op_ids: Vec<sens::Sens8> = compiled
             .operations
             .iter()
             .map(|op| op.semantic_id)
@@ -321,7 +321,7 @@ mod tests {
                 sens::sid!(00001100),
                 sens::sid!(00000100)
             ],
-            "operation metadata must preserve first encounter order, not impose an ordering on opaque Sid8 identities"
+            "operation metadata must preserve first encounter order, not impose an ordering on opaque Sens8 identities"
         );
         assert_eq!(compiled.operations[0].canonical_name, "quote");
         assert_eq!(compiled.operations[1].canonical_name, "plus");
