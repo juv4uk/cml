@@ -1,9 +1,9 @@
-use sens::Sid8;
+use sens::Sens8;
 use std::fs;
 
 use cml::coverage::{BackendEvidenceState, CoverageLedger};
 
-const LIMITED: &[(sens::Sid8, &str)] = &[
+const LIMITED: &[(sens::Sens8, &str)] = &[
     (
         sens::sid!(00001100),
         "named_definition_uses_a_lexical_let_binding",
