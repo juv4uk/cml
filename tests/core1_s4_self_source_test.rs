@@ -55,11 +55,7 @@ fn encode_expr(
     compiled: &cml::x86_freestanding_metadata::X86CompiledProgram,
 ) -> X86InputValue {
     match expr {
-        Expr::Sid(_) => {
-            panic!(
-                "S4 target input transport has no admitted SID8 ABI yet; do not alias SID8 through a symbol/string/integer word"
-            )
-        }
+        Expr::Sid(sens) => X86InputValue::sid8(sens.packed_byte()),
         Expr::Integer(value) => X86InputValue::word(
             wsm_os_target::encode_fixnum(*value)
                 .unwrap_or_else(|| panic!("fixture integer outside target fixnum range: {value}")),
@@ -147,7 +143,7 @@ fn s4_compiled_emitter_compiles_its_real_core1_cond_definition() {
         "(value \"(def compiler-nil? ",
         "(lambda (form) ",
         "(cond ",
-        "((prim atom ((var form))) (prim eq ((var form) (quote ())))) ",
+        "((prim 00000010 ((var form))) (prim 00000011 ((var form) (quote ())))) ",
         "((var t) (quote ())))))\")"
     );
 

@@ -1,0 +1,108 @@
+name: Core1 S5 exact SID8 transport
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/x86_freestanding.rs"
+      - "src/witness_bridge.rs"
+      - "tests/target_abi_v7_pin_test.rs"
+      - "tests/sid8_native_transport_test.rs"
+      - "tests/core1_s4_self_source_test.rs"
+      - ".github/workflows/core1-s5-sid8-transport.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core1-s5-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core1-s5-transport:
+    runs-on: [self-hosted, guix]
+    env:
+      RUSTC_WRAPPER: ""
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      SENS_CLONE: /home/agents/GitHub/sens
+      WSM_MY_LISP_CLONE: /home/agents/GitHub/wsm-my-lisp
+      TARGET_CONTRACT_CLONE: /home/agents/GitHub/wsm-target-contract
+      TARGET_CONTRACT_COMMIT: a03301315b6b590c0d0b997497cd2a43d1e4ea1f
+      S4_PRELUDE_COMMIT: d359c4885e0609a6c8350daf45de157b40cf48f3
+      S4_COMPILER_COMMIT: 5591eca48bfd32aa1a1e9e159ad205afdb3475c2
+      SID8_NUCLEUS_COMMIT: 09045b7c39764e4cda9d11771061889073dfdc40
+
+    steps:
+      - name: Checkout CML without private submodules
+        uses: actions/checkout@v5
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Resolve pinned local dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for repo in "$SENS_CLONE" "$WSM_MY_LISP_CLONE" "$TARGET_CONTRACT_CLONE"; do
+            test -d "$repo/.git"
+          done
+
+          sens_pin="$(git ls-tree HEAD external/sens | awk '{print $3}')"
+          test -n "$sens_pin"
+          git -C "$SENS_CLONE" cat-file -e "$sens_pin^{commit}"
+          git config submodule.external/sens.url "$SENS_CLONE"
+          git -c protocol.file.allow=always submodule update --init external/sens
+          test "$(git -C external/sens rev-parse HEAD)" = "$sens_pin"
+
+          git -C "$TARGET_CONTRACT_CLONE" cat-file -e "$TARGET_CONTRACT_COMMIT^{commit}"
+          git -C "$SENS_CLONE" cat-file -e "$S4_PRELUDE_COMMIT^{commit}"
+          git -C "$WSM_MY_LISP_CLONE" cat-file -e "$S4_COMPILER_COMMIT^{commit}"
+          if ! git -C "$WSM_MY_LISP_CLONE" cat-file -e "$SID8_NUCLEUS_COMMIT^{commit}" 2>/dev/null; then
+            # Add only the exact merged object to the shared clone. Do not
+            # checkout, reset, merge, or move any agent-owned branch/ref.
+            git -C "$WSM_MY_LISP_CLONE" fetch --no-tags origin "$SID8_NUCLEUS_COMMIT"
+          fi
+          git -C "$WSM_MY_LISP_CLONE" cat-file -e "$SID8_NUCLEUS_COMMIT^{commit}"
+
+          cfg="$RUNNER_TEMP/core1-s5-gitconfig"
+          : > "$cfg"
+          git config --file "$cfg" protocol.file.allow always
+          git config --file "$cfg" url."file://$TARGET_CONTRACT_CLONE".insteadOf https://github.com/juv4uk/wsm-target-contract.git
+          echo "GIT_CONFIG_GLOBAL=$cfg" >> "$GITHUB_ENV"
+
+          git -C "$SENS_CLONE" show "$S4_PRELUDE_COMMIT:lib/core1-compiler-prelude.lisp" > "$RUNNER_TEMP/core1-compiler-prelude.lisp"
+          git -C "$WSM_MY_LISP_CLONE" show "$S4_COMPILER_COMMIT:lib/compiler.lisp" > "$RUNNER_TEMP/compiler.lisp"
+          git -C "$WSM_MY_LISP_CLONE" show "$SID8_NUCLEUS_COMMIT:asm/nucleus.s" > "$RUNNER_TEMP/nucleus.s"
+
+          printf 'CML head: %s\n' "$(git rev-parse HEAD)"
+          printf 'CML sens pin: %s\n' "$sens_pin"
+          printf 'S4 prelude commit: %s\n' "$S4_PRELUDE_COMMIT"
+          printf 'S4 prelude sha256: '
+          sha256sum "$RUNNER_TEMP/core1-compiler-prelude.lisp" | cut -d' ' -f1
+          printf 'S4 compiler commit: %s\n' "$S4_COMPILER_COMMIT"
+          printf 'S4 compiler sha256: '
+          sha256sum "$RUNNER_TEMP/compiler.lisp" | cut -d' ' -f1
+          printf 'SID8 nucleus commit: %s\n' "$SID8_NUCLEUS_COMMIT"
+          printf 'SID8 nucleus sha256: '
+          sha256sum "$RUNNER_TEMP/nucleus.s" | cut -d' ' -f1
+
+      - name: Diff hygiene
+        run: git diff --check
+
+      - name: Target ABI v7 pin
+        run: cargo test --test target_abi_v7_pin_test -- --nocapture
+
+      - name: Exact native SID8 transport
+        env:
+          WSM_NUCLEUS_ASM: ${{ runner.temp }}/nucleus.s
+        run: cargo test --test sid8_native_transport_test -- --nocapture
+
+      - name: S4 self-source with exact SENS identities
+        env:
+          WSM_NUCLEUS_ASM: ${{ runner.temp }}/nucleus.s
+          WSM_MY_LISP_CORE1_PRELUDE_SOURCE: ${{ runner.temp }}/core1-compiler-prelude.lisp
+          WSM_MY_LISP_COMPILER_SOURCE: ${{ runner.temp }}/compiler.lisp
+        run: cargo test --test core1_s4_self_source_test -- --nocapture
