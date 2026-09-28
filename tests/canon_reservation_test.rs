@@ -6,7 +6,7 @@
 //! reserved: binders that attempt to bind those names must fail before
 //! IR is emitted.
 //!
-//! CML still claims only contract 2.0 globally (see compatibility.my).
+//! CML still claims only contract 2.0 globally (see compatibility.lisp).
 //! This is a targeted alignment of binder rejection with upstream.
 
 use cml::lower::{self, LowerErrorKind};
