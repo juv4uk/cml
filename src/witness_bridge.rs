@@ -418,6 +418,9 @@ static int seen_before(uint64_t word) {{
 static int dump_value(uint64_t word, uint64_t arena_begin, uint64_t arena_next,
                       uint64_t arena_end, size_t depth);
 
+static int dump_value(uint64_t word, uint64_t arena_begin, uint64_t arena_next,
+                      uint64_t arena_end, size_t depth);
+
 static int dump_cons(uint64_t word, uint64_t arena_begin, uint64_t arena_next,
                      uint64_t arena_end, size_t depth) {{
     if (depth > MAX_SEEN) return -1;
@@ -768,10 +771,12 @@ fn graph_launcher_source() -> &'static str {
 #include <stdlib.h>
 
 extern uint64_t wsm_entry(void *);
+extern uint64_t wsm_sid8_bits(void *, uint64_t);
 
 #define MAX_SEEN 256
 #define CONS_ALIGNMENT 16
 #define TAG_MASK 7
+#define TAG_BOXED 7
 
 static uint64_t seen[MAX_SEEN];
 static size_t seen_len;
@@ -816,10 +821,21 @@ static int dump_cons(uint64_t word, uint64_t arena_begin, uint64_t arena_next,
     printf("cell 0x%" PRIx64 " 0x%" PRIx64 " 0x%" PRIx64 "\n",
            word, car, cdr);
 
-    if (dump_cons(car, arena_begin, arena_next, arena_end, depth + 1) != 0) {
+    if (dump_value(car, arena_begin, arena_next, arena_end, depth + 1) != 0) {
         return -1;
     }
-    return dump_cons(cdr, arena_begin, arena_next, arena_end, depth + 1);
+    return dump_value(cdr, arena_begin, arena_next, arena_end, depth + 1);
+}
+
+static int dump_value(uint64_t word, uint64_t arena_begin, uint64_t arena_next,
+                      uint64_t arena_end, size_t depth) {
+    if ((word & TAG_MASK) == TAG_BOXED) {
+        uint64_t bits = wsm_sid8_bits(0, word);
+        if (bits > 255) return -1;
+        printf("sid8 0x%" PRIx64 " %" PRIu64 "\n", word, bits);
+        return 0;
+    }
+    return dump_cons(word, arena_begin, arena_next, arena_end, depth);
 }
 
 int main(int argc, char **argv) {
@@ -854,7 +870,7 @@ int main(int argc, char **argv) {
 
     printf("root 0x%" PRIx64 "\n", root);
 
-    if (dump_cons(root, arena_begin, arena_next, arena_end, 0) != 0) {
+    if (dump_value(root, arena_begin, arena_next, arena_end, 0) != 0) {
         return 96;
     }
     return 0;
