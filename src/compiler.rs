@@ -335,15 +335,57 @@ impl Compiler {
         self.emit(&format!("CDR {} R1", target_reg));
     }
 
+    /// Materialize the pinned SENS predicate result form from the target's
+    /// internal TRUE/NIL control value.  FPGA EQ/ATOM stay unchanged as
+    /// mechanism primitives; only a language-visible predicate result crosses
+    /// this boundary as the authority-prescribed singleton list (1)/(0).
+    fn materialize_predicate_result(&mut self, raw_reg: &str, target_reg: &str) {
+        let false_label = self.next_label("predicate_false");
+        let end_label = self.next_label("predicate_end");
+
+        // R9 = canonical NIL, built without depending on a published name.
+        self.emit("LOADI R7 0");
+        self.emit("LOADI R8 1");
+        self.emit("EQ R9 R7 R8");
+
+        self.emit(&format!("JF {} {}", raw_reg, false_label));
+        self.emit("LOADI R7 1");
+        self.emit(&format!("CONS {} R7 R9", target_reg));
+        self.emit(&format!("JMP {}", end_label));
+
+        self.emit(&format!("{}:", false_label));
+        self.emit("LOADI R7 0");
+        self.emit(&format!("CONS {} R7 R9", target_reg));
+        self.emit(&format!("{}:", end_label));
+    }
+
     fn compile_eq_mechanism(&mut self, args: &[Ir], target_reg: &str) {
         self.compile_expr(&args[0], "R1");
         self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-        self.emit(&format!("EQ {} R1 R2", target_reg));
+        self.emit("EQ R6 R1 R2");
+        self.materialize_predicate_result("R6", target_reg);
     }
 
     fn compile_atom_mechanism(&mut self, args: &[Ir], target_reg: &str) {
+        let non_nil_label = self.next_label("atom_non_nil");
+        let end_label = self.next_label("atom_end");
+
         self.compile_expr(&args[0], "R1");
-        self.emit(&format!("ATOM {} R1", target_reg));
+
+        // The pinned corpus gives NIL its own ATOM result: ().
+        self.emit("LOADI R7 0");
+        self.emit("LOADI R8 1");
+        self.emit("EQ R9 R7 R8"); // R9 = NIL
+        self.emit("EQ R6 R1 R9"); // raw TRUE iff the operand itself is NIL
+        self.emit(&format!("JF R6 {}", non_nil_label));
+        self.emit(&format!("MOV {} R9", target_reg));
+        self.emit(&format!("JMP {}", end_label));
+
+        // Non-NIL atoms become (1); cons cells become (0).
+        self.emit(&format!("{}:", non_nil_label));
+        self.emit("ATOM R6 R1");
+        self.materialize_predicate_result("R6", target_reg);
+        self.emit(&format!("{}:", end_label));
     }
 
     fn compile_equal_mechanism(&mut self, args: &[Ir], target_reg: &str) {
@@ -351,7 +393,7 @@ impl Compiler {
         self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
         self.used_equal = true;
         self.call_subroutine("cml_equal");
-        self.emit(&format!("MOV {} R15", target_reg));
+        self.materialize_predicate_result("R15", target_reg);
     }
 
     fn compile_add_mechanism(&mut self, args: &[Ir], target_reg: &str) {
