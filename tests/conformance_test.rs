@@ -305,25 +305,18 @@ fn canonical_decoder_renders_proper_and_dotted_heap_structures() {
 
 #[test]
 fn test_conformance() {
-    let fixture_path =
-        if std::path::Path::new("external/my-lisp/tests/fixtures/conformance.lisp").exists() {
-            "external/my-lisp/tests/fixtures/conformance.lisp"
-        } else {
-            "external/my-lisp/tests/fixtures/conformance.my"
-        };
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let fixture_path = manifest_dir.join("external/sens/tests/fixtures/conformance.lisp");
     let fixture_content =
-        fs::read_to_string(fixture_path).expect("Failed to read conformance fixture");
+        fs::read_to_string(&fixture_path).expect("Failed to read conformance fixture");
 
-    // 1. Build the simulator once. Sources are read from ../fpga-lisp
-    // (current_dir), but the compiled .vvp is written back into this
-    // crate's own directory via an absolute -o path, so nothing is written
-    // under the sibling repo (its own WSL/Guix user may not have write
-    // access there).
-    let cwd = env::current_dir().unwrap();
+    // Resolve repository inputs from the crate manifest, never from the
+    // process working directory chosen by Cargo, a runner, or an IDE.
+    let cwd = manifest_dir;
     let vvp_abs = cwd.join("tb_cml_e2e.vvp");
-    let fpga_sim_dir = "../fpga-lisp";
+    let fpga_sim_dir = manifest_dir.join("../fpga-lisp");
     let iv_output = Command::new("iverilog")
-        .current_dir(fpga_sim_dir)
+        .current_dir(&fpga_sim_dir)
         .arg("-g2012")
         .arg("-I")
         .arg("fpga/rtl")
@@ -444,12 +437,12 @@ fn test_conformance() {
             full_asm.push_str(&asm);
 
             let test_name = "conformance_test";
-            let asm_path = format!("{}.asm", test_name);
+            let asm_path = cwd.join(format!("{test_name}.asm"));
             fs::write(&asm_path, &full_asm).unwrap();
 
             // Assemble
             let asm_output = Command::new("python3")
-                .arg("../fpga-lisp/assembler.py")
+                .arg(fpga_sim_dir.join("assembler.py"))
                 .arg(&asm_path)
                 .output()
                 .expect("Failed to run python assembler");
@@ -462,8 +455,7 @@ fn test_conformance() {
                 ));
             }
 
-            let bin_path = format!("{}.bin", test_name);
-            let bin_abs = cwd.join(&bin_path);
+            let bin_abs = cwd.join(format!("{test_name}.bin"));
 
             // Run vvp
             let vvp_output = Command::new("vvp")
@@ -476,7 +468,7 @@ fn test_conformance() {
 
             // Cleanup intermediate files for this test
             let _ = fs::remove_file(&asm_path);
-            let _ = fs::remove_file(&bin_path);
+            let _ = fs::remove_file(&bin_abs);
 
             // Decode R15
             let mut tag = None;
