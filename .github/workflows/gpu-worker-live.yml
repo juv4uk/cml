@@ -81,13 +81,13 @@ jobs:
 
           test "$(stat -c %s worker-output.i32)" = "33554432"
           python3 - <<'PY'
-import struct
-with open("worker-output.i32", "rb") as f:
-    first = struct.unpack("<i", f.read(4))[0]
-    f.seek(-4, 2)
-    last = struct.unpack("<i", f.read(4))[0]
-assert first == 64 and last == 64, (first, last)
-print(f"file-backed CUDA witness: first={first} last={last}")
-PY
+          import struct
+          with open("worker-output.i32", "rb") as f:
+              first = struct.unpack("<i", f.read(4))[0]
+              f.seek(-4, 2)
+              last = struct.unpack("<i", f.read(4))[0]
+          assert first == 64 and last == 64, (first, last)
+          print(f"file-backed CUDA witness: first={first} last={last}")
+          PY
 
           cat worker.err
