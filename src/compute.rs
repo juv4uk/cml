@@ -84,6 +84,14 @@ pub struct ComputeKernel {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComputeRegion {
+    /// Exact SENS identity of the head that admitted this region.
+    ///
+    /// This is carried in the data, not only in control flow, so that a
+    /// consumer can never silently treat two distinct function identities as
+    /// one shared bulk operation (cml#344). `00110111` (map over a list) and
+    /// `01011001` (numeric-buffer-map) are DIFFERENT functions: a shared
+    /// `BulkOperation::Map` below is a mechanism category, never an identity.
+    pub identity: sens::Sens8,
     pub operation: BulkOperation,
     pub function: Ir,
     pub input: Ir,
@@ -216,10 +224,24 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
         return None;
     };
     match (&**func, args.as_slice()) {
+        (Ir::Sid(sid), [function, input]) if *sid == sens::sid!(01011001) => Some(ComputeRegion {
+            identity: sens::sens!(01011001),
+            operation: BulkOperation::Map,
+            function: function.clone(),
+            input: input.clone(),
+            initial: None,
+            kernel: lower_kernel(function, 1),
+        }),
+        // `00110111` is the list map (map / відобразити / āvartana), a
+        // DIFFERENT function from `01011001` (numeric-buffer-map). It gets its
+        // own admission, and only on explicit list-storage evidence, so that a
+        // numeric buffer can never reach the bulk path under the wrong exact
+        // identity (cml#344). Without list evidence this fails closed.
         (Ir::Sid(sid), [function, input])
-            if *sid == sens::sid!(00110111) || *sid == sens::sid!(01011001) =>
+            if *sid == sens::sid!(00110111) && has_linked_list_evidence(input) =>
         {
             Some(ComputeRegion {
+                identity: sens::sens!(00110111),
                 operation: BulkOperation::Map,
                 function: function.clone(),
                 input: input.clone(),
@@ -229,6 +251,7 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
         }
         (Ir::Sid(sid), [function, initial, input]) if *sid == sens::sid!(00111001) => {
             Some(ComputeRegion {
+                identity: sens::sens!(00111001),
                 operation: BulkOperation::Reduce,
                 function: function.clone(),
                 input: input.clone(),
@@ -238,6 +261,15 @@ fn extract_region(ir: &Ir) -> Option<ComputeRegion> {
         }
         _ => None,
     }
+}
+
+/// Explicit list-storage evidence, matching the `LinkedList` classification in
+/// `storage_of`. Used to admit the list map `00110111` as its own path.
+fn has_linked_list_evidence(input: &Ir) -> bool {
+    matches!(
+        input,
+        Ir::Quote(Quoted::List(_) | Quoted::DottedList(_, _)) | Ir::Nil
+    )
 }
 
 fn prove_reduction_eligibility(
@@ -589,6 +621,12 @@ fn effect_of(ir: &Ir) -> EffectClass {
             ) {
                 return EffectClass::Allocating;
             }
+            // Чистота — це не тотожність. 00110111 (map над списком) і
+            // 01011001 (numeric-buffer-map) — РІЗНІ функції, але обидві чисті:
+            // жодна не мусить ефектів, обидві повертають нове значення.
+            // Тому 00110111 лишається тут, у contrast до extract_region(), де
+            // він НЕ допускається: чистота не дає права бути numeric-buffer
+            // admission key (cml#344).
             let known_pure = matches!(
                 &**func,
                 Ir::Sid(sid)
