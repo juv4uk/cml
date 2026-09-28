@@ -598,6 +598,7 @@ mod tests {
             storage: StorageClass::ContiguousBuffer,
             numeric_domain: NumericDomain::FixedWidthInteger,
             region: Some(ComputeRegion {
+                identity: sens::sens!(01011001),
                 operation: BulkOperation::Map,
                 function,
                 input: input_buffer,
@@ -649,6 +650,7 @@ mod tests {
             storage: StorageClass::ContiguousBuffer,
             numeric_domain: NumericDomain::FixedWidthInteger,
             region: Some(ComputeRegion {
+                identity: sens::sens!(00111001),
                 operation: BulkOperation::Reduce,
                 function,
                 input: input_buffer,

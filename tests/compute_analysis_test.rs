@@ -53,7 +53,11 @@ fn recognizes_map_without_pretending_a_list_is_a_gpu_buffer() {
 
 #[test]
 fn pure_but_unsupported_kernel_shape_stays_fail_closed() {
-    let analysis = analyze(&lower_one("(map (lambda (x) (cond (t x))) #i32(1 2 3))"));
+    // `numeric-buffer-map` (01011001) is the exact identity for mapping a
+    // numeric buffer. The list `map` (00110111) must not stand in for it.
+    let analysis = analyze(&lower_one(
+        "(numeric-buffer-map (lambda (x) (cond (t x))) #i32(1 2 3))",
+    ));
     assert_eq!(analysis.effect, EffectClass::Pure);
     assert!(
         analysis
@@ -65,12 +69,53 @@ fn pure_but_unsupported_kernel_shape_stays_fail_closed() {
 
 #[test]
 fn captured_values_are_not_mistaken_for_kernel_parameters() {
-    let analysis = analyze(&lower_one("(map (lambda (x) (+ x offset)) #i32(1 2))"));
+    let analysis = analyze(&lower_one(
+        "(numeric-buffer-map (lambda (x) (+ x offset)) #i32(1 2))",
+    ));
     assert!(
         analysis
             .gpu_blockers
             .contains(&AdmissionBlocker::KernelNotLowerable)
     );
+}
+
+#[test]
+fn list_map_and_numeric_buffer_map_stay_distinct_identities() {
+    // cml#344: `00110111` (list map) and `01011001` (numeric-buffer-map) are
+    // two different functions, not two names for one thing. A numeric buffer
+    // must fail closed under the list-map identity instead of riding the
+    // numeric-buffer compute route.
+    let list_map = analyze(&lower_one("(map (lambda (x) (+ x 1)) (quote (1 2 3)))"));
+    let list_region = list_map
+        .region
+        .as_ref()
+        .expect("list map has explicit list evidence, so it keeps its own admitted path");
+    assert_eq!(list_region.identity, sens::sens!(00110111));
+    assert_eq!(list_region.operation, BulkOperation::Map);
+
+    let numeric = analyze(&lower_one(
+        "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3))",
+    ));
+    let numeric_region = numeric
+        .region
+        .as_ref()
+        .expect("numeric-buffer-map is admitted for a numeric buffer");
+    assert_eq!(numeric_region.identity, sens::sens!(01011001));
+    assert_eq!(numeric_region.operation, BulkOperation::Map);
+
+    assert_ne!(
+        list_region.identity, numeric_region.identity,
+        "the two exact identities must never collapse into one"
+    );
+
+    // The forbidden dual-identity path: numeric buffer under the list map.
+    let crossed = analyze(&lower_one("(map (lambda (x) (+ x 1)) #i32(1 2 3))"));
+    assert!(
+        crossed.region.is_none(),
+        "a numeric buffer must not be admitted as a bulk region under list-map identity \
+         00110111 (cml#344)"
+    );
+    assert!(!crossed.gpu_eligible());
 }
 
 #[test]
