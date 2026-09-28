@@ -11,7 +11,7 @@ on:
 
 jobs:
   core1-s3b-composite-input:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, guix]
     steps:
       - name: Checkout CML with build-source submodule
         uses: actions/checkout@v5

@@ -20,7 +20,7 @@ on:
 # the checked-in supported-pin submodule dependency initialized.
 jobs:
   reader-contract-4:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, guix]
     steps:
       - name: Checkout CML with supported-pin dependency
         uses: actions/checkout@v4

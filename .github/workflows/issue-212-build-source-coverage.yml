@@ -19,7 +19,7 @@ permissions:
 jobs:
   focused:
     name: Build-source coverage provenance
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, guix]
     steps:
       - name: Checkout CML with build-source submodule
         uses: actions/checkout@v5

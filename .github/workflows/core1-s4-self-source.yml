@@ -11,7 +11,7 @@ on:
 
 jobs:
   s4-self-source:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, guix]
     steps:
       - name: Checkout CML
         uses: actions/checkout@v5

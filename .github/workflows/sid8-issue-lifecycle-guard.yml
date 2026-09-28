@@ -11,7 +11,7 @@ permissions:
 jobs:
   reopen:
     if: github.event.issue.number == 238
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, guix]
     steps:
       - name: Reopen permanent SID8-only issue
         env:

@@ -10,7 +10,7 @@ on:
 
 jobs:
   focused:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, guix]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
@@ -23,8 +23,19 @@ jobs:
           ref: b5d68bba109b972122f92fa10d237f81ce90aa87
           path: fpga-lisp
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install Icarus Verilog
-        run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Install Icarus Verilog (if absent)
+        # На локальному self-hosted runner-і sudo просить пароль, тому
+        # безумовний `sudo apt-get` падав би на кожному запуску. iverilog
+        # уже встановлено в образі runner-а; встановлюємо лише якщо
+        # справді немає, і тоді з явним діагностичним повідомленням.
+        run: |
+          if command -v iverilog >/dev/null 2>&1; then
+            echo "iverilog present: $(iverilog -V 2>&1 | head -1)"
+          else
+            echo "::error::iverilog is absent and this runner has no passwordless sudo."
+            echo "Install it on the runner image, or grant passwordless sudo for apt."
+            exit 1
+          fi
       - name: FPGA compiler regression
         working-directory: cml
         run: cargo test --test compiler_test -- --nocapture

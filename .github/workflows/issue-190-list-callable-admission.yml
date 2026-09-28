@@ -10,7 +10,7 @@ on:
 
 jobs:
   list-callable-admission:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, guix]
     steps:
       - name: Checkout CML with build-source submodule
         uses: actions/checkout@v5

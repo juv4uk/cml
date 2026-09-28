@@ -15,7 +15,7 @@ permissions:
 jobs:
   focused:
     name: Core profile request provenance
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, guix]
     steps:
       - name: Checkout CML with pinned my-lisp
         uses: actions/checkout@v5

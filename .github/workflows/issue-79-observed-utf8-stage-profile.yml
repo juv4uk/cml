@@ -10,7 +10,7 @@ on:
 # be confused with #84's active observed-current channel.
 jobs:
   profile:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, guix]
     timeout-minutes: 15
     env:
       MY_LISP_HISTORICAL_WORKLOAD_SHA: ed1ef28928df1db0cc83f17ae993527635b6256d

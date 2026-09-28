@@ -10,7 +10,7 @@ on:
 
 jobs:
   s3b-input-boundary:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, guix]
     steps:
       - uses: actions/checkout@v5
         with:
