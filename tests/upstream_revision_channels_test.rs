@@ -77,7 +77,7 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         .expect("#310 requires the active upstream submodule declaration");
     assert!(
         gitmodules.contains("url = https://github.com/juv4uk/sens.git"),
-        "#310 external/my-lisp may remain the local path, but its fetch URL must be juv4uk/sens"
+        "#310 the external/sens gitlink must fetch from juv4uk/sens"
     );
     assert!(
         !gitmodules.contains("github.com/juv4uk/my-lisp"),
@@ -88,14 +88,14 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
     assert_eq!(
         head(&supported_checkout),
         supported,
-        "#84 supported-pin declaration must match the external/my-lisp gitlink checkout"
+        "#84 supported-pin declaration must match the external/sens gitlink checkout"
     );
 
-    let observed_checkout = sibling("my-lisp");
+    let observed_checkout = sibling("sens");
     assert_eq!(
         head(&observed_checkout),
         observed,
-        "#84 CI sibling my-lisp checkout must be the declared observed-current revision"
+        "#84 CI sibling sens checkout must be the declared observed-current revision"
     );
 
     let compatibility =
@@ -173,7 +173,7 @@ fn exact_rational_authority_witness_declares_supported_pin_channel() {
 
 #[test]
 fn observed_current_exposes_new_math_witness_without_promoting_supported_pin() {
-    let observed_fixture = sibling("my-lisp").join("tests/fixtures/mathematical-result-v1.lisp");
+    let observed_fixture = sibling("sens").join("tests/fixtures/mathematical-result-v1.lisp");
 
     // Channel separation must survive future convergence: supported-pin may
     // eventually gain this fixture without invalidating #84. The invariant

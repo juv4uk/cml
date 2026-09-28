@@ -1,4 +1,4 @@
-//! Conformance and Triple-Oracle tests for the CML ↔ my-lisp encoder bridge (#52).
+//! Conformance and Triple-Oracle tests for the CML ↔ sens encoder bridge (#52).
 //!
 //! Verifies:
 //! 1. Authority boundary: Lisp owns the physical byte encoding and semantic IDs.
@@ -23,7 +23,7 @@ fn test_prov() -> Provenance {
 }
 
 /// Upstream channel: supported-pin.
-/// The `external/my-lisp` gitlink owns this encoder authority; the
+/// The `external/sens` gitlink owns this encoder authority; the
 /// observed-current sibling is not an encoder compatibility denominator.
 fn submodule_repo(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -35,7 +35,7 @@ fn create_lisp_encoder_session() -> Session {
     let mut session = Session::default();
     load_core_library(&mut session).expect("load_core_library must succeed");
 
-    let encoder_path = submodule_repo("my-lisp").join("lib/machine/encoding/x86-64.lisp");
+    let encoder_path = submodule_repo("sens").join("lib/machine/encoding/x86-64.lisp");
     let encoder_src = fs::read_to_string(&encoder_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", encoder_path.display()));
     eval_program(&encoder_src, &mut session)
@@ -151,11 +151,11 @@ unsafe fn execute_bytes_as_fn(bytes: &[u8]) -> u64 {
 /// There is no second encoder-authority SHA constant: this test only proves
 /// that the supported dependency is initialized rather than an empty submodule.
 #[test]
-fn test_external_my_lisp_submodule_is_checked_out() {
-    let encoder_path = submodule_repo("my-lisp").join("lib/machine/encoding/x86-64.lisp");
+fn test_external_sens_submodule_is_checked_out() {
+    let encoder_path = submodule_repo("sens").join("lib/machine/encoding/x86-64.lisp");
     assert!(
         encoder_path.exists(),
-        "external/my-lisp submodule not checked out at {} — run `git submodule update --init`",
+        "external/sens submodule not checked out at {} — run `git submodule update --init`",
         encoder_path.display()
     );
 }
