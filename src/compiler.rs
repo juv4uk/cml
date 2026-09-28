@@ -335,15 +335,45 @@ impl Compiler {
         self.emit(&format!("CDR {} R1", target_reg));
     }
 
+    fn materialize_relation_result(&mut self, raw_reg: &str, target_reg: &str) {
+        let false_label = self.next_label("relation_false");
+        let end_label = self.next_label("relation_end");
+
+        self.emit(&format!("JF {} {}", raw_reg, false_label));
+        self.compile_quoted(&Quoted::List(vec![Quoted::Int(1)]), target_reg);
+        self.emit(&format!("JMP {}", end_label));
+        self.emit(&format!("{}:", false_label));
+        self.compile_quoted(&Quoted::List(vec![Quoted::Int(0)]), target_reg);
+        self.emit(&format!("{}:", end_label));
+    }
+
     fn compile_eq_mechanism(&mut self, args: &[Ir], target_reg: &str) {
         self.compile_expr(&args[0], "R1");
         self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
-        self.emit(&format!("EQ {} R1 R2", target_reg));
+        self.emit("EQ R3 R1 R2");
+        self.materialize_relation_result("R3", target_reg);
     }
 
     fn compile_atom_mechanism(&mut self, args: &[Ir], target_reg: &str) {
         self.compile_expr(&args[0], "R1");
-        self.emit(&format!("ATOM {} R1", target_reg));
+
+        // Корпус розрізняє три спостережувані результати:
+        // NIL -> (), інший атом -> (1), пара -> (0).
+        self.emit("LOADI R13 0");
+        self.emit("LOADI R12 1");
+        self.emit("EQ R9 R12 R13"); // R9 = NIL
+        self.emit("EQ R2 R1 R9"); // R2 = raw TRUE лише для NIL
+
+        let non_nil_label = self.next_label("atom_non_nil");
+        let end_label = self.next_label("atom_result_end");
+        self.emit(&format!("JF R2 {}", non_nil_label));
+        self.compile_expr(&Ir::Nil, target_reg);
+        self.emit(&format!("JMP {}", end_label));
+
+        self.emit(&format!("{}:", non_nil_label));
+        self.emit("ATOM R3 R1");
+        self.materialize_relation_result("R3", target_reg);
+        self.emit(&format!("{}:", end_label));
     }
 
     fn compile_equal_mechanism(&mut self, args: &[Ir], target_reg: &str) {
@@ -351,7 +381,7 @@ impl Compiler {
         self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
         self.used_equal = true;
         self.call_subroutine("cml_equal");
-        self.emit(&format!("MOV {} R15", target_reg));
+        self.materialize_relation_result("R15", target_reg);
     }
 
     fn compile_add_mechanism(&mut self, args: &[Ir], target_reg: &str) {
@@ -734,8 +764,9 @@ impl Compiler {
 
     // Structural equality without letrec/recursion: an explicit worklist of
     // (a . b) pairs pushed onto the shared stack register R11, drained
-    // iteratively. Type mismatches stop pushing new work but keep draining
-    // so R11 always returns balanced to its caller.
+    // iteratively back to the R11 value observed on entry. The caller may
+    // already have saved its link register on R11; that caller-owned prefix
+    // is a stack base, never part of this subroutine's worklist.
     // Структурна рівність без letrec/рекурсії: явний worklist пар (a . b)
     // на спільному регістрі-стеку R11.
     // Strukturelle Gleichheit ohne letrec/Rekursion: explizite Arbeitsliste
@@ -745,16 +776,14 @@ impl Compiler {
         self.emit("cml_equal:");
         self.emit("; input: R1 = a, R2 = b");
         self.emit("; output: R15 = TRUE/NIL");
+        self.emit("MOV R10 R11"); // caller-owned stack base; do not consume it
         self.emit("CONS R12 R1 R2");
         self.emit("CONS R11 R12 R11"); // push initial (a . b)
         self.emit("LOADI R15 0");
         self.emit("ATOM R15 R15"); // R15 = TRUE (running result)
 
         self.emit("cml_equal_loop:");
-        self.emit("LOADI R9 0");
-        self.emit("LOADI R8 1");
-        self.emit("EQ R7 R8 R9"); // R7 = NIL
-        self.emit("EQ R6 R11 R7"); // R6 = TRUE if worklist empty
+        self.emit("EQ R6 R11 R10"); // TRUE iff our worklist returned to entry base
         self.emit("JF R6 cml_equal_pop");
         self.emit("JMP cml_equal_done");
 
