@@ -33,7 +33,7 @@ fn expand_macros_is_explicit_stage() {
 
 #[test]
 fn defmacro_my_list_through_c_backend() {
-    // compatibility.my / macros.lisp witness: (my-list 1 2 3) → (quote (1 2 3))
+    // compatibility.lisp / macros.lisp witness: (my-list 1 2 3) → (quote (1 2 3))
     // Evaluating quoted list via car of the expanded form is out of scope;
     // the expanded program is the quoted list itself as a value.
     let src = r#"(defmacro my-list items (cons (quote quote) (cons items (quote ()))))
