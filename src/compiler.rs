@@ -350,6 +350,27 @@ impl Compiler {
     fn compile_eq_mechanism(&mut self, args: &[Ir], target_reg: &str) {
         self.compile_expr(&args[0], "R1");
         self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
+
+        // SENS 00000011 is defined only on atoms. Keep the domain decision
+        // in the compiler and use fpga-lisp ISA 1.4 only as the target-owned
+        // named-failure mechanism.
+        let type_error = self.next_label("eq_type_error");
+        let end_label = self.next_label("eq_domain_end");
+        self.emit("ATOM R5 R1");
+        self.emit(&format!("JF R5 {}", type_error));
+        self.emit("ATOM R5 R2");
+        self.emit(&format!("JF R5 {}", type_error));
+        self.emit("EQ R3 R1 R2");
+        self.materialize_relation_result("R3", target_reg);
+        self.emit(&format!("JMP {}", end_label));
+        self.emit(&format!("{}:", type_error));
+        self.emit("HALT R0 R0 R1 0");
+        self.emit(&format!("{}:", end_label));
+    }
+
+    fn compile_numeric_eq_mechanism(&mut self, args: &[Ir], target_reg: &str) {
+        self.compile_expr(&args[0], "R1");
+        self.preserve_across("R1", |c| c.compile_expr(&args[1], "R2"));
         self.emit("EQ R3 R1 R2");
         self.materialize_relation_result("R3", target_reg);
     }
@@ -449,8 +470,10 @@ impl Compiler {
         // through PrimOp or any surface/backend name.
         if sid == sens::sid!(00000010) {
             self.compile_atom_mechanism(args, target_reg);
-        } else if sid == sens::sid!(00000011) || sid == sens::sid!(00011100) {
+        } else if sid == sens::sid!(00000011) {
             self.compile_eq_mechanism(args, target_reg);
+        } else if sid == sens::sid!(00011100) {
+            self.compile_numeric_eq_mechanism(args, target_reg);
         } else if sid == sens::sid!(00100010) {
             self.compile_equal_mechanism(args, target_reg);
         } else if sid == sens::sid!(00000100) {

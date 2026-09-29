@@ -14,12 +14,32 @@ fn compile(source: &str) -> String {
 fn eq_materializes_corpus_relation_instead_of_raw_fpga_truth() {
     let assembly = compile("(00000011 (quote radio) (quote radio))");
 
+    assert!(assembly.contains("ATOM R5 R1"));
+    assert!(assembly.contains("ATOM R5 R2"));
     assert!(assembly.contains("EQ R3 R1 R2"));
     assert!(assembly.contains("JF R3 relation_false_"));
+    assert!(assembly.contains("HALT R0 R0 R1 0"));
     assert!(
         !assembly.contains("EQ R15 R1 R2"),
         "raw FPGA EQ result must not escape as the language result"
     );
+}
+
+#[test]
+fn eq_pair_domain_emits_the_isa_1_4_type_trap() {
+    let assembly = compile("(00000011 (quote (1)) (quote (2)))");
+
+    assert!(assembly.contains("JF R5 eq_type_error_"));
+    assert!(assembly.contains("HALT R0 R0 R1 0"));
+}
+
+#[test]
+fn numeric_eq_does_not_inherit_the_atom_only_eq_domain_trap() {
+    let assembly = compile("(00011100 1 1)");
+
+    assert!(assembly.contains("EQ R3 R1 R2"));
+    assert!(!assembly.contains("eq_type_error_"));
+    assert!(!assembly.contains("HALT R0 R0 R1 0"));
 }
 
 #[test]
