@@ -17,6 +17,7 @@ wsm-os-target = { git = "https://github.com/juv4uk/wsm-target-contract.git", rev
 sens = { path = "external/sens/crates/sens" }
 
 [dev-dependencies]
+regex = "1.13.1"
 # #84 supported-pin channel:
 # cml's tests read sens's own .lisp source tree directly (the encoder
 # bridge triple-oracle check, CPU profile contracts, conformance fixtures)
