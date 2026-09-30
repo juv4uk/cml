@@ -7,6 +7,7 @@ use cml::{
 
 const EXPECTED_S2_IR: &str = "(value \"(prim cons ((quote A) (quote B)))\")";
 
+#[ignore = "focused S3a witness needs pinned sources; runs in core1-s3a-native-witness.yml"]
 #[test]
 fn core1_compiled_emitter_executes_bounded_compiler_form_natively() {
     let prelude_path = std::env::var("WSM_MY_LISP_CORE1_PRELUDE_SOURCE")
