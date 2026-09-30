@@ -787,10 +787,15 @@ fn effect_of(ir: &Ir) -> EffectClass {
             // Тому 00110111 лишається тут, у contrast до extract_region(), де
             // він НЕ допускається: чистота не дає права бути numeric-buffer
             // admission key (cml#344).
+            // Pure arithmetic the compute region can lower (times on this
+            // branch): same effect class as plus -- a new value, no effects.
+            // Identities come from the registry; this list mirrors admission
+            // capability, it does not create identity (GPU-2 #368).
             let known_pure = matches!(
                 &**func,
                 Ir::Sid(sid)
                     if *sid == sens::sid!(00001100)
+                        || *sid == sens::sid!(00001110)
                         || *sid == sens::sid!(00110111)
                         || *sid == sens::sid!(01011001)
                         || *sid == sens::sid!(00111001)
