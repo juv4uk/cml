@@ -226,8 +226,13 @@ pub enum PlacementRejection {
 /// children. Saturation keeps pathological trees deterministic.
 pub fn scalar_operation_count(expression: &ScalarExpr) -> u64 {
     match expression {
-        ScalarExpr::Parameter(_) | ScalarExpr::ExactInteger(_) => 0,
+        ScalarExpr::Parameter(_) | ScalarExpr::ExactInteger(_) | ScalarExpr::Float32(_) => 0,
         ScalarExpr::CheckedAdd(left, right) => 1u64
+            .saturating_add(scalar_operation_count(left))
+            .saturating_add(scalar_operation_count(right)),
+        // GPU-2 #368: multiplication counts like CheckedAdd -- one
+        // arithmetic operation plus children; a float constant is a leaf.
+        ScalarExpr::Mul(left, right) => 1u64
             .saturating_add(scalar_operation_count(left))
             .saturating_add(scalar_operation_count(right)),
     }
