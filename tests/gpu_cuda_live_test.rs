@@ -4,8 +4,8 @@ use cml::accelerator::{AcceleratorApi, AcceleratorVendor, SelectionPolicy, selec
 use cml::compute::{AdmissionBlocker, ComputeBackend, ComputeExecutionError, CpuComputeBackend};
 use cml::gpu_cuda::CudaEmitError;
 use cml::gpu_cuda_runtime::{
-    CudaCapabilityStatus, CudaRuntimeError, CudaSession, discover_devices, execute_map,
-    probe_capability,
+    CudaCapabilityStatus, CudaKernelMode, CudaRuntimeError, CudaSession, discover_devices,
+    execute_map, probe_capability,
 };
 use cml::ir::{BufferLiteral, Ir, Params};
 use cml::{lower, parser};
@@ -43,11 +43,15 @@ fn f32_map_ir(values: &[f32], offset: i64) -> Ir {
 }
 
 fn assert_cpu_cuda_parity(session: &CudaSession, ir: &Ir) {
+    assert_cpu_cuda_parity_with_mode(session, ir, CudaKernelMode::Production);
+}
+
+fn assert_cpu_cuda_parity_with_mode(session: &CudaSession, ir: &Ir, mode: CudaKernelMode) {
     let cpu = CpuComputeBackend
         .execute(ir)
         .expect("CPU reference rejected admitted conformance case");
     let cuda = session
-        .execute_map(ir)
+        .execute_map_with_mode(ir, mode)
         .expect("CUDA rejected admitted conformance case");
 
     assert_eq!(
@@ -148,6 +152,40 @@ fn live_cuda_matches_cpu_reference_matrix() {
     assert_cpu_cuda_parity(
         &session,
         &f32_map_ir(&[1.0, -2.5, 0.1, -0.0, 16_777_216.0], 3),
+    );
+}
+
+/// cml#360 / sens#1585 E1: the witness mode must execute the same admitted
+/// matrix with NVRTC `-fmad=false` and still match the CPU reference bits.
+/// The contraction-sensitive 286-ULP E1 case with hardcoded reference bits
+/// lives in the sens witness (`experiments/gpu2-e1e3/witness.py`), not here:
+/// cml tests own no Lisp expected answers.
+#[test]
+#[ignore = "requires a live NVIDIA CUDA device"]
+fn live_cuda_bitwise_equality_mode_matches_cpu_reference_matrix() {
+    let session = CudaSession::new(0).expect("CUDA session creation failed");
+
+    assert_cpu_cuda_parity_with_mode(
+        &session,
+        &i32_map_ir(vec![1, 2, 3], 1),
+        CudaKernelMode::BitwiseEquality,
+    );
+
+    // 257 crosses a typical 256-thread launch boundary and witnesses the
+    // generated bounds guard on a non-block-aligned size.
+    let non_aligned: Vec<i32> = (-128..129).collect();
+    assert_eq!(non_aligned.len(), 257);
+    assert_cpu_cuda_parity_with_mode(
+        &session,
+        &i32_map_ir(non_aligned, 7),
+        CudaKernelMode::BitwiseEquality,
+    );
+
+    // Compare stored IEEE-754 binary32 bits, not decimal renderings or epsilon.
+    assert_cpu_cuda_parity_with_mode(
+        &session,
+        &f32_map_ir(&[1.0, -2.5, 0.1, -0.0, 16_777_216.0], 3),
+        CudaKernelMode::BitwiseEquality,
     );
 }
 
