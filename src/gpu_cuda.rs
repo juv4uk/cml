@@ -30,8 +30,7 @@ pub fn emit_map_kernel(ir: &Ir) -> Result<String, CudaEmitError> {
     let (element_type, expression) = match analysis.numeric_domain {
         NumericDomain::FixedWidthInteger => ("int", emit_i32_expr(&kernel.body)?),
         NumericDomain::InexactFloat => {
-            let form =
-                F32MapKernel::lower(&kernel.body).ok_or(CudaEmitError::UnsupportedRegion)?;
+            let form = F32MapKernel::lower(&kernel.body).ok_or(CudaEmitError::UnsupportedRegion)?;
             // GPU-2-E1 / #368: two plain operators. FFMA contraction is
             // controlled by the kernel mode (`-fmad=false` in
             // `CudaKernelMode::BitwiseEquality`, PR #366), not by the
