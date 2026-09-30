@@ -439,9 +439,10 @@ fn substitute_parameter_zero(
             Box::new(substitute_parameter_zero(left, replacement)?),
             Box::new(substitute_parameter_zero(right, replacement)?),
         )),
-        ScalarExpr::Sqrt(inner) => Some(ScalarExpr::Sqrt(Box::new(
-            substitute_parameter_zero(inner, replacement)?,
-        ))),
+        ScalarExpr::Sqrt(inner) => Some(ScalarExpr::Sqrt(Box::new(substitute_parameter_zero(
+            inner,
+            replacement,
+        )?))),
     }
 }
 
@@ -828,9 +829,9 @@ fn lower_scalar_expr(ir: &Ir, parameters: &[String]) -> Option<ScalarExpr> {
                 && matches!(&**func, Ir::Sid(sid)
                     if surface_sid("sqrt").map_or(false, |s| s == *sid)) =>
         {
-            Some(ScalarExpr::Sqrt(Box::new(
-                lower_scalar_expr(&args[0], parameters)?,
-            )))
+            Some(ScalarExpr::Sqrt(Box::new(lower_scalar_expr(
+                &args[0], parameters,
+            )?)))
         }
         _ => None,
     }
@@ -1540,8 +1541,8 @@ mod f32_map_kernel_tests {
         let element = f32::from_bits(E1_A);
         let stepwise =
             eval_f32_stepwise(&e1_body(), &[element]).expect("E1 body evaluates step-wise");
-        let fused = eval_f64(&e1_body(), &[f64::from(element)])
-            .expect("E1 body evaluates in f64") as f32;
+        let fused =
+            eval_f64(&e1_body(), &[f64::from(element)]).expect("E1 body evaluates in f64") as f32;
         assert_eq!(stepwise.to_bits(), 0x39796000);
         assert_eq!(fused.to_bits(), 0x3979611e);
     }
