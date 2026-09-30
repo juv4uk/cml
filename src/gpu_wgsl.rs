@@ -40,6 +40,12 @@ pub fn emit_map_shader(ir: &Ir) -> Result<String, WgslError> {
                 F32MapKernel::MulAdd(scale, offset) => {
                     format!("x * {} + {}", wgsl_f32(scale), wgsl_f32(offset))
                 }
+                // GPU-2 E2/E3 / #379: WGSL f32 division and sqrt are
+                // correctly-rounded per operation; a closed constant is
+                // emitted as its exact stored bits.
+                F32MapKernel::Div(divisor) => format!("x / {}", wgsl_f32(divisor)),
+                F32MapKernel::Sqrt => "sqrt(x)".to_string(),
+                F32MapKernel::Constant(bits) => format!("bitcast<f32>(0x{bits:08x}u)"),
             };
             ("f32", expression)
         }
@@ -69,9 +75,13 @@ fn emit_i32_expr(expression: &ScalarExpr) -> Result<String, WgslError> {
             emit_i32_expr(left)?,
             emit_i32_expr(right)?
         )),
-        // #366/#368: outside the proven-integer subset; the float path owns
-        // these nodes (see `f32_scale_offset`).
-        ScalarExpr::Float32(_) | ScalarExpr::Mul(..) => Err(WgslError::UnsupportedRegion),
+        // #366/#368/#379: outside the proven-integer subset; the float
+        // path owns these nodes (see `F32MapKernel`).
+        ScalarExpr::Float32(_)
+        | ScalarExpr::Mul(..)
+        | ScalarExpr::Sub(..)
+        | ScalarExpr::Div(..)
+        | ScalarExpr::Sqrt(_) => Err(WgslError::UnsupportedRegion),
     }
 }
 
