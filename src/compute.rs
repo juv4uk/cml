@@ -751,6 +751,9 @@ fn is_scalar(ir: &Ir) -> bool {
 fn effect_of(ir: &Ir) -> EffectClass {
     match ir {
         Ir::Int(_)
+        // A float literal is a constant value like an integer (GPU-2 #368):
+        // the compute region now admits it as stored binary32 bits.
+        | Ir::Float(_)
         | Ir::Buffer(_)
         | Ir::Nil
         | Ir::True
