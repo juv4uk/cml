@@ -8,19 +8,19 @@
 //! Згідно з контрактом CML: `my-lisp` володіє семантикою мови та SID-таблицею
 //! (`lib/surface/semantic-registry.lisp`). CML не винаходить власних імен
 //! функцій: для registry-admitted поверхонь (`list`, `reverse`, `not`, ...)
-//! ідентичність у IR — це саме бітовий ключ `Sid8`, отриманий через
+//! ідентичність у IR — це саме бітовий ключ `Sens8`, отриманий через
 //! `sens::semantic_registry_export::semantic_id_for_admitted_surface`.
 //! Локальні/модульні функції без registry-запису (напр. `reverse-onto`,
 //! `utf8-continuation-byte?`) лишаються під своїми спейлінгами — вони не є
 //! мовними семантичними ідентичностями.
 
 use crate::ast::Expr as CExpr;
-use sens::Sid8;
+use sens::Sens8;
 use sens::semantic_registry_export::semantic_id_bits;
 
 /// Convert one raw my-lisp S-expression into a CML `Expr`.
 ///
-/// `Sid` leaves remain typed exact `Sid8` values. They are never converted
+/// `Sid` leaves remain typed exact `Sens8` values. They are never converted
 /// to surface names, strings, symbols, integers, or other aliases; symbols
 /// survive verbatim; numbers/rationals/strings pass through; lists recurse.
 pub fn convert_lisp_expr(expr: &sens::Expr) -> Result<CExpr, BridgeError> {
@@ -43,15 +43,15 @@ pub fn convert_lisp_expr(expr: &sens::Expr) -> Result<CExpr, BridgeError> {
     }
 }
 
-/// Render a `Sid8` as its canonical 8-bit ASCII address string.
-pub fn address_of(sid: Sid8) -> String {
+/// Render a `Sens8` as its canonical 8-bit ASCII address string.
+pub fn address_of(sid: Sens8) -> String {
     semantic_id_bits(sid)
 }
 
-/// Resolve a `Sid8` to its Lisp-owned canonical surface spelling: the first
+/// Resolve a `Sens8` to its Lisp-owned canonical surface spelling: the first
 /// `en` (or fallback first) admitted surface row. This is registry-owned
 /// identity, never a CML hardcoded table.
-pub fn surface_of(sid: Sid8) -> String {
+pub fn surface_of(sid: Sens8) -> String {
     use sens::semantic_registry_export::admitted_surfaces_for_semantic_id;
     let rows = admitted_surfaces_for_semantic_id(sid);
     rows.iter()

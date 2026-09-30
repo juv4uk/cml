@@ -12,19 +12,19 @@ fn lower_one(source: &str) -> Ir {
     lowered.remove(0)
 }
 
-fn assert_sid_call(source: &str, expected_sid: sens::Sid8) {
+fn assert_sid_call(source: &str, expected_sid: sens::Sens8) {
     let lowered = lower_one(source);
     match lowered {
         Ir::App { func, .. } => match *func {
             Ir::Sid(actual) => assert_eq!(
                 actual, expected_sid,
-                "function call must preserve exact Sid8 after surface resolution"
+                "function call must preserve exact Sens8 after surface resolution"
             ),
             other => {
                 panic!("function call identity must be Ir::Sid({expected_sid}), got {other:?}")
             }
         },
-        other => panic!("function call must lower to Ir::App keyed by Sid8, got {other:?}"),
+        other => panic!("function call must lower to Ir::App keyed by Sens8, got {other:?}"),
     }
 }
 
@@ -49,7 +49,7 @@ fn first_class_callable_surface_is_sid8_not_builtin_name_or_primop_identity() {
     assert_eq!(
         lowered,
         Ir::Sid(sens::sid!(00000101)),
-        "first-class callable identity must remain exact Sid8"
+        "first-class callable identity must remain exact Sens8"
     );
 }
 
