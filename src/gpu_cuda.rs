@@ -5,8 +5,8 @@
 //! to the optional CUDA runtime layer.
 
 use crate::compute::{
-    AdmissionBlocker, BulkOperation, ComputeKernel, NumericDomain, ScalarExpr, analyze,
-    f32_affine_offset,
+    AdmissionBlocker, BulkOperation, ComputeKernel, F32MapKernel, NumericDomain, ScalarExpr,
+    analyze,
 };
 use crate::ir::Ir;
 
@@ -30,9 +30,29 @@ pub fn emit_map_kernel(ir: &Ir) -> Result<String, CudaEmitError> {
     let (element_type, expression) = match analysis.numeric_domain {
         NumericDomain::FixedWidthInteger => ("int", emit_i32_expr(&kernel.body)?),
         NumericDomain::InexactFloat => {
-            let offset =
-                f32_affine_offset(&kernel.body).ok_or(CudaEmitError::UnsupportedRegion)? as f32;
-            ("float", format!("x + {}", cuda_f32(offset)))
+            let form = F32MapKernel::lower(&kernel.body).ok_or(CudaEmitError::UnsupportedRegion)?;
+            // GPU-2-E1 / #368: two plain operators. FFMA contraction is
+            // controlled by the kernel mode (`-fmad=false` in
+            // `CudaKernelMode::BitwiseEquality`, PR #366), not by the
+            // emitter; the production-mode FMA policy is a separate
+            // language-owner decision (sens#1585).
+            let expression = match form {
+                F32MapKernel::AffineAdd(offset) | F32MapKernel::Add(offset) => {
+                    format!("x + {}", cuda_f32(offset))
+                }
+                F32MapKernel::Mul(scale) => format!("x * {}", cuda_f32(scale)),
+                F32MapKernel::MulAdd(scale, offset) => {
+                    format!("x * {} + {}", cuda_f32(scale), cuda_f32(offset))
+                }
+                // GPU-2 E2/E3 / #379: division and sqrt are IEEE operations
+                // in NVRTC's default mode; a closed constant is emitted as
+                // its exact stored bits, so canonical == backend bitwise
+                // even for NaN/Inf.
+                F32MapKernel::Div(divisor) => format!("x / {}", cuda_f32(divisor)),
+                F32MapKernel::Sqrt => "sqrtf(x)".to_string(),
+                F32MapKernel::Constant(bits) => format!("__int_as_float(0x{bits:08x})"),
+            };
+            ("float", expression)
         }
         _ => return Err(CudaEmitError::UnsupportedRegion),
     };
@@ -74,6 +94,13 @@ fn emit_i32_expr(expression: &ScalarExpr) -> Result<String, CudaEmitError> {
             emit_i32_expr(left)?,
             emit_i32_expr(right)?
         )),
+        // #368/#379: outside the proven-integer subset; the float path
+        // owns these nodes (see `F32MapKernel`).
+        ScalarExpr::Float32(_)
+        | ScalarExpr::Mul(..)
+        | ScalarExpr::Sub(..)
+        | ScalarExpr::Div(..)
+        | ScalarExpr::Sqrt(_) => Err(CudaEmitError::UnsupportedRegion),
     }
 }
 
