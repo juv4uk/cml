@@ -52,4 +52,4 @@ jobs:
           WSM_NUCLEUS_ASM: ${{ github.workspace }}/wsm-my-lisp/asm/nucleus.s
           WSM_MY_LISP_CORE1_PRELUDE_SOURCE: ${{ github.workspace }}/upstream-sens/lib/core1-compiler-prelude.lisp
           WSM_MY_LISP_COMPILER_SOURCE: ${{ github.workspace }}/wsm-my-lisp/lib/compiler.lisp
-        run: cargo test --test core1_s4_self_source_test -- --nocapture
+        run: cargo test --test core1_s4_self_source_test -- --include-ignored --nocapture

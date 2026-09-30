@@ -74,4 +74,4 @@ jobs:
           WSM_MY_LISP_COMPILER_SOURCE: ${{ github.workspace }}/wsm-my-lisp/lib/compiler.lisp
         run: |
           set -euo pipefail
-          cargo test --test core1_s3a_compiled_emitter_test -- --nocapture
+          cargo test --test core1_s3a_compiled_emitter_test -- --include-ignored --nocapture
