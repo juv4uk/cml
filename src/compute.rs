@@ -477,9 +477,7 @@ fn f32_rounding_proven(region: &ComputeRegion) -> bool {
             return false;
         };
         let backend = form.apply(element);
-        canonical.is_finite()
-            && backend.is_finite()
-            && canonical.to_bits() == backend.to_bits()
+        canonical.is_finite() && backend.is_finite() && canonical.to_bits() == backend.to_bits()
     })
 }
 
@@ -1414,8 +1412,8 @@ mod f32_map_kernel_tests {
         let element = f32::from_bits(E1_A);
         let stepwise =
             eval_f32_stepwise(&e1_body(), &[element]).expect("E1 body evaluates step-wise");
-        let fused = eval_f64(&e1_body(), &[f64::from(element)])
-            .expect("E1 body evaluates in f64") as f32;
+        let fused =
+            eval_f64(&e1_body(), &[f64::from(element)]).expect("E1 body evaluates in f64") as f32;
         assert_eq!(stepwise.to_bits(), 0x39796000);
         assert_eq!(fused.to_bits(), 0x3979611e);
     }
