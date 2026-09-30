@@ -98,6 +98,7 @@ fn compiler_named_def<'a>(forms: &'a [Expr], name: &str) -> &'a Expr {
         .unwrap_or_else(|| panic!("pinned compiler source must contain def {name}"))
 }
 
+#[ignore = "focused S4 witness needs pinned sources; runs in core1-s4-self-source.yml"]
 #[test]
 fn s4_compiled_emitter_compiles_its_real_core1_cond_definition() {
     let prelude_path = std::env::var("WSM_MY_LISP_CORE1_PRELUDE_SOURCE")
