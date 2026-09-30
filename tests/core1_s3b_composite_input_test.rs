@@ -24,6 +24,7 @@ fn list(items: Vec<X86InputValue>) -> X86InputValue {
         })
 }
 
+#[ignore = "focused S3b witness needs pinned sources; runs in core1-s3b-composite-input.yml"]
 #[test]
 fn core1_compiled_emitter_accepts_two_composite_inputs_without_recompile() {
     let prelude_path = std::env::var("WSM_MY_LISP_CORE1_PRELUDE_SOURCE")
