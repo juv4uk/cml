@@ -141,7 +141,10 @@ pub fn nvrtc_options_for(mode: CudaKernelMode, compute_capability: (i32, i32)) -
     match mode {
         CudaKernelMode::Production => vec![format!("-arch={arch}")],
         CudaKernelMode::BitwiseEquality => {
-            vec![format!("-arch={arch}"), NVRTC_NO_FMA_CONTRACTION.to_string()]
+            vec![
+                format!("-arch={arch}"),
+                NVRTC_NO_FMA_CONTRACTION.to_string(),
+            ]
         }
     }
 }
