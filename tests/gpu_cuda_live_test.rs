@@ -9,6 +9,12 @@ use cml::gpu_cuda_runtime::{
 };
 use cml::ir::{BufferLiteral, Ir, Params};
 use cml::{lower, parser};
+use std::fs::{self, File};
+use std::io::{Read, Seek, SeekFrom};
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 fn lower_one(source: &str) -> Ir {
     let expressions = parser::parse(source).unwrap();
@@ -220,4 +226,95 @@ fn live_cuda_cannot_bypass_failed_admission() {
         0,
         "rejected IR must not compile or cache a CUDA kernel"
     );
+}
+
+struct WorkerGuard {
+    child: Child,
+    socket: PathBuf,
+    temp_dir: PathBuf,
+}
+
+impl Drop for WorkerGuard {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = fs::remove_file(&self.socket);
+        let _ = fs::remove_dir_all(&self.temp_dir);
+    }
+}
+
+#[test]
+#[ignore = "requires a live NVIDIA CUDA device"]
+fn persistent_worker_handles_file_backed_heavy_chain() {
+    let worker = env!("CARGO_BIN_EXE_cml-gpu-worker");
+    let temp_dir = std::env::temp_dir().join(format!("cml-gpu-worker-live-{}", std::process::id()));
+    fs::create_dir_all(&temp_dir).expect("create GPU worker temp dir");
+
+    let socket = temp_dir.join("worker.sock");
+    let input = temp_dir.join("input.i32");
+    let output = temp_dir.join("output.i32");
+
+    let child = Command::new(worker)
+        .arg("serve")
+        .env("CML_GPU_WORKER_SOCKET", &socket)
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("spawn persistent GPU worker");
+    let _guard = WorkerGuard {
+        child,
+        socket: socket.clone(),
+        temp_dir: temp_dir.clone(),
+    };
+
+    for _ in 0..50 {
+        if socket.exists() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    assert!(socket.exists(), "GPU worker socket did not become ready");
+
+    // 32 MiB = 8,388,608 i32 zeros. set_len gives a cheap zero-filled input
+    // without spending CPU time generating millions of values.
+    File::create(&input)
+        .expect("create worker input")
+        .set_len(32 * 1024 * 1024)
+        .expect("size worker input");
+
+    let offsets: Vec<String> = (0..64).map(|_| "1".to_string()).collect();
+    for iteration in 1..=3 {
+        let result = Command::new(worker)
+            .arg("chain-file-i32")
+            .arg(&input)
+            .arg(&output)
+            .args(&offsets)
+            .env("CML_GPU_WORKER_SOCKET", &socket)
+            .output()
+            .expect("run file-backed CUDA worker request");
+
+        assert!(
+            result.status.success(),
+            "worker iteration {iteration} failed: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let evidence = String::from_utf8_lossy(&result.stdout);
+        eprintln!("GPU worker heavy iteration {iteration}: {evidence}");
+        assert!(evidence.contains("count=8388608"));
+        assert!(evidence.contains("steps=64"));
+        assert!(evidence.contains("cuda_ns="));
+    }
+
+    assert_eq!(
+        fs::metadata(&output).expect("stat worker output").len(),
+        32 * 1024 * 1024
+    );
+
+    let mut file = File::open(&output).expect("open worker output");
+    let mut word = [0u8; 4];
+    file.read_exact(&mut word).expect("read first output word");
+    assert_eq!(i32::from_le_bytes(word), 64);
+    file.seek(SeekFrom::End(-4)).expect("seek last output word");
+    file.read_exact(&mut word).expect("read last output word");
+    assert_eq!(i32::from_le_bytes(word), 64);
 }
