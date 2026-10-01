@@ -16,13 +16,7 @@ fn render_expr(expr: &Expr) -> String {
         Expr::Integer(value) => value.to_string(),
         Expr::Rational(num, den) => format!("{num}/{den}"),
         Expr::Symbol(symbol) => symbol.clone(),
-        Expr::String(value) => format!(
-            ""{}"",
-            value
-                .replace('\\', "\\\\")
-                .replace('"', "\\"")
-                .replace('\n', "\\n")
-        ),
+        Expr::String(value) => format!("{value:?}"),
         Expr::List(items) => {
             let inner = items.iter().map(render_expr).collect::<Vec<_>>().join(" ");
             format!("({inner})")
