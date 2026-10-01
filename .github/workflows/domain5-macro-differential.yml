@@ -1,0 +1,47 @@
+name: D5 macro differential
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "macros.lisp"
+      - "tests/domain5_macro_differential_test.rs"
+      - "contracts/cml-operations.lisp"
+      - ".github/workflows/domain5-macro-differential.yml"
+  push:
+    branches: [master]
+    paths:
+      - "macros.lisp"
+      - "tests/domain5_macro_differential_test.rs"
+      - "contracts/cml-operations.lisp"
+      - ".github/workflows/domain5-macro-differential.yml"
+
+jobs:
+  differential:
+    name: Rust MacroExpander vs Lisp reference
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CML with pinned SENS
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check focused formatting
+        run: cargo fmt -p cml -- --check
+
+      - name: Run D5 macro differential
+        run: cargo test -p cml --test domain5_macro_differential_test -- --nocapture
+
+      - name: Publish D5 summary
+        if: always()
+        run: |
+          {
+            echo "## D5 compiler falsifier"
+            echo
+            echo "- Rust MacroExpander and Lisp-hosted macros.lisp consume one CML-parsed AST corpus."
+            echo "- Raw-operand, nested-expansion and definition-order semantics are checked."
+            echo "- This gate tests parity only; it does not ratify any D5 code."
+          } >> "$GITHUB_STEP_SUMMARY"
