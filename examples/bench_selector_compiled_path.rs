@@ -164,14 +164,21 @@ fn compile_nested_program(
 }
 
 fn compile_linear_program(depth: usize, index: usize, count: usize) -> Result<String, String> {
-    if count != 1 {
-        return Err("linear benchmark recipe currently requires count=1".into());
+    if count == 0 {
+        return Err("linear benchmark recipe requires count >= 1".into());
     }
     let selector = selector_word(depth, index);
     let steps = decode(&selector)?;
-    let mut assembly = compile_nested_program(depth, index, 1, false)?;
-    let anchor = assembly
+    let assembly = compile_nested_program(depth, index, 1, false)?;
+
+    let prologue_marker = "    movq %rdi, %r12\n";
+    let body_start = assembly
+        .find(prologue_marker)
+        .map(|offset| offset + prologue_marker.len())
+        .ok_or_else(|| "x86 prologue anchor not found".to_string())?;
+    let epilogue_start = assembly
         .rfind("\n    addq $")
+        .map(|offset| offset + 1)
         .ok_or_else(|| "x86 epilogue anchor not found".to_string())?;
 
     let mut recipe = String::new();
@@ -183,8 +190,16 @@ fn compile_linear_program(depth: usize, index: usize, count: usize) -> Result<St
             Step::Cdr => "    call wsm_cdr\n",
         });
     }
-    assembly.insert_str(anchor + 1, &recipe);
-    Ok(assembly)
+
+    let mut one = String::from(&assembly[body_start..epilogue_start]);
+    one.push_str(&recipe);
+
+    let mut out = String::from(&assembly[..body_start]);
+    for _ in 0..count {
+        out.push_str(&one);
+    }
+    out.push_str(&assembly[epilogue_start..]);
+    Ok(out)
 }
 
 fn compile_strategy(
