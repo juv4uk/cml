@@ -19,12 +19,16 @@ ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE = "bench_selector_compiled_path"
 IREF_RE = re.compile(r"I\s+refs:\s+([0-9,]+)")
 DEPTHS = (0, 1, 2, 4, 8, 16)
+CANDIDATES = (
+    ("nested-ir", "compile"),
+    ("linear-recipe", "compile-linear"),
+)
 
 
 def sh(args, *, env=None, check=True):
     return subprocess.run(
         args, cwd=ROOT, env=env, check=check, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
 
 
@@ -36,10 +40,14 @@ def output(args):
 
 
 def irefs_command(args, *, env=None):
-    proc = sh([
-        "valgrind", "--tool=cachegrind", "--cache-sim=no", "--branch-sim=no",
-        *map(str, args)
-    ], env=env, check=False)
+    proc = sh(
+        [
+            "valgrind", "--tool=cachegrind", "--cache-sim=no",
+            "--branch-sim=no", *map(str, args),
+        ],
+        env=env,
+        check=False,
+    )
     if proc.returncode != 0:
         raise RuntimeError(proc.stdout + proc.stderr)
     match = IREF_RE.search(proc.stderr)
@@ -65,19 +73,17 @@ def inst_count(obj):
     )
 
 
-def compile_object(binary, depth, full, td):
-    tag = "full" if full else "baseline"
-    asm = td / f"d{depth}-{tag}.s"
-    obj = td / f"d{depth}-{tag}.o"
-    sh([str(binary), "emit", str(depth), "3", "1", tag, str(asm)])
+def compile_object(binary, depth, strategy, td):
+    asm = td / f"d{depth}-{strategy}.s"
+    obj = td / f"d{depth}-{strategy}.o"
+    sh([str(binary), "emit", str(depth), "3", "1", strategy, str(asm)])
     sh(["cc", "-c", "-x", "assembler", str(asm), "-o", str(obj)])
     return text_size(obj), inst_count(obj)
 
 
-def link_native(binary, depth, full, count, td, env):
-    tag = "full" if full else "baseline"
-    out = td / f"d{depth}-{tag}"
-    sh([str(binary), "link", str(depth), "3", str(count), tag, str(out)], env=env)
+def link_native(binary, depth, strategy, td, env):
+    out = td / f"d{depth}-{strategy}"
+    sh([str(binary), "link", str(depth), "3", "1", strategy, str(out)], env=env)
     return out
 
 
@@ -91,12 +97,17 @@ def parse_inspect(binary, depth):
     return parsed
 
 
+def median_irefs(args, samples, *, env=None):
+    return int(statistics.median(
+        irefs_command(args, env=env) for _ in range(samples)
+    ))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", required=True)
     ap.add_argument("--samples", type=int, default=3)
     ap.add_argument("--phase-count", type=int, default=1000)
-    ap.add_argument("--native-count", type=int, default=32)
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
 
@@ -123,60 +134,69 @@ def main():
             parsed = parse_inspect(binary, depth)
             steps = int(parsed["STEPS"])
 
-            base_text, base_inst = compile_object(binary, depth, False, td)
-            full_text, full_inst = compile_object(binary, depth, True, td)
-
-            base_exe = link_native(binary, depth, False, args.native_count, td, env)
-            full_exe = link_native(binary, depth, True, args.native_count, td, env)
-            base_samples = [irefs_command([base_exe]) for _ in range(samples)]
-            full_samples = [irefs_command([full_exe]) for _ in range(samples)]
-            base_med = int(statistics.median(base_samples))
-            full_med = int(statistics.median(full_samples))
-            native_delta = full_med - base_med
+            structural = {}
+            native = {}
+            for strategy in ("baseline", "nested", "linear"):
+                structural[strategy] = compile_object(binary, depth, strategy, td)
+                exe = link_native(binary, depth, strategy, td, env)
+                native[strategy] = median_irefs([exe], samples)
 
             for pattern in ("repeated", "random"):
-                phase = {}
-                for name in ("generate", "decode", "compile"):
-                    vals = [
-                        irefs_command([
-                            binary, name, str(depth), str(phase_count), pattern
-                        ])
-                        for _ in range(samples)
-                    ]
-                    phase[name] = int(statistics.median(vals))
+                common = {}
+                for phase in ("generate", "decode"):
+                    common[phase] = median_irefs(
+                        [binary, phase, str(depth), str(phase_count), pattern],
+                        samples,
+                    )
 
-                rows.append({
-                    "case_id": f"selector-d{depth}-{pattern}",
-                    "candidate": "compile-root-suffix-to-direct-sid-chain",
-                    "family": "selector",
-                    "semantic_depth": depth,
-                    "mode": pattern,
-                    "rep": "CML exact Sens8 CAR/CDR calls",
-                    "path_steps": steps,
-                    "runtime_path_ops": int(parsed["RUNTIME_PATH_OPS"]),
-                    "car_calls": int(parsed["CAR_CALLS"]),
-                    "cdr_calls": int(parsed["CDR_CALLS"]),
-                    "generate_i_refs": phase["generate"],
-                    "decode_i_refs": phase["decode"],
-                    "compile_i_refs": phase["compile"],
-                    "decode_delta_per_path":
-                        (phase["decode"] - phase["generate"]) / phase_count,
-                    "lower_emit_delta_per_path":
-                        (phase["compile"] - phase["decode"]) / phase_count,
-                    "native_batch": args.native_count,
-                    "native_baseline_i_refs": base_med,
-                    "native_full_i_refs": full_med,
-                    "native_delta_i_refs": native_delta,
-                    "native_i_refs_per_eval": native_delta / args.native_count,
-                    "native_i_refs_per_step":
-                        native_delta / args.native_count / steps,
-                    "baseline_machine_insts": base_inst,
-                    "full_machine_insts": full_inst,
-                    "machine_inst_delta": full_inst - base_inst,
-                    "baseline_text_bytes": base_text,
-                    "full_text_bytes": full_text,
-                    "code_bytes_delta": full_text - base_text,
-                })
+                for candidate, compile_phase in CANDIDATES:
+                    strategy = "nested" if candidate == "nested-ir" else "linear"
+                    compile_irefs = median_irefs(
+                        [
+                            binary, compile_phase, str(depth),
+                            str(phase_count), pattern,
+                        ],
+                        samples,
+                    )
+                    baseline_i = native["baseline"]
+                    full_i = native[strategy]
+                    delta_i = full_i - baseline_i
+                    base_text, base_inst = structural["baseline"]
+                    full_text, full_inst = structural[strategy]
+
+                    rows.append({
+                        "case_id": f"selector-d{depth}-{pattern}-{candidate}",
+                        "candidate": candidate,
+                        "family": "selector",
+                        "semantic_depth": depth,
+                        "mode": pattern,
+                        "rep": "CML exact Sens8 CAR/CDR calls",
+                        "path_steps": steps,
+                        "runtime_path_ops": int(parsed["RUNTIME_PATH_OPS"]),
+                        "car_calls": int(parsed["CAR_CALLS"]),
+                        "cdr_calls": int(parsed["CDR_CALLS"]),
+                        "generate_i_refs": common["generate"],
+                        "decode_i_refs": common["decode"],
+                        "compile_i_refs": compile_irefs,
+                        "decode_delta_per_path":
+                            (common["decode"] - common["generate"]) / phase_count,
+                        "lower_emit_delta_per_path":
+                            (compile_irefs - common["decode"]) / phase_count,
+                        "native_batch": 1,
+                        "native_baseline_i_refs": baseline_i,
+                        "native_full_i_refs": full_i,
+                        "native_delta_i_refs": delta_i,
+                        "native_i_refs_per_eval": delta_i,
+                        "native_i_refs_per_step": delta_i / steps,
+                        "baseline_machine_insts": base_inst,
+                        "full_machine_insts": full_inst,
+                        "machine_inst_delta": full_inst - base_inst,
+                        "machine_insts_per_step": (full_inst - base_inst) / steps,
+                        "baseline_text_bytes": base_text,
+                        "full_text_bytes": full_text,
+                        "code_bytes_delta": full_text - base_text,
+                        "code_bytes_per_step": (full_text - base_text) / steps,
+                    })
 
     with (out / "results.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(
@@ -190,6 +210,9 @@ def main():
         "sens_gitlink": output(["git", "ls-tree", "HEAD", "external/sens"]),
         "example_sha256": hashlib.sha256(
             (ROOT / "examples/bench_selector_compiled_path.rs").read_bytes()
+        ).hexdigest(),
+        "runner_sha256": hashlib.sha256(
+            (ROOT / "benchmarks/selector-compiled/run.py").read_bytes()
         ).hexdigest(),
         "nucleus_sha256": hashlib.sha256(Path(nucleus).read_bytes()).hexdigest(),
         "rustc": output(["rustc", "--version"]),
@@ -207,7 +230,7 @@ def main():
         ),
         "samples": samples,
         "phase_count": phase_count,
-        "native_count": args.native_count,
+        "native_batch": 1,
     }
     (out / "environment.json").write_text(
         json.dumps(environment, ensure_ascii=False, indent=2) + "\n",
