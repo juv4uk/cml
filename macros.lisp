@@ -38,8 +38,8 @@
 (def alist-get
   (lambda (alist key)
     (cond
-      ((atom alist) ())
-      ((eq (car (car alist)) key) (cdr (car alist)))
+      ((atom? alist) ())
+      ((eq? (car (car alist)) key) (cdr (car alist)))
       (t (alist-get (cdr alist) key)))))
 
 ; --- bind-params: params is a bare symbol, a proper list, or a dotted
@@ -51,11 +51,11 @@
 (def bind-params
   (lambda (params args)
     (cond
-      ((atom params)
+      ((atom? params)
        (cond
-         ((eq params ()) ())
+         ((eq? params ()) ())
          (t (cons (cons params args) ()))))
-      ((atom args) ())
+      ((atom? args) ())
       (t (cons (cons (car params) (car args))
                (bind-params (cdr params) (cdr args)))))))
 
@@ -66,28 +66,28 @@
 (def eval-macro-body
   (lambda (expr env)
     (cond
-      ((atom expr)
+      ((atom? expr)
        (cond
-         ((eq expr ()) ())
-         ((eq expr (quote nil)) ())
-         ((eq expr (quote t)) (quote t))
+         ((eq? expr ()) ())
+         ((eq? expr (quote nil)) ())
+         ((eq? expr (quote t)) (quote t))
          (t (alist-get env expr))))
       (t (eval-macro-form expr env)))))
 
 (def eval-macro-form
   (lambda (expr env)
     (cond
-      ((eq (car expr) (quote quote)) (car (cdr expr)))
-      ((eq (car expr) (quote cons))
+      ((eq? (car expr) (quote quote)) (car (cdr expr)))
+      ((eq? (car expr) (quote cons))
        (cons (eval-macro-body (car (cdr expr)) env)
              (eval-macro-body (car (cdr (cdr expr))) env)))
-      ((eq (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) env)))
-      ((eq (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) env)))
-      ((eq (car expr) (quote atom)) (truthy (atom (eval-macro-body (car (cdr expr)) env))))
-      ((eq (car expr) (quote eq))
+      ((eq? (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) env)))
+      ((eq? (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) env)))
+      ((eq? (car expr) (quote atom)) (truthy (atom? (eval-macro-body (car (cdr expr)) env))))
+      ((eq? (car expr) (quote eq))
        (truthy (equal? (eval-macro-body (car (cdr expr)) env)
                         (eval-macro-body (car (cdr (cdr expr))) env))))
-      ((eq (car expr) (quote cond)) (eval-macro-cond (cdr expr) env))
+      ((eq? (car expr) (quote cond)) (eval-macro-cond (cdr expr) env))
       (t ()))))
 
 (def truthy (lambda (v) (cond (v (quote t)) (t ()))))
@@ -95,7 +95,7 @@
 (def eval-macro-cond
   (lambda (branches env)
     (cond
-      ((atom branches) ())
+      ((atom? branches) ())
       (t (cond
            ((eval-macro-body (car (car branches)) env)
             (eval-macro-body (car (cdr (car branches))) env))
@@ -106,8 +106,8 @@
 (def defmacro-form?
   (lambda (expr)
     (cond
-      ((atom expr) ())
-      ((eq (car expr) (quote defmacro)) t)
+      ((atom? expr) ())
+      ((eq? (car expr) (quote defmacro)) t)
       (t ()))))
 
 (def defmacro-name (lambda (expr) (car (cdr expr))))
@@ -117,14 +117,14 @@
 (def expand
   (lambda (expr table)
     (cond
-      ((atom expr) expr)
-      ((eq (car expr) (quote quote)) expr)
+      ((atom? expr) expr)
+      ((eq? (car expr) (quote quote)) expr)
       (t (expand-call expr table)))))
 
 (def expand-call
   (lambda (expr table)
     (cond
-      ((atom (car expr)) (expand-with-macro-check expr table))
+      ((atom? (car expr)) (expand-with-macro-check expr table))
       (t (expand-list expr table)))))
 
 (def expand-with-macro-check
@@ -148,7 +148,7 @@
 (def expand-list
   (lambda (expr table)
     (cond
-      ((atom expr) expr)
+      ((atom? expr) expr)
       (t (cons (expand (car expr) table) (expand-list (cdr expr) table))))))
 
 ; --- process: one sequential staging walk, matching the live Rust
@@ -166,7 +166,7 @@
 (def expand-program-with
   (lambda (exprs table)
     (cond
-      ((atom exprs) ())
+      ((atom? exprs) ())
       ((defmacro-form? (car exprs))
        (expand-program-with
          (cdr exprs)
