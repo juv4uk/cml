@@ -11,10 +11,10 @@ enum Step {
     Cdr,
 }
 
-fn sid(step: Step) -> sens::Sid8 {
+fn sid(step: Step) -> sens::Sens8 {
     match step {
-        Step::Car => sens::sid!(00000101),
-        Step::Cdr => sens::sid!(00000110),
+        Step::Car => sens::sens!(00000101),
+        Step::Cdr => sens::sens!(00000110),
     }
 }
 
@@ -110,17 +110,17 @@ fn measure(phase: &str, depth: usize, count: usize, pattern: &str) -> Result<(),
     for i in 0..count {
         let index = if pattern == "repeated" { 0 } else { i };
         let selector = selector_word(depth, index);
-        checksum ^= selector.len();
+        checksum = checksum.wrapping_mul(16_777_619).wrapping_add(selector.len());
         if phase == "generate" {
             continue;
         }
         let steps = decode(&selector)?;
-        checksum ^= steps.len();
+        checksum = checksum.wrapping_mul(16_777_619).wrapping_add(steps.len());
         if phase == "decode" {
             continue;
         }
         let assembly = compile_one(&selector)?;
-        checksum ^= assembly.len();
+        checksum = checksum.wrapping_mul(16_777_619).wrapping_add(assembly.len());
     }
     black_box(checksum);
     println!("CHECKSUM\t{checksum}");
