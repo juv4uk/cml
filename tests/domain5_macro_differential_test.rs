@@ -101,6 +101,34 @@ fn assert_differential(session: &mut Session, name: &str, source: &str, expected
     );
 }
 
+
+#[test]
+fn lisp_macro_reference_uses_registry_admitted_predicate_surfaces() {
+    let operations = include_str!("../contracts/cml-operations.lisp");
+    let macros = include_str!("../macros.lisp");
+
+    assert!(operations.contains("(canonical-name . \"atom?\")"));
+    assert!(operations.contains("(canonical-name . \"eq?\")"));
+
+    assert!(
+        !macros.contains("(atom "),
+        "macros.lisp must not execute retired/unadmitted atom surface"
+    );
+    assert!(
+        !macros.contains("(eq "),
+        "macros.lisp must not execute retired/unadmitted eq surface"
+    );
+
+    assert!(
+        macros.contains("(quote atom)"),
+        "CML macro meta-language must still recognize historical atom operator syntax as data"
+    );
+    assert!(
+        macros.contains("(quote eq)"),
+        "CML macro meta-language must still recognize historical eq operator syntax as data"
+    );
+}
+
 #[test]
 fn d5_one_transformer_contract_matches_rust_and_lisp_macro_authorities() {
     let mut session = lisp_macro_session();
