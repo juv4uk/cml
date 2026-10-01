@@ -33,12 +33,27 @@
 ; Not exhaustively tested -- same maturity level as fpga-lisp's
 ; assembler.my, a proven-real artifact, not a guarantee of full parity.
 
+; --- explicit bridge from current SENS predicate domains to the CML
+; macro meta-language. CML's historical `atom` means "not a pair", including
+; structural (), while current SENS keeps structural empty distinct from the
+; atom/pair predicate. Keep that distinction explicit instead of coercing ().
+(def macro-empty?
+  (lambda (value)
+    (equal? value (quote ()))))
+
+(def macro-atom?
+  (lambda (value)
+    (cond
+      ((macro-empty? value) t)
+      ((atom? value) t)
+      (t ()))))
+
 ; --- alist lookup, shared shape for both the macro table and bindings ---
 
 (def alist-get
   (lambda (alist key)
     (cond
-      ((atom? alist) ())
+      ((macro-atom? alist) ())
       ((eq? (car (car alist)) key) (cdr (car alist)))
       (t (alist-get (cdr alist) key)))))
 
@@ -51,11 +66,11 @@
 (def bind-params
   (lambda (params args)
     (cond
-      ((atom? params)
+      ((macro-atom? params)
        (cond
-         ((eq? params ()) ())
+         ((macro-empty? params) ())
          (t (cons (cons params args) ()))))
-      ((atom? args) ())
+      ((macro-atom? args) ())
       (t (cons (cons (car params) (car args))
                (bind-params (cdr params) (cdr args)))))))
 
@@ -66,9 +81,9 @@
 (def eval-macro-body
   (lambda (expr env)
     (cond
-      ((atom? expr)
+      ((macro-atom? expr)
        (cond
-         ((eq? expr ()) ())
+         ((macro-empty? expr) ())
          ((eq? expr (quote nil)) ())
          ((eq? expr (quote t)) (quote t))
          (t (alist-get env expr))))
@@ -83,7 +98,7 @@
              (eval-macro-body (car (cdr (cdr expr))) env)))
       ((eq? (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) env)))
       ((eq? (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) env)))
-      ((eq? (car expr) (quote atom)) (truthy (atom? (eval-macro-body (car (cdr expr)) env))))
+      ((eq? (car expr) (quote atom)) (truthy (macro-atom? (eval-macro-body (car (cdr expr)) env))))
       ((eq? (car expr) (quote eq))
        (truthy (equal? (eval-macro-body (car (cdr expr)) env)
                         (eval-macro-body (car (cdr (cdr expr))) env))))
@@ -95,7 +110,7 @@
 (def eval-macro-cond
   (lambda (branches env)
     (cond
-      ((atom? branches) ())
+      ((macro-atom? branches) ())
       (t (cond
            ((eval-macro-body (car (car branches)) env)
             (eval-macro-body (car (cdr (car branches))) env))
@@ -106,7 +121,7 @@
 (def defmacro-form?
   (lambda (expr)
     (cond
-      ((atom? expr) ())
+      ((macro-atom? expr) ())
       ((eq? (car expr) (quote defmacro)) t)
       (t ()))))
 
@@ -117,14 +132,14 @@
 (def expand
   (lambda (expr table)
     (cond
-      ((atom? expr) expr)
+      ((macro-atom? expr) expr)
       ((eq? (car expr) (quote quote)) expr)
       (t (expand-call expr table)))))
 
 (def expand-call
   (lambda (expr table)
     (cond
-      ((atom? (car expr)) (expand-with-macro-check expr table))
+      ((macro-atom? (car expr)) (expand-with-macro-check expr table))
       (t (expand-list expr table)))))
 
 (def expand-with-macro-check
@@ -148,7 +163,7 @@
 (def expand-list
   (lambda (expr table)
     (cond
-      ((atom? expr) expr)
+      ((macro-atom? expr) expr)
       (t (cons (expand (car expr) table) (expand-list (cdr expr) table))))))
 
 ; --- process: one sequential staging walk, matching the live Rust
@@ -166,7 +181,7 @@
 (def expand-program-with
   (lambda (exprs table)
     (cond
-      ((atom? exprs) ())
+      ((macro-atom? exprs) ())
       ((defmacro-form? (car exprs))
        (expand-program-with
          (cdr exprs)
