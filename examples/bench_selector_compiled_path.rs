@@ -3,6 +3,7 @@ use cml::ir::{Ir, Quoted};
 use cml::witness_bridge::execute_x86_actual;
 use cml::x86_freestanding::X86FreestandingBackend;
 use std::hint::black_box;
+use std::path::Path;
 
 #[derive(Clone, Copy, Debug)]
 enum Step {
@@ -139,6 +140,42 @@ fn inspect(depth: usize, index: usize) -> Result<(), String> {
     Ok(())
 }
 
+fn compile_program(depth: usize, index: usize, count: usize, full: bool) -> Result<String, String> {
+    let selector = selector_word(depth, index);
+    let steps = decode(&selector)?;
+    let expr = if full {
+        direct_ir(&steps)
+    } else {
+        Ir::Quote(selected_input(&steps))
+    };
+    let program = vec![expr; count];
+    X86FreestandingBackend::new()
+        .compile_program(&program)
+        .map_err(|e| e.to_string())
+}
+
+fn emit_program(
+    depth: usize,
+    index: usize,
+    count: usize,
+    full: bool,
+    output: &str,
+) -> Result<(), String> {
+    let assembly = compile_program(depth, index, count, full)?;
+    std::fs::write(output, assembly).map_err(|e| e.to_string())
+}
+
+fn link_program(
+    depth: usize,
+    index: usize,
+    count: usize,
+    full: bool,
+    output: &str,
+) -> Result<(), String> {
+    let assembly = compile_program(depth, index, count, full)?;
+    cml::x86_elf::link_x86_elf(&assembly, Path::new(output))
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let result = match args.get(1).map(String::as_str) {
@@ -153,8 +190,21 @@ fn main() {
             args.get(3).and_then(|s| s.parse().ok()).unwrap_or(100),
             args.get(4).map(String::as_str).unwrap_or("repeated"),
         ),
+        Some("emit") | Some("link") => {
+            let action = args[1].as_str();
+            let depth = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(4);
+            let index = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let count = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(1);
+            let full = args.get(5).map(String::as_str).unwrap_or("full") == "full";
+            let output = args.get(6).ok_or_else(|| "missing output path".to_string());
+            match output {
+                Ok(output) if action == "emit" => emit_program(depth, index, count, full, output),
+                Ok(output) => link_program(depth, index, count, full, output),
+                Err(error) => Err(error),
+            }
+        }
         _ => Err(
-            "usage: bench_selector_compiled_path verify DEPTH | inspect DEPTH INDEX | generate|decode|compile DEPTH COUNT repeated|random".into(),
+            "usage: ... verify DEPTH | inspect DEPTH INDEX | generate|decode|compile DEPTH COUNT repeated|random | emit|link DEPTH INDEX COUNT full|baseline OUTPUT".into(),
         ),
     };
     if let Err(error) = result {
