@@ -133,8 +133,12 @@
   (lambda (expr table)
     (cond
       ((macro-atom? expr) expr)
-      ((eq? (car expr) (quote quote)) expr)
-      (t (expand-call expr table)))))
+      ((macro-atom? (car expr))
+       (cond
+         ((macro-empty? (car expr)) (expand-list expr table))
+         ((eq? (car expr) (quote quote)) expr)
+         (t (expand-call expr table))))
+      (t (expand-list expr table)))))
 
 (def expand-call
   (lambda (expr table)
