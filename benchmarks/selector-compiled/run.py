@@ -81,9 +81,11 @@ def compile_object(binary, depth, strategy, td):
     return text_size(obj), inst_count(obj)
 
 
-def link_native(binary, depth, strategy, td, env):
+def link_native(binary, depth, strategy, count, td, env):
     out = td / f"d{depth}-{strategy}"
-    sh([str(binary), "link", str(depth), "3", "1", strategy, str(out)], env=env)
+    sh([
+        str(binary), "link", str(depth), "3", str(count), strategy, str(out)
+    ], env=env)
     return out
 
 
@@ -108,6 +110,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--samples", type=int, default=3)
     ap.add_argument("--phase-count", type=int, default=1000)
+    ap.add_argument("--native-count", type=int, default=32)
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
 
@@ -138,7 +141,9 @@ def main():
             native = {}
             for strategy in ("baseline", "nested", "linear"):
                 structural[strategy] = compile_object(binary, depth, strategy, td)
-                exe = link_native(binary, depth, strategy, td, env)
+                exe = link_native(
+                    binary, depth, strategy, args.native_count, td, env
+                )
                 native[strategy] = median_irefs([exe], samples)
 
             for pattern in ("repeated", "random"):
@@ -182,12 +187,13 @@ def main():
                             (common["decode"] - common["generate"]) / phase_count,
                         "lower_emit_delta_per_path":
                             (compile_irefs - common["decode"]) / phase_count,
-                        "native_batch": 1,
+                        "native_batch": args.native_count,
                         "native_baseline_i_refs": baseline_i,
                         "native_full_i_refs": full_i,
                         "native_delta_i_refs": delta_i,
-                        "native_i_refs_per_eval": delta_i,
-                        "native_i_refs_per_step": delta_i / steps,
+                        "native_i_refs_per_eval": delta_i / args.native_count,
+                        "native_i_refs_per_step":
+                            delta_i / args.native_count / steps,
                         "baseline_machine_insts": base_inst,
                         "full_machine_insts": full_inst,
                         "machine_inst_delta": full_inst - base_inst,
@@ -230,7 +236,7 @@ def main():
         ),
         "samples": samples,
         "phase_count": phase_count,
-        "native_batch": 1,
+        "native_batch": args.native_count,
     }
     (out / "environment.json").write_text(
         json.dumps(environment, ensure_ascii=False, indent=2) + "\n",
