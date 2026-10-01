@@ -101,7 +101,6 @@ fn assert_differential(session: &mut Session, name: &str, source: &str, expected
     );
 }
 
-
 #[test]
 fn lisp_macro_reference_uses_registry_admitted_predicate_surfaces() {
     let operations = include_str!("../contracts/cml-operations.lisp");
