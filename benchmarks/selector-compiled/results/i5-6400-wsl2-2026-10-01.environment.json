@@ -1,0 +1,19 @@
+{
+  "cml_git_sha": "151fd304fc734eae58d52f80e27a0b2943585643",
+  "sens_gitlink": "160000 commit a69f4dd1246f668a4bfefa3bf11863a1def24af3\texternal/sens",
+  "example_sha256": "0d107b01a17df5abf39a2fbe1fa315cee0ed7c898d0b99ed3d316d708279449e",
+  "nucleus_sha256": "1e2db6d51640b9b35ef21b96f955aa4f103e32517d0f7b3865280e756f5759d7",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "valgrind": "valgrind-3.27.0",
+  "cc": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "python": "3.12.12",
+  "kernel": "6.18.33.2-microsoft-standard-WSL2",
+  "cpu": "Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz",
+  "samples": 3,
+  "phase_count": 1000,
+  "native_count": 32,
+  "benchmark_source_head": "9c392c3a4d8b0e60cdda140c70b76c05258b56d4",
+  "cml_base_sha": "151fd304fc734eae58d52f80e27a0b2943585643",
+  "sens_gitlink_sha": "a69f4dd1246f668a4bfefa3bf11863a1def24af3",
+  "nucleus_repo_sha": "22a626f5c3cb4dbcbf6e4903278b384744a45a0b"
+}
