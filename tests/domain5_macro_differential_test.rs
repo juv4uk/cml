@@ -128,6 +128,11 @@ fn d5_one_transformer_contract_matches_rust_and_lisp_macro_authorities() {
             "(defmacro my-if (test then else) (cons (quote cond) (cons (cons test (cons then (quote ()))) (cons (cons (quote t) (cons else (quote ()))) (quote ()))))) (my-if (eq 1 1) 42 0)",
             "((cond ((eq 1 1) 42) (t 0)))",
         ),
+        (
+            "forward-definition-not-retroactive",
+            "(later 1) (defmacro later (x) x)",
+            "((later 1))",
+        ),
     ];
 
     for (name, source, expected) in corpus {
