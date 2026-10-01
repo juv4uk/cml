@@ -85,23 +85,30 @@ fn verify(depth: usize) -> Result<(), String> {
     for index in 0..4usize {
         let selector = selector_word(depth, index);
         let steps = decode(&selector)?;
-        let assembly = X86FreestandingBackend::new()
+        let nested = X86FreestandingBackend::new()
             .compile_program(&[direct_ir(&steps)])
             .map_err(|e| e.to_string())?;
-        let actual = execute_x86_actual(&assembly).map_err(|e| e.to_string())?;
-        if actual != "(value \"42\")" {
-            return Err(format!("{selector}: expected 42, got {actual}"));
-        }
-        let calls =
-            assembly.matches("call wsm_car").count() + assembly.matches("call wsm_cdr").count();
-        if calls != steps.len() {
-            return Err(format!(
-                "{selector}: expected {} selector calls, got {calls}",
-                steps.len()
-            ));
+        let linear = compile_linear_program(depth, index, 1)?;
+
+        for (strategy, assembly) in [("nested", nested), ("linear", linear)] {
+            let actual = execute_x86_actual(&assembly).map_err(|e| e.to_string())?;
+            if actual != "(value \"42\")" {
+                return Err(format!(
+                    "{selector}/{strategy}: expected 42, got {actual}"
+                ));
+            }
+            let calls =
+                assembly.matches("call wsm_car").count()
+                    + assembly.matches("call wsm_cdr").count();
+            if calls != steps.len() {
+                return Err(format!(
+                    "{selector}/{strategy}: expected {} selector calls, got {calls}",
+                    steps.len()
+                ));
+            }
         }
     }
-    println!("VERIFY\tPASS\tdepth={depth}");
+    println!("VERIFY\tPASS\tdepth={depth}\tstrategies=nested,linear");
     Ok(())
 }
 
