@@ -24,6 +24,28 @@
 - native differential: однаковий pair-tree baseline проти baseline + direct selector chain;
 - object `.text` bytes та machine instruction count.
 
+### Перший виміряний результат
+
+Owner hardware: i5-6400 / WSL2, Valgrind 3.27.0, 3 samples, native batch 32.
+
+Repeated-path representative rows:
+
+| depth | steps | nested native I/eval | linear native I/eval | nested inst/step | linear inst/step | nested bytes/step | linear bytes/step |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 1 | 8.344 | 7.344 | 4.0 | 3.0 | 18.0 | 11.0 |
+| 4 | 5 | 44.344 | 39.344 | 4.0 | 3.0 | 19.2 | 11.0 |
+| 16 | 17 | 152.344 | 135.344 | 6.0 | 3.0 | 24.0 | 11.0 |
+
+Bounded result:
+
+- both candidates have execution parity and zero runtime semantic-path operations;
+- linear recipe removes **exactly 1 native I-ref per selector step** versus nested IR in these batched rows;
+- linear static wrapper stays exactly **3 machine instructions + 11 .text bytes per step** at depth 0/4/16;
+- generic nested lowering accumulates extra stack-slot machinery and grows worse at depth 16;
+- compile-time lower+emit cost is not universally lower: linear has a fixed patch/recipe overhead at depth 0, but is materially cheaper by depth 4 and 16 in this harness.
+
+This is mechanism evidence, not a semantic change and not a production cutover.
+
 ### Виявлений зайвий механізм
 
 Generic nested-call lowering зараз матеріалізує кожне проміжне selector-value у stack slot:
