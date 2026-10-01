@@ -277,7 +277,7 @@ def main() -> None:
                         "cache_misses": 0,
                         "allocations": 0,
                         "allocated_bytes": 0,
-                        "object_bytes": "",
+                        "object_bytes": d if mode == "loop" else 0,
                         "wire_bits": "",
                         "compiler_phase": "",
                         "machine_insts": "",
@@ -306,9 +306,16 @@ def main() -> None:
                     "median_total_i_refs": int(full),
                     "median_base_i_refs": int(base),
                     "net_i_refs_per_call": f"{net:.3f}",
-                    "code_bytes": sizes.get(f"unrolled_{d}", "") if candidate == "unrolled" else sizes.get("loop_select", ""),
-                    "runtime_tree_steps": 0 if candidate == "unrolled" else d,
-                    "runtime_path_decode": 0 if candidate == "unrolled" else d,
+                    "code_bytes": sizes.get(f"unrolled_{d}", 0) if candidate == "unrolled" else sizes.get("loop_select", 0),
+                    "path_data_bytes": 0 if candidate == "unrolled" else d,
+                    "packed_path_lower_bound_bytes": 0 if candidate == "unrolled" else (d + 7) // 8,
+                    "static_footprint_bytes": (
+                        sizes.get(f"unrolled_{d}", 0)
+                        if candidate == "unrolled"
+                        else sizes.get("loop_select", 0) + d
+                    ),
+                    "primitive_steps": d,
+                    "runtime_path_decode_ops": 0 if candidate == "unrolled" else d,
                 })
 
         raw_fields = list(raw_rows[0].keys())
@@ -323,11 +330,12 @@ def main() -> None:
             writer.writeheader()
             writer.writerows(summary_rows)
 
-        print("depth\tcandidate\tnet_Irefs/call\tcode_bytes\truntime_path_ops")
+        print("depth\tcandidate\tnet_Irefs/call\tcode_bytes\tstatic_bytes\tprimitive_steps\truntime_path_decode")
         for row in summary_rows:
             print(
                 f"{row['depth']}\t{row['candidate']}\t{row['net_i_refs_per_call']}\t"
-                f"{row['code_bytes']}\t{row['runtime_path_decode']}"
+                f"{row['code_bytes']}\t{row['static_footprint_bytes']}\t"
+                f"{row['primitive_steps']}\t{row['runtime_path_decode_ops']}"
             )
 
 
