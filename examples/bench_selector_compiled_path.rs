@@ -140,7 +140,12 @@ fn inspect(depth: usize, index: usize) -> Result<(), String> {
     Ok(())
 }
 
-fn compile_program(depth: usize, index: usize, count: usize, full: bool) -> Result<String, String> {
+fn compile_nested_program(
+    depth: usize,
+    index: usize,
+    count: usize,
+    full: bool,
+) -> Result<String, String> {
     let selector = selector_word(depth, index);
     let steps = decode(&selector)?;
     let expr = if full {
@@ -154,14 +159,52 @@ fn compile_program(depth: usize, index: usize, count: usize, full: bool) -> Resu
         .map_err(|e| e.to_string())
 }
 
+fn compile_linear_program(depth: usize, index: usize, count: usize) -> Result<String, String> {
+    if count != 1 {
+        return Err("linear benchmark recipe currently requires count=1".into());
+    }
+    let selector = selector_word(depth, index);
+    let steps = decode(&selector)?;
+    let mut assembly = compile_nested_program(depth, index, 1, false)?;
+    let anchor = assembly
+        .rfind("\n    addq $")
+        .ok_or_else(|| "x86 epilogue anchor not found".to_string())?;
+
+    let mut recipe = String::new();
+    for step in steps.iter().rev() {
+        recipe.push_str("    movq %r12, %rdi\n");
+        recipe.push_str("    movq %rax, %rsi\n");
+        recipe.push_str(match step {
+            Step::Car => "    call wsm_car\n",
+            Step::Cdr => "    call wsm_cdr\n",
+        });
+    }
+    assembly.insert_str(anchor + 1, &recipe);
+    Ok(assembly)
+}
+
+fn compile_strategy(
+    depth: usize,
+    index: usize,
+    count: usize,
+    strategy: &str,
+) -> Result<String, String> {
+    match strategy {
+        "baseline" => compile_nested_program(depth, index, count, false),
+        "nested" | "full" => compile_nested_program(depth, index, count, true),
+        "linear" => compile_linear_program(depth, index, count),
+        other => Err(format!("unknown compile strategy {other}")),
+    }
+}
+
 fn emit_program(
     depth: usize,
     index: usize,
     count: usize,
-    full: bool,
+    strategy: &str,
     output: &str,
 ) -> Result<(), String> {
-    let assembly = compile_program(depth, index, count, full)?;
+    let assembly = compile_strategy(depth, index, count, strategy)?;
     std::fs::write(output, assembly).map_err(|e| e.to_string())
 }
 
@@ -169,10 +212,10 @@ fn link_program(
     depth: usize,
     index: usize,
     count: usize,
-    full: bool,
+    strategy: &str,
     output: &str,
 ) -> Result<(), String> {
-    let assembly = compile_program(depth, index, count, full)?;
+    let assembly = compile_strategy(depth, index, count, strategy)?;
     cml::x86_elf::link_x86_elf(&assembly, Path::new(output))
 }
 
@@ -195,16 +238,18 @@ fn main() {
             let depth = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(4);
             let index = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
             let count = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(1);
-            let full = args.get(5).map(String::as_str).unwrap_or("full") == "full";
+            let strategy = args.get(5).map(String::as_str).unwrap_or("nested");
             let output = args.get(6).ok_or_else(|| "missing output path".to_string());
             match output {
-                Ok(output) if action == "emit" => emit_program(depth, index, count, full, output),
-                Ok(output) => link_program(depth, index, count, full, output),
+                Ok(output) if action == "emit" => {
+                    emit_program(depth, index, count, strategy, output)
+                }
+                Ok(output) => link_program(depth, index, count, strategy, output),
                 Err(error) => Err(error),
             }
         }
         _ => Err(
-            "usage: ... verify DEPTH | inspect DEPTH INDEX | generate|decode|compile DEPTH COUNT repeated|random | emit|link DEPTH INDEX COUNT full|baseline OUTPUT".into(),
+            "usage: ... verify DEPTH | inspect DEPTH INDEX | generate|decode|compile DEPTH COUNT repeated|random | emit|link DEPTH INDEX COUNT baseline|nested|linear OUTPUT".into(),
         ),
     };
     if let Err(error) = result {
