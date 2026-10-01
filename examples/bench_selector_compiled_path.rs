@@ -119,7 +119,11 @@ fn measure(phase: &str, depth: usize, count: usize, pattern: &str) -> Result<(),
         if phase == "decode" {
             continue;
         }
-        let assembly = compile_one(&selector)?;
+        let assembly = if phase == "compile-linear" {
+            compile_linear_program(depth, index, 1)?
+        } else {
+            compile_one(&selector)?
+        };
         checksum = checksum.wrapping_mul(16_777_619).wrapping_add(assembly.len());
     }
     black_box(checksum);
@@ -227,7 +231,7 @@ fn main() {
             args.get(2).and_then(|s| s.parse().ok()).unwrap_or(4),
             args.get(3).and_then(|s| s.parse().ok()).unwrap_or(0),
         ),
-        Some(phase @ ("generate" | "decode" | "compile")) => measure(
+        Some(phase @ ("generate" | "decode" | "compile" | "compile-linear")) => measure(
             phase,
             args.get(2).and_then(|s| s.parse().ok()).unwrap_or(4),
             args.get(3).and_then(|s| s.parse().ok()).unwrap_or(100),
@@ -249,7 +253,7 @@ fn main() {
             }
         }
         _ => Err(
-            "usage: ... verify DEPTH | inspect DEPTH INDEX | generate|decode|compile DEPTH COUNT repeated|random | emit|link DEPTH INDEX COUNT baseline|nested|linear OUTPUT".into(),
+            "usage: ... verify DEPTH | inspect DEPTH INDEX | generate|decode|compile|compile-linear DEPTH COUNT repeated|random | emit|link DEPTH INDEX COUNT baseline|nested|linear OUTPUT".into(),
         ),
     };
     if let Err(error) = result {
