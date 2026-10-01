@@ -8,7 +8,7 @@
 use cml::ast::{Expr, NumericBufferLiteral};
 use cml::macros::MacroExpander;
 use cml::parser;
-use sens::{eval_program, load_core_library, Session};
+use sens::{Session, eval_program, load_core_library};
 
 fn render_expr(expr: &Expr) -> String {
     match expr {
@@ -28,7 +28,11 @@ fn render_expr(expr: &Expr) -> String {
             format!("({})", rendered.join(" "))
         }
         Expr::NumericBuffer(NumericBufferLiteral::I32(values)) => {
-            let inner = values.iter().map(ToString::to_string).collect::<Vec<_>>().join(" ");
+            let inner = values
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(" ");
             format!("#i32({inner})")
         }
         Expr::NumericBuffer(NumericBufferLiteral::F32(bits)) => {
