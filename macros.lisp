@@ -33,13 +33,28 @@
 ; Not exhaustively tested -- same maturity level as fpga-lisp's
 ; assembler.my, a proven-real artifact, not a guarantee of full parity.
 
+; --- explicit bridge from current SENS predicate domains to the CML
+; macro meta-language. CML's historical `atom` means "not a pair", including
+; structural (), while current SENS keeps structural empty distinct from the
+; atom/pair predicate. Keep that distinction explicit instead of coercing ().
+(def macro-empty?
+  (lambda (value)
+    (equal? value (quote ()))))
+
+(def macro-atom?
+  (lambda (value)
+    (cond
+      ((macro-empty? value) t)
+      ((atom? value) t)
+      (t ()))))
+
 ; --- alist lookup, shared shape for both the macro table and bindings ---
 
 (def alist-get
   (lambda (alist key)
     (cond
-      ((atom alist) ())
-      ((eq (car (car alist)) key) (cdr (car alist)))
+      ((macro-atom? alist) ())
+      ((eq? (car (car alist)) key) (cdr (car alist)))
       (t (alist-get (cdr alist) key)))))
 
 ; --- bind-params: params is a bare symbol, a proper list, or a dotted
@@ -51,11 +66,11 @@
 (def bind-params
   (lambda (params args)
     (cond
-      ((atom params)
+      ((macro-atom? params)
        (cond
-         ((eq params ()) ())
+         ((macro-empty? params) ())
          (t (cons (cons params args) ()))))
-      ((atom args) ())
+      ((macro-atom? args) ())
       (t (cons (cons (car params) (car args))
                (bind-params (cdr params) (cdr args)))))))
 
@@ -66,28 +81,28 @@
 (def eval-macro-body
   (lambda (expr env)
     (cond
-      ((atom expr)
+      ((macro-atom? expr)
        (cond
-         ((eq expr ()) ())
-         ((eq expr (quote nil)) ())
-         ((eq expr (quote t)) (quote t))
+         ((macro-empty? expr) ())
+         ((eq? expr (quote nil)) ())
+         ((eq? expr (quote t)) (quote t))
          (t (alist-get env expr))))
       (t (eval-macro-form expr env)))))
 
 (def eval-macro-form
   (lambda (expr env)
     (cond
-      ((eq (car expr) (quote quote)) (car (cdr expr)))
-      ((eq (car expr) (quote cons))
+      ((eq? (car expr) (quote quote)) (car (cdr expr)))
+      ((eq? (car expr) (quote cons))
        (cons (eval-macro-body (car (cdr expr)) env)
              (eval-macro-body (car (cdr (cdr expr))) env)))
-      ((eq (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) env)))
-      ((eq (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) env)))
-      ((eq (car expr) (quote atom)) (truthy (atom (eval-macro-body (car (cdr expr)) env))))
-      ((eq (car expr) (quote eq))
+      ((eq? (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) env)))
+      ((eq? (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) env)))
+      ((eq? (car expr) (quote atom)) (truthy (macro-atom? (eval-macro-body (car (cdr expr)) env))))
+      ((eq? (car expr) (quote eq))
        (truthy (equal? (eval-macro-body (car (cdr expr)) env)
                         (eval-macro-body (car (cdr (cdr expr))) env))))
-      ((eq (car expr) (quote cond)) (eval-macro-cond (cdr expr) env))
+      ((eq? (car expr) (quote cond)) (eval-macro-cond (cdr expr) env))
       (t ()))))
 
 (def truthy (lambda (v) (cond (v (quote t)) (t ()))))
@@ -95,7 +110,7 @@
 (def eval-macro-cond
   (lambda (branches env)
     (cond
-      ((atom branches) ())
+      ((macro-atom? branches) ())
       (t (cond
            ((eval-macro-body (car (car branches)) env)
             (eval-macro-body (car (cdr (car branches))) env))
@@ -106,8 +121,8 @@
 (def defmacro-form?
   (lambda (expr)
     (cond
-      ((atom expr) ())
-      ((eq (car expr) (quote defmacro)) t)
+      ((macro-atom? expr) ())
+      ((eq? (car expr) (quote defmacro)) t)
       (t ()))))
 
 (def defmacro-name (lambda (expr) (car (cdr expr))))
@@ -117,14 +132,18 @@
 (def expand
   (lambda (expr table)
     (cond
-      ((atom expr) expr)
-      ((eq (car expr) (quote quote)) expr)
-      (t (expand-call expr table)))))
+      ((macro-atom? expr) expr)
+      ((macro-atom? (car expr))
+       (cond
+         ((macro-empty? (car expr)) (expand-list expr table))
+         ((eq? (car expr) (quote quote)) expr)
+         (t (expand-call expr table))))
+      (t (expand-list expr table)))))
 
 (def expand-call
   (lambda (expr table)
     (cond
-      ((atom (car expr)) (expand-with-macro-check expr table))
+      ((macro-atom? (car expr)) (expand-with-macro-check expr table))
       (t (expand-list expr table)))))
 
 (def expand-with-macro-check
@@ -148,31 +167,33 @@
 (def expand-list
   (lambda (expr table)
     (cond
-      ((atom expr) expr)
+      ((macro-atom? expr) expr)
       (t (cons (expand (car expr) table) (expand-list (cdr expr) table))))))
 
-; --- process: split a program into (macro-table . non-defmacro-exprs),
-; matching MacroExpander::process's two-pass shape (collect, then
-; expand each remaining top-level form against the now-complete table). ---
+; --- process: one sequential staging walk, matching the live Rust
+; MacroExpander::process exactly. A defmacro becomes visible only after its
+; top-level definition has been encountered; later definitions never rewrite
+; earlier source retroactively. Nested expansion of an already-visible macro
+; still recurses through `expand` above. ---
 
-(def collect-macros
-  (lambda (exprs table)
-    (cond
-      ((atom exprs) table)
-      ((defmacro-form? (car exprs))
-       (collect-macros (cdr exprs)
-                        (cons (cons (defmacro-name (car exprs))
-                                    (cons (defmacro-params (car exprs)) (defmacro-body (car exprs))))
-                              table)))
-      (t (collect-macros (cdr exprs) table)))))
+(def add-macro-definition
+  (lambda (expr table)
+    (cons (cons (defmacro-name expr)
+                (cons (defmacro-params expr) (defmacro-body expr)))
+          table)))
 
 (def expand-program-with
   (lambda (exprs table)
     (cond
-      ((atom exprs) ())
-      ((defmacro-form? (car exprs)) (expand-program-with (cdr exprs) table))
-      (t (cons (expand (car exprs) table) (expand-program-with (cdr exprs) table))))))
+      ((macro-atom? exprs) ())
+      ((defmacro-form? (car exprs))
+       (expand-program-with
+         (cdr exprs)
+         (add-macro-definition (car exprs) table)))
+      (t
+       (cons (expand (car exprs) table)
+             (expand-program-with (cdr exprs) table))))))
 
 (def expand-program
   (lambda (exprs)
-    (expand-program-with exprs (collect-macros exprs ()))))
+    (expand-program-with exprs ())))
