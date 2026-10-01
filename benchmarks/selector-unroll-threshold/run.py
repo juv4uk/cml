@@ -124,7 +124,7 @@ static Node *build_path(size_t depth, const uint8_t *path, Node *nodes, Node *po
 
 int main(int argc, char **argv) {{
     if (argc != 4) {{
-        fprintf(stderr, "usage: %s MODE DEPTH N\n", argv[0]);
+        fprintf(stderr, "usage: %s MODE DEPTH N\\n", argv[0]);
         return 2;
     }}
     const char *mode = argv[1];
@@ -141,7 +141,7 @@ int main(int argc, char **argv) {{
     Node *expected = &nodes[depth];
 
     if (unrolled(root) != expected || loop_select(root, path, depth) != expected) {{
-        fprintf(stderr, "selector parity failure at depth %zu\n", depth);
+        fprintf(stderr, "selector parity failure at depth %zu\\n", depth);
         return 4;
     }}
 
@@ -160,7 +160,7 @@ int main(int argc, char **argv) {{
         sink ^= (uintptr_t)out;
     }}
 
-    if (sink == 0x12345678u) printf("%zu\n", depth);
+    if (sink == 0x12345678u) printf("%zu\\n", depth);
     return 0;
 }}
 '''
