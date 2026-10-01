@@ -151,28 +151,30 @@
       ((atom expr) expr)
       (t (cons (expand (car expr) table) (expand-list (cdr expr) table))))))
 
-; --- process: split a program into (macro-table . non-defmacro-exprs),
-; matching MacroExpander::process's two-pass shape (collect, then
-; expand each remaining top-level form against the now-complete table). ---
+; --- process: one sequential staging walk, matching the live Rust
+; MacroExpander::process exactly. A defmacro becomes visible only after its
+; top-level definition has been encountered; later definitions never rewrite
+; earlier source retroactively. Nested expansion of an already-visible macro
+; still recurses through `expand` above. ---
 
-(def collect-macros
-  (lambda (exprs table)
-    (cond
-      ((atom exprs) table)
-      ((defmacro-form? (car exprs))
-       (collect-macros (cdr exprs)
-                        (cons (cons (defmacro-name (car exprs))
-                                    (cons (defmacro-params (car exprs)) (defmacro-body (car exprs))))
-                              table)))
-      (t (collect-macros (cdr exprs) table)))))
+(def add-macro-definition
+  (lambda (expr table)
+    (cons (cons (defmacro-name expr)
+                (cons (defmacro-params expr) (defmacro-body expr)))
+          table)))
 
 (def expand-program-with
   (lambda (exprs table)
     (cond
       ((atom exprs) ())
-      ((defmacro-form? (car exprs)) (expand-program-with (cdr exprs) table))
-      (t (cons (expand (car exprs) table) (expand-program-with (cdr exprs) table))))))
+      ((defmacro-form? (car exprs))
+       (expand-program-with
+         (cdr exprs)
+         (add-macro-definition (car exprs) table)))
+      (t
+       (cons (expand (car exprs) table)
+             (expand-program-with (cdr exprs) table))))))
 
 (def expand-program
   (lambda (exprs)
-    (expand-program-with exprs (collect-macros exprs ()))))
+    (expand-program-with exprs ())))
