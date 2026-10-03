@@ -1918,7 +1918,7 @@ impl Emitter {
         let result = (|| {
             let mut slots = Vec::with_capacity(args.len());
             for argument in args {
-                let direct_nested_wsm_cons = match argument {
+                let direct_nested_gc_proven_shape = match argument {
                     Ir::App { func, .. } => {
                         if let Ir::Sid(sid) = func.as_ref() {
                             matches!(sid8_call_contract(*sid), Some((Some(2), "wsm_cons")))
@@ -1930,11 +1930,12 @@ impl Emitter {
                                 )
                         }
                     }
+                    Ir::Quote(Quoted::List(_) | Quoted::DottedList(_, _)) => true,
                     _ => false,
                 };
 
                 let saved_complete = self.gc_structured_context_complete;
-                if saved_complete && !direct_nested_wsm_cons {
+                if saved_complete && !direct_nested_gc_proven_shape {
                     self.gc_structured_context_complete = false;
                 }
                 let emitted = self.emit_ir(argument);
@@ -2669,6 +2670,33 @@ impl Emitter {
     }
 
     fn emit_quoted(&mut self, quoted: &Quoted) -> Result<(), CompileError> {
+        // #422: quote-list collection is certified only when this emitter can
+        // explain every older live location in the current native frame.
+        // Top-level quote has no older frame roots. A quote used as one of the
+        // already-proved #417 structured arguments inherits those exact roots.
+        let certificate_complete =
+            self.gc_structured_context_complete || (self.gc_emit_depth == 1 && self.env.is_empty());
+        let outer_roots = if self.gc_structured_context_complete {
+            self.gc_structured_live_slots.clone()
+        } else {
+            Vec::new()
+        };
+        let mut quote_tail_slots = Vec::new();
+        self.emit_quoted_with_gc(
+            quoted,
+            certificate_complete,
+            &outer_roots,
+            &mut quote_tail_slots,
+        )
+    }
+
+    fn emit_quoted_with_gc(
+        &mut self,
+        quoted: &Quoted,
+        certificate_complete: bool,
+        outer_roots: &[usize],
+        quote_tail_slots: &mut Vec<usize>,
+    ) -> Result<(), CompileError> {
         match quoted {
             Quoted::Int(value) => {
                 let word = wsm_os_target::encode_fixnum(*value)
@@ -2687,23 +2715,90 @@ impl Emitter {
                 for value in values.iter().rev() {
                     let tail = self.allocate_slot();
                     self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(tail)));
-                    self.emit_quoted(value)?;
+                    quote_tail_slots.push(tail);
+
+                    self.emit_quoted_with_gc(
+                        value,
+                        certificate_complete,
+                        outer_roots,
+                        quote_tail_slots,
+                    )?;
+
                     self.line("    movq %r12, %rdi");
                     self.line("    movq %rax, %rsi");
-                    self.line(&format!("    movq {}(%rsp), %rdx", Self::slot_offset(tail)));
+                    self.line(&format!(
+                        "    movq {}(%rsp), %rdx",
+                        Self::slot_offset(tail)
+                    ));
+
+                    let gc_return_label = if certificate_complete {
+                        let mut live_stack_slots = outer_roots.to_vec();
+                        live_stack_slots.extend(quote_tail_slots.iter().copied());
+                        Some(self.emit_gc_root_certificate(
+                            "quote-bounded",
+                            "wsm_cons",
+                            &live_stack_slots,
+                            &["%rsi", "%rdx"],
+                        ))
+                    } else {
+                        None
+                    };
+
                     self.line("    call wsm_cons");
+                    if let Some(return_label) = gc_return_label {
+                        self.line(&format!("{return_label}:"));
+                    }
+
+                    let popped = quote_tail_slots.pop();
+                    debug_assert_eq!(popped, Some(tail));
                 }
             }
             Quoted::DottedList(values, tail_value) => {
-                self.emit_quoted(tail_value)?;
+                self.emit_quoted_with_gc(
+                    tail_value,
+                    certificate_complete,
+                    outer_roots,
+                    quote_tail_slots,
+                )?;
                 for value in values.iter().rev() {
                     let tail = self.allocate_slot();
                     self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(tail)));
-                    self.emit_quoted(value)?;
+                    quote_tail_slots.push(tail);
+
+                    self.emit_quoted_with_gc(
+                        value,
+                        certificate_complete,
+                        outer_roots,
+                        quote_tail_slots,
+                    )?;
+
                     self.line("    movq %r12, %rdi");
                     self.line("    movq %rax, %rsi");
-                    self.line(&format!("    movq {}(%rsp), %rdx", Self::slot_offset(tail)));
+                    self.line(&format!(
+                        "    movq {}(%rsp), %rdx",
+                        Self::slot_offset(tail)
+                    ));
+
+                    let gc_return_label = if certificate_complete {
+                        let mut live_stack_slots = outer_roots.to_vec();
+                        live_stack_slots.extend(quote_tail_slots.iter().copied());
+                        Some(self.emit_gc_root_certificate(
+                            "quote-bounded",
+                            "wsm_cons",
+                            &live_stack_slots,
+                            &["%rsi", "%rdx"],
+                        ))
+                    } else {
+                        None
+                    };
+
                     self.line("    call wsm_cons");
+                    if let Some(return_label) = gc_return_label {
+                        self.line(&format!("{return_label}:"));
+                    }
+
+                    let popped = quote_tail_slots.pop();
+                    debug_assert_eq!(popped, Some(tail));
                 }
             }
             _ => {
