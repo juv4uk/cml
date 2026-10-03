@@ -489,7 +489,6 @@ fn captured_closure_fails_closed_when_an_outer_structured_spill_is_live() {
     );
 }
 
-
 #[test]
 fn quoted_proper_list_emits_one_exact_rewriteable_tail_root_per_cons() {
     let expressions = parser::parse("(quote (A B C))").unwrap();
@@ -505,7 +504,10 @@ fn quoted_proper_list_emits_one_exact_rewriteable_tail_root_per_cons() {
 
     assert_eq!(quote.len(), 3);
     assert_eq!(
-        quote.iter().map(|cert| cert.stack_roots.len()).collect::<Vec<_>>(),
+        quote
+            .iter()
+            .map(|cert| cert.stack_roots.len())
+            .collect::<Vec<_>>(),
         vec![1, 1, 1]
     );
     for cert in &quote {
@@ -538,7 +540,10 @@ fn nested_quoted_list_carries_outer_tail_through_inner_allocations() {
 
     assert_eq!(quote.len(), 5);
     assert_eq!(
-        quote.iter().map(|cert| cert.stack_roots.len()).collect::<Vec<_>>(),
+        quote
+            .iter()
+            .map(|cert| cert.stack_roots.len())
+            .collect::<Vec<_>>(),
         vec![1, 2, 2, 1, 1]
     );
     let shared: BTreeSet<_> = quote[1]
@@ -564,7 +569,10 @@ fn quoted_list_in_structured_cons_preserves_the_older_outer_spill() {
         .collect();
     assert_eq!(quote.len(), 2);
     assert_eq!(
-        quote.iter().map(|cert| cert.stack_roots.len()).collect::<Vec<_>>(),
+        quote
+            .iter()
+            .map(|cert| cert.stack_roots.len())
+            .collect::<Vec<_>>(),
         vec![2, 2]
     );
     let shared: BTreeSet<_> = quote[0]
@@ -595,7 +603,10 @@ fn quoted_dotted_list_certifies_the_current_tail_location() {
         .collect();
     assert_eq!(quote.len(), 2);
     assert_eq!(
-        quote.iter().map(|cert| cert.stack_roots.len()).collect::<Vec<_>>(),
+        quote
+            .iter()
+            .map(|cert| cert.stack_roots.len())
+            .collect::<Vec<_>>(),
         vec![1, 1]
     );
     assert!(quote[0].stack_roots.is_disjoint(&quote[1].stack_roots));
