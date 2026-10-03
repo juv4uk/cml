@@ -5,8 +5,7 @@ use cml::x86_freestanding_metadata::parse_gc_root_map_manifest;
 
 #[test]
 fn certified_comments_project_to_deterministic_machine_readable_records() {
-    let expressions =
-        parser::parse("((lambda (a b . rest) rest) 10 20 30 40 50)").unwrap();
+    let expressions = parser::parse("((lambda (a b . rest) rest) 10 20 30 40 50)").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
 
     let compiled = X86FreestandingBackend::new()
@@ -23,10 +22,12 @@ fn certified_comments_project_to_deterministic_machine_readable_records() {
         assert_eq!(record.certificate_kind, "pack-rest-bounded");
         assert_eq!(record.register_roots, vec!["%rdx", "%rsi"]);
         assert!(!record.stack_offsets.is_empty());
-        assert!(record
-            .stack_offsets
-            .iter()
-            .all(|offset| offset % 8 == 0 && *offset < record.frame_bytes));
+        assert!(
+            record
+                .stack_offsets
+                .iter()
+                .all(|offset| offset % 8 == 0 && *offset < record.frame_bytes)
+        );
 
         let comment = format!(
             "# GC_SAFEPOINT id={} kind={} allocator={} frame={} return_label={}",
@@ -38,10 +39,7 @@ fn certified_comments_project_to_deterministic_machine_readable_records() {
         );
         assert!(compiled.assembly.contains(&comment));
 
-        let call_and_label = format!(
-            "    call {}\n{}:",
-            record.allocator, record.return_label
-        );
+        let call_and_label = format!("    call {}\n{}:", record.allocator, record.return_label);
         assert!(
             compiled.assembly.contains(&call_and_label),
             "return label must denote the PC immediately after the certified allocation"
