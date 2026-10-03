@@ -117,7 +117,9 @@ fn pack_rest_safepoints_emit_exact_shrinking_root_locations() {
     let fixed_offsets = &final_arg_offsets[..2];
     for fixed in fixed_offsets {
         assert!(
-            certificates.iter().all(|cert| cert.stack_roots.contains(fixed)),
+            certificates
+                .iter()
+                .all(|cert| cert.stack_roots.contains(fixed)),
             "fixed argument location {fixed} is live after every packing allocation"
         );
     }
