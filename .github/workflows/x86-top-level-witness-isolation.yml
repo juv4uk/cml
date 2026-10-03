@@ -1,0 +1,38 @@
+name: X86 top-level witness isolation
+
+on:
+  pull_request:
+    paths:
+      - "tests/x86_top_level_let_test.rs"
+      - ".github/workflows/x86-top-level-witness-isolation.yml"
+  workflow_dispatch:
+
+jobs:
+  x86-top-level-witness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CML with build-source submodule
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Checkout exact wsm-my-lisp runtime nucleus
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: a6bd9747196f2d676ab6883cbb4b84c7fcfc6947
+          path: wsm-my-lisp
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run top-level x86 witnesses
+        shell: bash
+        env:
+          WSM_NUCLEUS_ASM: ${{ github.workspace }}/wsm-my-lisp/asm/nucleus.s
+        run: |
+          set -euo pipefail
+          test "$(git -C wsm-my-lisp rev-parse HEAD)" = "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947"
+          cargo test --test x86_top_level_let_test -- --nocapture
