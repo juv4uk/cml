@@ -114,7 +114,6 @@ fn manifest_parser_fails_closed_on_corrupt_root_metadata() {
     assert!(parse_gc_root_map_manifest(&wrong_version).is_err());
 }
 
-
 #[test]
 fn quote_bounded_certificates_project_to_machine_readable_wire() {
     let expressions = parser::parse("(quote (A B C))").unwrap();
