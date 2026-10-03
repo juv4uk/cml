@@ -41,8 +41,8 @@ const OWNERS: &[AllocatorOwner] = &[
         name: "emit_fixed_arity_closure_value",
         direct_cons: 1,
         direct_closure_new: 1,
-        policy: Policy::UnknownNeedsRootProof,
-        note: "capture-list construction plus closure descriptor allocation",
+        policy: Policy::ConditionalCertified,
+        note: "closure-capture-cons + closure-new-bounded only when current-frame completeness is proved",
     },
     AllocatorOwner {
         name: "emit_quoted",
@@ -154,6 +154,13 @@ fn certified_owner_families_keep_their_fail_closed_certificate_guards() {
     assert!(pack_rest.contains("if let Some(preserved_slots)"));
     assert!(pack_rest.contains(r#""pack-rest-bounded""#));
     assert_eq!(count(pack_rest, "call wsm_cons"), 1);
+
+    let closure = owner_source(SOURCE, "emit_fixed_arity_closure_value");
+    assert!(closure.contains("certificate_frame_is_complete"));
+    assert!(closure.contains(r#""closure-capture-cons""#));
+    assert!(closure.contains(r#""closure-new-bounded""#));
+    assert_eq!(count(closure, "call wsm_cons"), 1);
+    assert_eq!(count(closure, "call wsm_closure_new"), 1);
 }
 
 #[test]
@@ -180,14 +187,14 @@ fn census_is_small_explicit_and_reviewable() {
             .iter()
             .filter(|owner| owner.policy == Policy::ConditionalCertified)
             .count(),
-        2
+        3
     );
     assert_eq!(
         OWNERS
             .iter()
             .filter(|owner| owner.policy == Policy::UnknownNeedsRootProof)
             .count(),
-        4
+        3
     );
 
     for owner in OWNERS {
