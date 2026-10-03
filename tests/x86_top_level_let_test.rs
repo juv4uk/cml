@@ -285,7 +285,6 @@ fn row13_corpus_fixture_exact_witness() {
     );
 }
 
-
 #[test]
 fn temp_witness_paths_are_unique_under_parallel_creation() {
     let handles = (0..64)
