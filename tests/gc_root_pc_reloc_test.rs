@@ -13,8 +13,6 @@ fn unique_base(stem: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("cml-{stem}-{}-{nonce}", std::process::id()))
 }
 
-
-
 fn link_must_fail(source: &str, stem: &str) {
     let base = unique_base(stem);
     let s_path = base.with_extension("s");
