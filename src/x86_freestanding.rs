@@ -1975,6 +1975,13 @@ impl Emitter {
         body: &Ir,
         args: &[Ir],
     ) -> Result<(), CompileError> {
+        // #415: the research certificate is complete only for the bounded
+        // case where this call owns every stack slot in the current frame.
+        // Any pre-existing slot or lexical binding may carry a live value
+        // across the nested allocations, and #413 does not own general
+        // expression liveness. Fail closed by emitting no certificate.
+        let certificate_frame_is_complete = self.next_slot == 0 && self.env.is_empty();
+
         let fixed_count = fixed.len();
         let fixed_args = &args[..fixed_count];
         let rest_args = &args[fixed_count..];
@@ -1996,8 +2003,10 @@ impl Emitter {
         }
 
         let preserved_fixed_slots = arg_slots.clone();
+        let certificate_preserved_slots =
+            certificate_frame_is_complete.then_some(preserved_fixed_slots.as_slice());
         let current_cdr_slot =
-            self.emit_pack_rest_list(&rest_slots, Some(&preserved_fixed_slots))?;
+            self.emit_pack_rest_list(&rest_slots, certificate_preserved_slots)?;
         arg_slots.push(current_cdr_slot);
 
         let mut effective_params = fixed.to_vec();
