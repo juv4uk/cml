@@ -1773,7 +1773,12 @@ impl Emitter {
                         let old_env = std::mem::replace(&mut self.env, param_env);
                         let old_next_slot = self.next_slot;
                         self.next_slot = param_names.len();
-                        self.emit_tail_body(body, label, param_names.len(), None)?;
+                        let old_frame_bytes = self.frame_bytes;
+                        self.frame_bytes = frame_bytes;
+                        let body_result =
+                            self.emit_tail_body(body, label, param_names.len(), None);
+                        self.frame_bytes = old_frame_bytes;
+                        body_result?;
                         self.env = old_env;
                         self.next_slot = old_next_slot;
                         self.line(&format!("    addq ${frame_bytes}, %rsp"));
@@ -1824,7 +1829,12 @@ impl Emitter {
                         let old_env = std::mem::replace(&mut self.env, param_env);
                         let old_next_slot = self.next_slot;
                         self.next_slot = all_params.len();
-                        self.emit_tail_body(body, label, all_params.len(), Some(fixed.len()))?;
+                        let old_frame_bytes = self.frame_bytes;
+                        self.frame_bytes = frame_bytes;
+                        let body_result =
+                            self.emit_tail_body(body, label, all_params.len(), Some(fixed.len()));
+                        self.frame_bytes = old_frame_bytes;
+                        body_result?;
                         self.env = old_env;
                         self.next_slot = old_next_slot;
                         self.line(&format!("    addq ${frame_bytes}, %rsp"));
@@ -1863,7 +1873,11 @@ impl Emitter {
                         let old_env = std::mem::replace(&mut self.env, param_env);
                         let old_next_slot = self.next_slot;
                         self.next_slot = 1;
-                        self.emit_tail_body(body, label, 1, Some(0))?;
+                        let old_frame_bytes = self.frame_bytes;
+                        self.frame_bytes = frame_bytes;
+                        let body_result = self.emit_tail_body(body, label, 1, Some(0));
+                        self.frame_bytes = old_frame_bytes;
+                        body_result?;
                         self.env = old_env;
                         self.next_slot = old_next_slot;
                         self.line(&format!("    addq ${frame_bytes}, %rsp"));
@@ -2160,7 +2174,11 @@ impl Emitter {
             self.env.insert(name.clone(), local_slot);
         }
 
-        self.emit_ir(body)?;
+        let old_frame_bytes = self.frame_bytes;
+        self.frame_bytes = frame_bytes;
+        let body_result = self.emit_ir(body);
+        self.frame_bytes = old_frame_bytes;
+        body_result?;
         self.env = saved_env;
         self.next_slot = saved_next_slot;
 
@@ -2190,8 +2208,22 @@ impl Emitter {
         let definition_id = self.allocate_label() + 1;
         self.closure_labels.insert(definition_id, parameters.len());
 
+        // #421: certify closure allocation only when this native frame has no
+        // unexplained spill locations. Captures clone the complete lexical
+        // environment; if those slots exactly cover 0..next_slot and no
+        // structured outer spill is pending, the closure construction owns the
+        // complete current-frame root set. More complex contexts fail closed.
+        let capture_slots: Vec<usize> = captures.values().copied().collect();
+        let mut sorted_capture_slots = capture_slots.clone();
+        sorted_capture_slots.sort_unstable();
+        sorted_capture_slots.dedup();
+        let expected_frame_slots: Vec<usize> = (0..self.next_slot).collect();
+        let certificate_frame_is_complete = self.gc_structured_live_slots.is_empty()
+            && sorted_capture_slots == expected_frame_slots;
+
         self.emit_immediate(wsm_os_target::NIL);
-        for (_, slot) in captures.iter().rev() {
+        for index in (0..capture_slots.len()).rev() {
+            let slot = capture_slots[index];
             let tail_slot = self.allocate_slot();
             self.line(&format!(
                 "    movq %rax, {}(%rsp)",
@@ -2200,17 +2232,31 @@ impl Emitter {
             self.line("    movq %r12, %rdi");
             self.line(&format!(
                 "    movq {}(%rsp), %rsi",
-                Self::slot_offset(*slot)
+                Self::slot_offset(slot)
             ));
             self.line(&format!(
                 "    movq {}(%rsp), %rdx",
                 Self::slot_offset(tail_slot)
             ));
+
+            if certificate_frame_is_complete {
+                let mut live_stack_slots = capture_slots[..=index].to_vec();
+                live_stack_slots.push(tail_slot);
+                self.emit_gc_root_certificate(
+                    "closure-capture-cons",
+                    &live_stack_slots,
+                    &["%rsi", "%rdx"],
+                );
+            }
+
             self.line("    call wsm_cons");
         }
         self.line("    movq %rax, %rdx");
         self.line("    movq %r12, %rdi");
         self.line(&format!("    movl ${definition_id}, %esi"));
+        if certificate_frame_is_complete {
+            self.emit_gc_root_certificate("closure-new-bounded", &[], &["%rdx"]);
+        }
         self.line("    call wsm_closure_new");
 
         let after_label = self.allocate_label();
@@ -2281,7 +2327,11 @@ impl Emitter {
             self.env.insert(name.clone(), local_slot);
         }
 
-        self.emit_ir(body)?;
+        let old_frame_bytes = self.frame_bytes;
+        self.frame_bytes = frame_bytes;
+        let body_result = self.emit_ir(body);
+        self.frame_bytes = old_frame_bytes;
+        body_result?;
         self.env = saved_env;
         self.next_slot = saved_next_slot;
         self.line(&format!("    addq ${frame_bytes}, %rsp"));
