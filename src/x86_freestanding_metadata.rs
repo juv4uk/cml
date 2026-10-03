@@ -421,6 +421,13 @@ pub fn parse_gc_root_map_manifest(
             stack_offsets,
             register_roots,
         };
+        if record.allocator.is_empty()
+            || record.certificate_kind.is_empty()
+            || record.allocator.chars().any(char::is_whitespace)
+            || record.certificate_kind.chars().any(char::is_whitespace)
+        {
+            return Err("empty or invalid GC root-map token");
+        }
         if records.iter().any(|existing: &X86GcRootMapMetadata| {
             existing.id == record.id || existing.return_label == record.return_label
         }) {
