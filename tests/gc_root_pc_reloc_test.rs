@@ -195,7 +195,6 @@ fn absent_root_certificate_emits_no_pc_binding_section() {
     );
 }
 
-
 #[test]
 fn tampered_compiler_root_identity_is_rejected_before_assembly() {
     let expressions = parser::parse("((lambda (a b . rest) rest) 10 20 30 40 50)").unwrap();
