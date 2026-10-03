@@ -2254,35 +2254,41 @@ impl Emitter {
                 Self::slot_offset(tail_slot)
             ));
 
-            if certificate_frame_is_complete {
+            let gc_return_label = if certificate_frame_is_complete {
                 let mut live_stack_slots = capture_slots[..=index].to_vec();
                 live_stack_slots.push(tail_slot);
-                let gc_return_label = self.emit_gc_root_certificate(
+                Some(self.emit_gc_root_certificate(
                     "closure-capture-cons",
                     "wsm_cons",
                     &live_stack_slots,
                     &["%rsi", "%rdx"],
-                );
-                self.line("    call wsm_cons");
-                self.line(&format!("{gc_return_label}:"));
+                ))
             } else {
-                self.line("    call wsm_cons");
+                None
+            };
+
+            self.line("    call wsm_cons");
+            if let Some(return_label) = gc_return_label {
+                self.line(&format!("{return_label}:"));
             }
         }
         self.line("    movq %rax, %rdx");
         self.line("    movq %r12, %rdi");
         self.line(&format!("    movl ${definition_id}, %esi"));
-        if certificate_frame_is_complete {
-            let gc_return_label = self.emit_gc_root_certificate(
+        let gc_return_label = if certificate_frame_is_complete {
+            Some(self.emit_gc_root_certificate(
                 "closure-new-bounded",
                 "wsm_closure_new",
                 &[],
                 &["%rdx"],
-            );
-            self.line("    call wsm_closure_new");
-            self.line(&format!("{gc_return_label}:"));
+            ))
         } else {
-            self.line("    call wsm_closure_new");
+            None
+        };
+
+        self.line("    call wsm_closure_new");
+        if let Some(return_label) = gc_return_label {
+            self.line(&format!("{return_label}:"));
         }
 
         let after_label = self.allocate_label();
