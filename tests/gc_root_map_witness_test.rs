@@ -337,7 +337,6 @@ fn complex_nested_form_fails_closed_instead_of_emitting_partial_structured_map()
     assert_eq!(certificates[0].stack_roots.len(), 2);
 }
 
-
 #[test]
 fn captured_closure_emits_shrinking_capture_roots_and_exact_environment_root() {
     let expressions = parser::parse(
@@ -425,12 +424,18 @@ fn captured_closure_emits_shrinking_capture_roots_and_exact_environment_root() {
     );
 
     let frames: BTreeSet<_> = closure.iter().map(|cert| cert.frame).collect();
-    assert_eq!(frames.len(), 1, "one closure construction lives in one native frame");
+    assert_eq!(
+        frames.len(),
+        1,
+        "one closure construction lives in one native frame"
+    );
     let certified_frame = closure[0].frame;
     assert_eq!(certified_frame % 8, 0);
     for cert in &closure[..2] {
         assert!(
-            cert.stack_roots.iter().all(|offset| *offset < certified_frame),
+            cert.stack_roots
+                .iter()
+                .all(|offset| *offset < certified_frame),
             "every capture root must lie inside the certified current frame"
         );
     }
