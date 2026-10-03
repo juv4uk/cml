@@ -97,7 +97,6 @@ impl X86CompiledProgram {
         true
     }
 
-
     /// Validate compiler-owned root-map records without making them semantic.
     pub fn validate_gc_root_maps(&self) -> bool {
         let mut ids = BTreeSet::new();
@@ -117,7 +116,11 @@ impl X86CompiledProgram {
             {
                 return false;
             }
-            if !record.stack_offsets.windows(2).all(|pair| pair[0] < pair[1]) {
+            if !record
+                .stack_offsets
+                .windows(2)
+                .all(|pair| pair[0] < pair[1])
+            {
                 return false;
             }
             if record
@@ -142,10 +145,7 @@ impl X86CompiledProgram {
                 return false;
             }
 
-            let call_and_label = format!(
-                "    call {}\n{}:",
-                record.allocator, record.return_label
-            );
+            let call_and_label = format!("    call {}\n{}:", record.allocator, record.return_label);
             if !self.assembly.contains(&call_and_label) {
                 return false;
             }
@@ -252,10 +252,9 @@ fn compiled_program_metadata(
         .collect::<Result<Vec<_>, CompileError>>()?;
 
     let operations = collect_program_operations(program);
-    let gc_root_maps = parse_gc_root_maps_from_assembly(&assembly)
-        .ok_or(CompileError::UnsupportedVariant(
-            "invalid compiler-owned GC root metadata",
-        ))?;
+    let gc_root_maps = parse_gc_root_maps_from_assembly(&assembly).ok_or(
+        CompileError::UnsupportedVariant("invalid compiler-owned GC root metadata"),
+    )?;
     let output = X86CompiledProgram {
         assembly,
         symbols,
@@ -272,7 +271,6 @@ fn compiled_program_metadata(
     }
     Ok(output)
 }
-
 
 fn metadata_field<'a>(parts: &'a [&'a str], key: &str) -> Option<&'a str> {
     parts
@@ -322,9 +320,10 @@ fn parse_gc_root_maps_from_assembly(assembly: &str) -> Option<Vec<X86GcRootMapMe
             let frame_bytes = metadata_field(&parts, "frame")?.parse().ok()?;
             let return_label = metadata_field(&parts, "return_label")?.to_string();
 
-            if records.iter().any(|record| {
-                record.id == id || record.return_label == return_label
-            }) {
+            if records
+                .iter()
+                .any(|record| record.id == id || record.return_label == return_label)
+            {
                 return None;
             }
 
@@ -403,14 +402,12 @@ pub fn parse_gc_root_map_manifest(
             .ok_or("missing frame size")?
             .parse()
             .map_err(|_| "invalid frame size")?;
-        let stack_offsets = parse_usize_list(
-            metadata_field(&parts, "stack").ok_or("missing stack roots")?,
-        )
-        .ok_or("invalid stack roots")?;
-        let register_roots = parse_string_list(
-            metadata_field(&parts, "regs").ok_or("missing register roots")?,
-        )
-        .ok_or("invalid register roots")?;
+        let stack_offsets =
+            parse_usize_list(metadata_field(&parts, "stack").ok_or("missing stack roots")?)
+                .ok_or("invalid stack roots")?;
+        let register_roots =
+            parse_string_list(metadata_field(&parts, "regs").ok_or("missing register roots")?)
+                .ok_or("invalid register roots")?;
 
         let record = X86GcRootMapMetadata {
             id,
