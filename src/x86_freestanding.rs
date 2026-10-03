@@ -1914,7 +1914,11 @@ impl Emitter {
         self.emit_direct_lambda_call_with_slots(params, body, &arg_slots)
     }
 
-    fn emit_pack_rest_list(&mut self, rest_slots: &[usize]) -> Result<usize, CompileError> {
+    fn emit_pack_rest_list(
+        &mut self,
+        rest_slots: &[usize],
+        certificate_preserved_slots: Option<&[usize]>,
+    ) -> Result<usize, CompileError> {
         let mut current_cdr_slot = self.allocate_slot();
         self.emit_immediate(wsm_os_target::NIL);
         self.line(&format!(
@@ -1938,9 +1942,16 @@ impl Emitter {
             // live in their stack slots. The current car/cdr operands are also
             // live in %rsi/%rdx and in their stack copies. After this call the
             // processed car slot is dead, so the next certificate shrinks.
-            let mut live_stack_slots = rest_slots[..=index].to_vec();
-            live_stack_slots.push(current_cdr_slot);
-            self.emit_gc_root_certificate("pack-rest", &live_stack_slots, &["%rsi", "%rdx"]);
+            if let Some(preserved_slots) = certificate_preserved_slots {
+                let mut live_stack_slots = preserved_slots.to_vec();
+                live_stack_slots.extend_from_slice(&rest_slots[..=index]);
+                live_stack_slots.push(current_cdr_slot);
+                self.emit_gc_root_certificate(
+                    "pack-rest-bounded",
+                    &live_stack_slots,
+                    &["%rsi", "%rdx"],
+                );
+            }
 
             self.line("    call wsm_cons");
             current_cdr_slot = self.allocate_slot();
@@ -1982,7 +1993,9 @@ impl Emitter {
             rest_slots.push(slot);
         }
 
-        let current_cdr_slot = self.emit_pack_rest_list(&rest_slots)?;
+        let preserved_fixed_slots = arg_slots.clone();
+        let current_cdr_slot =
+            self.emit_pack_rest_list(&rest_slots, Some(&preserved_fixed_slots))?;
         arg_slots.push(current_cdr_slot);
 
         let mut effective_params = fixed.to_vec();
@@ -2261,7 +2274,7 @@ impl Emitter {
                         rest_slots.push(slot);
                     }
 
-                    let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
+                    let rest_slot = self.emit_pack_rest_list(&rest_slots, None)?;
                     arg_slots.push(rest_slot);
 
                     self.line("    movq %r12, %rdi");
@@ -2285,7 +2298,7 @@ impl Emitter {
                         rest_slots.push(slot);
                     }
 
-                    let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
+                    let rest_slot = self.emit_pack_rest_list(&rest_slots, None)?;
 
                     self.line("    movq %r12, %rdi");
                     self.line(&format!(
@@ -3150,7 +3163,7 @@ impl Emitter {
                         rest_slots.push(slot);
                     }
 
-                    let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
+                    let rest_slot = self.emit_pack_rest_list(&rest_slots, None)?;
 
                     for (param_idx, &tmp) in fixed_slots.iter().enumerate() {
                         self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(tmp)));
