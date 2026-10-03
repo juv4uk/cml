@@ -1918,10 +1918,11 @@ impl Emitter {
         let result = (|| {
             let mut slots = Vec::with_capacity(args.len());
             for argument in args {
-                let direct_nested_wsm_cons = match argument {
+                let direct_nested_gc_certified = match argument {
                     Ir::App { func, .. } => {
                         if let Ir::Sid(sid) = func.as_ref() {
                             matches!(sid8_call_contract(*sid), Some((Some(2), "wsm_cons")))
+                                || *sid == sens::sid!(00100111)
                         } else {
                             matches!(platform_call_contract(func), Some((_, _, "wsm_cons")))
                                 && !matches!(
@@ -1934,7 +1935,7 @@ impl Emitter {
                 };
 
                 let saved_complete = self.gc_structured_context_complete;
-                if saved_complete && !direct_nested_wsm_cons {
+                if saved_complete && !direct_nested_gc_certified {
                     self.gc_structured_context_complete = false;
                 }
                 let emitted = self.emit_ir(argument);
@@ -2845,11 +2846,23 @@ impl Emitter {
     /// Builds the list right-to-left using wsm_cons.
     fn emit_primitive_list(&mut self, args: &[Ir]) -> Result<(), CompileError> {
         if args.is_empty() {
-            // (list) -> NIL
             self.emit_immediate(wsm_os_target::NIL);
             return Ok(());
         }
-        // Evaluate arguments left-to-right, store in slots
+
+        // #423: publish LIST roots only when every older same-frame live
+        // location is already known. A top-level empty frame owns its whole
+        // slice; a structured parent contributes its exact older live slots.
+        // Other contexts fail closed and emit no LIST certificate.
+        let certificate_outer_slots = if self.gc_structured_context_complete {
+            Some(self.gc_structured_live_slots.clone())
+        } else if self.next_slot == 0 && self.env.is_empty() {
+            Some(Vec::new())
+        } else {
+            None
+        };
+
+        // Evaluate arguments left-to-right, storing each result in a slot.
         let mut slots = Vec::new();
         for arg in args {
             self.emit_ir(arg)?;
@@ -2857,20 +2870,36 @@ impl Emitter {
             self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
             slots.push(slot);
         }
-        // Build list right-to-left using wsm_cons
-        // Start with NIL
+
+        // Build right-to-left. Pending/current source slots remain live;
+        // consumed sources do not. The newly constructed tail lives in %rdx.
         self.emit_immediate(wsm_os_target::NIL);
-        for slot in slots.iter().rev() {
-            // Preserve the current tail from %rax as the cdr argument before
-            // loading the next car. wsm_cons(ctx, car, cdr) returns the new
-            // pair in %rax, which becomes the tail for the next iteration.
+        for index in (0..slots.len()).rev() {
+            let slot = slots[index];
             self.line("    movq %rax, %rdx");
             self.line(&format!(
                 "    movq {}(%rsp), %rsi",
-                Self::slot_offset(*slot)
+                Self::slot_offset(slot)
             ));
             self.line("    movq %r12, %rdi");
+
+            let gc_return_label = if let Some(outer_slots) = &certificate_outer_slots {
+                let mut live_stack_slots = outer_slots.clone();
+                live_stack_slots.extend_from_slice(&slots[..=index]);
+                Some(self.emit_gc_root_certificate(
+                    "list-bounded",
+                    "wsm_cons",
+                    &live_stack_slots,
+                    &["%rsi", "%rdx"],
+                ))
+            } else {
+                None
+            };
+
             self.line("    call wsm_cons");
+            if let Some(return_label) = gc_return_label {
+                self.line(&format!("{return_label}:"));
+            }
         }
         Ok(())
     }
