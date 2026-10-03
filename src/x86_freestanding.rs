@@ -285,6 +285,8 @@ impl X86FreestandingBackend {
             env: BTreeMap::new(),
             next_slot: 0,
             next_label: 0,
+            frame_bytes,
+            next_gc_safepoint: 0,
             closure_labels: BTreeMap::new(),
             named_closure_definitions: BTreeMap::new(),
             functions: BTreeMap::new(),
@@ -490,6 +492,8 @@ impl X86FreestandingBackend {
             // Body gets slots starting after the param slots.
             next_slot: param_count,
             next_label: 0,
+            frame_bytes,
+            next_gc_safepoint: 0,
             closure_labels: BTreeMap::new(),
             named_closure_definitions: BTreeMap::new(),
             functions: BTreeMap::new(),
@@ -1500,6 +1504,10 @@ struct Emitter {
     env: BTreeMap<String, usize>,
     next_slot: usize,
     next_label: usize,
+    // Research-only GC root certificate metadata. These fields affect emitted
+    // comments only; they are not a runtime ABI or language semantics.
+    frame_bytes: usize,
+    next_gc_safepoint: usize,
     // definition_id -> fixed arity. Runtime closure objects stay unchanged
     // (definition_id + environment); arity is compiler-owned dispatch metadata
     // used to make dynamic calls fail closed on a mismatched call shape.
@@ -1534,6 +1542,37 @@ impl Emitter {
 
     fn slot_offset(slot: usize) -> usize {
         slot * 8
+    }
+
+    /// cml#413: emit a research-only precise-root certificate as assembler
+    /// comments. The certificate names rewriteable native locations; it does
+    /// not alter machine code, runtime ABI, or SENS semantics.
+    fn emit_gc_root_certificate(
+        &mut self,
+        kind: &str,
+        stack_slots: &[usize],
+        register_roots: &[&str],
+    ) {
+        let id = self.next_gc_safepoint;
+        self.next_gc_safepoint += 1;
+
+        let mut stack_slots = stack_slots.to_vec();
+        stack_slots.sort_unstable();
+        stack_slots.dedup();
+
+        self.line(&format!(
+            "    # GC_SAFEPOINT id={id} kind={kind} frame={}",
+            self.frame_bytes
+        ));
+        for slot in stack_slots {
+            self.line(&format!(
+                "    # GC_STACK_ROOT id={id} offset={}",
+                Self::slot_offset(slot)
+            ));
+        }
+        for register in register_roots {
+            self.line(&format!("    # GC_REGISTER_ROOT id={id} reg={register}"));
+        }
     }
 
     fn emit_ir(&mut self, ir: &Ir) -> Result<(), CompileError> {
@@ -1875,7 +1914,11 @@ impl Emitter {
         self.emit_direct_lambda_call_with_slots(params, body, &arg_slots)
     }
 
-    fn emit_pack_rest_list(&mut self, rest_slots: &[usize]) -> Result<usize, CompileError> {
+    fn emit_pack_rest_list(
+        &mut self,
+        rest_slots: &[usize],
+        certificate_preserved_slots: Option<&[usize]>,
+    ) -> Result<usize, CompileError> {
         let mut current_cdr_slot = self.allocate_slot();
         self.emit_immediate(wsm_os_target::NIL);
         self.line(&format!(
@@ -1883,7 +1926,8 @@ impl Emitter {
             Self::slot_offset(current_cdr_slot)
         ));
 
-        for &car_slot in rest_slots.iter().rev() {
+        for index in (0..rest_slots.len()).rev() {
+            let car_slot = rest_slots[index];
             self.line("    movq %r12, %rdi");
             self.line(&format!(
                 "    movq {}(%rsp), %rsi",
@@ -1893,6 +1937,24 @@ impl Emitter {
                 "    movq {}(%rsp), %rdx",
                 Self::slot_offset(current_cdr_slot)
             ));
+
+            // This bounded certificate is emitted only when the caller can
+            // prove its extra preserved slots. At the allocating call, those
+            // preserved values plus all not-yet-packed rest values and the
+            // current cdr remain live. The current car/cdr operands are also
+            // live in %rsi/%rdx and in their stack copies. After this call the
+            // processed car and previous cdr locations die.
+            if let Some(preserved_slots) = certificate_preserved_slots {
+                let mut live_stack_slots = preserved_slots.to_vec();
+                live_stack_slots.extend_from_slice(&rest_slots[..=index]);
+                live_stack_slots.push(current_cdr_slot);
+                self.emit_gc_root_certificate(
+                    "pack-rest-bounded",
+                    &live_stack_slots,
+                    &["%rsi", "%rdx"],
+                );
+            }
+
             self.line("    call wsm_cons");
             current_cdr_slot = self.allocate_slot();
             self.line(&format!(
@@ -1933,7 +1995,9 @@ impl Emitter {
             rest_slots.push(slot);
         }
 
-        let current_cdr_slot = self.emit_pack_rest_list(&rest_slots)?;
+        let preserved_fixed_slots = arg_slots.clone();
+        let current_cdr_slot =
+            self.emit_pack_rest_list(&rest_slots, Some(&preserved_fixed_slots))?;
         arg_slots.push(current_cdr_slot);
 
         let mut effective_params = fixed.to_vec();
@@ -2212,7 +2276,7 @@ impl Emitter {
                         rest_slots.push(slot);
                     }
 
-                    let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
+                    let rest_slot = self.emit_pack_rest_list(&rest_slots, None)?;
                     arg_slots.push(rest_slot);
 
                     self.line("    movq %r12, %rdi");
@@ -2236,7 +2300,7 @@ impl Emitter {
                         rest_slots.push(slot);
                     }
 
-                    let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
+                    let rest_slot = self.emit_pack_rest_list(&rest_slots, None)?;
 
                     self.line("    movq %r12, %rdi");
                     self.line(&format!(
@@ -3101,7 +3165,7 @@ impl Emitter {
                         rest_slots.push(slot);
                     }
 
-                    let rest_slot = self.emit_pack_rest_list(&rest_slots)?;
+                    let rest_slot = self.emit_pack_rest_list(&rest_slots, None)?;
 
                     for (param_idx, &tmp) in fixed_slots.iter().enumerate() {
                         self.line(&format!("    movq {}(%rsp), %rax", Self::slot_offset(tmp)));

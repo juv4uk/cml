@@ -1,0 +1,26 @@
+name: GC root-map witness
+
+on:
+  pull_request:
+    paths:
+      - "src/x86_freestanding.rs"
+      - "tests/gc_root_map_witness_test.rs"
+      - ".github/workflows/gc-root-map-witness.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  root-map-witness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout CML with build-source submodule
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Exact compiler-owned root certificate
+        run: cargo test --quiet --test gc_root_map_witness_test
