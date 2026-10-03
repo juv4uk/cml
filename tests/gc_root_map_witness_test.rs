@@ -233,7 +233,6 @@ fn nested_variadic_call_with_preexisting_spill_emits_no_partial_certificate() {
     );
 }
 
-
 #[test]
 fn nested_platform_call_carries_earlier_outer_spill_as_live_root() {
     let expressions = parser::parse("(cons (quote KEEP) (cons (quote B) (quote C)))").unwrap();
