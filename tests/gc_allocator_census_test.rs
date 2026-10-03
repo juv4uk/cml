@@ -48,8 +48,8 @@ const OWNERS: &[AllocatorOwner] = &[
         name: "emit_quoted",
         direct_cons: 2,
         direct_closure_new: 0,
-        policy: Policy::UnknownNeedsRootProof,
-        note: "proper/dotted quoted-list construction",
+        policy: Policy::ConditionalCertified,
+        note: "quote-bounded only when exact outer structured roots and active quote tails are complete",
     },
     AllocatorOwner {
         name: "emit_primitive_list",
@@ -161,6 +161,20 @@ fn certified_owner_families_keep_their_fail_closed_certificate_guards() {
     assert!(closure.contains(r#""closure-new-bounded""#));
     assert_eq!(count(closure, "call wsm_cons"), 1);
     assert_eq!(count(closure, "call wsm_closure_new"), 1);
+
+    let quoted = owner_source(SOURCE, "emit_quoted");
+    assert!(quoted.contains("certificate_complete"));
+    assert!(quoted.contains("emit_quoted_with_gc"));
+    assert_eq!(count(quoted, "call wsm_cons"), 0);
+
+    let quoted_helper = owner_source(SOURCE, "emit_quoted_with_gc");
+    assert!(quoted_helper.contains(r#""quote-bounded""#));
+    assert!(quoted_helper.contains("quote_tail_slots"));
+    assert_eq!(
+        count(quoted_helper, "call wsm_cons"),
+        2,
+        "proper and dotted quoted-list loops own the two direct cons sites"
+    );
 }
 
 #[test]
@@ -187,14 +201,14 @@ fn census_is_small_explicit_and_reviewable() {
             .iter()
             .filter(|owner| owner.policy == Policy::ConditionalCertified)
             .count(),
-        3
+        4
     );
     assert_eq!(
         OWNERS
             .iter()
             .filter(|owner| owner.policy == Policy::UnknownNeedsRootProof)
             .count(),
-        3
+        2
     );
 
     for owner in OWNERS {
