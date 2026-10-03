@@ -2726,10 +2726,7 @@ impl Emitter {
 
                     self.line("    movq %r12, %rdi");
                     self.line("    movq %rax, %rsi");
-                    self.line(&format!(
-                        "    movq {}(%rsp), %rdx",
-                        Self::slot_offset(tail)
-                    ));
+                    self.line(&format!("    movq {}(%rsp), %rdx", Self::slot_offset(tail)));
 
                     let gc_return_label = if certificate_complete {
                         let mut live_stack_slots = outer_roots.to_vec();
@@ -2774,10 +2771,7 @@ impl Emitter {
 
                     self.line("    movq %r12, %rdi");
                     self.line("    movq %rax, %rsi");
-                    self.line(&format!(
-                        "    movq {}(%rsp), %rdx",
-                        Self::slot_offset(tail)
-                    ));
+                    self.line(&format!("    movq {}(%rsp), %rdx", Self::slot_offset(tail)));
 
                     let gc_return_label = if certificate_complete {
                         let mut live_stack_slots = outer_roots.to_vec();
