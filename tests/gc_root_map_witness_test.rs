@@ -488,3 +488,120 @@ fn captured_closure_fails_closed_when_an_outer_structured_spill_is_live() {
         "the outer cons may still be certified after the nested closure expression completes"
     );
 }
+
+#[test]
+fn sid8_list_emits_exact_shrinking_pending_argument_roots() {
+    let expressions =
+        parser::parse("(list (quote A) (quote B) (quote C) (quote D))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("top-level LIST fixture must compile");
+
+    let list: Vec<_> = parse_certificates(&assembly)
+        .into_iter()
+        .filter(|cert| cert.kind == "list-bounded")
+        .collect();
+
+    assert_eq!(list.len(), 4, "four LIST elements require four cons safepoints");
+    assert_eq!(
+        list.iter()
+            .map(|cert| cert.stack_roots.len())
+            .collect::<Vec<_>>(),
+        vec![4, 3, 2, 1],
+        "pending source locations shrink exactly once per consumed argument"
+    );
+
+    for cert in &list {
+        assert_eq!(
+            cert.register_roots,
+            BTreeSet::from(["%rdx".to_string(), "%rsi".to_string()]),
+            "current car and tail must be rewriteable for a moving collector"
+        );
+        assert!(!cert.register_roots.contains("%r12"));
+        assert!(
+            cert.stack_roots.iter().all(|offset| *offset < cert.frame),
+            "every pending LIST source must lie inside the current native frame"
+        );
+    }
+
+    for pair in list.windows(2) {
+        assert_eq!(
+            pair[0]
+                .stack_roots
+                .difference(&pair[1].stack_roots)
+                .count(),
+            1,
+            "exactly one consumed source location dies after each cons"
+        );
+        assert!(
+            pair[1].stack_roots.is_subset(&pair[0].stack_roots),
+            "LIST does not invent replacement stack roots; the new tail lives in %rdx"
+        );
+    }
+}
+
+#[test]
+fn nested_sid8_list_preserves_the_older_outer_structured_spill() {
+    let expressions =
+        parser::parse("(cons (quote KEEP) (list (quote A) (quote B) (quote C)))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("nested LIST inside outer cons must compile");
+
+    let certificates = parse_certificates(&assembly);
+    let list: Vec<_> = certificates
+        .iter()
+        .filter(|cert| cert.kind == "list-bounded")
+        .collect();
+    assert_eq!(list.len(), 3);
+    assert_eq!(
+        list.iter()
+            .map(|cert| cert.stack_roots.len())
+            .collect::<Vec<_>>(),
+        vec![4, 3, 2],
+        "outer KEEP stays live while three pending LIST sources shrink"
+    );
+
+    let outer = certificates
+        .iter()
+        .find(|cert| cert.kind == "runtime-call-structured")
+        .expect("outer cons should retain its bounded structured certificate");
+    assert_eq!(
+        outer.stack_roots.len(),
+        2,
+        "outer cons needs KEEP + LIST result"
+    );
+
+    let shared: Vec<_> = list
+        .last()
+        .expect("last LIST safepoint")
+        .stack_roots
+        .intersection(&outer.stack_roots)
+        .copied()
+        .collect();
+    assert_eq!(
+        shared.len(),
+        1,
+        "one rewriteable older outer spill must survive every nested LIST allocation"
+    );
+}
+
+#[test]
+fn sid8_list_fails_closed_in_unproved_lexical_context() {
+    let expressions =
+        parser::parse("((lambda (x) (list x (quote A))) (quote X))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("lexical LIST fixture must compile");
+
+    assert!(
+        parse_certificates(&assembly)
+            .iter()
+            .all(|cert| cert.kind != "list-bounded"),
+        "LIST must not publish a partial current-frame map when lexical liveness is unproved"
+    );
+}
+
