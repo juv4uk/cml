@@ -5,6 +5,8 @@ on:
     paths:
       - "src/x86_freestanding.rs"
       - "tests/gc_root_map_witness_test.rs"
+      - "tests/gc_root_map_wire_test.rs"
+      - "src/x86_freestanding_metadata.rs"
       - "tests/gc_root_pc_reloc_test.rs"
       - "src/x86_freestanding_metadata.rs"
       - "tests/gc_allocator_census_test.rs"
@@ -27,6 +29,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Exact compiler-owned root certificate
         run: cargo test --quiet --test gc_root_map_witness_test
+      - name: Deterministic root-map wire projection
+        run: cargo test --quiet --test gc_root_map_wire_test
       - name: Linker-resolved safepoint PC relocation witness
         run: cargo test --quiet --test gc_root_pc_reloc_test
       - name: Finite allocator-owner census
