@@ -209,9 +209,27 @@ fn nested_variadic_call_with_preexisting_spill_emits_no_partial_certificate() {
         assembly.matches("call wsm_cons").count() >= 3,
         "fixture must contain nested rest-packing allocations plus outer cons"
     );
+    let certificates = parse_certificates(&assembly);
     assert!(
-        parse_certificates(&assembly).is_empty(),
-        "bounded root metadata must fail closed when an older outer spill exists"
+        certificates
+            .iter()
+            .all(|cert| cert.kind != "pack-rest-bounded"),
+        "#415 bounded pack-rest metadata must stay suppressed when an older outer spill exists"
+    );
+
+    let structured: Vec<_> = certificates
+        .iter()
+        .filter(|cert| cert.kind == "runtime-call-structured")
+        .collect();
+    assert_eq!(
+        structured.len(),
+        1,
+        "#417 may certify the outer top-level cons after the complex nested variadic call returns"
+    );
+    assert_eq!(
+        structured[0].stack_roots.len(),
+        2,
+        "outer cons has exactly KEEP plus the completed nested result"
     );
 }
 
