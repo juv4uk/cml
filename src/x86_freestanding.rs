@@ -1561,9 +1561,10 @@ impl Emitter {
     fn emit_gc_root_certificate(
         &mut self,
         kind: &str,
+        allocator: &str,
         stack_slots: &[usize],
         register_roots: &[&str],
-    ) {
+    ) -> usize {
         let id = self.next_gc_safepoint;
         self.next_gc_safepoint += 1;
 
@@ -1571,8 +1572,9 @@ impl Emitter {
         stack_slots.sort_unstable();
         stack_slots.dedup();
 
+        let return_label = format!(".Lgc_return_{id}");
         self.line(&format!(
-            "    # GC_SAFEPOINT id={id} kind={kind} frame={}",
+            "    # GC_SAFEPOINT id={id} kind={kind} allocator={allocator} frame={} return_label={return_label}",
             self.frame_bytes
         ));
         for slot in stack_slots {
@@ -1584,6 +1586,11 @@ impl Emitter {
         for register in register_roots {
             self.line(&format!("    # GC_REGISTER_ROOT id={id} reg={register}"));
         }
+        id
+    }
+
+    fn emit_gc_return_label(&mut self, id: usize) {
+        self.line(&format!(".Lgc_return_{id}:"));
     }
 
     fn emit_ir(&mut self, ir: &Ir) -> Result<(), CompileError> {
@@ -1944,16 +1951,22 @@ impl Emitter {
             // First structured allocating consumer: wsm_cons. Other runtime
             // allocators stay uncertified until #412 gives them an exact
             // root-class proof.
-            if runtime == "wsm_cons" && self.gc_structured_context_complete {
+            let gc_safepoint = if runtime == "wsm_cons" && self.gc_structured_context_complete {
                 let live_slots = self.gc_structured_live_slots.clone();
-                self.emit_gc_root_certificate(
+                Some(self.emit_gc_root_certificate(
                     "runtime-call-structured",
+                    "wsm_cons",
                     &live_slots,
                     &["%rsi", "%rdx"],
-                );
-            }
+                ))
+            } else {
+                None
+            };
 
             self.line(&format!("    call {runtime}"));
+            if let Some(id) = gc_safepoint {
+                self.emit_gc_return_label(id);
+            }
             Ok(())
         })();
 
@@ -2024,18 +2037,24 @@ impl Emitter {
             // current cdr remain live. The current car/cdr operands are also
             // live in %rsi/%rdx and in their stack copies. After this call the
             // processed car and previous cdr locations die.
-            if let Some(preserved_slots) = certificate_preserved_slots {
+            let gc_safepoint = if let Some(preserved_slots) = certificate_preserved_slots {
                 let mut live_stack_slots = preserved_slots.to_vec();
                 live_stack_slots.extend_from_slice(&rest_slots[..=index]);
                 live_stack_slots.push(current_cdr_slot);
-                self.emit_gc_root_certificate(
+                Some(self.emit_gc_root_certificate(
                     "pack-rest-bounded",
+                    "wsm_cons",
                     &live_stack_slots,
                     &["%rsi", "%rdx"],
-                );
-            }
+                ))
+            } else {
+                None
+            };
 
             self.line("    call wsm_cons");
+            if let Some(id) = gc_safepoint {
+                self.emit_gc_return_label(id);
+            }
             current_cdr_slot = self.allocate_slot();
             self.line(&format!(
                 "    movq %rax, {}(%rsp)",
