@@ -56,8 +56,8 @@ const OWNERS: &[AllocatorOwner] = &[
         name: "emit_primitive_list",
         direct_cons: 1,
         direct_closure_new: 0,
-        policy: Policy::UnknownNeedsRootProof,
-        note: "SID8 LIST right-to-left construction",
+        policy: Policy::ConditionalCertified,
+        note: "list-bounded with exact pending argument slots + tail register when frame completeness is proved",
     },
 ];
 
@@ -168,6 +168,13 @@ fn certified_owner_families_keep_their_fail_closed_certificate_guards() {
     assert_eq!(count(closure, "call wsm_cons"), 1);
     assert_eq!(count(closure, "call wsm_closure_new"), 1);
 
+    let list = owner_source(SOURCE, "emit_primitive_list");
+    assert!(list.contains("certificate_outer_slots"));
+    assert!(list.contains(r#""list-bounded""#));
+    assert!(list.contains(r#""wsm_cons""#));
+    assert!(list.contains("gc_return_label"));
+    assert_eq!(count(list, "call wsm_cons"), 1);
+
     let quoted = owner_source(SOURCE, "emit_quoted");
     assert!(quoted.contains("certificate_complete"));
     assert!(quoted.contains("emit_quoted_with_gc"));
@@ -232,7 +239,7 @@ fn census_is_small_explicit_and_reviewable() {
             .iter()
             .filter(|owner| owner.policy == Policy::ConditionalCertified)
             .count(),
-        4
+        5
     );
     assert_eq!(
         OWNERS
@@ -246,7 +253,7 @@ fn census_is_small_explicit_and_reviewable() {
             .iter()
             .filter(|owner| owner.policy == Policy::UnknownNeedsRootProof)
             .count(),
-        1
+        0
     );
 
     for owner in OWNERS {

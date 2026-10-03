@@ -152,3 +152,48 @@ fn quote_bounded_certificates_project_to_machine_readable_wire() {
         3
     );
 }
+
+
+#[test]
+fn list_bounded_certificates_project_to_machine_readable_wire() {
+    let expressions =
+        parser::parse("(list (quote A) (quote B) (quote C) (quote D))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+
+    let compiled = X86FreestandingBackend::new()
+        .compile_program_with_metadata(&program)
+        .expect("LIST fixture must compile with metadata");
+
+    let list: Vec<_> = compiled
+        .gc_root_maps
+        .iter()
+        .filter(|record| record.certificate_kind == "list-bounded")
+        .collect();
+
+    assert_eq!(list.len(), 4);
+    assert!(compiled.validate_gc_root_maps());
+    assert_eq!(
+        list.iter()
+            .map(|record| record.stack_offsets.len())
+            .collect::<Vec<_>>(),
+        vec![4, 3, 2, 1]
+    );
+
+    for record in list {
+        assert_eq!(record.allocator, "wsm_cons");
+        assert_eq!(record.register_roots, vec!["%rdx", "%rsi"]);
+        let call_and_label = format!("    call wsm_cons\n{}:", record.return_label);
+        assert!(compiled.assembly.contains(&call_and_label));
+    }
+
+    let manifest = compiled.gc_root_map_manifest();
+    let decoded = parse_gc_root_map_manifest(&manifest).expect("LIST manifest must decode");
+    assert_eq!(decoded, compiled.gc_root_maps);
+    assert_eq!(
+        decoded
+            .iter()
+            .filter(|record| record.certificate_kind == "list-bounded")
+            .count(),
+        4
+    );
+}
