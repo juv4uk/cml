@@ -40,7 +40,9 @@ fn parse_certificates(assembly: &str) -> Vec<Certificate> {
             let parts: Vec<_> = rest.split_whitespace().collect();
             let id: usize = field(parts.iter().copied(), "id").parse().unwrap();
             let offset: usize = field(parts.iter().copied(), "offset").parse().unwrap();
-            let current = certificates.last_mut().expect("stack root must follow safepoint");
+            let current = certificates
+                .last_mut()
+                .expect("stack root must follow safepoint");
             assert_eq!(current.id, id);
             assert!(current.stack_roots.insert(offset), "duplicate stack root");
         } else if let Some(rest) = line.strip_prefix("# GC_REGISTER_ROOT ") {
@@ -51,7 +53,10 @@ fn parse_certificates(assembly: &str) -> Vec<Certificate> {
                 .last_mut()
                 .expect("register root must follow safepoint");
             assert_eq!(current.id, id);
-            assert!(current.register_roots.insert(reg), "duplicate register root");
+            assert!(
+                current.register_roots.insert(reg),
+                "duplicate register root"
+            );
         }
     }
 
@@ -81,7 +86,11 @@ fn pack_rest_safepoints_emit_exact_shrinking_root_locations() {
     );
 
     let frames: BTreeSet<_> = certificates.iter().map(|c| c.frame).collect();
-    assert_eq!(frames.len(), 1, "all certificates belong to one native frame");
+    assert_eq!(
+        frames.len(),
+        1,
+        "all certificates belong to one native frame"
+    );
     let frame = certificates[0].frame;
     assert_eq!(frame % 16, 0, "freestanding spill frame remains aligned");
 
