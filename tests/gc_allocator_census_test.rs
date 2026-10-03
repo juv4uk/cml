@@ -49,8 +49,8 @@ const OWNERS: &[AllocatorOwner] = &[
         name: "emit_quoted",
         direct_cons: 2,
         direct_closure_new: 0,
-        policy: Policy::UnknownNeedsRootProof,
-        note: "proper/dotted quoted-list construction",
+        policy: Policy::ConditionalCertified,
+        note: "quote-bounded only when exact outer structured roots and active quote tails are complete",
     },
     AllocatorOwner {
         name: "emit_primitive_list",
@@ -124,8 +124,13 @@ fn every_direct_allocator_emission_belongs_to_the_declared_owner_census() {
 
     for owner in OWNERS {
         let body = owner_source(SOURCE, owner.name);
+        let helper_cons = if owner.name == "emit_quoted" {
+            count(owner_source(SOURCE, "emit_quoted_with_gc"), "call wsm_cons")
+        } else {
+            0
+        };
         assert_eq!(
-            count(body, "call wsm_cons"),
+            count(body, "call wsm_cons") + helper_cons,
             owner.direct_cons,
             "{} changed its direct wsm_cons ownership; update #419 deliberately",
             owner.name
@@ -162,6 +167,22 @@ fn certified_owner_families_keep_their_fail_closed_certificate_guards() {
     assert!(closure.contains(r#""closure-new-bounded""#));
     assert_eq!(count(closure, "call wsm_cons"), 1);
     assert_eq!(count(closure, "call wsm_closure_new"), 1);
+
+    let quoted = owner_source(SOURCE, "emit_quoted");
+    assert!(quoted.contains("certificate_complete"));
+    assert!(quoted.contains("emit_quoted_with_gc"));
+    assert_eq!(count(quoted, "call wsm_cons"), 0);
+
+    let quoted_helper = owner_source(SOURCE, "emit_quoted_with_gc");
+    assert!(quoted_helper.contains(r#""quote-bounded""#));
+    assert!(quoted_helper.contains(r#""wsm_cons""#));
+    assert!(quoted_helper.contains("quote_tail_slots"));
+    assert!(quoted_helper.contains("gc_return_label"));
+    assert_eq!(
+        count(quoted_helper, "call wsm_cons"),
+        2,
+        "proper and dotted quote loops own the two direct cons sites"
+    );
 }
 
 #[test]
@@ -195,7 +216,8 @@ fn unknown_allocator_owners_are_not_silently_treated_as_certified() {
         let body = owner_source(SOURCE, owner.name);
         assert!(
             !body.contains(r#""runtime-call-structured""#)
-                && !body.contains(r#""pack-rest-bounded""#),
+                && !body.contains(r#""pack-rest-bounded""#)
+                && !body.contains(r#""quote-bounded""#),
             "{} is UNKNOWN in #419 and must not inherit another owner's certificate kind",
             owner.name
         );
@@ -210,7 +232,7 @@ fn census_is_small_explicit_and_reviewable() {
             .iter()
             .filter(|owner| owner.policy == Policy::ConditionalCertified)
             .count(),
-        3
+        4
     );
     assert_eq!(
         OWNERS
@@ -224,7 +246,7 @@ fn census_is_small_explicit_and_reviewable() {
             .iter()
             .filter(|owner| owner.policy == Policy::UnknownNeedsRootProof)
             .count(),
-        2
+        1
     );
 
     for owner in OWNERS {
