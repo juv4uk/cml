@@ -13,6 +13,15 @@ use std::collections::BTreeSet;
 
 pub const GC_ROOT_MAP_WIRE_VERSION: u32 = 1;
 
+// Research-only runtime payload projection (#443). These values are explicitly
+// not a ratified final ABI; they exist so the linked ELF can carry the same
+// root locations already proved by the compiler-owned metadata.
+pub const GC_ROOT_PAYLOAD_VERSION: u64 = 1;
+pub const GC_ROOT_ALLOCATOR_WSM_CONS: u64 = 1;
+pub const GC_ROOT_ALLOCATOR_WSM_CLOSURE_NEW: u64 = 2;
+pub const GC_ROOT_REG_RSI: u64 = 1 << 0;
+pub const GC_ROOT_REG_RDX: u64 = 1 << 1;
+
 /// One compiler-owned x86 target symbol assignment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct X86SymbolMetadata {
@@ -187,6 +196,26 @@ impl X86CompiledProgram {
         out
     }
 
+    fn gc_root_allocator_code(name: &str) -> Result<u64, &'static str> {
+        match name {
+            "wsm_cons" => Ok(GC_ROOT_ALLOCATOR_WSM_CONS),
+            "wsm_closure_new" => Ok(GC_ROOT_ALLOCATOR_WSM_CLOSURE_NEW),
+            _ => Err("unsupported GC root allocator for runtime payload"),
+        }
+    }
+
+    fn gc_root_register_mask(registers: &[String]) -> Result<u64, &'static str> {
+        let mut mask = 0u64;
+        for register in registers {
+            match register.as_str() {
+                "%rsi" => mask |= GC_ROOT_REG_RSI,
+                "%rdx" => mask |= GC_ROOT_REG_RDX,
+                _ => return Err("unsupported GC root register for runtime payload"),
+            }
+        }
+        Ok(mask)
+    }
+
     /// Append a research-only relocation table that binds each already-proved
     /// compiler return label to its final linked PC through the ordinary
     /// assembler/linker relocation mechanism.
@@ -212,6 +241,57 @@ impl X86CompiledProgram {
             out.push_str(&format!(".quad {}\n", record.id));
             out.push_str(&format!(".quad {}\n", record.return_label));
         }
+        Ok(out)
+    }
+
+    /// Append both runtime-facing GC research sections:
+    ///
+    /// - .wsm_gc_root_pc_bind: (site_id, final_pc) relocation pairs;
+    /// - .wsm_gc_root_payload: versioned site_id-keyed root payload.
+    ///
+    /// Payload section encoding (all little-endian u64 after linking):
+    ///
+    ///   version
+    ///   record_count
+    ///   repeat record_count times:
+    ///     site_id
+    ///     frame_bytes
+    ///     allocator_code
+    ///     register_mask
+    ///     stack_root_count
+    ///     stack_root_offset[stack_root_count]
+    ///
+    /// Certificate kind remains host-side diagnostic metadata in this research
+    /// slice because traversal does not consume it. Site-id equality is the join
+    /// law between the payload and final-PC sections.
+    pub fn assembly_with_gc_root_runtime_sections(&self) -> Result<String, &'static str> {
+        let mut out = self.assembly_with_gc_root_pc_bindings()?;
+        if self.gc_root_maps.is_empty() {
+            return Ok(out);
+        }
+
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
+        out.push_str(".section .wsm_gc_root_payload,\"a\",@progbits\n");
+        out.push_str(".p2align 3\n");
+        out.push_str(&format!(".quad {}\n", GC_ROOT_PAYLOAD_VERSION));
+        out.push_str(&format!(".quad {}\n", self.gc_root_maps.len()));
+
+        for record in &self.gc_root_maps {
+            let allocator_code = Self::gc_root_allocator_code(&record.allocator)?;
+            let register_mask = Self::gc_root_register_mask(&record.register_roots)?;
+
+            out.push_str(&format!(".quad {}\n", record.id));
+            out.push_str(&format!(".quad {}\n", record.frame_bytes));
+            out.push_str(&format!(".quad {}\n", allocator_code));
+            out.push_str(&format!(".quad {}\n", register_mask));
+            out.push_str(&format!(".quad {}\n", record.stack_offsets.len()));
+            for offset in &record.stack_offsets {
+                out.push_str(&format!(".quad {}\n", offset));
+            }
+        }
+
         Ok(out)
     }
 }
