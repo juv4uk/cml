@@ -10,10 +10,7 @@ fn unique_base(stem: &str) -> std::path::PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    std::env::temp_dir().join(format!(
-        "cml-{stem}-{}-{nonce}",
-        std::process::id()
-    ))
+    std::env::temp_dir().join(format!("cml-{stem}-{}-{nonce}", std::process::id()))
 }
 
 fn link_and_read_bindings(source: &str, text_base: &str, stem: &str) -> Vec<(u64, u64)> {
@@ -73,7 +70,11 @@ fn link_and_read_bindings(source: &str, text_base: &str, stem: &str) -> Vec<(u64
     );
 
     let bytes = std::fs::read(&bin_path).expect("read linked PC-binding section");
-    assert_eq!(bytes.len() % 16, 0, "binding section must contain u64 pairs");
+    assert_eq!(
+        bytes.len() % 16,
+        0,
+        "binding section must contain u64 pairs"
+    );
     let records = bytes
         .chunks_exact(16)
         .map(|chunk| {
@@ -92,8 +93,7 @@ fn link_and_read_bindings(source: &str, text_base: &str, stem: &str) -> Vec<(u64
 
 #[test]
 fn certified_return_labels_relocate_to_final_linked_pcs() {
-    let expressions =
-        parser::parse("((lambda (a b . rest) rest) 10 20 30 40 50)").unwrap();
+    let expressions = parser::parse("((lambda (a b . rest) rest) 10 20 30 40 50)").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let compiled = X86FreestandingBackend::new()
         .compile_program_with_metadata(&program)
@@ -104,9 +104,7 @@ fn certified_return_labels_relocate_to_final_linked_pcs() {
         .assembly_with_gc_root_pc_bindings()
         .expect("valid compiler root maps must project relocation bindings");
 
-    assembly.push_str(
-        "\n.text\n.globl wsm_cons\n.type wsm_cons,@function\nwsm_cons:\n    ret\n",
-    );
+    assembly.push_str("\n.text\n.globl wsm_cons\n.type wsm_cons,@function\nwsm_cons:\n    ret\n");
 
     let low = link_and_read_bindings(&assembly, "0x100000", "gc-pc-low");
     let high = link_and_read_bindings(&assembly, "0x200000", "gc-pc-high");
@@ -114,9 +112,7 @@ fn certified_return_labels_relocate_to_final_linked_pcs() {
     assert_eq!(low.len(), compiled.gc_root_maps.len());
     assert_eq!(high.len(), compiled.gc_root_maps.len());
 
-    for (index, ((low_id, low_pc), (high_id, high_pc))) in
-        low.iter().zip(high.iter()).enumerate()
-    {
+    for (index, ((low_id, low_pc), (high_id, high_pc))) in low.iter().zip(high.iter()).enumerate() {
         assert_eq!(*low_id, index as u64);
         assert_eq!(*high_id, index as u64);
         assert_ne!(*low_pc, 0);
