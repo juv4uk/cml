@@ -123,8 +123,13 @@ fn every_direct_allocator_emission_belongs_to_the_declared_owner_census() {
 
     for owner in OWNERS {
         let body = owner_source(SOURCE, owner.name);
+        let helper_cons = if owner.name == "emit_quoted" {
+            count(owner_source(SOURCE, "emit_quoted_with_gc"), "call wsm_cons")
+        } else {
+            0
+        };
         assert_eq!(
-            count(body, "call wsm_cons"),
+            count(body, "call wsm_cons") + helper_cons,
             owner.direct_cons,
             "{} changed its direct wsm_cons ownership; update #419 deliberately",
             owner.name
