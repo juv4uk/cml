@@ -1883,14 +1883,14 @@ impl Emitter {
         self.line(&format!("    movabsq ${word}, %rax"));
     }
 
-    fn emit_platform_call(&mut self, func: &Ir, args: &[Ir]) -> Result<(), CompileError> {
-        let (_, expected, runtime) =
-            platform_call_contract(func).expect("preflight classified platform call");
-        debug_assert_eq!(args.len(), expected);
-
-        // #417: bounded structured root state. A top-level platform call in an
+    fn emit_runtime_call_with_structured_args(
+        &mut self,
+        args: &[Ir],
+        runtime: &str,
+    ) -> Result<(), CompileError> {
+        // #417: bounded structured root state. A top-level runtime call in an
         // empty lexical environment may prove its own argument-evaluation
-        // lifetime. Nested *direct platform calls* inherit that proof. More
+        // lifetime. Nested direct wsm_cons calls inherit that proof. More
         // complex nested forms fail closed by temporarily suspending
         // completeness rather than publishing a partial root map.
         let live_checkpoint = self.gc_structured_live_slots.len();
@@ -1902,15 +1902,28 @@ impl Emitter {
         let result = (|| {
             let mut slots = Vec::with_capacity(args.len());
             for argument in args {
-                let direct_platform_argument = matches!(
-                    argument,
-                    Ir::App { func, .. }
-                        if platform_call_contract(func).is_some()
-                            && !matches!(func.as_ref(), Ir::Var(name) if self.env.contains_key(name))
-                );
+                let direct_nested_wsm_cons = match argument {
+                    Ir::App { func, .. } => {
+                        if let Ir::Sid(sid) = func.as_ref() {
+                            matches!(
+                                sid8_call_contract(*sid),
+                                Some((Some(2), "wsm_cons"))
+                            )
+                        } else {
+                            matches!(
+                                platform_call_contract(func),
+                                Some((_, _, "wsm_cons"))
+                            ) && !matches!(
+                                func.as_ref(),
+                                Ir::Var(name) if self.env.contains_key(name)
+                            )
+                        }
+                    }
+                    _ => false,
+                };
 
                 let saved_complete = self.gc_structured_context_complete;
-                if saved_complete && !direct_platform_argument {
+                if saved_complete && !direct_nested_wsm_cons {
                     self.gc_structured_context_complete = false;
                 }
                 let emitted = self.emit_ir(argument);
@@ -1935,13 +1948,13 @@ impl Emitter {
                 ));
             }
 
-            // First structured consumer: wsm_cons. Other allocating runtime
-            // calls stay uncertified until #412 gives them their own exact
+            // First structured allocating consumer: wsm_cons. Other runtime
+            // allocators stay uncertified until #412 gives them an exact
             // root-class proof.
             if runtime == "wsm_cons" && self.gc_structured_context_complete {
                 let live_slots = self.gc_structured_live_slots.clone();
                 self.emit_gc_root_certificate(
-                    "platform-call-structured",
+                    "runtime-call-structured",
                     &live_slots,
                     &["%rsi", "%rdx"],
                 );
@@ -1954,6 +1967,13 @@ impl Emitter {
         self.gc_structured_live_slots.truncate(live_checkpoint);
         self.gc_structured_context_complete = previous_complete;
         result
+    }
+
+    fn emit_platform_call(&mut self, func: &Ir, args: &[Ir]) -> Result<(), CompileError> {
+        let (_, expected, runtime) =
+            platform_call_contract(func).expect("preflight classified platform call");
+        debug_assert_eq!(args.len(), expected);
+        self.emit_runtime_call_with_structured_args(args, runtime)
     }
 
     /// Emit a bounded, immediately-applied lambda with 0 to 5 parameters as a
@@ -2747,26 +2767,7 @@ impl Emitter {
             return self.emit_primitive_list(args);
         }
 
-        let slots: Vec<usize> = args
-            .iter()
-            .map(|argument| {
-                self.emit_ir(argument)?;
-                let slot = self.allocate_slot();
-                self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(slot)));
-                Ok(slot)
-            })
-            .collect::<Result<_, CompileError>>()?;
-
-        self.line("    movq %r12, %rdi");
-        let registers = ["%rsi", "%rdx", "%rcx", "%r8", "%r9"];
-        for (slot, register) in slots.iter().zip(registers.iter()) {
-            self.line(&format!(
-                "    movq {}(%rsp), {register}",
-                Self::slot_offset(*slot)
-            ));
-        }
-        self.line(&format!("    call {runtime}"));
-        Ok(())
+        self.emit_runtime_call_with_structured_args(args, runtime)
     }
 
     /// Emit a variadic List primitive: (list) -> NIL, (list a b c) -> (a b c)
