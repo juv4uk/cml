@@ -336,3 +336,155 @@ fn complex_nested_form_fails_closed_instead_of_emitting_partial_structured_map()
     );
     assert_eq!(certificates[0].stack_roots.len(), 2);
 }
+
+#[test]
+fn captured_closure_emits_shrinking_capture_roots_and_exact_environment_root() {
+    let expressions = parser::parse(
+        "(((lambda (a b) (lambda (x) (cons a (cons b (cons x (quote ())))))) \
+          (quote A) (quote B)) \
+         (quote C))",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("two-capture escaping closure must compile");
+
+    let closure: Vec<_> = parse_certificates(&assembly)
+        .into_iter()
+        .filter(|cert| {
+            matches!(
+                cert.kind.as_str(),
+                "closure-capture-cons" | "closure-new-bounded"
+            )
+        })
+        .collect();
+
+    assert_eq!(
+        closure.len(),
+        3,
+        "two captured values require two cons safepoints plus closure allocation"
+    );
+    assert_eq!(
+        closure.iter().map(|c| c.kind.as_str()).collect::<Vec<_>>(),
+        vec![
+            "closure-capture-cons",
+            "closure-capture-cons",
+            "closure-new-bounded",
+        ]
+    );
+
+    assert_eq!(
+        closure
+            .iter()
+            .map(|c| c.stack_roots.len())
+            .collect::<Vec<_>>(),
+        vec![3, 2, 0],
+        "future capture sources shrink while each old tail is replaced"
+    );
+    assert_eq!(
+        closure[0].register_roots,
+        BTreeSet::from(["%rdx".to_string(), "%rsi".to_string()])
+    );
+    assert_eq!(
+        closure[1].register_roots,
+        BTreeSet::from(["%rdx".to_string(), "%rsi".to_string()])
+    );
+    assert_eq!(
+        closure[2].register_roots,
+        BTreeSet::from(["%rdx".to_string()]),
+        "completed environment list is the only closure-allocation register root"
+    );
+    assert!(
+        closure
+            .iter()
+            .all(|cert| !cert.register_roots.contains("%r12")),
+        "RuntimeContext must never become a WSM root"
+    );
+
+    let first_removed: Vec<_> = closure[0]
+        .stack_roots
+        .difference(&closure[1].stack_roots)
+        .copied()
+        .collect();
+    let first_added: Vec<_> = closure[1]
+        .stack_roots
+        .difference(&closure[0].stack_roots)
+        .copied()
+        .collect();
+    assert_eq!(
+        first_removed.len(),
+        2,
+        "one consumed capture source and the previous tail die after the first cons"
+    );
+    assert_eq!(
+        first_added.len(),
+        1,
+        "the newly materialized environment tail becomes the next live tail"
+    );
+
+    let frames: BTreeSet<_> = closure.iter().map(|cert| cert.frame).collect();
+    assert_eq!(
+        frames.len(),
+        1,
+        "one closure construction lives in one native frame"
+    );
+    let certified_frame = closure[0].frame;
+    assert_eq!(certified_frame % 8, 0);
+    for cert in &closure[..2] {
+        assert!(
+            cert.stack_roots
+                .iter()
+                .all(|offset| *offset < certified_frame),
+            "every capture root must lie inside the certified current frame"
+        );
+    }
+
+    let cert_marker = assembly
+        .find("kind=closure-capture-cons")
+        .expect("fixture must emit bounded closure root metadata");
+    let nearest_frame_line = assembly[..cert_marker]
+        .lines()
+        .rev()
+        .find(|line| line.trim().starts_with("subq $"))
+        .expect("closure certificate must be inside an explicit native frame")
+        .trim();
+    let emitted_frame: usize = nearest_frame_line
+        .strip_prefix("subq $")
+        .and_then(|rest| rest.strip_suffix(", %rsp"))
+        .expect("native frame line shape")
+        .parse()
+        .expect("numeric native frame size");
+    assert_eq!(
+        certified_frame, emitted_frame,
+        "research root metadata must name the actual currently emitted native frame"
+    );
+}
+
+#[test]
+fn captured_closure_fails_closed_when_an_outer_structured_spill_is_live() {
+    let expressions = parser::parse(
+        "(cons (quote KEEP) \
+           ((lambda (a b) (lambda (x) (cons a (cons b x)))) \
+            (quote A) (quote B)))",
+    )
+    .unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("nested closure fixture must compile");
+
+    let certificates = parse_certificates(&assembly);
+    assert!(
+        certificates.iter().all(|cert| {
+            cert.kind != "closure-capture-cons" && cert.kind != "closure-new-bounded"
+        }),
+        "closure metadata must fail closed while an older caller-frame structured spill is live"
+    );
+    assert!(
+        certificates
+            .iter()
+            .any(|cert| cert.kind == "runtime-call-structured"),
+        "the outer cons may still be certified after the nested closure expression completes"
+    );
+}
