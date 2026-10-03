@@ -114,9 +114,7 @@ fn certified_return_labels_relocate_to_final_linked_pcs() {
     assert_eq!(low.len(), compiled.gc_root_maps.len());
     assert_eq!(high.len(), compiled.gc_root_maps.len());
 
-    for (index, ((low_id, low_pc), (high_id, high_pc))) in
-        low.iter().zip(high.iter()).enumerate()
-    {
+    for (index, ((low_id, low_pc), (high_id, high_pc))) in low.iter().zip(high.iter()).enumerate() {
         assert_eq!(*low_id, index as u64);
         assert_eq!(*high_id, index as u64);
         assert_ne!(*low_pc, 0);
