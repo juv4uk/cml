@@ -11,6 +11,8 @@ use crate::ir::{Ir, Quoted};
 use crate::x86_freestanding::{CompileError, X86FreestandingBackend};
 use std::collections::BTreeSet;
 
+pub const GC_ROOT_MAP_WIRE_VERSION: u32 = 1;
+
 /// One compiler-owned x86 target symbol assignment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct X86SymbolMetadata {
@@ -22,12 +24,29 @@ pub struct X86SymbolMetadata {
     pub encoded_word: wsm_os_target::Word,
 }
 
-/// Assembly plus the deterministic symbol and Canon operation projections that belong to it.
+/// One compiler-proved allocation-site root map projected from the exact
+/// assembler certificate emitted by the x86 backend.
+///
+/// This is mechanism metadata only. It does not admit a language operation,
+/// collector, or safepoint beyond what the compiler already proved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct X86GcRootMapMetadata {
+    pub id: usize,
+    pub return_label: String,
+    pub allocator: String,
+    pub certificate_kind: String,
+    pub frame_bytes: usize,
+    pub stack_offsets: Vec<usize>,
+    pub register_roots: Vec<String>,
+}
+
+/// Assembly plus deterministic compiler-owned metadata projections.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct X86CompiledProgram {
     pub assembly: String,
     pub symbols: Vec<X86SymbolMetadata>,
     pub operations: Vec<&'static CanonOperation>,
+    pub gc_root_maps: Vec<X86GcRootMapMetadata>,
 }
 
 impl X86CompiledProgram {
@@ -76,6 +95,96 @@ impl X86CompiledProgram {
             }
         }
         true
+    }
+
+    /// Validate compiler-owned root-map records without making them semantic.
+    pub fn validate_gc_root_maps(&self) -> bool {
+        let mut ids = BTreeSet::new();
+        let mut labels = BTreeSet::new();
+
+        for record in &self.gc_root_maps {
+            if !ids.insert(record.id) || !labels.insert(record.return_label.as_str()) {
+                return false;
+            }
+            if record.return_label != format!(".Lgc_return_{}", record.id) {
+                return false;
+            }
+            if record.allocator.is_empty()
+                || record.allocator.chars().any(char::is_whitespace)
+                || record.certificate_kind.is_empty()
+                || record.certificate_kind.chars().any(char::is_whitespace)
+            {
+                return false;
+            }
+            if !record
+                .stack_offsets
+                .windows(2)
+                .all(|pair| pair[0] < pair[1])
+            {
+                return false;
+            }
+            if record
+                .stack_offsets
+                .iter()
+                .any(|offset| offset % 8 != 0 || *offset >= record.frame_bytes)
+            {
+                return false;
+            }
+            if !record
+                .register_roots
+                .windows(2)
+                .all(|pair| pair[0] < pair[1])
+            {
+                return false;
+            }
+            if record
+                .register_roots
+                .iter()
+                .any(|register| !matches!(register.as_str(), "%rsi" | "%rdx"))
+            {
+                return false;
+            }
+
+            let call_and_label = format!("    call {}\n{}:", record.allocator, record.return_label);
+            if !self.assembly.contains(&call_and_label) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Deterministic research wire projection for a future runtime consumer.
+    pub fn gc_root_map_manifest(&self) -> String {
+        let mut out = format!("CML_GC_ROOT_MAP_V{}\n", GC_ROOT_MAP_WIRE_VERSION);
+        for record in &self.gc_root_maps {
+            let stack = if record.stack_offsets.is_empty() {
+                "-".to_string()
+            } else {
+                record
+                    .stack_offsets
+                    .iter()
+                    .map(usize::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            };
+            let registers = if record.register_roots.is_empty() {
+                "-".to_string()
+            } else {
+                record.register_roots.join(",")
+            };
+            out.push_str(&format!(
+                "site id={} label={} allocator={} kind={} frame={} stack={} regs={}\n",
+                record.id,
+                record.return_label,
+                record.allocator,
+                record.certificate_kind,
+                record.frame_bytes,
+                stack,
+                registers
+            ));
+        }
+        out
     }
 }
 
@@ -143,15 +252,206 @@ fn compiled_program_metadata(
         .collect::<Result<Vec<_>, CompileError>>()?;
 
     let operations = collect_program_operations(program);
+    let gc_root_maps = parse_gc_root_maps_from_assembly(&assembly).ok_or(
+        CompileError::UnsupportedVariant("invalid compiler-owned GC root metadata"),
+    )?;
     let output = X86CompiledProgram {
         assembly,
         symbols,
         operations,
+        gc_root_maps,
     };
-    if !output.validate_symbol_metadata() || !output.validate_operation_metadata() {
-        return Err(CompileError::TooManySymbols);
+    if !output.validate_symbol_metadata()
+        || !output.validate_operation_metadata()
+        || !output.validate_gc_root_maps()
+    {
+        return Err(CompileError::UnsupportedVariant(
+            "invalid compiler-owned metadata projection",
+        ));
     }
     Ok(output)
+}
+
+fn metadata_field<'a>(parts: &'a [&'a str], key: &str) -> Option<&'a str> {
+    parts
+        .iter()
+        .filter_map(|part| part.split_once('='))
+        .find_map(|(name, value)| (name == key).then_some(value))
+}
+
+fn parse_usize_list(raw: &str) -> Option<Vec<usize>> {
+    if raw == "-" {
+        return Some(Vec::new());
+    }
+    let mut values = raw
+        .split(',')
+        .map(str::parse)
+        .collect::<Result<Vec<usize>, _>>()
+        .ok()?;
+    values.sort_unstable();
+    if values.windows(2).any(|pair| pair[0] == pair[1]) {
+        return None;
+    }
+    Some(values)
+}
+
+fn parse_string_list(raw: &str) -> Option<Vec<String>> {
+    if raw == "-" {
+        return Some(Vec::new());
+    }
+    let mut values = raw.split(',').map(str::to_string).collect::<Vec<_>>();
+    values.sort();
+    if values.windows(2).any(|pair| pair[0] == pair[1]) {
+        return None;
+    }
+    Some(values)
+}
+
+fn parse_gc_root_maps_from_assembly(assembly: &str) -> Option<Vec<X86GcRootMapMetadata>> {
+    let mut records = Vec::<X86GcRootMapMetadata>::new();
+
+    for raw in assembly.lines() {
+        let line = raw.trim();
+        if let Some(rest) = line.strip_prefix("# GC_SAFEPOINT ") {
+            let parts = rest.split_whitespace().collect::<Vec<_>>();
+            let id = metadata_field(&parts, "id")?.parse().ok()?;
+            let certificate_kind = metadata_field(&parts, "kind")?.to_string();
+            let allocator = metadata_field(&parts, "allocator")?.to_string();
+            let frame_bytes = metadata_field(&parts, "frame")?.parse().ok()?;
+            let return_label = metadata_field(&parts, "return_label")?.to_string();
+
+            if records
+                .iter()
+                .any(|record| record.id == id || record.return_label == return_label)
+            {
+                return None;
+            }
+
+            records.push(X86GcRootMapMetadata {
+                id,
+                return_label,
+                allocator,
+                certificate_kind,
+                frame_bytes,
+                stack_offsets: Vec::new(),
+                register_roots: Vec::new(),
+            });
+        } else if let Some(rest) = line.strip_prefix("# GC_STACK_ROOT ") {
+            let parts = rest.split_whitespace().collect::<Vec<_>>();
+            let id = metadata_field(&parts, "id")?.parse().ok()?;
+            let offset = metadata_field(&parts, "offset")?.parse().ok()?;
+            let current = records.last_mut()?;
+            if current.id != id || current.stack_offsets.contains(&offset) {
+                return None;
+            }
+            current.stack_offsets.push(offset);
+        } else if let Some(rest) = line.strip_prefix("# GC_REGISTER_ROOT ") {
+            let parts = rest.split_whitespace().collect::<Vec<_>>();
+            let id = metadata_field(&parts, "id")?.parse().ok()?;
+            let register = metadata_field(&parts, "reg")?.to_string();
+            let current = records.last_mut()?;
+            if current.id != id || current.register_roots.contains(&register) {
+                return None;
+            }
+            current.register_roots.push(register);
+        }
+    }
+
+    for record in &mut records {
+        record.stack_offsets.sort_unstable();
+        record.register_roots.sort();
+    }
+    records.sort_by_key(|record| record.id);
+    Some(records)
+}
+
+/// Parse the deterministic research manifest emitted by the compiled-program
+/// root-map projection. This does not authorize collection or invent a safepoint.
+pub fn parse_gc_root_map_manifest(
+    manifest: &str,
+) -> Result<Vec<X86GcRootMapMetadata>, &'static str> {
+    let mut lines = manifest.lines();
+    let expected_header = format!("CML_GC_ROOT_MAP_V{}", GC_ROOT_MAP_WIRE_VERSION);
+    if lines.next() != Some(expected_header.as_str()) {
+        return Err("unsupported GC root-map manifest version");
+    }
+
+    let mut records = Vec::new();
+    for line in lines {
+        if line.is_empty() {
+            continue;
+        }
+        let rest = line
+            .strip_prefix("site ")
+            .ok_or("invalid GC root-map record prefix")?;
+        let parts = rest.split_whitespace().collect::<Vec<_>>();
+        let id = metadata_field(&parts, "id")
+            .ok_or("missing site id")?
+            .parse()
+            .map_err(|_| "invalid site id")?;
+        let return_label = metadata_field(&parts, "label")
+            .ok_or("missing return label")?
+            .to_string();
+        let allocator = metadata_field(&parts, "allocator")
+            .ok_or("missing allocator")?
+            .to_string();
+        let certificate_kind = metadata_field(&parts, "kind")
+            .ok_or("missing certificate kind")?
+            .to_string();
+        let frame_bytes = metadata_field(&parts, "frame")
+            .ok_or("missing frame size")?
+            .parse()
+            .map_err(|_| "invalid frame size")?;
+        let stack_offsets =
+            parse_usize_list(metadata_field(&parts, "stack").ok_or("missing stack roots")?)
+                .ok_or("invalid stack roots")?;
+        let register_roots =
+            parse_string_list(metadata_field(&parts, "regs").ok_or("missing register roots")?)
+                .ok_or("invalid register roots")?;
+
+        let record = X86GcRootMapMetadata {
+            id,
+            return_label,
+            allocator,
+            certificate_kind,
+            frame_bytes,
+            stack_offsets,
+            register_roots,
+        };
+        if record.allocator.is_empty()
+            || record.certificate_kind.is_empty()
+            || record.allocator.chars().any(char::is_whitespace)
+            || record.certificate_kind.chars().any(char::is_whitespace)
+        {
+            return Err("empty or invalid GC root-map token");
+        }
+        if records.iter().any(|existing: &X86GcRootMapMetadata| {
+            existing.id == record.id || existing.return_label == record.return_label
+        }) {
+            return Err("duplicate GC root-map site");
+        }
+        if record.return_label != format!(".Lgc_return_{}", record.id) {
+            return Err("return label does not match site id");
+        }
+        if record
+            .stack_offsets
+            .iter()
+            .any(|offset| offset % 8 != 0 || *offset >= record.frame_bytes)
+        {
+            return Err("invalid stack-root offset");
+        }
+        if record
+            .register_roots
+            .iter()
+            .any(|register| !matches!(register.as_str(), "%rsi" | "%rdx"))
+        {
+            return Err("unsupported rewriteable register");
+        }
+        records.push(record);
+    }
+
+    records.sort_by_key(|record| record.id);
+    Ok(records)
 }
 
 /// Mirror the x86 backend's existing *mechanical* symbol-set projection after
