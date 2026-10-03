@@ -1938,10 +1938,12 @@ impl Emitter {
                 Self::slot_offset(current_cdr_slot)
             ));
 
-            // At the allocating call, all not-yet-packed rest values remain
-            // live in their stack slots. The current car/cdr operands are also
+            // This bounded certificate is emitted only when the caller can
+            // prove its extra preserved slots. At the allocating call, those
+            // preserved values plus all not-yet-packed rest values and the
+            // current cdr remain live. The current car/cdr operands are also
             // live in %rsi/%rdx and in their stack copies. After this call the
-            // processed car slot is dead, so the next certificate shrinks.
+            // processed car and previous cdr locations die.
             if let Some(preserved_slots) = certificate_preserved_slots {
                 let mut live_stack_slots = preserved_slots.to_vec();
                 live_stack_slots.extend_from_slice(&rest_slots[..=index]);
