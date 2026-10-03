@@ -186,6 +186,34 @@ impl X86CompiledProgram {
         }
         out
     }
+
+    /// Append a research-only relocation table that binds each already-proved
+    /// compiler return label to its final linked PC through the ordinary
+    /// assembler/linker relocation mechanism.
+    ///
+    /// Records are (site_id: u64, final_pc: u64) pairs in
+    /// .wsm_gc_root_pc_bind. This is mechanism evidence only: it does not
+    /// widen liveness, admit a collector, or ratify the final section ABI.
+    pub fn assembly_with_gc_root_pc_bindings(&self) -> Result<String, &'static str> {
+        if !self.validate_gc_root_maps() {
+            return Err("invalid compiler-owned GC root metadata");
+        }
+
+        let mut out = self.assembly.clone();
+        if self.gc_root_maps.is_empty() {
+            return Ok(out);
+        }
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
+        out.push_str(".section .wsm_gc_root_pc_bind,\"a\",@progbits\n");
+        out.push_str(".p2align 3\n");
+        for record in &self.gc_root_maps {
+            out.push_str(&format!(".quad {}\n", record.id));
+            out.push_str(&format!(".quad {}\n", record.return_label));
+        }
+        Ok(out)
+    }
 }
 
 impl X86FreestandingBackend {
