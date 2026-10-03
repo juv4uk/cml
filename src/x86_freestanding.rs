@@ -1571,9 +1571,7 @@ impl Emitter {
             ));
         }
         for register in register_roots {
-            self.line(&format!(
-                "    # GC_REGISTER_ROOT id={id} reg={register}"
-            ));
+            self.line(&format!("    # GC_REGISTER_ROOT id={id} reg={register}"));
         }
     }
 
@@ -1942,11 +1940,7 @@ impl Emitter {
             // processed car slot is dead, so the next certificate shrinks.
             let mut live_stack_slots = rest_slots[..=index].to_vec();
             live_stack_slots.push(current_cdr_slot);
-            self.emit_gc_root_certificate(
-                "pack-rest",
-                &live_stack_slots,
-                &["%rsi", "%rdx"],
-            );
+            self.emit_gc_root_certificate("pack-rest", &live_stack_slots, &["%rsi", "%rdx"]);
 
             self.line("    call wsm_cons");
             current_cdr_slot = self.allocate_slot();
