@@ -227,7 +227,7 @@ fn nested_platform_call_carries_earlier_outer_spill_as_live_root() {
 
     let certificates: Vec<_> = parse_certificates(&assembly)
         .into_iter()
-        .filter(|cert| cert.kind == "platform-call-structured")
+        .filter(|cert| cert.kind == "runtime-call-structured")
         .collect();
 
     assert_eq!(
@@ -277,7 +277,7 @@ fn nested_platform_call_without_earlier_spill_has_no_phantom_root() {
 
     let certificates: Vec<_> = parse_certificates(&assembly)
         .into_iter()
-        .filter(|cert| cert.kind == "platform-call-structured")
+        .filter(|cert| cert.kind == "runtime-call-structured")
         .collect();
 
     assert_eq!(certificates.len(), 2);
@@ -313,7 +313,7 @@ fn complex_nested_form_fails_closed_instead_of_emitting_partial_structured_map()
 
     let certificates: Vec<_> = parse_certificates(&assembly)
         .into_iter()
-        .filter(|cert| cert.kind == "platform-call-structured")
+        .filter(|cert| cert.kind == "runtime-call-structured")
         .collect();
 
     assert_eq!(
