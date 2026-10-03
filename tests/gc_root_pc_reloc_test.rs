@@ -13,6 +13,50 @@ fn unique_base(stem: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("cml-{stem}-{}-{nonce}", std::process::id()))
 }
 
+
+
+fn link_must_fail(source: &str, stem: &str) {
+    let base = unique_base(stem);
+    let s_path = base.with_extension("s");
+    let o_path = base.with_extension("o");
+    let elf_path = base.with_extension("elf");
+
+    std::fs::write(&s_path, source).expect("write unresolved relocation witness");
+
+    let assembled = Command::new("as")
+        .arg("--64")
+        .arg(&s_path)
+        .arg("-o")
+        .arg(&o_path)
+        .output()
+        .expect("run GNU as");
+    assert!(
+        assembled.status.success(),
+        "GNU as unexpectedly rejected unresolved-link witness: {}",
+        String::from_utf8_lossy(&assembled.stderr)
+    );
+
+    let linked = Command::new("ld")
+        .arg("-m")
+        .arg("elf_x86_64")
+        .arg("-e")
+        .arg("wsm_entry")
+        .arg(&o_path)
+        .arg("-o")
+        .arg(&elf_path)
+        .output()
+        .expect("run GNU ld");
+
+    assert!(
+        !linked.status.success(),
+        "GNU ld must fail closed on an unresolved certified return label"
+    );
+
+    let _ = std::fs::remove_file(s_path);
+    let _ = std::fs::remove_file(o_path);
+    let _ = std::fs::remove_file(elf_path);
+}
+
 fn link_and_read_bindings(source: &str, text_base: &str, stem: &str) -> Vec<(u64, u64)> {
     let base = unique_base(stem);
     let s_path = base.with_extension("s");
@@ -149,4 +193,54 @@ fn absent_root_certificate_emits_no_pc_binding_section() {
             .expect("absence is a valid non-safepoint state"),
         compiled.assembly
     );
+}
+
+
+#[test]
+fn tampered_compiler_root_identity_is_rejected_before_assembly() {
+    let expressions = parser::parse("((lambda (a b . rest) rest) 10 20 30 40 50)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let compiled = X86FreestandingBackend::new()
+        .compile_program_with_metadata(&program)
+        .expect("bounded variadic root-map witness must compile");
+
+    let mut bad_label = compiled.clone();
+    bad_label.gc_root_maps[0].return_label = ".Lgc_return_99".to_string();
+    assert!(
+        bad_label.assembly_with_gc_root_pc_bindings().is_err(),
+        "tampered return-label identity must fail before relocation emission"
+    );
+
+    let mut duplicate_site = compiled.clone();
+    duplicate_site.gc_root_maps[1].id = duplicate_site.gc_root_maps[0].id;
+    assert!(
+        duplicate_site.assembly_with_gc_root_pc_bindings().is_err(),
+        "duplicate compiler site identity must fail before relocation emission"
+    );
+
+    let mut duplicate_label = compiled;
+    duplicate_label.gc_root_maps[1].return_label =
+        duplicate_label.gc_root_maps[0].return_label.clone();
+    assert!(
+        duplicate_label.assembly_with_gc_root_pc_bindings().is_err(),
+        "duplicate compiler return label must fail before relocation emission"
+    );
+}
+
+#[test]
+fn unresolved_return_label_fails_at_link_time() {
+    let source = r#"
+.text
+.globl wsm_entry
+.type wsm_entry,@function
+wsm_entry:
+    ret
+
+.section .wsm_gc_root_pc_bind,"a",@progbits
+.p2align 3
+.quad 0
+.quad .Lgc_return_missing
+"#;
+
+    link_must_fail(source, "gc-pc-unresolved");
 }
