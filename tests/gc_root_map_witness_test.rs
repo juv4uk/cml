@@ -233,11 +233,9 @@ fn nested_variadic_call_with_preexisting_spill_emits_no_partial_certificate() {
     );
 }
 
-
 #[test]
 fn nested_platform_call_carries_earlier_outer_spill_as_live_root() {
-    let expressions =
-        parser::parse("(cons (quote KEEP) (cons (quote B) (quote C)))").unwrap();
+    let expressions = parser::parse("(cons (quote KEEP) (cons (quote B) (quote C)))").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
@@ -286,8 +284,7 @@ fn nested_platform_call_carries_earlier_outer_spill_as_live_root() {
 
 #[test]
 fn nested_platform_call_without_earlier_spill_has_no_phantom_root() {
-    let expressions =
-        parser::parse("(cons (cons (quote B) (quote C)) (quote KEEP))").unwrap();
+    let expressions = parser::parse("(cons (cons (quote B) (quote C)) (quote KEEP))").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
@@ -315,10 +312,8 @@ fn nested_platform_call_without_earlier_spill_has_no_phantom_root() {
 
 #[test]
 fn complex_nested_form_fails_closed_instead_of_emitting_partial_structured_map() {
-    let expressions = parser::parse(
-        "(cons (quote KEEP) ((lambda () (cons (quote B) (quote C)))))",
-    )
-    .unwrap();
+    let expressions =
+        parser::parse("(cons (quote KEEP) ((lambda () (cons (quote B) (quote C)))))").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)

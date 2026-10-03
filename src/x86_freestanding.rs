@@ -1905,18 +1905,13 @@ impl Emitter {
                 let direct_nested_wsm_cons = match argument {
                     Ir::App { func, .. } => {
                         if let Ir::Sid(sid) = func.as_ref() {
-                            matches!(
-                                sid8_call_contract(*sid),
-                                Some((Some(2), "wsm_cons"))
-                            )
+                            matches!(sid8_call_contract(*sid), Some((Some(2), "wsm_cons")))
                         } else {
-                            matches!(
-                                platform_call_contract(func),
-                                Some((_, _, "wsm_cons"))
-                            ) && !matches!(
-                                func.as_ref(),
-                                Ir::Var(name) if self.env.contains_key(name)
-                            )
+                            matches!(platform_call_contract(func), Some((_, _, "wsm_cons")))
+                                && !matches!(
+                                    func.as_ref(),
+                                    Ir::Var(name) if self.env.contains_key(name)
+                                )
                         }
                     }
                     _ => false,
@@ -1939,9 +1934,7 @@ impl Emitter {
             }
 
             self.line("    movq %r12, %rdi");
-            for (slot, register) in
-                slots.iter().zip(["%rsi", "%rdx", "%rcx", "%r8", "%r9"])
-            {
+            for (slot, register) in slots.iter().zip(["%rsi", "%rdx", "%rcx", "%r8", "%r9"]) {
                 self.line(&format!(
                     "    movq {}(%rsp), {register}",
                     Self::slot_offset(*slot)
