@@ -108,10 +108,7 @@ fn owner_source<'a>(source: &'a str, name: &str) -> &'a str {
 #[test]
 fn every_direct_allocator_emission_belongs_to_the_declared_owner_census() {
     let expected_cons: usize = OWNERS.iter().map(|owner| owner.direct_cons).sum();
-    let expected_closure_new: usize = OWNERS
-        .iter()
-        .map(|owner| owner.direct_closure_new)
-        .sum();
+    let expected_closure_new: usize = OWNERS.iter().map(|owner| owner.direct_closure_new).sum();
 
     assert_eq!(
         count(SOURCE, "call wsm_cons"),
@@ -197,11 +194,7 @@ fn census_is_small_explicit_and_reviewable() {
         assert!(!owner.note.is_empty());
         eprintln!(
             "{}: {:?}; direct_cons={}; direct_closure_new={}; {}",
-            owner.name,
-            owner.policy,
-            owner.direct_cons,
-            owner.direct_closure_new,
-            owner.note
+            owner.name, owner.policy, owner.direct_cons, owner.direct_closure_new, owner.note
         );
     }
 }
