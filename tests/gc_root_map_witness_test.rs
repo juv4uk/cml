@@ -193,3 +193,22 @@ fn non_allocating_fixed_lambda_emits_no_gc_certificate() {
         "research root metadata is emitted only at admitted allocating safepoints"
     );
 }
+
+#[test]
+fn nested_variadic_call_with_preexisting_spill_emits_no_partial_certificate() {
+    let expressions =
+        parser::parse("(cons (quote KEEP) ((lambda (a . rest) rest) 1 2 3))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("nested variadic call must compile");
+
+    assert!(
+        assembly.matches("call wsm_cons").count() >= 3,
+        "fixture must contain nested rest-packing allocations plus outer cons"
+    );
+    assert!(
+        parse_certificates(&assembly).is_empty(),
+        "bounded root metadata must fail closed when an older outer spill exists"
+    );
+}
