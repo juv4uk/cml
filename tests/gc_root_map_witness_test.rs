@@ -488,3 +488,147 @@ fn captured_closure_fails_closed_when_an_outer_structured_spill_is_live() {
         "the outer cons may still be certified after the nested closure expression completes"
     );
 }
+
+
+#[test]
+fn quoted_proper_list_emits_one_exact_rewriteable_tail_root_per_cons() {
+    let expressions = parser::parse("(quote (A B C))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("quoted proper list must compile");
+
+    let quote: Vec<_> = parse_certificates(&assembly)
+        .into_iter()
+        .filter(|cert| cert.kind == "quote-bounded")
+        .collect();
+
+    assert_eq!(quote.len(), 3);
+    assert_eq!(
+        quote.iter().map(|cert| cert.stack_roots.len()).collect::<Vec<_>>(),
+        vec![1, 1, 1]
+    );
+    for cert in &quote {
+        assert_eq!(
+            cert.register_roots,
+            BTreeSet::from(["%rdx".to_string(), "%rsi".to_string()])
+        );
+        assert!(!cert.register_roots.contains("%r12"));
+    }
+    for pair in quote.windows(2) {
+        assert!(
+            pair[0].stack_roots.is_disjoint(&pair[1].stack_roots),
+            "old quote tail location must die after replacement"
+        );
+    }
+}
+
+#[test]
+fn nested_quoted_list_carries_outer_tail_through_inner_allocations() {
+    let expressions = parser::parse("(quote (A (B C) D))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("nested quoted list must compile");
+
+    let quote: Vec<_> = parse_certificates(&assembly)
+        .into_iter()
+        .filter(|cert| cert.kind == "quote-bounded")
+        .collect();
+
+    assert_eq!(quote.len(), 5);
+    assert_eq!(
+        quote.iter().map(|cert| cert.stack_roots.len()).collect::<Vec<_>>(),
+        vec![1, 2, 2, 1, 1]
+    );
+    let shared: BTreeSet<_> = quote[1]
+        .stack_roots
+        .intersection(&quote[2].stack_roots)
+        .copied()
+        .collect();
+    assert_eq!(shared.len(), 1);
+}
+
+#[test]
+fn quoted_list_in_structured_cons_preserves_the_older_outer_spill() {
+    let expressions = parser::parse("(cons (quote KEEP) (quote (A B)))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("structured outer cons with quoted list must compile");
+
+    let certificates = parse_certificates(&assembly);
+    let quote: Vec<_> = certificates
+        .iter()
+        .filter(|cert| cert.kind == "quote-bounded")
+        .collect();
+    assert_eq!(quote.len(), 2);
+    assert_eq!(
+        quote.iter().map(|cert| cert.stack_roots.len()).collect::<Vec<_>>(),
+        vec![2, 2]
+    );
+    let shared: BTreeSet<_> = quote[0]
+        .stack_roots
+        .intersection(&quote[1].stack_roots)
+        .copied()
+        .collect();
+    assert_eq!(shared.len(), 1);
+
+    let outer: Vec<_> = certificates
+        .iter()
+        .filter(|cert| cert.kind == "runtime-call-structured")
+        .collect();
+    assert_eq!(outer.len(), 1);
+}
+
+#[test]
+fn quoted_dotted_list_certifies_the_current_tail_location() {
+    let expressions = parser::parse("(quote (A B . C))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("quoted dotted list must compile");
+
+    let quote: Vec<_> = parse_certificates(&assembly)
+        .into_iter()
+        .filter(|cert| cert.kind == "quote-bounded")
+        .collect();
+    assert_eq!(quote.len(), 2);
+    assert_eq!(
+        quote.iter().map(|cert| cert.stack_roots.len()).collect::<Vec<_>>(),
+        vec![1, 1]
+    );
+    assert!(quote[0].stack_roots.is_disjoint(&quote[1].stack_roots));
+}
+
+#[test]
+fn quoted_scalar_does_not_invent_a_gc_root_from_its_bits() {
+    let expressions = parser::parse("(quote 4096)").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("quoted scalar must compile");
+
+    assert_eq!(assembly.matches("call wsm_cons").count(), 0);
+    assert!(
+        parse_certificates(&assembly)
+            .iter()
+            .all(|cert| cert.kind != "quote-bounded")
+    );
+}
+
+#[test]
+fn quoted_list_in_unproved_lexical_context_emits_no_partial_certificate() {
+    let expressions = parser::parse("((lambda (x) (quote (A B))) (quote KEEP))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("lexical quoted-list fixture must compile");
+
+    assert!(assembly.matches("call wsm_cons").count() >= 2);
+    assert!(
+        parse_certificates(&assembly)
+            .iter()
+            .all(|cert| cert.kind != "quote-bounded")
+    );
+}
