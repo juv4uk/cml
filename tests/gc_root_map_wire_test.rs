@@ -113,3 +113,43 @@ fn manifest_parser_fails_closed_on_corrupt_root_metadata() {
     let wrong_version = good.replacen("CML_GC_ROOT_MAP_V1", "CML_GC_ROOT_MAP_V2", 1);
     assert!(parse_gc_root_map_manifest(&wrong_version).is_err());
 }
+
+
+#[test]
+fn quote_bounded_certificates_project_to_machine_readable_wire() {
+    let expressions = parser::parse("(quote (A B C))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+
+    let compiled = X86FreestandingBackend::new()
+        .compile_program_with_metadata(&program)
+        .expect("quoted proper list must compile with metadata");
+
+    let quote: Vec<_> = compiled
+        .gc_root_maps
+        .iter()
+        .filter(|record| record.certificate_kind == "quote-bounded")
+        .collect();
+
+    assert_eq!(quote.len(), 3);
+    assert!(compiled.validate_gc_root_maps());
+
+    for record in quote {
+        assert_eq!(record.allocator, "wsm_cons");
+        assert_eq!(record.register_roots, vec!["%rdx", "%rsi"]);
+        assert_eq!(record.stack_offsets.len(), 1);
+        assert!(record.stack_offsets[0] < record.frame_bytes);
+        let call_and_label = format!("    call wsm_cons\n{}:", record.return_label);
+        assert!(compiled.assembly.contains(&call_and_label));
+    }
+
+    let manifest = compiled.gc_root_map_manifest();
+    let decoded = parse_gc_root_map_manifest(&manifest).expect("quote manifest must decode");
+    assert_eq!(decoded, compiled.gc_root_maps);
+    assert_eq!(
+        decoded
+            .iter()
+            .filter(|record| record.certificate_kind == "quote-bounded")
+            .count(),
+        3
+    );
+}
