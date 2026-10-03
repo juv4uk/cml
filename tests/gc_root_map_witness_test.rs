@@ -29,7 +29,7 @@ fn parse_certificates(assembly: &str) -> Vec<Certificate> {
             let id = field(parts.iter().copied(), "id").parse().unwrap();
             let kind = field(parts.iter().copied(), "kind");
             let frame = field(parts.iter().copied(), "frame").parse().unwrap();
-            assert_eq!(kind, "pack-rest");
+            assert_eq!(kind, "pack-rest-bounded");
             certificates.push(Certificate {
                 id,
                 frame,
@@ -65,7 +65,7 @@ fn parse_certificates(assembly: &str) -> Vec<Certificate> {
 
 #[test]
 fn pack_rest_safepoints_emit_exact_shrinking_root_locations() {
-    let expressions = parser::parse("((lambda args args) 1 2 3)").unwrap();
+    let expressions = parser::parse("((lambda (a b . rest) rest) 10 20 30 40 50)").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
@@ -81,8 +81,53 @@ fn pack_rest_safepoints_emit_exact_shrinking_root_locations() {
     let stack_counts: Vec<_> = certificates.iter().map(|c| c.stack_roots.len()).collect();
     assert_eq!(
         stack_counts,
-        vec![4, 3, 2],
-        "each completed cons makes exactly one pending rest value dead"
+        vec![6, 5, 4],
+        "two preserved fixed arguments stay rooted while pending rest roots shrink"
+    );
+
+    // Derive the fixed-argument locations from their actual use *after* the
+    // final packing allocation. This avoids a hand-written stack-offset
+    // whitelist and proves the certificate follows compiler layout.
+    let after_last_cons = assembly
+        .rsplit_once("call wsm_cons")
+        .expect("fixture must allocate the rest list")
+        .1;
+    let before_lambda_call = after_last_cons
+        .split("call .Llambda_")
+        .next()
+        .expect("direct lambda call must follow rest packing");
+    let final_arg_offsets: Vec<usize> = before_lambda_call
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            let rest = line.strip_prefix("movq ")?;
+            let (source, target) = rest.split_once(", ")?;
+            if !matches!(target, "%rsi" | "%rdx" | "%rcx" | "%r8" | "%r9") {
+                return None;
+            }
+            let offset = source.strip_suffix("(%rsp)")?;
+            offset.parse().ok()
+        })
+        .collect();
+    assert_eq!(
+        final_arg_offsets.len(),
+        3,
+        "fixed a/b plus packed rest must feed the final lambda call"
+    );
+    let fixed_offsets = &final_arg_offsets[..2];
+    for fixed in fixed_offsets {
+        assert!(
+            certificates.iter().all(|cert| cert.stack_roots.contains(fixed)),
+            "fixed argument location {fixed} is live after every packing allocation"
+        );
+    }
+    assert!(
+        !certificates
+            .last()
+            .expect("three safepoints")
+            .stack_roots
+            .contains(&final_arg_offsets[2]),
+        "final packed-rest result does not exist until after the last allocation"
     );
 
     let frames: BTreeSet<_> = certificates.iter().map(|c| c.frame).collect();
@@ -120,8 +165,9 @@ fn pack_rest_safepoints_emit_exact_shrinking_root_locations() {
         let removed: Vec<_> = before.difference(after).copied().collect();
         let added: Vec<_> = after.difference(before).copied().collect();
 
-        // One processed car and the previous cdr slot die; one newly allocated
-        // cdr/result slot becomes live. Net root count shrinks by one.
+        // Preserved fixed roots remain. One processed car and the previous
+        // cdr slot die; one newly allocated cdr/result slot becomes live.
+        // Net root count shrinks by one.
         assert_eq!(removed.len(), 2, "dead locations must disappear precisely");
         assert_eq!(added.len(), 1, "new packed-list cdr location must appear");
     }
