@@ -16,7 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout CML with build-source submodule
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 1
       - uses: dtolnay/rust-toolchain@stable
       - name: Exact compiler-owned root certificate
         run: cargo test --quiet --test gc_root_map_witness_test
