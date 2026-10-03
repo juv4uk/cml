@@ -3,6 +3,7 @@ const SOURCE: &str = include_str!("../src/x86_freestanding.rs");
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Policy {
     ConditionalCertified,
+    NotASafepoint,
     UnknownNeedsRootProof,
 }
 
@@ -20,8 +21,8 @@ const OWNERS: &[AllocatorOwner] = &[
         name: "compile_program",
         direct_cons: 0,
         direct_closure_new: 1,
-        policy: Policy::UnknownNeedsRootProof,
-        note: "startup named-closure allocation; globals/root owner not yet proved",
+        policy: Policy::NotASafepoint,
+        note: "startup named-closure allocation; runtime currently OOMs on capacity exhaustion and must not collect here until global rewriteable roots are proved",
     },
     AllocatorOwner {
         name: "emit_runtime_call_with_structured_args",
@@ -157,6 +158,28 @@ fn certified_owner_families_keep_their_fail_closed_certificate_guards() {
 }
 
 #[test]
+fn startup_named_closure_allocation_is_explicitly_not_a_safepoint() {
+    let startup = OWNERS
+        .iter()
+        .find(|owner| owner.name == "compile_program")
+        .expect("compile_program must stay in the allocator census");
+    assert_eq!(startup.policy, Policy::NotASafepoint);
+
+    let body = owner_source(SOURCE, "compile_program");
+    assert_eq!(count(body, "call wsm_closure_new"), 1);
+    assert_eq!(count(body, "call wsm_cons"), 0);
+    assert!(body.contains("wsm_os_target::NIL"));
+    assert!(body.contains(".Lnamed_closure_word_"));
+
+    assert!(
+        !body.contains("emit_gc_root_certificate")
+            && !body.contains(r#""runtime-call-structured""#)
+            && !body.contains(r#""pack-rest-bounded""#),
+        "startup is NOT-A-SAFEPOINT: adding a GC certificate requires solving #424 global rewriteable roots first"
+    );
+}
+
+#[test]
 fn unknown_allocator_owners_are_not_silently_treated_as_certified() {
     for owner in OWNERS
         .iter()
@@ -185,9 +208,16 @@ fn census_is_small_explicit_and_reviewable() {
     assert_eq!(
         OWNERS
             .iter()
+            .filter(|owner| owner.policy == Policy::NotASafepoint)
+            .count(),
+        1
+    );
+    assert_eq!(
+        OWNERS
+            .iter()
             .filter(|owner| owner.policy == Policy::UnknownNeedsRootProof)
             .count(),
-        4
+        3
     );
 
     for owner in OWNERS {
