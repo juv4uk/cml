@@ -643,3 +643,101 @@ fn quoted_list_in_unproved_lexical_context_emits_no_partial_certificate() {
             .all(|cert| cert.kind != "quote-bounded")
     );
 }
+
+
+#[test]
+fn sid8_list_emits_exact_shrinking_pending_argument_roots() {
+    let expressions =
+        parser::parse("(list (quote A) (quote B) (quote C) (quote D))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("top-level LIST fixture must compile");
+
+    let list: Vec<_> = parse_certificates(&assembly)
+        .into_iter()
+        .filter(|cert| cert.kind == "list-bounded")
+        .collect();
+
+    assert_eq!(list.len(), 4);
+    assert_eq!(
+        list.iter()
+            .map(|cert| cert.stack_roots.len())
+            .collect::<Vec<_>>(),
+        vec![4, 3, 2, 1]
+    );
+
+    for cert in &list {
+        assert_eq!(
+            cert.register_roots,
+            BTreeSet::from(["%rdx".to_string(), "%rsi".to_string()])
+        );
+        assert!(!cert.register_roots.contains("%r12"));
+        assert!(cert.stack_roots.iter().all(|offset| *offset < cert.frame));
+    }
+
+    for pair in list.windows(2) {
+        assert_eq!(
+            pair[0]
+                .stack_roots
+                .difference(&pair[1].stack_roots)
+                .count(),
+            1
+        );
+        assert!(pair[1].stack_roots.is_subset(&pair[0].stack_roots));
+    }
+}
+
+#[test]
+fn nested_sid8_list_preserves_the_older_outer_structured_spill() {
+    let expressions =
+        parser::parse("(cons (quote KEEP) (list (quote A) (quote B) (quote C)))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("nested LIST inside outer cons must compile");
+
+    let certificates = parse_certificates(&assembly);
+    let list: Vec<_> = certificates
+        .iter()
+        .filter(|cert| cert.kind == "list-bounded")
+        .collect();
+    assert_eq!(list.len(), 3);
+    assert_eq!(
+        list.iter()
+            .map(|cert| cert.stack_roots.len())
+            .collect::<Vec<_>>(),
+        vec![4, 3, 2]
+    );
+
+    let outer = certificates
+        .iter()
+        .find(|cert| cert.kind == "runtime-call-structured")
+        .expect("outer cons should retain its bounded structured certificate");
+    assert_eq!(outer.stack_roots.len(), 2);
+
+    let shared: Vec<_> = list
+        .last()
+        .expect("last LIST safepoint")
+        .stack_roots
+        .intersection(&outer.stack_roots)
+        .copied()
+        .collect();
+    assert_eq!(shared.len(), 1);
+}
+
+#[test]
+fn sid8_list_fails_closed_in_unproved_lexical_context() {
+    let expressions =
+        parser::parse("((lambda (x) (list x (quote A))) (quote X))").unwrap();
+    let program = lower::lower_program(&expressions).unwrap();
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&program)
+        .expect("lexical LIST fixture must compile");
+
+    assert!(
+        parse_certificates(&assembly)
+            .iter()
+            .all(|cert| cert.kind != "list-bounded")
+    );
+}
