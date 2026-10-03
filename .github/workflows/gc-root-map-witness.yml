@@ -5,6 +5,8 @@ on:
     paths:
       - "src/x86_freestanding.rs"
       - "tests/gc_root_map_witness_test.rs"
+      - "tests/gc_root_pc_reloc_test.rs"
+      - "src/x86_freestanding_metadata.rs"
       - "tests/gc_allocator_census_test.rs"
       - ".github/workflows/gc-root-map-witness.yml"
   workflow_dispatch:
@@ -25,5 +27,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Exact compiler-owned root certificate
         run: cargo test --quiet --test gc_root_map_witness_test
+      - name: Linker-resolved safepoint PC relocation witness
+        run: cargo test --quiet --test gc_root_pc_reloc_test
       - name: Finite allocator-owner census
         run: cargo test --quiet --test gc_allocator_census_test
