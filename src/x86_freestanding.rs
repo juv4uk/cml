@@ -1778,8 +1778,7 @@ impl Emitter {
                         self.next_slot = param_names.len();
                         let old_frame_bytes = self.frame_bytes;
                         self.frame_bytes = frame_bytes;
-                        let body_result =
-                            self.emit_tail_body(body, label, param_names.len(), None);
+                        let body_result = self.emit_tail_body(body, label, param_names.len(), None);
                         self.frame_bytes = old_frame_bytes;
                         body_result?;
                         self.env = old_env;
@@ -2245,10 +2244,7 @@ impl Emitter {
                 Self::slot_offset(tail_slot)
             ));
             self.line("    movq %r12, %rdi");
-            self.line(&format!(
-                "    movq {}(%rsp), %rsi",
-                Self::slot_offset(slot)
-            ));
+            self.line(&format!("    movq {}(%rsp), %rsi", Self::slot_offset(slot)));
             self.line(&format!(
                 "    movq {}(%rsp), %rdx",
                 Self::slot_offset(tail_slot)
