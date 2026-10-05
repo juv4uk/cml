@@ -1,0 +1,105 @@
+name: Issue 465 real pass evidence
+
+on:
+  pull_request:
+    paths:
+      - src/compiler_passes.rs
+      - src/bin/cml-compile.rs
+      - tests/compiler_pass_manifest_test.rs
+      - scripts/bind-sens-pass-evidence.py
+      - .github/workflows/issue-465-real-pass-evidence.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout cml
+        uses: actions/checkout@v5
+        with:
+          path: cml
+          submodules: recursive
+      - name: Resolve observed-current SENS
+        id: rev
+        working-directory: cml
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(grep -F '(observed-current-sha . "' upstream-revisions.lisp | head -n1 | cut -d'"' -f2)"
+          test "${#sha}" -eq 40
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Checkout observed-current SENS
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/sens
+          ref: ${{ steps.rev.outputs.sha }}
+          path: sens
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Rustfmt contract
+        working-directory: cml
+        run: cargo fmt -p cml -- --check
+      - name: Build CML pass manifest binary
+        working-directory: cml
+        run: cargo build --bin cml-compile
+      - name: Emit upstream real oracle rows
+        working-directory: sens
+        run: |
+          cargo build --release -p sens --example current_en_vs_d1d8_cpu
+          python3 benchmarks/execution-ladder-conformance/emit_oracle.py \
+            --manifest benchmarks/current-en-vs-d1d8/fixtures/d3-smoke.json \
+            --helper target/release/examples/current_en_vs_d1d8_cpu \
+            --out /tmp/sens-d3-oracle.jsonl
+      - name: Bind real rows to ast-to-ir evidence
+        working-directory: cml
+        run: |
+          python3 scripts/bind-sens-pass-evidence.py \
+            /tmp/sens-d3-oracle.jsonl \
+            --sens-dir ../sens \
+            --cml-compile target/debug/cml-compile \
+            --pass-id ast-to-ir.lower \
+            | tee /tmp/pass-evidence.txt
+          test "$(grep -c '^CML-PASS-EVIDENCE' /tmp/pass-evidence.txt)" -eq 3
+          test "$(grep -c $'status=BLOCKED\\treason=exact-domain-identity-transport-unavailable' /tmp/pass-evidence.txt)" -eq 2
+          grep -F "CML-PASS-EVIDENCE-GREEN pass_id=ast-to-ir.lower rows=2" /tmp/pass-evidence.txt
+      - name: Wrong oracle digest fails before pass evidence
+        working-directory: cml
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          src="/tmp/sens-d3-oracle.jsonl"
+          dst="/tmp/bad-oracle.jsonl"
+          rows=[json.loads(line) for line in open(src, encoding="utf-8") if line.strip()]
+          rows[0]["oracle_digest"]="0"*64
+          with open(dst,"w",encoding="utf-8") as f:
+              for row in rows:
+                  f.write(json.dumps(row, ensure_ascii=False, sort_keys=True)+"\n")
+          PY
+          if python3 scripts/bind-sens-pass-evidence.py \
+            /tmp/bad-oracle.jsonl --sens-dir ../sens \
+            --cml-compile target/debug/cml-compile --pass-id ast-to-ir.lower
+          then
+            echo "ERROR: wrong oracle digest reached pass evidence"
+            exit 1
+          fi
+      - name: Wrong identity trace digest fails before pass evidence
+        working-directory: cml
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          src="/tmp/sens-d3-oracle.jsonl"
+          dst="/tmp/bad-trace.jsonl"
+          rows=[json.loads(line) for line in open(src, encoding="utf-8") if line.strip()]
+          rows[0]["identity_trace_digest"]="0"*64
+          with open(dst,"w",encoding="utf-8") as f:
+              for row in rows:
+                  f.write(json.dumps(row, ensure_ascii=False, sort_keys=True)+"\n")
+          PY
+          if python3 scripts/bind-sens-pass-evidence.py \
+            /tmp/bad-trace.jsonl --sens-dir ../sens \
+            --cml-compile target/debug/cml-compile --pass-id ast-to-ir.lower
+          then
+            echo "ERROR: wrong identity trace digest reached pass evidence"
+            exit 1
+          fi
