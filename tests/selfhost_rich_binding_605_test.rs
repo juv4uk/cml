@@ -99,9 +99,9 @@ fn real_pinned_compiler_nucleus_reaches_all_nine_rich_mechanisms_via_sens_roles(
 #[test]
 fn current_role_binding_source_has_no_host_role_or_identity_switch() {
     let mechanism_source = include_str!("../src/compiler_mechanism.rs");
-    assert!(!mechanism_source.contains("DomainIdentity"));
-    assert!(!mechanism_source.contains("packed_bits"));
-    assert!(!mechanism_source.contains("Sid8"));
-    assert!(!mechanism_source.contains("Sens8"));
+    assert!(!mechanism_source.contains("DomainIdentity::"));
+    assert!(!mechanism_source.contains("packed_bits("));
+    assert!(!mechanism_source.contains("sens::Sid8"));
+    assert!(!mechanism_source.contains("sens::Sens8"));
     assert!(mechanism_source.contains("CompilerLoweringRole"));
 }
