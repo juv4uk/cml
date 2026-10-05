@@ -159,15 +159,17 @@ mod enabled {
     }
 
     fn serve(path: PathBuf) -> Result<(), String> {
-        // Strict bootstrap comes before socket creation. A failed host probe or
-        // live-device mismatch must never leave a socket that looks ready.
-        let evidence = initialize_host_session_from_configured_probe(0)
-            .map_err(|error| format!("CUDA host/session admission failed: {error:?}"))?;
-
+        // Remove any path left by a previous worker before strict bootstrap.
+        // If host admission fails, no stale socket path may survive and look ready.
         if path.exists() {
             fs::remove_file(&path)
                 .map_err(|error| format!("remove stale socket {}: {error}", path.display()))?;
         }
+
+        // Strict bootstrap still completes before a new listening socket exists.
+        let evidence = initialize_host_session_from_configured_probe(0)
+            .map_err(|error| format!("CUDA host/session admission failed: {error:?}"))?;
+
         let listener = UnixListener::bind(&path)
             .map_err(|error| format!("bind {}: {error}", path.display()))?;
         let _guard = SocketGuard(path.clone());
