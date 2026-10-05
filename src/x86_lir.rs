@@ -483,6 +483,77 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
             };
             lower_binary_alu(args, lir_op, ctx, prov)
         }
+        Ir::App { func, args }
+            if matches!(func.as_ref(), Ir::Sid(sid)
+                if *sid == sens::sid!(00010011) || *sid == sens::sid!(00010100)) =>
+        {
+            if args.len() != 2 {
+                return Err(LirLowerError::InvalidArity {
+                    expected: 2,
+                    found: args.len(),
+                });
+            }
+
+            let literal = |arg: &Ir| match arg {
+                Ir::Int(value) => Ok(*value),
+                _ => Err(LirLowerError::Unsupported(
+                    "x86 div-rem lowering currently requires literal exact integers".to_string(),
+                )),
+            };
+
+            let numerator = literal(&args[0])?;
+            let divisor = literal(&args[1])?;
+            if numerator < 0 || divisor <= 0 {
+                return Err(LirLowerError::Unsupported(
+                    "x86 div-rem lowering requires numerator >= 0 and divisor > 0".to_string(),
+                ));
+            }
+            if wsm_os_target::encode_fixnum(numerator).is_none()
+                || wsm_os_target::encode_fixnum(divisor).is_none()
+            {
+                return Err(LirLowerError::Unsupported(
+                    "x86 div-rem operands exceed admitted target fixnum range".to_string(),
+                ));
+            }
+
+            let numerator_vreg = ctx.func.alloc_vreg();
+            let divisor_vreg = ctx.func.alloc_vreg();
+            let low = ctx.func.alloc_vreg();
+            let high = ctx.func.alloc_vreg();
+
+            ctx.emit(LirInst::Const64 {
+                dst: numerator_vreg,
+                imm: numerator as u64,
+                provenance: prov.clone(),
+            });
+            ctx.emit(LirInst::Const64 {
+                dst: divisor_vreg,
+                imm: divisor as u64,
+                provenance: prov.clone(),
+            });
+            ctx.emit(LirInst::Copy {
+                dst: low,
+                src: numerator_vreg,
+                provenance: prov.clone(),
+            });
+            ctx.emit(LirInst::Const64 {
+                dst: high,
+                imm: 0,
+                provenance: prov.clone(),
+            });
+            ctx.emit(LirInst::DivRem {
+                low,
+                high,
+                divisor: divisor_vreg,
+                provenance: prov,
+            });
+
+            if *func.as_ref() == Ir::Sid(sens::sid!(00010100)) {
+                Ok(low)
+            } else {
+                Ok(high)
+            }
+        }
         Ir::Cond { branches } => {
             if branches.is_empty() {
                 return Err(LirLowerError::Unsupported(
