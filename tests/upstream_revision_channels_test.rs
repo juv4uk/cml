@@ -91,7 +91,7 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         "#84 supported-pin declaration must match the external/sens gitlink checkout"
     );
 
-    let observed_checkout = sibling("my-lisp");
+    let observed_checkout = sibling("sens");
     assert_eq!(
         head(&observed_checkout),
         observed,
@@ -173,7 +173,7 @@ fn exact_rational_authority_witness_declares_supported_pin_channel() {
 
 #[test]
 fn observed_current_exposes_new_math_witness_without_promoting_supported_pin() {
-    let observed_fixture = sibling("my-lisp").join("tests/fixtures/mathematical-result-v1.lisp");
+    let observed_fixture = sibling("sens").join("tests/fixtures/mathematical-result-v1.lisp");
 
     // Channel separation must survive future convergence: supported-pin may
     // eventually gain this fixture without invalidating #84. The invariant
