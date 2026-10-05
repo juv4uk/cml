@@ -13,6 +13,7 @@ pub mod elf64;
 pub mod execution;
 mod execution_scheduler;
 mod execution_store;
+pub mod exact_q_rep;
 pub mod fpga_transport;
 pub mod fs;
 pub mod gpu_cuda;
