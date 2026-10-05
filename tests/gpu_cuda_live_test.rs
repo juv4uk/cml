@@ -91,7 +91,7 @@ fn nvidia_driver_jit_target_executes_and_records_live_toolchain_provenance() {
     assert!(provenance.driver_version > 0);
     assert_eq!(cuda.device.compute_capability, session.device().compute_capability);
 }
- 
+
 #[test]
 #[ignore = "requires a live NVIDIA CUDA device"]
 fn capability_probe_reports_live_cuda_devices() {
