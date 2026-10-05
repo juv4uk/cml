@@ -1,5 +1,5 @@
 use cml::compute::{AdmissionBlocker, ComputeBackend, ComputeExecutionError, CpuComputeBackend};
-use cml::ir::{BufferLiteral, Ir, Params, PrimOp};
+use cml::ir::{BufferLiteral, Ir, Params};
 use cml::{lower, parser};
 use sens::{ErrorKind, Session, eval_program};
 
@@ -16,7 +16,7 @@ fn lower_one(source: &str) -> Ir {
 
 fn f32_map_ir(values: &[f32], body: Ir) -> Ir {
     Ir::App {
-        func: Box::new(Ir::Builtin("NUMERIC-BUFFER-MAP".to_string())),
+        func: Box::new(Ir::Sid(sens::sid!(01011001))),
         args: vec![
             Ir::Lambda {
                 params: Params::Fixed(vec!["X".to_string()]),
@@ -26,6 +26,13 @@ fn f32_map_ir(values: &[f32], body: Ir) -> Ir {
                 values.iter().map(|value| value.to_bits()).collect(),
             )),
         ],
+    }
+}
+
+fn sid_add(lhs: Ir, rhs: Ir) -> Ir {
+    Ir::App {
+        func: Box::new(Ir::Sid(sens::sid!(00001100))),
+        args: vec![lhs, rhs],
     }
 }
 
@@ -103,26 +110,14 @@ fn dormant_f32_cpu_ir_matches_the_live_canonical_evaluator() {
             "(numeric-buffer-map (lambda (x) (+ x 1)) #f32(1.0 -2.5 0.1))",
             f32_map_ir(
                 &[1.0, -2.5, 0.1],
-                Ir::Prim {
-                    op: PrimOp::Add,
-                    args: vec![Ir::Var("X".to_string()), Ir::Int(1)],
-                },
+                sid_add(Ir::Var("X".to_string()), Ir::Int(1)),
             ),
         ),
         (
             "(numeric-buffer-map (lambda (x) (+ (+ x 10) -3)) #f32(1.0 -2.5 0.1))",
             f32_map_ir(
                 &[1.0, -2.5, 0.1],
-                Ir::Prim {
-                    op: PrimOp::Add,
-                    args: vec![
-                        Ir::Prim {
-                            op: PrimOp::Add,
-                            args: vec![Ir::Var("X".to_string()), Ir::Int(10)],
-                        },
-                        Ir::Int(-3),
-                    ],
-                },
+                sid_add(sid_add(Ir::Var("X".to_string()), Ir::Int(10)), Ir::Int(-3)),
             ),
         ),
     ];

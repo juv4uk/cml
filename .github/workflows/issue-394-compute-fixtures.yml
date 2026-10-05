@@ -1,0 +1,27 @@
+name: Issue 394 compute fixture health
+
+on:
+  pull_request:
+    paths:
+      - tests/cpu_compute_differential_test.rs
+      - tests/cpu_parallel_compute_backend_test.rs
+      - tests/gpu_wgsl_test.rs
+      - .github/workflows/issue-394-compute-fixtures.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Rustfmt contract
+        run: cargo fmt -p cml -- --check
+      - name: CPU differential fixture
+        run: cargo test --test cpu_compute_differential_test -- --nocapture
+      - name: Parallel CPU fixture
+        run: cargo test --test cpu_parallel_compute_backend_test -- --nocapture
+      - name: WGSL fixture
+        run: cargo test --test gpu_wgsl_test -- --nocapture

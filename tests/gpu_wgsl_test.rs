@@ -1,6 +1,6 @@
 use cml::compute::AdmissionBlocker;
 use cml::gpu_wgsl::{WgslError, emit_map_shader};
-use cml::ir::{BufferLiteral, Ir, Params, PrimOp};
+use cml::ir::{BufferLiteral, Ir, Params};
 use cml::{lower, parser};
 
 fn lower_one(source: &str) -> Ir {
@@ -10,7 +10,7 @@ fn lower_one(source: &str) -> Ir {
 
 fn f32_map_ir(values: &[f32], body: Ir) -> Ir {
     Ir::App {
-        func: Box::new(Ir::Builtin("NUMERIC-BUFFER-MAP".to_string())),
+        func: Box::new(Ir::Sid(sens::sid!(01011001))),
         args: vec![
             Ir::Lambda {
                 params: Params::Fixed(vec!["X".to_string()]),
@@ -20,6 +20,13 @@ fn f32_map_ir(values: &[f32], body: Ir) -> Ir {
                 values.iter().map(|value| value.to_bits()).collect(),
             )),
         ],
+    }
+}
+
+fn sid_add(lhs: Ir, rhs: Ir) -> Ir {
+    Ir::App {
+        func: Box::new(Ir::Sid(sens::sid!(00001100))),
+        args: vec![lhs, rhs],
     }
 }
 
@@ -41,16 +48,7 @@ fn dormant_affine_f32_ir_is_flattened_to_one_binary32_add() {
     // напряму, щоб окремо зберегти доказ своєї внутрішньої арифметики.
     let shader = emit_map_shader(&f32_map_ir(
         &[1.0, 2.0],
-        Ir::Prim {
-            op: PrimOp::Add,
-            args: vec![
-                Ir::Prim {
-                    op: PrimOp::Add,
-                    args: vec![Ir::Var("X".to_string()), Ir::Int(10)],
-                },
-                Ir::Int(-3),
-            ],
-        },
+        sid_add(sid_add(Ir::Var("X".to_string()), Ir::Int(10)), Ir::Int(-3)),
     ))
     .unwrap();
     assert!(shader.contains("array<f32>"));
@@ -62,10 +60,7 @@ fn dormant_affine_f32_ir_is_flattened_to_one_binary32_add() {
 fn emitter_rejects_non_affine_f32_ir() {
     let error = emit_map_shader(&f32_map_ir(
         &[1.0],
-        Ir::Prim {
-            op: PrimOp::Add,
-            args: vec![Ir::Var("X".to_string()), Ir::Var("X".to_string())],
-        },
+        sid_add(Ir::Var("X".to_string()), Ir::Var("X".to_string())),
     ))
     .unwrap_err();
     assert!(matches!(

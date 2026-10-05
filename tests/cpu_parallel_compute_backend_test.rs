@@ -198,7 +198,7 @@ fn diagnostic_performance_benchmark_on_large_buffer() {
     let count = 50_000;
     let raw: Vec<i32> = (0..count).map(|x| (x % 1000) as i32).collect();
     let ir = Ir::App {
-        func: Box::new(Ir::Var("NUMERIC-BUFFER-MAP".into())),
+        func: Box::new(Ir::Sid(sens::sid!(01011001))),
         args: vec![
             lower_one("(lambda (x) (+ x 1))"),
             Ir::Buffer(BufferLiteral::I32(raw)),
