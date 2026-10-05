@@ -95,6 +95,22 @@ mod tests {
     }
 
     #[test]
+    fn pass_contract_stays_width_neutral() {
+        for pass in PASS_MANIFEST {
+            let contract = format!(
+                "{} {} {} {}",
+                pass.id, pass.input, pass.output, pass.obligation
+            )
+            .to_ascii_lowercase();
+            assert!(
+                !contract.contains("sid8") && !contract.contains("sens8"),
+                "new pass contract must not canonize legacy 8-bit identity: {}",
+                pass.id
+            );
+        }
+    }
+
+    #[test]
     fn current_pass_order_matches_the_existing_lowering_spine() {
         let ids: Vec<_> = PASS_MANIFEST.iter().map(|pass| pass.id).collect();
         assert_eq!(
