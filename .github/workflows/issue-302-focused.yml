@@ -12,7 +12,7 @@ on:
 
 jobs:
   focused:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, guix]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
