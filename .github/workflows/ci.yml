@@ -8,11 +8,12 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout cml
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.SENS_READ_TOKEN }}
           path: cml
           # external/sens is a real submodule now: sens is the contract dependency
           # (cml reads its .lisp source tree directly for the encoder bridge, CPU
@@ -60,6 +61,7 @@ jobs:
       - name: Checkout sens (supported evidence)
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.SENS_READ_TOKEN }}
           repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.supported_pin_sha }}
           path: sens-supported
@@ -67,6 +69,7 @@ jobs:
       - name: Checkout sens (observed-current)
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.SENS_READ_TOKEN }}
           repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
           path: sens
@@ -74,6 +77,7 @@ jobs:
       - name: Checkout sens (Core1 bootstrap source)
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.SENS_READ_TOKEN }}
           repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}
           path: sens-bootstrap
@@ -106,6 +110,7 @@ jobs:
       - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.SENS_READ_TOKEN }}
           repository: juv4uk/fpga-lisp
           ref: d1cb7eb79f675e8f2cc128c3b12918d6b08b9413
           path: fpga-lisp
@@ -113,6 +118,7 @@ jobs:
       - name: Checkout wsm-my-lisp (provides x86 asm nucleus witness)
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.SENS_READ_TOKEN }}
           repository: juv4uk/wsm-my-lisp
           ref: 1fe661664479c92da1968d60914b512320678ac2
           path: wsm-my-lisp
