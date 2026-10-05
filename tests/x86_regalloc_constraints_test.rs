@@ -148,10 +148,7 @@ fn duplicate_identical_constraint_is_idempotent() {
         .expect("identical duplicate must not change the plan");
 
     assert_eq!(twice, once);
-    assert_eq!(
-        twice.fixed_constraints.get(&VReg(0)),
-        Some(&X86Reg::Rdx)
-    );
+    assert_eq!(twice.fixed_constraints.get(&VReg(0)), Some(&X86Reg::Rdx));
 }
 
 #[test]
