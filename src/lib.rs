@@ -37,6 +37,7 @@ pub mod pratyahara;
 pub mod runtime_abi;
 pub mod semantic;
 pub mod semantic_export;
+pub mod slot_vm;
 pub mod upstream_sid_bridge;
 pub mod witness_bridge;
 pub mod x86_avx2;
