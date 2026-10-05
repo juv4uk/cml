@@ -15,7 +15,19 @@ use sens::{ErrorKind, Session};
 const CORPUS: &str =
     include_str!("../external/sens/contracts/compiler-d3-selector-corpus-v1.tsv");
 
-const TEST_CML_REVISION: &str = "7572dbc0868d69de4c3c10d4542b635c050bed0f";
+const FALLBACK_CML_REVISION: &str = "7572dbc0868d69de4c3c10d4542b635c050bed0f";
+
+fn producer_cml_revision() -> String {
+    std::env::var("GITHUB_SHA")
+        .ok()
+        .filter(|sha| {
+            sha.len() == 40
+                && sha
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+        })
+        .unwrap_or_else(|| FALLBACK_CML_REVISION.to_string())
+}
 
 struct Case {
     name: String,
@@ -88,7 +100,8 @@ fn slot_observation(source: &str, digest: &str) -> Observation {
     assert_eq!(program.source_case_id.as_deref(), Some(digest));
 
     let authority = pinned_authority().expect("pinned SENS authority must resolve");
-    let envelope = SlotArtifactEnvelope::new(program, &authority, TEST_CML_REVISION)
+    let cml_revision = producer_cml_revision();
+    let envelope = SlotArtifactEnvelope::new(program, &authority, &cml_revision)
         .expect("verified SLOT program must accept compiler provenance");
     let encoded = envelope
         .encode_v1()
@@ -106,7 +119,7 @@ fn slot_observation(source: &str, digest: &str) -> Observation {
         decoded.provenance.sens_contract_version,
         authority.language_contract_version
     );
-    assert_eq!(decoded.provenance.cml_revision, TEST_CML_REVISION);
+    assert_eq!(decoded.provenance.cml_revision, cml_revision);
     assert_eq!(decoded.program.source_case_id.as_deref(), Some(digest));
 
     match execute(&decoded.program) {
