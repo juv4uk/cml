@@ -16,7 +16,44 @@ pub enum CudaEmitError {
     UnsupportedRegion,
 }
 
-pub fn emit_map_kernel(ir: &Ir) -> Result<String, CudaEmitError> {
+/// Target ABI selected by the CUDA lowering boundary.
+///
+/// This is compiler mechanism metadata, never a SENS semantic identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CudaElementType {
+    I32,
+    F32,
+}
+
+impl CudaElementType {
+    pub const fn c_type(self) -> &'static str {
+        match self {
+            Self::I32 => "int",
+            Self::F32 => "float",
+        }
+    }
+}
+
+/// First-class result of lowering one admitted CML map region for NVIDIA CUDA.
+///
+/// Keeping identity/domain/ABI beside the source makes the compiler boundary
+/// inspectable before NVRTC. The runtime may compile this artifact, but cannot
+/// mint a new semantic meaning from it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CudaMapKernel {
+    pub identity: sens::Sens8,
+    pub numeric_domain: NumericDomain,
+    pub element_type: CudaElementType,
+    pub parameter_count: usize,
+    pub entry_point: &'static str,
+    pub source: String,
+}
+
+/// Lower canonical CML IR into one bounded CUDA map-kernel artifact.
+///
+/// Semantic admission happens before target emission and unsupported regions
+/// fail closed. NVRTC/Driver JIT belongs to the runtime layer.
+pub fn lower_map_kernel(ir: &Ir) -> Result<CudaMapKernel, CudaEmitError> {
     let analysis = analyze(ir);
     if !analysis.gpu_eligible() {
         return Err(CudaEmitError::NotEligible(analysis.gpu_blockers));
@@ -25,10 +62,14 @@ pub fn emit_map_kernel(ir: &Ir) -> Result<String, CudaEmitError> {
     if region.operation != BulkOperation::Map {
         return Err(CudaEmitError::UnsupportedRegion);
     }
+    let identity = region.identity.clone();
     let kernel = region.kernel.ok_or(CudaEmitError::UnsupportedRegion)?;
+    if kernel.parameter_count != 1 {
+        return Err(CudaEmitError::UnsupportedRegion);
+    }
 
     let (element_type, expression) = match analysis.numeric_domain {
-        NumericDomain::FixedWidthInteger => ("int", emit_i32_expr(&kernel.body)?),
+        NumericDomain::FixedWidthInteger => (CudaElementType::I32, emit_i32_expr(&kernel.body)?),
         NumericDomain::InexactFloat => {
             let form = F32MapKernel::lower(&kernel.body).ok_or(CudaEmitError::UnsupportedRegion)?;
             // GPU-2-E1 / #368: two plain operators. FFMA contraction is
@@ -52,12 +93,28 @@ pub fn emit_map_kernel(ir: &Ir) -> Result<String, CudaEmitError> {
                 F32MapKernel::Sqrt => "sqrtf(x)".to_string(),
                 F32MapKernel::Constant(bits) => format!("__int_as_float(0x{bits:08x})"),
             };
-            ("float", expression)
+            (CudaElementType::F32, expression)
         }
         _ => return Err(CudaEmitError::UnsupportedRegion),
     };
 
-    Ok(render_map_kernel(element_type, &expression))
+    let source = render_map_kernel(element_type.c_type(), &expression);
+    Ok(CudaMapKernel {
+        identity,
+        numeric_domain: analysis.numeric_domain,
+        element_type,
+        parameter_count: kernel.parameter_count,
+        entry_point: "cml_map",
+        source,
+    })
+}
+
+/// Compatibility source-emission API.
+///
+/// New compiler/runtime code should prefer `lower_map_kernel` so target ABI
+/// metadata is not discarded before NVRTC.
+pub fn emit_map_kernel(ir: &Ir) -> Result<String, CudaEmitError> {
+    Ok(lower_map_kernel(ir)?.source)
 }
 
 /// Emit CUDA source from an already admitted unary i32 compute kernel.
