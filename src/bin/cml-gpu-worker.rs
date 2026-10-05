@@ -157,6 +157,7 @@ mod enabled {
     }
 
     fn handle(stream: &mut UnixStream) -> Result<(), String> {
+        let server_started = Instant::now();
         let (opcode, payload) = read_request(stream)?;
         match opcode {
             OP_PING => write_response(stream, STATUS_OK, b"pong").map_err(io_error),
@@ -186,17 +187,19 @@ mod enabled {
                 let execution =
                     execute_map_chain_i32_selected(&functions, &input, &[functions.len() - 1], 0)
                         .map_err(|error| format!("CUDA chain execution failed: {error:?}"))?;
-                let cuda_ns = cuda_started.elapsed().as_nanos();
+                let cuda_ns = cuda_started.elapsed().as_nanos() as u64;
                 let Some((_, BufferLiteral::I32(output))) = execution.outputs.into_iter().next()
                 else {
                     return Err("CUDA chain returned no final i32 buffer".into());
                 };
                 write_i32_file(&output_path, &output)?;
+                let server_service_ns = server_started.elapsed().as_nanos() as u64;
                 let body = format!(
-                    "count={} steps={} cuda_ns={} output={}",
+                    "count={} steps={} cuda_ns={} server_ns={} output={}",
                     output.len(),
                     offsets.len(),
                     cuda_ns,
+                    server_service_ns,
                     output_path.display()
                 );
                 write_response(stream, STATUS_OK, body.as_bytes()).map_err(io_error)
@@ -290,6 +293,58 @@ mod enabled {
         Ok(())
     }
 
+    /// Separately measured timing metrics for shared worker request processing (#476).
+    ///
+    /// Definitions:
+    /// - `client_total_rt_ns`: Total elapsed wall time measured by the client using
+    ///   a monotonic clock (`Instant::now()`) from immediately before connection
+    ///   attempt until after the complete response is read.
+    /// - `server_service_ns`: Elapsed wall time measured by the server using a monotonic
+    ///   clock from receipt of the request header until completion of the response.
+    /// - `cuda_ns`: Exact execution wall time measured inside the CUDA runtime for
+    ///   the operation (if applicable).
+    /// - `derived_protocol_wait_ns`: `client_total_rt_ns.saturating_sub(server_service_ns)`.
+    ///   Measures the combined queue wait, connection handshake, socket transfer,
+    ///   and operating system scheduling overhead.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub struct WorkerTimingEvidence {
+        pub client_total_rt_ns: u64,
+        pub server_service_ns: u64,
+        pub cuda_ns: Option<u64>,
+        pub derived_protocol_wait_ns: u64,
+    }
+
+    impl WorkerTimingEvidence {
+        pub fn compute(
+            client_total_rt_ns: u64,
+            server_service_ns: u64,
+            cuda_ns: Option<u64>,
+        ) -> Self {
+            Self {
+                client_total_rt_ns,
+                server_service_ns,
+                cuda_ns,
+                derived_protocol_wait_ns: client_total_rt_ns.saturating_sub(server_service_ns),
+            }
+        }
+    }
+
+    pub fn parse_chain_response_timing(
+        body: &str,
+        client_total_rt_ns: u64,
+    ) -> WorkerTimingEvidence {
+        let mut cuda_ns = None;
+        let mut server_ns = 0;
+        for token in body.split_whitespace() {
+            if let Some(val) = token.strip_prefix("cuda_ns=") {
+                cuda_ns = val.parse::<u64>().ok();
+            } else if let Some(val) = token.strip_prefix("server_ns=") {
+                server_ns = val.parse::<u64>().unwrap_or(0);
+            }
+        }
+        WorkerTimingEvidence::compute(client_total_rt_ns, server_ns, cuda_ns)
+    }
+
     fn client_chain_file_i32(
         socket: &Path,
         input: &Path,
@@ -303,9 +358,21 @@ mod enabled {
         for offset in offsets {
             payload.extend_from_slice(&offset.to_le_bytes());
         }
-        let body = transact(socket, OP_CHAIN_FILE_I32, &payload)?;
-        println!("{}", String::from_utf8_lossy(&body));
+        let (body, client_rt_ns) = transact_timed(socket, OP_CHAIN_FILE_I32, &payload)?;
+        let body_str = String::from_utf8_lossy(&body);
+        let timing = parse_chain_response_timing(&body_str, client_rt_ns);
+        println!(
+            "{body_str} client_rt_ns={} wait_ns={}",
+            timing.client_total_rt_ns, timing.derived_protocol_wait_ns
+        );
         Ok(())
+    }
+
+    fn transact_timed(path: &Path, opcode: u8, payload: &[u8]) -> Result<(Vec<u8>, u64), String> {
+        let start = Instant::now();
+        let body = transact(path, opcode, payload)?;
+        let client_rt_ns = start.elapsed().as_nanos() as u64;
+        Ok((body, client_rt_ns))
     }
 
     fn transact(path: &Path, opcode: u8, payload: &[u8]) -> Result<Vec<u8>, String> {
@@ -472,5 +539,48 @@ mod enabled {
 
     fn io_error(error: io::Error) -> String {
         error.to_string()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn timing_evidence_computes_derived_wait_correctly() {
+            let timing = WorkerTimingEvidence::compute(100_000, 70_000, Some(50_000));
+            assert_eq!(timing.client_total_rt_ns, 100_000);
+            assert_eq!(timing.server_service_ns, 70_000);
+            assert_eq!(timing.cuda_ns, Some(50_000));
+            assert_eq!(timing.derived_protocol_wait_ns, 30_000);
+        }
+
+        #[test]
+        fn timing_evidence_handles_sub_nanosecond_saturation() {
+            let timing = WorkerTimingEvidence::compute(50_000, 60_000, None);
+            assert_eq!(timing.client_total_rt_ns, 50_000);
+            assert_eq!(timing.server_service_ns, 60_000);
+            assert_eq!(timing.cuda_ns, None);
+            assert_eq!(timing.derived_protocol_wait_ns, 0);
+        }
+
+        #[test]
+        fn parse_chain_response_timing_extracts_all_components() {
+            let body = "count=1000 steps=4 cuda_ns=265000 server_ns=350000 output=/tmp/out.i32";
+            let timing = parse_chain_response_timing(body, 450_000);
+            assert_eq!(timing.cuda_ns, Some(265_000));
+            assert_eq!(timing.server_service_ns, 350_000);
+            assert_eq!(timing.client_total_rt_ns, 450_000);
+            assert_eq!(timing.derived_protocol_wait_ns, 100_000);
+        }
+
+        #[test]
+        fn parse_chain_response_timing_without_cuda_metric() {
+            let body = "count=1000 steps=4 server_ns=300000 output=/tmp/out.i32";
+            let timing = parse_chain_response_timing(body, 400_000);
+            assert_eq!(timing.cuda_ns, None);
+            assert_eq!(timing.server_service_ns, 300_000);
+            assert_eq!(timing.client_total_rt_ns, 400_000);
+            assert_eq!(timing.derived_protocol_wait_ns, 100_000);
+        }
     }
 }
