@@ -7,6 +7,7 @@
 
 #![cfg(unix)]
 
+use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::os::fd::AsRawFd;
@@ -16,6 +17,18 @@ use std::time::Instant;
 const LOCK_EX: i32 = 2;
 const LOCK_UN: i32 = 8;
 const MAX_FIELD_BYTES: usize = 128;
+const DEFAULT_LOCK_PATH: &str = "/run/cml-gpu-worker/gpu-admission.lock";
+const DEFAULT_RESOURCE_KEY: &str = "cuda:0";
+
+pub fn gpu_admission_lock_path() -> PathBuf {
+    env::var_os("CML_GPU_ADMISSION_LOCK")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_LOCK_PATH))
+}
+
+pub fn gpu_resource_key() -> String {
+    env::var("CML_GPU_RESOURCE_KEY").unwrap_or_else(|_| DEFAULT_RESOURCE_KEY.to_string())
+}
 
 unsafe extern "C" {
     fn flock(fd: i32, operation: i32) -> i32;
