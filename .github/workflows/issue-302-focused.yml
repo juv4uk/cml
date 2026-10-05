@@ -17,11 +17,13 @@ concurrency:
 
 jobs:
   focused:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, guix]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
         with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: recursive
       - name: Format check
         run: guix shell --pure -m manifest.scm -- cargo fmt -p cml -- --check
