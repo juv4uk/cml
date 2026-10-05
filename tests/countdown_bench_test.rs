@@ -54,8 +54,8 @@ int main() {{
       (def countdown
         (lambda (n)
           (cond
-            ((eq n 0) 42)
-            (t (countdown (- n 1))))))
+            ((тотожне? n 0) 0)
+            ((тотожне? n n) (countdown (- n 1))))))
       (countdown {n})
     "#
     );
