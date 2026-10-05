@@ -68,13 +68,32 @@ fn unavailable_host_fails_closed_before_cuda_session() {
 
 #[test]
 fn missing_nvrtc_has_distinct_diagnostic() {
-    let record = ready_record().replace(
-        "CUDA_NVRTC_LIBRARY_PRESENT=true",
-        "CUDA_NVRTC_LIBRARY_PRESENT=false",
-    );
+    let record = ready_record()
+        .replace(
+            "CUDA_NVRTC_LIB=/usr/local/cuda-12.6/targets/x86_64-linux/lib/libnvrtc.so.12",
+            "CUDA_NVRTC_LIB=",
+        )
+        .replace(
+            "CUDA_NVRTC_LIBRARY_PRESENT=true",
+            "CUDA_NVRTC_LIBRARY_PRESENT=false",
+        );
     let error = CudaHostCapability::parse_env_record(&record).unwrap_err();
 
     assert_eq!(error, CudaHostCapabilityError::NvrtcLibraryUnavailable);
+}
+
+#[test]
+fn claimed_nvrtc_presence_requires_a_library_path() {
+    let record = ready_record().replace(
+        "CUDA_NVRTC_LIB=/usr/local/cuda-12.6/targets/x86_64-linux/lib/libnvrtc.so.12",
+        "CUDA_NVRTC_LIB=",
+    );
+    let error = CudaHostCapability::parse_env_record(&record).unwrap_err();
+
+    assert_eq!(
+        error,
+        CudaHostCapabilityError::MissingField("CUDA_NVRTC_LIB")
+    );
 }
 
 #[test]
