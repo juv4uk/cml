@@ -20,8 +20,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          token: ${{ secrets.SENS_READ_TOKEN }}
-          submodules: recursive
+          submodules: false
+      - name: Hydrate private SENS submodule from runner mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
+          git -C external/sens log -1 --format='external/sens %H'
       - uses: dtolnay/rust-toolchain@stable
       - name: Exact direct SID8 x86 dispatch witness
         run: cargo test --test direct_sid8_x86_dispatch_test -- --nocapture
@@ -31,8 +37,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          token: ${{ secrets.SENS_READ_TOKEN }}
-          submodules: recursive
+          submodules: false
+      - name: Hydrate private SENS submodule from runner mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
+          git -C external/sens log -1 --format='external/sens %H'
       - uses: dtolnay/rust-toolchain@stable
       - name: Rustfmt changed SID8 files
         env:
