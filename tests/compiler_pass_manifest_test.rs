@@ -9,7 +9,10 @@ fn cli_emits_the_ordered_machine_readable_pass_manifest() {
         .output()
         .expect("launch cml-compile passes");
 
-    assert!(output.status.success(), "pass manifest command must succeed");
+    assert!(
+        output.status.success(),
+        "pass manifest command must succeed"
+    );
     let stdout = String::from_utf8(output.stdout).expect("manifest output must be UTF-8");
     let lines: Vec<_> = stdout.lines().collect();
 
