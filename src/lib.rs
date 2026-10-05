@@ -24,6 +24,9 @@ pub mod gpu_cuda_runtime;
 #[cfg(feature = "gpu-wgpu")]
 pub mod gpu_wgpu_runtime;
 pub mod gpu_wgsl;
+#[cfg(unix)]
+pub mod gpu_admission;
+pub mod gpu_worker_client;
 pub mod gpu_worker_client;
 pub mod ir;
 pub mod lisp_asm_vertical;
