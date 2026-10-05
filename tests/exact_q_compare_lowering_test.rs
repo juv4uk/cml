@@ -8,14 +8,14 @@ fn exact_q_compare_family_is_admitted_by_distinct_semantic_identity() {
     // Three GREEN slices promote 1014 (<), 1017 (<=), and 1018 (>=) to
     // explicit comparison IR; 1015/1016 remain admitted-but-partial generic Apps.
     let cases = [
-        ("<", sens::sid!(00011010)),
-        (">", sens::sid!(00011011)),
-        ("=", sens::sid!(00011100)),
-        ("<=", sens::sid!(00011101)),
-        (">=", sens::sid!(00011110)),
+        ("<", "lessp?", sens::sid!(00011010)),
+        (">", "greaterp?", sens::sid!(00011011)),
+        ("=", "equalp?", sens::sid!(00011100)),
+        ("<=", "not-greaterp?", sens::sid!(00011101)),
+        (">=", "not-lessp?", sens::sid!(00011110)),
     ];
 
-    for (surface, semantic_id) in cases {
+    for (surface, canonical_name, semantic_id) in cases {
         assert_eq!(
             canon::callable_semantic_id(surface),
             Some(semantic_id),
@@ -24,7 +24,7 @@ fn exact_q_compare_family_is_admitted_by_distinct_semantic_identity() {
 
         let operation = canon::find_operation_by_id(semantic_id)
             .expect("admitted exact-Q comparison identity must have compiler operation metadata");
-        assert_eq!(operation.canonical_name, surface);
+        assert_eq!(operation.canonical_name, canonical_name);
         assert_eq!(operation.status, "partial");
 
         let source = format!("({surface} 128 191)");
