@@ -24,17 +24,31 @@ fn main() -> ExitCode {
 fn run() -> Result<(), String> {
     let mut args = env::args_os();
     let _program = args.next();
-    let command = args
-        .next()
-        .ok_or_else(|| "usage: cml-compile x86-elf <source.lisp> <output>".to_string())?;
-    let source = args
-        .next()
-        .ok_or_else(|| "usage: cml-compile x86-elf <source.lisp> <output>".to_string())?;
-    let output = args
-        .next()
-        .ok_or_else(|| "usage: cml-compile x86-elf <source.lisp> <output>".to_string())?;
+    const USAGE: &str =
+        "usage: cml-compile x86-elf <source.lisp> <output> | cml-compile passes";
+    let command = args.next().ok_or_else(|| USAGE.to_string())?;
+
+    if command == "passes" {
+        if args.next().is_some() {
+            return Err(USAGE.into());
+        }
+        for pass in cml::compiler_passes::pass_manifest() {
+            println!(
+                "CML-PASS\tid={}\tinput={}\toutput={}\tevidence={}\tobligation={}",
+                pass.id,
+                pass.input,
+                pass.output,
+                pass.current_evidence.as_str(),
+                pass.obligation
+            );
+        }
+        return Ok(());
+    }
+
+    let source = args.next().ok_or_else(|| USAGE.to_string())?;
+    let output = args.next().ok_or_else(|| USAGE.to_string())?;
     if args.next().is_some() {
-        return Err("usage: cml-compile x86-elf <source.lisp> <output>".into());
+        return Err(USAGE.into());
     }
 
     if command != "x86-elf" {
