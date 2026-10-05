@@ -9,7 +9,7 @@ on:
 # GitHub's control plane cancels that stale in-progress run before scheduling
 # this tiny trusted no-op. Remove this one-shot branch after requalification.
 concurrency:
-  group: CI-refs/pull/529/merge
+  group: CI-refs/pull/528/merge
   cancel-in-progress: true
 
 jobs:
@@ -17,4 +17,4 @@ jobs:
     runs-on: [self-hosted, guix]
     timeout-minutes: 2
     steps:
-      - run: echo "stale PR #529 CI occupancy released by concurrency control"
+      - run: echo "stale PR #528 CI occupancy released by concurrency control"
