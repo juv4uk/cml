@@ -72,12 +72,12 @@ fn defmacro_my_if_else_branch() {
 }
 
 #[test]
-fn current_cond_rejects_bare_t_instead_of_coercing_truthiness() {
+fn compatibility_cond_rejects_bare_t_instead_of_coercing_truthiness() {
     match compile_and_run("(cond (t 1))").expect("compile_and_run") {
         Observation::Error(error) => {
             assert!(
                 error.contains("Type") && error.contains("PredicateBit"),
-                "current COND must reject non-PredicateBit test values: {error}"
+                "compatibility COND must reject non-PredicateBit test values: {error}"
             );
         }
         other => panic!("expected PredicateBit Type error, got {other:?}"),
