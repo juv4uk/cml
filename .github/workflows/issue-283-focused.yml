@@ -9,13 +9,19 @@ on:
       - tests/compute_analysis_test.rs
       - .github/workflows/issue-283-focused.yml
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   focused:
-    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, guix]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
         with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
       - name: Format check
