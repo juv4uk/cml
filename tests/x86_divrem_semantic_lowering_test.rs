@@ -2,6 +2,9 @@
 
 #![cfg(all(target_os = "linux", target_arch = "x86_64"))]
 
+use std::fs;
+use std::path::PathBuf;
+
 use cml::machine_inst::assemble_program;
 use cml::native_baseline::NativeExecutable;
 use cml::x86_lir::{LirLowerError, lower_ir_to_lir, lir_to_machine_items};
@@ -24,12 +27,13 @@ fn native_raw(source: &str) -> u64 {
 }
 
 fn oracle_session() -> Session {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("external/sens/lib/core.lisp");
+    let core = fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("read pinned SENS core at {}: {error}", path.display()));
+
     let mut session = Session::default();
-    eval_program(
-        include_str!("../external/sens/lib/core.lisp"),
-        &mut session,
-    )
-    .expect("pinned SENS core library must load for quotient/mod oracle");
+    eval_program(&core, &mut session)
+        .expect("pinned SENS core library must load for quotient/mod oracle");
     session
 }
 
