@@ -13,12 +13,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Requires the repository runner's custom `guix` label; runner 21 was
-# verified online with Guix installed before this gate was retriggered.
+# Targets the known CML CPU host label directly; Guix availability is verified
+# by the guix-shell commands themselves rather than by scheduler metadata.
 jobs:
   focused:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, guix]
+    runs-on: [self-hosted, i5-6400]
     timeout-minutes: 20
     steps:
       - name: Require private dependency read token
