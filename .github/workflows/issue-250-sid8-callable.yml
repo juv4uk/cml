@@ -16,11 +16,13 @@ concurrency:
 
 jobs:
   focused:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, guix]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
         with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: recursive
       - name: C frontend preserves exact Sid8
         run: guix shell --pure -m manifest.scm -- cargo test --test c_frontend_sid8_identity_test -- --nocapture
