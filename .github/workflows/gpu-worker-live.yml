@@ -1,9 +1,16 @@
 name: GPU runner worker live
 
 on:
-  # One controlled CML GPU runner was restored by owner direction 2026-10-05.
-  # Keep physical-GPU execution manual-only while the lane is being requalified.
   workflow_dispatch:
+  # PR-level CUDA integration is owned by gpu-cuda-live.yml. Running both
+  # workflows in one physical-GPU concurrency group causes GitHub to replace
+  # pending runs. Requalify the exact-head persistent worker after merge when
+  # worker code itself changes.
+  push:
+    branches: [master]
+    paths:
+      - "src/bin/cml-gpu-worker.rs"
+      - ".github/workflows/gpu-worker-live.yml"
 
 concurrency:
   group: gpu-gtx-1050-ti
