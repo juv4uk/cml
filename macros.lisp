@@ -76,45 +76,45 @@
 
 ; --- eval-macro-body: the restricted meta-evaluator (quote/cons/car/cdr/
 ; atom/eq/cond only -- compatibility.my's `meta-evaluator-primitives`),
-; over unevaluated call-site ASTs bound in `env`. ---
+; over unevaluated call-site ASTs bound in `cml-macro-bindings`. ---
 
 (def eval-macro-body
-  (lambda (expr env)
+  (lambda (expr cml-macro-bindings)
     (cond
       ((macro-atom? expr)
        (cond
          ((macro-empty? expr) ())
          ((eq? expr (quote nil)) ())
          ((eq? expr (quote t)) (quote t))
-         (t (alist-get env expr))))
-      (t (eval-macro-form expr env)))))
+         (t (alist-get cml-macro-bindings expr))))
+      (t (eval-macro-form expr cml-macro-bindings)))))
 
 (def eval-macro-form
-  (lambda (expr env)
+  (lambda (expr cml-macro-bindings)
     (cond
       ((eq? (car expr) (quote quote)) (car (cdr expr)))
       ((eq? (car expr) (quote cons))
-       (cons (eval-macro-body (car (cdr expr)) env)
-             (eval-macro-body (car (cdr (cdr expr))) env)))
-      ((eq? (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) env)))
-      ((eq? (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) env)))
-      ((eq? (car expr) (quote atom)) (truthy (macro-atom? (eval-macro-body (car (cdr expr)) env))))
+       (cons (eval-macro-body (car (cdr expr)) cml-macro-bindings)
+             (eval-macro-body (car (cdr (cdr expr))) cml-macro-bindings)))
+      ((eq? (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) cml-macro-bindings)))
+      ((eq? (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) cml-macro-bindings)))
+      ((eq? (car expr) (quote atom)) (truthy (macro-atom? (eval-macro-body (car (cdr expr)) cml-macro-bindings))))
       ((eq? (car expr) (quote eq))
-       (truthy (equal? (eval-macro-body (car (cdr expr)) env)
-                        (eval-macro-body (car (cdr (cdr expr))) env))))
-      ((eq? (car expr) (quote cond)) (eval-macro-cond (cdr expr) env))
+       (truthy (equal? (eval-macro-body (car (cdr expr)) cml-macro-bindings)
+                        (eval-macro-body (car (cdr (cdr expr))) cml-macro-bindings))))
+      ((eq? (car expr) (quote cond)) (eval-macro-cond (cdr expr) cml-macro-bindings))
       (t ()))))
 
 (def truthy (lambda (v) (cond (v (quote t)) (t ()))))
 
 (def eval-macro-cond
-  (lambda (branches env)
+  (lambda (branches cml-macro-bindings)
     (cond
       ((macro-atom? branches) ())
       (t (cond
-           ((eval-macro-body (car (car branches)) env)
-            (eval-macro-body (car (cdr (car branches))) env))
-           (t (eval-macro-cond (cdr branches) env)))))))
+           ((eval-macro-body (car (car branches)) cml-macro-bindings)
+            (eval-macro-body (car (cdr (car branches))) cml-macro-bindings))
+           (t (eval-macro-cond (cdr branches) cml-macro-bindings)))))))
 
 ; --- defmacro recognition and top-level expansion pass ---
 
