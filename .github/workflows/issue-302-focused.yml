@@ -12,11 +12,12 @@ on:
 
 jobs:
   focused:
-    runs-on: ubuntu-24.04
+    runs-on: self-hosted
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
         with:
+          token: ${{ secrets.SENS_READ_TOKEN }}
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
       - name: Format check
