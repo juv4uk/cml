@@ -12,10 +12,14 @@ on:
   # upstream SENS contract; semantic drift must fail before merge.
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sync:
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: write
     env:
@@ -31,14 +35,14 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
 
-      - name: Check out pinned sens authority
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/sens
-          ref: main
-          token: ${{ secrets.SENS_READ_TOKEN }}
-          fetch-depth: 0
-          path: .upstream/sens
+      - name: Refresh and clone sens authority from runner mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C /home/agents/GitHub/sens fetch --prune origin main
+          rm -rf "$UPSTREAM_CLONE"
+          git -c protocol.file.allow=always clone --no-checkout /home/agents/GitHub/sens "$UPSTREAM_CLONE"
+          git -C "$UPSTREAM_CLONE" checkout --detach origin/main
 
       - name: Observe exact sens contract revision
         id: sync
@@ -99,7 +103,7 @@ jobs:
 
   verify:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: read
     env:
@@ -111,13 +115,13 @@ jobs:
       - name: Check out consumer repository
         uses: actions/checkout@v4
 
-      - name: Check out public sens authority
-        uses: actions/checkout@v4
-        with:
-          repository: juv4uk/sens
-          ref: main
-          fetch-depth: 0
-          path: .upstream/sens
+      - name: Clone private sens authority from runner mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$UPSTREAM_CLONE"
+          git -c protocol.file.allow=always clone --no-checkout /home/agents/GitHub/sens "$UPSTREAM_CLONE"
+          git -C "$UPSTREAM_CLONE" checkout --detach origin/main
 
       - name: Verify digest and exact pinned sens source
         shell: bash
