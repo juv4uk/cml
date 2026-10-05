@@ -10,7 +10,7 @@
 //! `main.rs`: `MacroExpander::new().process(&exprs)` runs first).
 
 use crate::ast::{Expr, NumericBufferLiteral};
-use crate::ir::{BufferLiteral, Ir, MachineOp, Params, Quoted};
+use crate::ir::{BufferLiteral, Ir, MachineOp, Params, PrimOp, Quoted};
 use crate::semantic::{self, SemanticError};
 use std::fmt;
 
