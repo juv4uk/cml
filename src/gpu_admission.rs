@@ -91,10 +91,9 @@ impl GpuAdmissionGuard {
         validate_field("resource_key", &resource_key)?;
         let lock_path = lock_path.into();
         if let Some(parent) = lock_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|error| {
-                    format!("create admission directory {}: {error}", parent.display())
-                })?;
+            fs::create_dir_all(parent).map_err(|error| {
+                format!("create admission directory {}: {error}", parent.display())
+            })?;
         }
         let owner_path = PathBuf::from(format!("{}.owner", lock_path.display()));
         let file = OpenOptions::new()
@@ -115,12 +114,19 @@ impl GpuAdmissionGuard {
         let wait_ns = started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
         let owner_record = format!(
             "repository={}\nrun_id={}\njob={}\ncase_id={}\nresource_key={}\nwait_ns={}\n",
-            provenance.repository, provenance.run_id, provenance.job, provenance.case_id, resource_key, wait_ns
+            provenance.repository,
+            provenance.run_id,
+            provenance.job,
+            provenance.case_id,
+            resource_key,
+            wait_ns
         );
-        fs::write(&owner_path, owner_record)
-            .map_err(|error| {
-                format!("write GPU admission owner {}: {error}", owner_path.display())
-            })?;
+        fs::write(&owner_path, owner_record).map_err(|error| {
+            format!(
+                "write GPU admission owner {}: {error}",
+                owner_path.display()
+            )
+        })?;
         Ok(Self {
             file,
             lock_path,
