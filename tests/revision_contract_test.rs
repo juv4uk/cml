@@ -81,6 +81,42 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
         isa.contains("(jf-branches-only-on . (nil))"),
         "fpga-lisp truth/JF contract drift"
     );
+
+    let control = fs::read_to_string(fpga_lisp.join("fpga/rtl/control.sv"))
+        .expect("reviewed fpga-lisp control RTL should be readable");
+    assert!(
+        control.contains("atom -> canonical Symbol(\"t\")")
+            && control.contains("eq -> canonical Symbol(\"t\")")
+            && control.matches("reg_wr_data.tag = TAG_SYMBOL;").count() >= 2
+            && control.matches("reg_wr_data.value = 28'd79;").count() >= 2,
+        "reviewed ATOM/EQ result representation drifted from canonical Symbol(t)"
+    );
+
+    let physical = fs::read_to_string(
+        fpga_lisp.join(
+            "evidence/FPGA-SHARED-ORACLE-PARITY-1/hardware-readback-2026-09-11.md",
+        ),
+    )
+    .expect("reviewed physical ATOM/EQ evidence should be readable");
+    assert!(
+        physical.contains("(atom (quote radio))")
+            && physical.contains("(eq (quote radio) (quote radio))")
+            && physical.matches("SYMBOL(79) [0x2000004F]").count() >= 2,
+        "physical CML-produced ATOM/EQ evidence no longer proves canonical Symbol(t)"
+    );
+
+    let cold_boot = fs::read_to_string(
+        fpga_lisp.join(
+            "evidence/FPGA-SHARED-ORACLE-PARITY-1/flash-cold-boot-2026-09-11.md",
+        ),
+    )
+    .expect("reviewed FPGA cold-boot evidence should be readable");
+    assert!(
+        cold_boot.contains("corpus-02.bin")
+            && cold_boot.contains("R15 = SYMBOL(79)  [0x2000004F]")
+            && cold_boot.contains("ERR: no error"),
+        "permanent-Flash cold-boot evidence drifted"
+    );
 }
 
 /// Keep CML's supported contract separate from the contract observed through
