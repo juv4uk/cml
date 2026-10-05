@@ -350,6 +350,51 @@ pub fn emit_machine_items_with_isel(
                         }));
                     }
                 }
+                LirInst::DivRem {
+                    low,
+                    high,
+                    divisor,
+                    provenance,
+                } => {
+                    let low_loc = get_loc(*low)?;
+                    let high_loc = get_loc(*high)?;
+                    if low_loc != AllocLocation::Reg(X86Reg::Rax) {
+                        return Err(RegAllocError::Internal(format!(
+                            "div-rem low {low} must be allocated to %rax, got {low_loc}"
+                        )));
+                    }
+                    if high_loc != AllocLocation::Reg(X86Reg::Rdx) {
+                        return Err(RegAllocError::Internal(format!(
+                            "div-rem high {high} must be allocated to %rdx, got {high_loc}"
+                        )));
+                    }
+
+                    let divisor_reg = match get_loc(*divisor)? {
+                        AllocLocation::Reg(reg) => {
+                            if reg == X86Reg::Rax || reg == X86Reg::Rdx {
+                                return Err(RegAllocError::Internal(format!(
+                                    "div-rem divisor {divisor} aliases fixed dividend register {}",
+                                    reg.name()
+                                )));
+                            }
+                            reg
+                        }
+                        AllocLocation::SpillSlot(slot) => {
+                            items.push(MachineItem::Inst(MachineInst::MovLoad {
+                                dst: SCRATCH_REG_A,
+                                base: X86Reg::Rsp,
+                                disp: (slot * 8) as i32,
+                                provenance: provenance.clone(),
+                            }));
+                            SCRATCH_REG_A
+                        }
+                    };
+
+                    items.push(MachineItem::Inst(MachineInst::DivReg {
+                        divisor: divisor_reg,
+                        provenance: provenance.clone(),
+                    }));
+                }
                 LirInst::Cmp {
                     lhs,
                     rhs,
