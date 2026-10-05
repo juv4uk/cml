@@ -1,75 +1,114 @@
 name: GPU CUDA live (GTX 1050 Ti)
 
-# CUDA — лише механізм виконання; семантику допускає CML/sens.
-# Ці тести в `cargo test` позначені #[ignore], бо потребують живої карти.
-# Тут вони запускаються на машині власника: i5-6400 + GTX 1050 Ti (compute 6.1),
-# WSL: драйвер іде з Windows через /dev/dxg і /usr/lib/wsl/lib/libcuda.so.1.
-#
-# Правильність (CPU = GPU) — у кожному PR. Калібрування швидкості (crossover) —
-# лише на master і вручну: час на карті шумить, це не поріг для червоного.
+# CUDA is an execution mechanism; CML/sens still own admission and semantics.
+# The GPU lane is intentionally narrow: only CUDA-capable compute work runs
+# here. Host compilation, parsing and orchestration remain CPU work.
 
 on:
-  # One controlled CML GPU runner was restored by owner direction 2026-10-05.
-  # Keep the physical-GPU witness manual-only while the lane is requalified.
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/gpu_cuda.rs"
+      - "src/gpu_cuda_runtime.rs"
+      - "src/compute.rs"
+      - "src/execution.rs"
+      - "examples/gpu2_witness.rs"
+      - "tests/gpu_cuda*.rs"
+      - "tests/execution_graph_cuda_live_test.rs"
+      - ".github/workflows/gpu-cuda-live.yml"
+  push:
+    branches: [master]
+    paths:
+      - "src/gpu_cuda.rs"
+      - "src/gpu_cuda_runtime.rs"
+      - "src/compute.rs"
+      - "src/execution.rs"
+      - "examples/gpu2_witness.rs"
+      - "tests/gpu_cuda*.rs"
+      - "tests/execution_graph_cuda_live_test.rs"
+      - ".github/workflows/gpu-cuda-live.yml"
 
-# Одна карта на 4 ГБ, кілька runner-процесів на машині: GPU-задачі — по одній.
+# One physical 4 GiB card: serialize live GPU jobs instead of racing VRAM.
 concurrency:
   group: gpu-gtx-1050-ti
   cancel-in-progress: false
 
 jobs:
   cuda-live:
-    # GPU lane адресує клас механізму, а не конкретний CPU host.
-    # `gtx-1050-ti` гарантує живий Pascal/CUDA 6.1 witness на машині власника.
     runs-on: [self-hosted, gpu, gtx-1050-ti]
     timeout-minutes: 30
     env:
-      # WSL: драйвер Windows має йти першим. NVRTC 12.6 також потребує
-      # реальний target lib directory і вузький libstdc++/libgcc shim.
       LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/lib/wsm-gcc-runtime
       CUDA_PATH: /usr/local/cuda-12.6
       CUDA_HOME: /usr/local/cuda-12.6
+      CML_GPU_WORKER_SOCKET: /run/cml-gpu-worker/worker.sock
       RUSTC_WRAPPER: /usr/bin/sccache
       SCCACHE_DIR: /home/agents/.cache/sccache
       SCCACHE_CACHE_SIZE: 30G
-      # Owner host has no useful Windows pagefile headroom; keep CPU compilation bounded.
+      # Keep unavoidable host compilation from starving the other local runners.
       CARGO_BUILD_JOBS: 1
       CARGO_INCREMENTAL: 0
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Isolate Cargo target by rustc build
         run: |
           rustc_key="$(rustc -vV | sha256sum | cut -c1-16)"
           test -n "$rustc_key"
           echo "CARGO_TARGET_DIR=/home/agents/.cache/cargo-target/cml/rustc-$rustc_key" >> "$GITHUB_ENV"
+
       - name: external/sens from the local clone
-        # juv4uk/sens приватний: GITHUB_TOKEN репо cml не може його клонувати.
-        # На власному runner-і беремо закріплений коміт з локального клону.
         run: |
           git config submodule.external/sens.url /home/agents/GitHub/sens
           git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens || {
-            echo "закріплений коміт external/sens відсутній у /home/agents/GitHub/sens — оновіть клон (git fetch)" >&2
+            echo "pinned external/sens commit is absent from /home/agents/GitHub/sens; refresh the clone" >&2
             exit 1
           }
           git -C external/sens log -1 --format='external/sens %H'
+
       - name: Probe the runner, card and persistent worker
         run: |
+          set -euo pipefail
           echo "runner=$RUNNER_NAME os=$RUNNER_OS arch=$RUNNER_ARCH"
           ls -l /dev/dxg
-          /usr/lib/wsl/lib/nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
-          export CML_GPU_WORKER_SOCKET=/run/cml-gpu-worker/worker.sock
+          /usr/lib/wsl/lib/nvidia-smi \
+            --query-gpu=name,driver_version,compute_cap,memory.total,utilization.gpu \
+            --format=csv,noheader
           systemctl is-active --quiet cml-gpu-worker.service
-          /home/agents/.local/bin/cml-gpu-worker ping
+          test "$(/home/agents/.local/bin/cml-gpu-worker ping)" = "pong"
           /home/agents/.local/bin/cml-gpu-worker probe
-      - name: CUDA emitter (no device needed)
+
+      - name: CUDA emitter (host compile only)
         run: cargo test --release --features gpu-cuda --test gpu_cuda_test
+
       - name: CUDA on the card — CPU = GPU
         run: cargo test --release --features gpu-cuda --test gpu_cuda_live_test -- --include-ignored
+
+      - name: SENS E1/E3 oracle — CUDA bitwise witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          ledger="$RUNNER_TEMP/sens-gpu2-e1e3.tsv"
+          python3 external/sens/experiments/gpu2-e1e3/witness.py \
+            --ledger "$ledger" \
+            --cases e1_muladd,e3_add_pos0_neg0,e3_mul_neg1_pos0 \
+            --run cml-cuda='WITNESS_EXECUTOR=cuda cargo run --quiet --release --features gpu-cuda --example gpu2_witness'
+          cat "$ledger"
+
       - name: CUDA execution graph — CPU = GPU
         run: cargo test --release --features gpu-cuda --test execution_graph_cuda_live_test -- --include-ignored
+
       - name: CUDA resident/fused chain — parity
         run: cargo test --release --features gpu-cuda --test gpu_cuda_resident_chain_live_test fused_final_only_chain_matches_resident_semantics -- --ignored --nocapture
-      - name: Crossover calibration (master / manual only)
+
+      - name: Crossover calibration
         if: ${{ github.event_name != 'pull_request' }}
         run: cargo test --release --features gpu-cuda --test gpu_cuda_crossover_live_test -- --include-ignored --nocapture
+
+      - name: GPU utilization after live work
+        if: always()
+        run: |
+          /usr/lib/wsl/lib/nvidia-smi \
+            --query-gpu=name,utilization.gpu,utilization.memory,memory.used,memory.total,temperature.gpu \
+            --format=csv,noheader || true
