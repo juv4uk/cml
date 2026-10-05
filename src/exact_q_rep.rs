@@ -252,6 +252,36 @@ mod tests {
     }
 
     #[test]
+    fn bounded_exhaustive_round_trip_preserves_exact_value() {
+        let ranges = [
+            ImmediateExactQRange::new(-1, 1).unwrap(),
+            ImmediateExactQRange::new(-8, 7).unwrap(),
+            ImmediateExactQRange::new(-64, 63).unwrap(),
+        ];
+
+        let mut checked = 0_u64;
+        for numerator in -64_i64..=64 {
+            for denominator in 1_u64..=32 {
+                let exact = q(numerator, denominator);
+                for range in ranges {
+                    let encoded = range.encode(exact);
+                    assert_eq!(
+                        encoded.decode(),
+                        exact,
+                        "round-trip diverged for {numerator}/{denominator} under [{}, {}]",
+                        range.min(),
+                        range.max()
+                    );
+                    assert_eq!(encoded.class(), range.classify(exact));
+                    checked += 1;
+                }
+            }
+        }
+
+        assert_eq!(checked, 12_384);
+    }
+
+    #[test]
     fn invalid_range_fails_closed() {
         assert_eq!(
             ImmediateExactQRange::new(1, -1),
