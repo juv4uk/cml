@@ -133,6 +133,7 @@ pub enum BridgeError {
     MechanismNotAdmitted,
     UnsupportedOrResearchIdentity,
     UnsupportedExecutionRole,
+    RoleProjectionFailure(String),
     ExecutionRoleMismatch,
     UpstreamBoundaryContractMissing,
 }
@@ -162,6 +163,9 @@ impl fmt::Display for BridgeError {
             }
             Self::UnsupportedExecutionRole => {
                 write!(formatter, "identity has no execution role in the first compiler slice")
+            }
+            Self::RoleProjectionFailure(message) => {
+                write!(formatter, "SENS compiler role projection failed: {message}")
             }
             Self::ExecutionRoleMismatch => {
                 write!(formatter, "carried execution role disagrees with pinned SENS authority")
@@ -247,10 +251,25 @@ fn verify_boundary_contract() -> Result<(), BridgeError> {
     }
 }
 
+/// Ask the pinned SENS compiler law for the authoritative bounded execution role.
+///
+/// CML does not inspect domain coordinates and never falls back to the Rust
+/// differential oracle if SENS evaluation fails.
+pub fn authoritative_execution_role(
+    identity: sens::DomainIdentity,
+) -> Result<sens::CompilerExecutionRole, BridgeError> {
+    let core = identity
+        .core_operation()
+        .ok_or(BridgeError::UnsupportedOrResearchIdentity)?;
+    sens::compiler_execution_role_from_sens(core)
+        .map_err(|error| BridgeError::RoleProjectionFailure(error.to_string()))?
+        .ok_or(BridgeError::UnsupportedExecutionRole)
+}
+
 /// Validate one SENS semantic request before any target/backend execution.
 ///
-/// The only identity -> role decision is delegated to
-/// `sens::compiler_execution_role`. CML never matches domain bits here.
+/// The identity -> role decision is executed by the pinned SENS-written law.
+/// CML only checks that the carried role agrees, then binds it to a mechanism.
 pub fn verify_request(
     request: SemanticRequest,
 ) -> Result<VerifiedDomainMechanism, BridgeError> {
@@ -296,12 +315,7 @@ pub fn verify_request(
         return Err(BridgeError::MechanismNotAdmitted);
     }
 
-    let core = request
-        .identity
-        .core_operation()
-        .ok_or(BridgeError::UnsupportedOrResearchIdentity)?;
-    let authoritative_role =
-        sens::compiler_execution_role(core).ok_or(BridgeError::UnsupportedExecutionRole)?;
+    let authoritative_role = authoritative_execution_role(request.identity)?;
 
     if authoritative_role != request.execution_role {
         return Err(BridgeError::ExecutionRoleMismatch);
@@ -359,8 +373,7 @@ mod tests {
     }
 
     fn role(identity: sens::DomainIdentity) -> sens::CompilerExecutionRole {
-        let core = identity.core_operation().expect("callable test identity");
-        sens::compiler_execution_role(core).expect("test identity has compiler role")
+        authoritative_execution_role(identity).expect("test identity has SENS-derived compiler role")
     }
 
     fn current_request(identity: sens::DomainIdentity) -> SemanticRequest {
@@ -509,6 +522,16 @@ mod tests {
             verify_call(request, vec![Ir::Nil]).unwrap_err(),
             BridgeError::UnsupportedOrResearchIdentity
         );
+    }
+
+    #[test]
+    fn production_bridge_source_does_not_call_rust_role_oracle() {
+        let source = include_str!("sens_domain_bridge.rs");
+        assert!(
+            !source.contains("sens::compiler_execution_role("),
+            "production bridge must not call the Rust differential role oracle"
+        );
+        assert!(source.contains("sens::compiler_execution_role_from_sens("));
     }
 
     #[test]
