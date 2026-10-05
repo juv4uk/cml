@@ -37,6 +37,9 @@ jobs:
           git config submodule.external/sens.url /home/agents/GitHub/sens
           git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
 
+      - name: Host adapter and fail-closed socket regressions
+        run: cargo test --features gpu-cuda --test gpu_host_test -- --nocapture
+
       - name: Build exact-head worker
         run: cargo build --release --features gpu-cuda --bin cml-gpu-worker
 
