@@ -13,12 +13,18 @@ on:
 
 jobs:
   focused:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, guix]
     timeout-minutes: 20
     steps:
+      - name: Require private dependency read token
+        env:
+          SENS_READ_TOKEN: ${{ secrets.SENS_READ_TOKEN }}
+        run: test -n "$SENS_READ_TOKEN"
+
       - uses: actions/checkout@v5
         with:
           submodules: recursive
+          token: ${{ secrets.SENS_READ_TOKEN }}
       - uses: dtolnay/rust-toolchain@stable
       - name: Rustfmt contract
         run: cargo fmt -p cml -- --check
