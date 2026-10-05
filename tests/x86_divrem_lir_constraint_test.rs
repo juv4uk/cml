@@ -10,7 +10,8 @@ use cml::machine_inst::{MachineInst, MachineItem, Provenance, X86Reg, assemble_p
 use cml::native_baseline::NativeExecutable;
 use cml::x86_lir::{LirFunction, LirInst, LirTerminator};
 use cml::x86_regalloc::{
-    AllocLocation, allocate_registers_with_constraints, fixed_constraints_for_function,
+    AllocLocation, RegAllocPlan, SCRATCH_REG_A, allocate_registers_with_constraints,
+    emit_machine_items_with_plan, fixed_constraints_for_function,
 };
 
 #[derive(Clone, Copy)]
@@ -186,4 +187,70 @@ fn optimizer_preserves_divrem_quotient_and_remainder_values() {
             "optimizer must not resurrect pre-DIV low/high facts"
         );
     }
+}
+
+
+#[test]
+fn spilled_divisor_reloads_through_nonallocatable_scratch_before_div() {
+    let function = divrem_function(20, 6, ResultKind::Remainder);
+    let intervals = cml::x86_regalloc::build_live_intervals(&function);
+
+    let (low, high, divisor) = function.blocks[0]
+        .instructions
+        .iter()
+        .find_map(|inst| match inst {
+            LirInst::DivRem {
+                low,
+                high,
+                divisor,
+                ..
+            } => Some((*low, *high, *divisor)),
+            _ => None,
+        })
+        .expect("DivRem must exist");
+
+    let constraints = fixed_constraints_for_function(&function);
+    let mut base = allocate_registers_with_constraints(&function, &constraints)
+        .expect("baseline allocation");
+    base.assignments.insert(low, AllocLocation::Reg(X86Reg::Rax));
+    base.assignments.insert(high, AllocLocation::Reg(X86Reg::Rdx));
+    base.assignments.insert(divisor, AllocLocation::SpillSlot(0));
+    base.spill_count = base.spill_count.max(1);
+
+    let plan = RegAllocPlan {
+        assignments: base.assignments,
+        spill_count: base.spill_count,
+        intervals,
+        fixed_constraints: base.fixed_constraints,
+    };
+    let items = emit_machine_items_with_plan(&function, &plan)
+        .expect("spilled divisor must be reloadable for DIV");
+
+    let div_index = items
+        .iter()
+        .position(|item| {
+            matches!(
+                item,
+                MachineItem::Inst(MachineInst::DivReg {
+                    divisor,
+                    ..
+                }) if *divisor == SCRATCH_REG_A
+            )
+        })
+        .expect("DIV must consume the dedicated scratch register");
+
+    assert!(
+        items[..div_index].iter().any(|item| {
+            matches!(
+                item,
+                MachineItem::Inst(MachineInst::MovLoad {
+                    dst,
+                    ..
+                }) if *dst == SCRATCH_REG_A
+            )
+        }),
+        "spilled divisor must be loaded into scratch before DIV"
+    );
+    assert_ne!(SCRATCH_REG_A, X86Reg::Rax);
+    assert_ne!(SCRATCH_REG_A, X86Reg::Rdx);
 }
