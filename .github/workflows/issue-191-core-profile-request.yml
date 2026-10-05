@@ -15,11 +15,12 @@ permissions:
 jobs:
   focused:
     name: Core profile request provenance
-    runs-on: ubuntu-24.04
+    runs-on: self-hosted
     steps:
       - name: Checkout CML with pinned my-lisp
         uses: actions/checkout@v5
         with:
+          token: ${{ secrets.SENS_READ_TOKEN }}
           submodules: recursive
 
       - name: Install Rust
