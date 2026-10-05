@@ -30,6 +30,10 @@ jobs:
         working-directory: cml
         run: python3 scripts/test-sens-execution-conformance-adapter.py
 
+      - name: SENS CUDA L3 conformance adapter self-test
+        working-directory: cml
+        run: python3 scripts/test-cml-cuda-l3-conformance.py
+
       - name: Resolve sens revision channels
         id: upstream_revisions
         working-directory: cml

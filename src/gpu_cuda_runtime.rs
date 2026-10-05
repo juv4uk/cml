@@ -14,10 +14,9 @@ use crate::compute::{
 };
 use crate::gpu_cuda::{
     CudaArtifactCache, CudaCacheDiagnosticEvidence, CudaCompilerTarget, CudaComputeCapability,
-    CudaDriverJitCacheKey,
-    CudaDriverJitModuleArtifact, CudaElementType, CudaEmitError, CudaLatencyBreakdown,
-    CudaMapKernel, CudaPtxArtifact, CudaPtxCacheKey, NvrtcVersion, emit_i32_compute_kernel,
-    lower_map_kernel,
+    CudaDriverJitCacheKey, CudaDriverJitModuleArtifact, CudaElementType, CudaEmitError,
+    CudaLatencyBreakdown, CudaMapKernel, CudaPtxArtifact, CudaPtxCacheKey, NvrtcVersion,
+    emit_i32_compute_kernel, lower_map_kernel,
 };
 use crate::ir::{BufferLiteral, Ir};
 
@@ -284,7 +283,11 @@ impl CudaSession {
     }
 
     pub fn prepare_map<'a>(&'a self, ir: &'a Ir) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
-        self.compile_target(CudaCompilerTarget::NvidiaDriverJit, ir, CudaKernelMode::Production)
+        self.compile_target(
+            CudaCompilerTarget::NvidiaDriverJit,
+            ir,
+            CudaKernelMode::Production,
+        )
     }
 
     /// Witness variant of [`CudaSession::prepare_map`]: the kernel is
