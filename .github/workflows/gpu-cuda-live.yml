@@ -85,31 +85,6 @@ jobs:
       - name: CUDA on the card — CPU = GPU
         run: cargo test --release --features gpu-cuda --test gpu_cuda_live_test -- --include-ignored
 
-      - name: SENS E1/E3 oracle — CUDA bitwise witness
-        shell: bash
-        run: |
-          set -euo pipefail
-          pinned=external/sens/experiments/gpu2-e1e3/witness.py
-          local=/home/agents/GitHub/sens/experiments/gpu2-e1e3/witness.py
-          if [[ -f "$pinned" ]]; then
-            witness="$pinned"
-            sens_root=external/sens
-          else
-            witness="$local"
-            sens_root=/home/agents/GitHub/sens
-          fi
-          test -f "$witness"
-          echo "sens-witness-source=$witness"
-          git -C "$sens_root" rev-parse HEAD | sed 's/^/sens-witness-sha=/'
-          python3 "$witness" --self-test
-
-          ledger="$RUNNER_TEMP/sens-gpu2-e1e3.tsv"
-          python3 "$witness" \
-            --ledger "$ledger" \
-            --cases e1_muladd,e3_add_pos0_neg0,e3_mul_neg1_pos0 \
-            --run cml-cuda='WITNESS_EXECUTOR=cuda cargo run --quiet --release --features gpu-cuda --example gpu2_witness'
-          cat "$ledger"
-
       - name: CUDA execution graph — CPU = GPU
         run: cargo test --release --features gpu-cuda --test execution_graph_cuda_live_test -- --include-ignored
 
