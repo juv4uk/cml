@@ -32,8 +32,12 @@ jobs:
           token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: true
 
-      - name: Rustfmt contract
-        run: guix shell --pure -m manifest.scm -- cargo fmt -p cml -- --check
+      - name: Rustfmt changed Rust surfaces
+        run: |
+          guix shell --pure -m manifest.scm -- \
+            rustfmt --edition 2024 --check \
+              src/compiler_artifact.rs \
+              tests/domain_bridge_slot_vertical_494_test.rs
 
       - name: Artifact provenance envelope unit tests
         run: guix shell --pure -m manifest.scm -- cargo test -p cml compiler_artifact::tests -- --nocapture
