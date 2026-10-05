@@ -468,13 +468,15 @@ pub fn allocate_registers_with_constraints(
         // 4. Register pressure exceeded. Only ordinary active intervals are
         // eligible to be evicted; fixed intervals are unspillable for their
         // live range.
+        // Preserve the legacy linear-scan tie-break exactly: `active` is
+        // already sorted by end position, and the old allocator considered
+        // its last interval first. Skip fixed intervals while walking that
+        // same order backwards rather than introducing a new comparator.
         let spill_candidate = active
             .iter()
             .enumerate()
-            .filter(|(_, (inv, _))| !fixed_constraints.contains_key(&inv.vreg))
-            .max_by(|(_, (a, _)), (_, (b, _))| {
-                a.end.cmp(&b.end).then_with(|| a.vreg.0.cmp(&b.vreg.0))
-            })
+            .rev()
+            .find(|(_, (inv, _))| !fixed_constraints.contains_key(&inv.vreg))
             .map(|(idx, _)| idx);
 
         if let Some(candidate_idx) = spill_candidate {
