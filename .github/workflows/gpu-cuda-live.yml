@@ -10,8 +10,12 @@ name: GPU CUDA live (GTX 1050 Ti)
 
 on:
   # One controlled CML GPU runner was restored by owner direction 2026-10-05.
-  # Keep the physical-GPU witness manual-only while the lane is requalified.
+  # Keep master manual-only. This trusted one-shot branch trigger exists only
+  # to requalify the owner GPU lane while Desktop Commander is unavailable.
   workflow_dispatch:
+  push:
+    branches:
+      - requal/gpu-cuda-live-20261005
 
 # Одна карта на 4 ГБ, кілька runner-процесів на машині: GPU-задачі — по одній.
 concurrency:
