@@ -68,7 +68,7 @@ fn test_lir_arithmetic_witness_native_parity() {
 
 #[test]
 fn test_lir_cond_branch_true_path_witness() {
-    let source = "(cond ((eq 5 5) 42) (t 99))";
+    let source = "(cond ((тотожне? 5 5) 42))";
     let ir = parse_and_lower_ir(source);
 
     let lir_func = lower_ir_to_lir(&ir).expect("lower cond to LIR");
@@ -94,7 +94,7 @@ fn test_lir_cond_branch_true_path_witness() {
 
 #[test]
 fn test_lir_cond_branch_false_path_witness() {
-    let source = "(cond ((eq 5 6) 42) (t 99))";
+    let source = "(cond ((тотожне? 5 6) 42) ((тотожне? 0 0) 99))";
     let ir = parse_and_lower_ir(source);
 
     let lir_func = lower_ir_to_lir(&ir).expect("lower cond to LIR");
@@ -126,7 +126,7 @@ fn test_lir_subtraction_expression_witness() {
 
 #[test]
 fn test_lir_emission_determinism() {
-    let source = "(cond ((eq 10 10) (+ 20 22)) (t (- 100 1)))";
+    let source = "(cond ((тотожне? 10 10) (+ 20 22)) ((тотожне? 0 0) (- 100 1)))";
     let ir1 = parse_and_lower_ir(source);
     let ir2 = parse_and_lower_ir(source);
 
@@ -149,7 +149,7 @@ fn test_lir_emission_determinism() {
 
 #[test]
 fn test_lir_cfg_predecessors_and_successors() {
-    let source = "(cond ((eq 1 1) 10) (t 20))";
+    let source = "(cond ((тотожне? 1 1) 10))";
     let ir = parse_and_lower_ir(source);
     let func = lower_ir_to_lir(&ir).unwrap();
 
