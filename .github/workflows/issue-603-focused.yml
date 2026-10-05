@@ -40,4 +40,4 @@ jobs:
 
       - name: GPU admission process contention witness
         run: |
-          guix shell --pure -m manifest.scm -- cargo test -p cml --test gpu_admission_contention_test -- --nocapture
+          timeout --signal=TERM 30s guix shell --pure -m manifest.scm -- cargo test -p cml --test gpu_admission_contention_test -- --nocapture
