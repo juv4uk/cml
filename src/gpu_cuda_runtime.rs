@@ -1,6 +1,7 @@
 //! Optional NVIDIA CUDA execution for admitted map regions.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use cudarc::driver::{CudaContext, CudaFunction, CudaSlice, LaunchConfig, PushKernelArg};
@@ -83,6 +84,8 @@ pub enum CudaRuntimeError {
     InsufficientDeviceMemory {
         required_bytes: usize,
         free_bytes: usize,
+        reserve_bytes: usize,
+        effective_available_bytes: usize,
     },
     InvalidMaterializationStep {
         step: usize,
@@ -107,6 +110,31 @@ impl From<CudaEmitError> for CudaRuntimeError {
     }
 }
 
+impl std::fmt::Display for CudaRuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Emit(err) => write!(f, "CUDA emit error: {err:?}"),
+            Self::UnsupportedInput => write!(f, "unsupported input"),
+            Self::InsufficientDeviceMemory {
+                required_bytes,
+                free_bytes,
+                reserve_bytes,
+                effective_available_bytes,
+            } => write!(
+                f,
+                "insufficient device memory: required={required_bytes} bytes, free={free_bytes} bytes, reserve={reserve_bytes} bytes, effective_available={effective_available_bytes} bytes"
+            ),
+            Self::InvalidMaterializationStep { step, chain_len } => {
+                write!(f, "invalid step {step} for chain of length {chain_len}")
+            }
+            Self::Nvrtc(msg) => write!(f, "NVRTC error: {msg}"),
+            Self::Driver { stage, message } => {
+                write!(f, "CUDA driver error at {stage:?}: {message}")
+            }
+        }
+    }
+}
+
 impl CudaRuntimeError {
     fn driver(stage: CudaDriverStage, error: impl ToString) -> Self {
         Self::Driver {
@@ -114,6 +142,31 @@ impl CudaRuntimeError {
             message: error.to_string(),
         }
     }
+}
+
+pub fn preflight_device_memory(
+    required_bytes: usize,
+    free_bytes: usize,
+    reserve_bytes: usize,
+) -> Result<usize, CudaRuntimeError> {
+    let effective_available = free_bytes.saturating_sub(reserve_bytes);
+    if required_bytes > effective_available {
+        Err(CudaRuntimeError::InsufficientDeviceMemory {
+            required_bytes,
+            free_bytes,
+            reserve_bytes,
+            effective_available_bytes: effective_available,
+        })
+    } else {
+        Ok(effective_available)
+    }
+}
+
+pub fn cuda_memory_reserve_from_env() -> usize {
+    std::env::var("CML_CUDA_MEMORY_RESERVE_BYTES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0)
 }
 
 fn nvrtc_arch_from_compute_capability((major, minor): (i32, i32)) -> String {
@@ -185,6 +238,7 @@ pub struct CudaSession {
     kernels: Mutex<HashMap<(CudaKernelMode, String), CudaFunction>>,
     i32_buffers: Mutex<Option<ReusableBuffers<i32>>>,
     f32_buffers: Mutex<Option<ReusableBuffers<f32>>>,
+    memory_reserve_bytes: AtomicUsize,
 }
 
 /// A semantic admission witness tied to the exact immutable IR that was
@@ -220,6 +274,7 @@ impl CudaSession {
             nvrtc_version: NvrtcVersion::new(nvrtc_major as i32, nvrtc_minor as i32),
             driver_version: query_driver_version()?,
         };
+        let reserve_bytes = cuda_memory_reserve_from_env();
         Ok(Self {
             context,
             device,
@@ -228,7 +283,26 @@ impl CudaSession {
             kernels: Mutex::new(HashMap::new()),
             i32_buffers: Mutex::new(None),
             f32_buffers: Mutex::new(None),
+            memory_reserve_bytes: AtomicUsize::new(reserve_bytes),
         })
+    }
+
+    pub fn with_memory_reserve(
+        device_ordinal: usize,
+        reserve_bytes: usize,
+    ) -> Result<Self, CudaRuntimeError> {
+        let session = Self::new(device_ordinal)?;
+        session.set_memory_reserve_bytes(reserve_bytes);
+        Ok(session)
+    }
+
+    pub fn memory_reserve_bytes(&self) -> usize {
+        self.memory_reserve_bytes.load(Ordering::Relaxed)
+    }
+
+    pub fn set_memory_reserve_bytes(&self, reserve_bytes: usize) {
+        self.memory_reserve_bytes
+            .store(reserve_bytes, Ordering::Relaxed);
     }
 
     pub fn device(&self) -> &CudaDevice {
@@ -522,15 +596,8 @@ impl CudaSession {
                 CudaRuntimeError::driver(CudaDriverStage::MemoryQuery, error),
             )
         })?;
-        if required_bytes > free_bytes {
-            return Err(fail(
-                0,
-                CudaRuntimeError::InsufficientDeviceMemory {
-                    required_bytes,
-                    free_bytes,
-                },
-            ));
-        }
+        preflight_device_memory(required_bytes, free_bytes, self.memory_reserve_bytes())
+            .map_err(|error| fail(0, error))?;
 
         // Re-admit the complete chain before the first kernel launch.
         let mut range =
@@ -702,15 +769,8 @@ impl CudaSession {
                 CudaRuntimeError::driver(CudaDriverStage::MemoryQuery, error),
             )
         })?;
-        if required_bytes > free_bytes {
-            return Err(fail(
-                0,
-                CudaRuntimeError::InsufficientDeviceMemory {
-                    required_bytes,
-                    free_bytes,
-                },
-            ));
-        }
+        preflight_device_memory(required_bytes, free_bytes, self.memory_reserve_bytes())
+            .map_err(|error| fail(0, error))?;
 
         let stream = self.context.default_stream();
         let input_device = stream
@@ -1241,5 +1301,55 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn preflight_zero_reserve_preserves_exact_fit() {
+        assert_eq!(preflight_device_memory(512, 1024, 0).unwrap(), 1024);
+        assert_eq!(preflight_device_memory(1024, 1024, 0).unwrap(), 1024);
+    }
+
+    #[test]
+    fn preflight_reserve_reduces_effective_available() {
+        assert_eq!(preflight_device_memory(700, 1000, 300).unwrap(), 700);
+        let error = preflight_device_memory(701, 1000, 300).unwrap_err();
+        assert!(matches!(
+            error,
+            CudaRuntimeError::InsufficientDeviceMemory {
+                required_bytes: 701,
+                free_bytes: 1000,
+                reserve_bytes: 300,
+                effective_available_bytes: 700,
+            }
+        ));
+    }
+
+    #[test]
+    fn preflight_reserve_saturates_at_zero() {
+        let error = preflight_device_memory(1, 200, 500).unwrap_err();
+        assert!(matches!(
+            error,
+            CudaRuntimeError::InsufficientDeviceMemory {
+                required_bytes: 1,
+                free_bytes: 200,
+                reserve_bytes: 500,
+                effective_available_bytes: 0,
+            }
+        ));
+    }
+
+    #[test]
+    fn memory_error_display_reports_resource_accounting() {
+        let error = CudaRuntimeError::InsufficientDeviceMemory {
+            required_bytes: 4096,
+            free_bytes: 2048,
+            reserve_bytes: 1024,
+            effective_available_bytes: 1024,
+        };
+        let text = error.to_string();
+        assert!(text.contains("required=4096"));
+        assert!(text.contains("free=2048"));
+        assert!(text.contains("reserve=1024"));
+        assert!(text.contains("effective_available=1024"));
     }
 }
