@@ -1,0 +1,70 @@
+name: Issue 605 rich role binding
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "src/compiler_mechanism.rs"
+      - "src/sens_domain_bridge.rs"
+      - "tests/current_nucleus_role_binding_test.rs"
+      - "upstream-revisions.lisp"
+      - "external/sens"
+      - ".github/workflows/issue-605-focused.yml"
+  push:
+    branches: [master]
+    paths:
+      - "src/compiler_mechanism.rs"
+      - "src/sens_domain_bridge.rs"
+      - "tests/current_nucleus_role_binding_test.rs"
+      - "upstream-revisions.lisp"
+      - "external/sens"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, guix]
+    timeout-minutes: 25
+    steps:
+      - name: Require private dependency read token
+        env:
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+        run: test -n "$SENS_READ_TOKEN"
+
+      - name: Checkout CML with pinned SENS
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+          submodules: true
+
+      - name: Verify exact SENS gitlink pin
+        run: |
+          test "$(git -C external/sens rev-parse HEAD)" = "08db33ced8643aedaa7de35cb61407900c0b0c05"
+          grep -q '(build-source-sha . "08db33ced8643aedaa7de35cb61407900c0b0c05")' upstream-revisions.lisp
+          grep -q '(supported-pin-sha . "08db33ced8643aedaa7de35cb61407900c0b0c05")' upstream-revisions.lisp
+
+      - name: Focused formatting
+        run: >-
+          guix shell --pure -m manifest.scm --
+          rustfmt --edition 2024 --check
+          src/compiler_mechanism.rs
+          src/sens_domain_bridge.rs
+          tests/current_nucleus_role_binding_test.rs
+
+      - name: Rich role mechanism unit tests
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml compiler_mechanism::tests -- --nocapture
+
+      - name: Proof-carrying SENS role bridge tests
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml sens_domain_bridge::tests -- --nocapture
+
+      - name: Current nucleus role closure witness
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --test current_nucleus_role_binding_test -- --nocapture
