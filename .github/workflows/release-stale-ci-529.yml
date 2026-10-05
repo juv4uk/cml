@@ -1,0 +1,20 @@
+name: Release stale CML runner occupancy
+
+on:
+  push:
+    branches:
+      - ops/release-stale-ci-529
+
+# Deliberately collide with the obsolete merged PR #529 CI concurrency group.
+# GitHub's control plane cancels that stale in-progress run before scheduling
+# this tiny trusted no-op. Remove this one-shot branch after requalification.
+concurrency:
+  group: CI-refs/pull/529/merge
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: [self-hosted, guix]
+    timeout-minutes: 2
+    steps:
+      - run: echo "stale PR #529 CI occupancy released by concurrency control"
