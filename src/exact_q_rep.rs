@@ -265,14 +265,8 @@ mod tests {
                 let exact = q(numerator, denominator);
                 for range in ranges {
                     let encoded = range.encode(exact);
-                    assert_eq!(
-                        encoded.decode(),
-                        exact,
-                        "round-trip diverged for {numerator}/{denominator} under [{}, {}]",
-                        range.min(),
-                        range.max()
-                    );
-                    assert_eq!(encoded.class(), range.classify(exact));
+                    assert!(encoded.decode() == exact);
+                    assert!(encoded.class() == range.classify(exact));
                     checked += 1;
                 }
             }
