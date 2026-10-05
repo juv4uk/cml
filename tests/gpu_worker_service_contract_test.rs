@@ -33,7 +33,7 @@ fn persistent_worker_unit_is_restartable_and_fail_closed_on_missing_dependencies
         "ConditionFileIsExecutable=/home/agents/.local/bin/cml-gpu-worker"
     ));
     assert!(unit.contains(
-        "ConditionFileIsExecutable=/home/agents/ecosystem/scripts/cuda-host-profile.sh"
+        "ConditionPathExists=/home/agents/ecosystem/scripts/cuda-host-profile.sh"
     ));
     assert!(unit.contains("Restart=always"));
     assert!(unit.contains("KillSignal=SIGINT"));
