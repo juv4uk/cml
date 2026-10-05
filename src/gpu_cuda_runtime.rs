@@ -235,6 +235,11 @@ impl CudaSession {
         &self.device
     }
 
+    /// Exact mechanism/toolchain provenance captured when this session was created.
+    pub fn toolchain_provenance(&self) -> CudaToolchainProvenance {
+        self.toolchain
+    }
+
     /// Number of distinct executable map kernels currently resident in this
     /// session. Exposed as mechanism evidence for reuse tests/benchmarks.
     pub fn cached_kernel_count(&self) -> Result<usize, CudaRuntimeError> {

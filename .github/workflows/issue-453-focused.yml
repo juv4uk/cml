@@ -11,6 +11,10 @@ on:
       - tests/compiler_pass_differential_test.rs
       - .github/workflows/issue-453-focused.yml
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   focused:
     runs-on: [self-hosted, guix]

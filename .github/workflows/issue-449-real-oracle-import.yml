@@ -9,6 +9,10 @@ on:
       - .github/workflows/ci.yml
       - .github/workflows/issue-449-real-oracle-import.yml
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   focused:
     runs-on: [self-hosted, guix]
