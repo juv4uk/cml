@@ -6,7 +6,7 @@ use cml::machine_inst::assemble_program;
 use cml::native_baseline::NativeExecutable;
 use cml::x86_lir::{LirLowerError, lower_ir_to_lir, lir_to_machine_items};
 use cml::{lower, parser};
-use sens::{Session, eval_program};
+use sens::{ErrorKind, Session, eval_program};
 
 fn parse_lower_one(source: &str) -> cml::ir::Ir {
     let exprs = parser::parse(source).expect("parse source");
@@ -23,8 +23,18 @@ fn native_raw(source: &str) -> u64 {
     NativeExecutable::load(&bytes).call()
 }
 
-fn oracle_u64(source: &str) -> u64 {
+fn oracle_session() -> Session {
     let mut session = Session::default();
+    eval_program(
+        include_str!("../external/sens/lib/core.lisp"),
+        &mut session,
+    )
+    .expect("pinned SENS core library must load for quotient/mod oracle");
+    session
+}
+
+fn oracle_u64(source: &str) -> u64 {
+    let mut session = oracle_session();
     eval_program(source, &mut session)
         .unwrap_or_else(|error| panic!("oracle failed for {source:?}: {error:?}"))
         .value
@@ -115,5 +125,21 @@ fn bounded_divrem_rejects_nonliteral_and_out_of_range_operands() {
         let error =
             lower_ir_to_lir(&ir).expect_err("unproven operand must stay outside bounded divide");
         assert!(matches!(error, LirLowerError::Unsupported(_)));
+    }
+}
+
+
+#[test]
+fn zero_divisor_rejection_matches_upstream_named_error() {
+    for source in ["(mod 5 0)", "(quotient 5 0)"] {
+        let mut session = oracle_session();
+        let upstream = eval_program(source, &mut session)
+            .expect_err("upstream must reject zero divisor");
+        assert_eq!(upstream.kind, ErrorKind::DivisionByZero);
+
+        let ir = parse_lower_one(source);
+        let local = lower_ir_to_lir(&ir)
+            .expect_err("bounded x86 LIR must fail closed before hardware DIV");
+        assert!(matches!(local, LirLowerError::Unsupported(_)));
     }
 }
