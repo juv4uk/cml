@@ -63,6 +63,7 @@ impl std::error::Error for CompileError {}
 
 fn validate_ir(ir: &Ir) -> Result<(), CompileError> {
     match ir {
+        Ir::DomainIdentity(_) => Err(CompileError::UnsupportedVariant("DomainIdentity")),
         Ir::Sid(_) => Err(CompileError::UnsupportedVariant("standalone SID8 value")),
         Ir::Int(n) => validate_int(*n),
         Ir::Float(_) => Err(CompileError::UnsupportedVariant("Float")),
@@ -273,6 +274,7 @@ impl Compiler {
 
     fn compile_expr(&mut self, ir: &Ir, target_reg: &str) {
         match ir {
+            Ir::DomainIdentity(_) => unreachable!("DomainIdentity rejected by validate_ir"),
             Ir::Sid(_) => unreachable!("standalone SID8 rejected by validate_ir"),
             Ir::Int(n) => {
                 self.emit_integer_literal(*n, target_reg);
