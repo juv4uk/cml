@@ -249,3 +249,41 @@ fn semantic_lowering_copies_div_result_out_of_precolored_temp_immediately() {
         );
     }
 }
+
+
+#[test]
+fn nested_mod_and_quotient_reuse_fixed_registers_and_compose_normally() {
+    let source = "(+ (mod 20 6) (quotient 20 6))";
+    let ir = parse_lower_one(source);
+    let lir = lower_ir_to_lir(&ir).expect("nested bounded divide expressions must lower");
+
+    let div_count = lir.blocks[0]
+        .instructions
+        .iter()
+        .filter(|inst| matches!(inst, LirInst::DivRem { .. }))
+        .count();
+    assert_eq!(div_count, 2, "both nested exact operations must reach DivRem");
+
+    let constraints = cml::x86_regalloc::fixed_constraints_for_function(&lir);
+    assert_eq!(constraints.len(), 4, "two DivRem nodes require two RAX/RDX pairs");
+
+    let plan = cml::x86_regalloc::allocate_registers_with_constraints(&lir, &constraints)
+        .expect("sequential fixed intervals must reuse RAX/RDX without conflict");
+    assert_eq!(
+        plan.spill_count, 0,
+        "small nested divide witness should not spill after short-lived result copies"
+    );
+
+    let items = lir_to_machine_items(&lir).expect("nested bounded divide expressions must emit");
+    let machine_divs = items
+        .iter()
+        .filter(|item| matches!(item, MachineItem::Inst(MachineInst::DivReg { .. })))
+        .count();
+    assert_eq!(machine_divs, 2);
+
+    let bytes = assemble_program(&items).expect("assemble nested DivRem witness");
+    let native = NativeExecutable::load(&bytes).call();
+    let oracle = oracle_u64(source);
+    assert_eq!(native, 5);
+    assert_eq!(native, oracle);
+}
