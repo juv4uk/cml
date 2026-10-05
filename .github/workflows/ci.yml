@@ -14,11 +14,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: cml
-          # external/sens is a real submodule now: sens is the contract dependency
-          # (cml reads its .lisp source tree directly for the encoder bridge, CPU
-          # profile, and conformance corpus), so it travels with cml's own
-          # checkout instead of a separately pinned sibling checkout.
-          submodules: true
+          # Cross-repository submodule auth is not reliable in PR workflows.
+          # SENS is checked out explicitly at the manifest's exact build-source SHA below.
+          submodules: false
 
       - name: SENS conformance adapter self-test
         working-directory: cml
@@ -43,11 +41,6 @@ jobs:
           test "${#supported_pin_sha}" -eq 40
           test "${#observed_current_sha}" -eq 40
           test "${#bootstrap_core1_sha}" -eq 40
-          actual_build_source_sha="$(git -C external/sens rev-parse HEAD)"
-          if [[ "$build_source_sha" != "$actual_build_source_sha" ]]; then
-            echo "build-source mismatch: manifest=$build_source_sha gitlink=$actual_build_source_sha" >&2
-            exit 1
-          fi
           echo "build_source_sha=$build_source_sha" >> "$GITHUB_OUTPUT"
           echo "supported_pin_sha=$supported_pin_sha" >> "$GITHUB_OUTPUT"
           echo "observed_current_sha=$observed_current_sha" >> "$GITHUB_OUTPUT"
@@ -56,6 +49,23 @@ jobs:
           echo "upstream-channel supported-pin sha=$supported_pin_sha"
           echo "upstream-channel observed-current sha=$observed_current_sha"
           echo "upstream-channel bootstrap-core1-source sha=$bootstrap_core1_sha"
+
+      - name: Checkout sens (build source)
+        uses: actions/checkout@v4
+        with:
+          repository: juv4uk/sens
+          ref: ${{ steps.upstream_revisions.outputs.build_source_sha }}
+          path: cml/external/sens
+
+      - name: Validate sens build-source checkout
+        working-directory: cml
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ steps.upstream_revisions.outputs.build_source_sha }}"
+          actual="$(git -C external/sens rev-parse HEAD)"
+          test "$expected" = "$actual"
+          echo "build-source checkout sha=$actual"
 
       - name: Checkout sens (supported evidence)
         uses: actions/checkout@v4
