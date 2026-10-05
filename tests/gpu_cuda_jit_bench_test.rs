@@ -58,11 +58,20 @@ fn bench_cuda_jit_latency_breakdown_on_device_zero() {
 
     eprintln!("============================================================");
     eprintln!("CUDA JIT LATENCY BREAKDOWN BENCHMARK (cml#491)");
-    eprintln!("Device: {} (ordinal {})", device.descriptor.name, device.ordinal);
-    eprintln!("Compute capability: {}.{}", device.compute_capability.0, device.compute_capability.1);
+    eprintln!(
+        "Device: {} (ordinal {})",
+        device.descriptor.name, device.ordinal
+    );
+    eprintln!(
+        "Compute capability: {}.{}",
+        device.compute_capability.0, device.compute_capability.1
+    );
     eprintln!("Driver version: {}", driver_version);
     eprintln!("NVRTC version: {}.{}", nvrtc_version.0, nvrtc_version.1);
-    eprintln!("Total VRAM: {} MiB", device.total_memory_bytes / 1024 / 1024);
+    eprintln!(
+        "Total VRAM: {} MiB",
+        device.total_memory_bytes / 1024 / 1024
+    );
     eprintln!("============================================================");
 
     let session = CudaSession::new(0).expect("Session creation failed");
@@ -80,7 +89,9 @@ fn bench_cuda_jit_latency_breakdown_on_device_zero() {
     let test_sizes = [1_000, 10_000, 100_000, 1_000_000];
 
     eprintln!("\n--- WORKLOAD: i32 MAP (Production Mode) ---");
-    eprintln!("size | lowering_us | nvrtc_us | driver_jit_us | fn_lookup_us | htod_us | kernel_us | dtoh_us | cold_ms | warm_us | cpu_ms | warm_speedup");
+    eprintln!(
+        "size | lowering_us | nvrtc_us | driver_jit_us | fn_lookup_us | htod_us | kernel_us | dtoh_us | cold_ms | warm_us | cpu_ms | warm_speedup"
+    );
     for size in test_sizes {
         let ir = i32_map_ir(size);
         let b = session
@@ -104,7 +115,9 @@ fn bench_cuda_jit_latency_breakdown_on_device_zero() {
     }
 
     eprintln!("\n--- WORKLOAD: f32 MAP (BitwiseEquality Mode -fmad=false) ---");
-    eprintln!("size | lowering_us | nvrtc_us | driver_jit_us | fn_lookup_us | htod_us | kernel_us | dtoh_us | cold_ms | warm_us | cpu_ms | warm_speedup");
+    eprintln!(
+        "size | lowering_us | nvrtc_us | driver_jit_us | fn_lookup_us | htod_us | kernel_us | dtoh_us | cold_ms | warm_us | cpu_ms | warm_speedup"
+    );
     for size in test_sizes {
         let ir = f32_map_ir(size);
         let b = session
