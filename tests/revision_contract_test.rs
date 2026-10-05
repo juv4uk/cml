@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const FPGA_LISP_SHA: &str = "0351a6d535504e0790f0f4e115b69518605b142e";
+const FPGA_LISP_SHA: &str = "d1cb7eb79f675e8f2cc128c3b12918d6b08b9413";
 
 fn sibling(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -52,16 +52,20 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
         compatibility.contains(&format!("(tested-sha . \"{FPGA_LISP_SHA}\")")),
         "FPGA_LISP_SHA constant does not match the compatibility contract"
     );
-    assert!(compatibility.contains("(isa . (1 1))"));
+    assert!(compatibility.contains("(isa . (1 4))"));
+    assert!(compatibility.contains(
+        "evidence/FPGA-SHARED-ORACLE-PARITY-1/hardware-readback-2026-09-11.md"
+    ));
+    assert!(compatibility.contains(
+        "evidence/FPGA-SHARED-ORACLE-PARITY-1/flash-cold-boot-2026-09-11.md"
+    ));
 
     let fpga_lisp = sibling("fpga-lisp");
     let fpga_lisp_head = head(&fpga_lisp);
-    if fpga_lisp_head != FPGA_LISP_SHA {
-        eprintln!(
-            "note: fpga-lisp has moved since compatibility contract was last verified/pinned \
-             (pinned {FPGA_LISP_SHA}, checked out {fpga_lisp_head})"
-        );
-    }
+    assert_eq!(
+        fpga_lisp_head, FPGA_LISP_SHA,
+        "fpga-lisp checkout must exactly match the reviewed CML target compatibility pin"
+    );
 
     let isa_file = if fpga_lisp.join("isa-contract.lisp").exists() {
         fpga_lisp.join("isa-contract.lisp")
@@ -70,14 +74,48 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
     };
     let isa = fs::read_to_string(isa_file).expect("fpga-lisp ISA contract should be readable");
     assert!(
-        isa.contains("(version . (1 1))")
-            || isa.contains("(version . (1 2))")
-            || isa.contains("(version . (1 3))"),
-        "fpga-lisp ISA version drift"
+        isa.contains("(version . (1 4))"),
+        "fpga-lisp ISA version must match the reviewed CML target contract"
     );
     assert!(
         isa.contains("(jf-branches-only-on . (nil))"),
         "fpga-lisp truth/JF contract drift"
+    );
+
+    let control = fs::read_to_string(fpga_lisp.join("fpga/rtl/control.sv"))
+        .expect("reviewed fpga-lisp control RTL should be readable");
+    assert!(
+        control.contains("atom -> canonical Symbol(\"t\")")
+            && control.contains("eq -> canonical Symbol(\"t\")")
+            && control.matches("reg_wr_data.tag = TAG_SYMBOL;").count() >= 2
+            && control.matches("reg_wr_data.value = 28'd79;").count() >= 2,
+        "reviewed ATOM/EQ result representation drifted from canonical Symbol(t)"
+    );
+
+    let physical = fs::read_to_string(
+        fpga_lisp.join(
+            "evidence/FPGA-SHARED-ORACLE-PARITY-1/hardware-readback-2026-09-11.md",
+        ),
+    )
+    .expect("reviewed physical ATOM/EQ evidence should be readable");
+    assert!(
+        physical.contains("(atom (quote radio))")
+            && physical.contains("(eq (quote radio) (quote radio))")
+            && physical.matches("SYMBOL(79) [0x2000004F]").count() >= 2,
+        "physical CML-produced ATOM/EQ evidence no longer proves canonical Symbol(t)"
+    );
+
+    let cold_boot = fs::read_to_string(
+        fpga_lisp.join(
+            "evidence/FPGA-SHARED-ORACLE-PARITY-1/flash-cold-boot-2026-09-11.md",
+        ),
+    )
+    .expect("reviewed FPGA cold-boot evidence should be readable");
+    assert!(
+        cold_boot.contains("corpus-02.bin")
+            && cold_boot.contains("R15 = SYMBOL(79)  [0x2000004F]")
+            && cold_boot.contains("ERR: no error"),
+        "permanent-Flash cold-boot evidence drifted"
     );
 }
 

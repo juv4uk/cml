@@ -154,10 +154,10 @@ If this agent can use GitHub but cannot reach the owner WSL or `swarm-node`, do 
   comment on `cml`'s side of that fix). Nothing else in the ecosystem may
   drift from what that repo says the language means.
 - **fpga-lisp** — hardware implementation of the same language on an FPGA.
-  Tracks an ISA contract (`isa-contract.lisp`, version **1.1**) against
-  my-lisp's semantics. `docs/lisp-machine-plan.md` there is the current,
-  authoritative status — don't infer progress from this file, which only
-  describes timeless roles.
+  Tracks an ISA contract (`isa-contract.lisp`; current reviewed CML target:
+  **1.4** at `d1cb7eb79f675e8f2cc128c3b12918d6b08b9413`) against SENS semantics.
+  Read that contract directly: the version here is only a navigation hint.
+  `docs/lisp-machine-plan.md` there is the current authoritative status.
 - **cml** (this repo) — an Ahead-of-Time compiler from my-lisp source,
   through a shared backend-neutral IR, to two targets today: fpga-lisp
   assembly (no runtime `eval`/`apply` loop on the hardware) and a minimal

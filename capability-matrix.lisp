@@ -33,7 +33,7 @@
   . ((fpga-lisp
       . ((contract . (2 0))
          (status . supported)
-         (isa . (1 1))
+         (isa . (1 4))
          (capabilities
           . ((integer . supported)
              (rational . unsupported)
