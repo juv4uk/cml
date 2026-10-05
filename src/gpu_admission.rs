@@ -9,7 +9,6 @@
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -87,6 +86,8 @@ impl GpuAdmissionGuard {
         provenance: &AdmissionProvenance,
     ) -> Result<Self, String> {
         provenance.validate()?;
+        let resource_key = resource_key.into();
+        validate_field("resource_key", &resource_key)?;
         let lock_path = lock_path.into();
         if let Some(parent) = lock_path.parent() {
             fs::create_dir_all(parent)
@@ -113,8 +114,6 @@ impl GpuAdmissionGuard {
             ));
         }
         let wait_ns = started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
-        let resource_key = resource_key.into();
-        validate_field("resource_key", &resource_key)?;
         let owner_record = format!(
             "repository={}\nrun_id={}\njob={}\ncase_id={}\nresource_key={}\nwait_ns={}\n",
             provenance.repository, provenance.run_id, provenance.job, provenance.case_id, resource_key, wait_ns
