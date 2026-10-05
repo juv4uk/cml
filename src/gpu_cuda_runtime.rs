@@ -9,7 +9,11 @@ use crate::accelerator::{
     AcceleratorApi, AcceleratorClass, AcceleratorDescriptor, AcceleratorVendor,
 };
 use crate::compute::{I32Range, fuse_i32_map_chain, i32_buffer_range, prove_i32_map_range};
-use crate::gpu_cuda::{CudaEmitError, emit_i32_compute_kernel, lower_map_kernel};
+use crate::gpu_cuda::{
+    CudaArtifactCache, CudaCacheDiagnosticEvidence, CudaComputeCapability, CudaDriverJitCacheKey,
+    CudaDriverJitModuleArtifact, CudaElementType, CudaEmitError, CudaMapKernel, CudaPtxArtifact,
+    CudaPtxCacheKey, emit_i32_compute_kernel, lower_map_kernel,
+};
 use crate::ir::{BufferLiteral, Ir};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -165,6 +169,7 @@ struct ReusableBuffers<T> {
 pub struct CudaSession {
     context: Arc<CudaContext>,
     device: CudaDevice,
+    artifact_cache: Mutex<CudaArtifactCache>,
     kernels: Mutex<HashMap<(CudaKernelMode, String), CudaFunction>>,
     i32_buffers: Mutex<Option<ReusableBuffers<i32>>>,
     f32_buffers: Mutex<Option<ReusableBuffers<f32>>>,
@@ -201,6 +206,7 @@ impl CudaSession {
         Ok(Self {
             context,
             device,
+            artifact_cache: Mutex::new(CudaArtifactCache::default()),
             kernels: Mutex::new(HashMap::new()),
             i32_buffers: Mutex::new(None),
             f32_buffers: Mutex::new(None),
@@ -225,6 +231,19 @@ impl CudaSession {
             })
     }
 
+    /// Diagnostic evidence for artifact cache hits, misses, and evictions.
+    pub fn cache_diagnostics(&self) -> Result<CudaCacheDiagnosticEvidence, CudaRuntimeError> {
+        self.artifact_cache
+            .lock()
+            .map(|cache| cache.diagnostics())
+            .map_err(|error| {
+                CudaRuntimeError::driver(
+                    CudaDriverStage::InternalState,
+                    format!("artifact cache mutex poisoned: {error}"),
+                )
+            })
+    }
+
     pub fn prepare_map<'a>(&'a self, ir: &'a Ir) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
         self.prepare_map_with_mode(ir, CudaKernelMode::Production)
     }
@@ -236,7 +255,7 @@ impl CudaSession {
         ir: &'a Ir,
         mode: CudaKernelMode,
     ) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
-        let source = lower_map_kernel(ir)?.source;
+        let kernel = lower_map_kernel(ir)?;
         let buffer = map_input(ir).ok_or(CudaRuntimeError::UnsupportedInput)?;
         if matches!(buffer, BufferLiteral::I32(values) if values.is_empty())
             || matches!(buffer, BufferLiteral::F32(values) if values.is_empty())
@@ -244,7 +263,7 @@ impl CudaSession {
             return Err(CudaRuntimeError::UnsupportedInput);
         }
 
-        let function = self.function_for_source(mode, source)?;
+        let function = self.function_for_kernel(mode, &kernel)?;
         Ok(PreparedCudaMap {
             session: self,
             function,
@@ -471,11 +490,10 @@ impl CudaSession {
             let next_range = prove_i32_map_range(function_ir, range)
                 .ok_or_else(|| fail(step, CudaRuntimeError::UnsupportedInput))?;
             let probe = i32_range_probe_ir(function_ir, range);
-            let source = lower_map_kernel(&probe)
-                .map_err(|error| fail(step, CudaRuntimeError::Emit(error)))?
-                .source;
+            let kernel = lower_map_kernel(&probe)
+                .map_err(|error| fail(step, CudaRuntimeError::Emit(error)))?;
             let function = self
-                .function_for_source(CudaKernelMode::Production, source)
+                .function_for_kernel(CudaKernelMode::Production, &kernel)
                 .map_err(|error| fail(step, error))?;
             prepared.push(function);
             range = next_range;
@@ -692,10 +710,11 @@ impl CudaSession {
         }))
     }
 
-    fn function_for_source(
+    /// Compile and load an admitted kernel artifact, consulting the PTX and module caches.
+    pub fn function_for_kernel(
         &self,
         mode: CudaKernelMode,
-        source: String,
+        kernel: &CudaMapKernel,
     ) -> Result<CudaFunction, CudaRuntimeError> {
         let mut kernels = self.kernels.lock().map_err(|error| {
             CudaRuntimeError::driver(
@@ -703,29 +722,88 @@ impl CudaSession {
                 format!("kernel cache mutex poisoned: {error}"),
             )
         })?;
-        let cache_key = (mode, source.clone());
+        let cache_key = (mode, kernel.source.clone());
         if let Some(function) = kernels.get(&cache_key) {
+            let mut cache = self.artifact_cache.lock().map_err(|error| {
+                CudaRuntimeError::driver(
+                    CudaDriverStage::InternalState,
+                    format!("artifact cache mutex poisoned: {error}"),
+                )
+            })?;
+            cache.record_ptx_hit();
+            cache.record_module_hit();
             return Ok(function.clone());
         }
 
         let options = nvrtc_options_for(mode, self.device.compute_capability);
-        let ptx = cudarc::nvrtc::compile_ptx_with_opts(
-            source.clone(),
-            cudarc::nvrtc::CompileOptions {
-                options,
-                ..Default::default()
-            },
-        )
-        .map_err(|error| CudaRuntimeError::Nvrtc(error.to_string()))?;
+        let ptx_key = CudaPtxCacheKey::new(
+            kernel.kernel_digest(),
+            self.device.compute_capability,
+            None,
+            options.clone(),
+        );
+
+        let mut cache = self.artifact_cache.lock().map_err(|error| {
+            CudaRuntimeError::driver(
+                CudaDriverStage::InternalState,
+                format!("artifact cache mutex poisoned: {error}"),
+            )
+        })?;
+
+        let (ptx_src, ptx_digest) = if let Some(cached_ptx) = cache.get_ptx(&ptx_key) {
+            (cached_ptx.ptx.clone(), cached_ptx.ptx_digest.clone())
+        } else {
+            let compiled = cudarc::nvrtc::compile_ptx_with_opts(
+                kernel.source.clone(),
+                cudarc::nvrtc::CompileOptions {
+                    options,
+                    ..Default::default()
+                },
+            )
+            .map_err(|error| CudaRuntimeError::Nvrtc(error.to_string()))?;
+            let artifact = CudaPtxArtifact::new(ptx_key, compiled.to_src());
+            let ptx_src = artifact.ptx.clone();
+            let ptx_digest = artifact.ptx_digest.clone();
+            cache.insert_ptx(artifact);
+            (ptx_src, ptx_digest)
+        };
+
+        let driver_key = CudaDriverJitCacheKey::new(
+            ptx_digest,
+            self.device.ordinal,
+            self.device.compute_capability,
+            None,
+        );
+
         let module = self
             .context
-            .load_module(ptx)
+            .load_module(cudarc::nvrtc::Ptx::from_src(ptx_src))
             .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::ModuleLoad, error))?;
         let function = module
-            .load_function("cml_map")
+            .load_function(kernel.entry_point)
             .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::FunctionLoad, error))?;
+
+        let module_artifact = CudaDriverJitModuleArtifact::new(driver_key, kernel.entry_point);
+        cache.insert_module(module_artifact);
+
         kernels.insert(cache_key, function.clone());
         Ok(function)
+    }
+
+    fn function_for_source(
+        &self,
+        mode: CudaKernelMode,
+        source: String,
+    ) -> Result<CudaFunction, CudaRuntimeError> {
+        let kernel = CudaMapKernel {
+            identity: sens::sens!(01011001),
+            numeric_domain: crate::compute::NumericDomain::FixedWidthInteger,
+            element_type: CudaElementType::I32,
+            parameter_count: 1,
+            entry_point: "cml_map",
+            source,
+        };
+        self.function_for_kernel(mode, &kernel)
     }
 }
 
