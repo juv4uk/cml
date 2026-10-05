@@ -1,7 +1,8 @@
 name: GPU runner worker live
 
 on:
-  # Local GitHub Actions runners were retired by owner directive 2026-09-28.
+  # One controlled CML GPU runner was restored by owner direction 2026-10-05.
+  # Keep physical-GPU execution manual-only while the lane is being requalified.
   workflow_dispatch:
 
 concurrency:
@@ -21,7 +22,6 @@ jobs:
       SCCACHE_CACHE_SIZE: 30G
       CARGO_BUILD_JOBS: 4
       CARGO_INCREMENTAL: 0
-      CML_GPU_WORKER_SOCKET: /tmp/cml-gpu-worker-ci.sock
     steps:
       - uses: actions/checkout@v4
 
@@ -35,40 +35,68 @@ jobs:
           git config submodule.external/sens.url /home/agents/GitHub/sens
           git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
 
-      - name: Build persistent worker
+      - name: Build exact-head worker
         run: cargo build --release --features gpu-cuda --bin cml-gpu-worker
 
-      - name: Runner to worker to CUDA round trip
+      - name: Prove persistent system worker and exact-head isolated worker
         shell: bash
         run: |
           set -euo pipefail
-          rm -f "$CML_GPU_WORKER_SOCKET"
+
+          installed_worker="$HOME/.local/bin/cml-gpu-worker"
+          persistent_socket=/run/cml-gpu-worker/worker.sock
+
+          echo "runner=$RUNNER_NAME os=$RUNNER_OS arch=$RUNNER_ARCH"
+          /usr/lib/wsl/lib/nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
+
+          # Phase A: the long-lived WSL system service is the execution lane used
+          # between CI jobs. It is deliberately not replaced by an unprivileged
+          # GitHub job.
+          systemctl is-active --quiet cml-gpu-worker.service
+          systemctl show cml-gpu-worker.service -p MainPID -p ActiveState -p FragmentPath
+          export CML_GPU_WORKER_SOCKET="$persistent_socket"
+          test "$("$installed_worker" ping)" = "pong"
+          "$installed_worker" probe
+          persistent_result="$("$installed_worker" add-i32 7 1 2 3 4)"
+          test "$persistent_result" = "8 9 10 11"
+          echo "persistent worker round trip: $persistent_result"
+          echo "persistent_worker_sha256=$(sha256sum "$installed_worker" | awk '{print $1}')"
+
+          # Phase B: prove the exact workflow head independently on a private
+          # socket. This validates new worker code without granting CI root
+          # authority to replace the system service.
+          ci_socket="/tmp/cml-gpu-worker-ci-$GITHUB_RUN_ID.sock"
+          export CML_GPU_WORKER_SOCKET="$ci_socket"
+          rm -f "$ci_socket"
           "$CARGO_TARGET_DIR/release/cml-gpu-worker" serve >worker.out 2>worker.err &
           worker_pid=$!
-          trap 'kill "$worker_pid" 2>/dev/null || true; wait "$worker_pid" 2>/dev/null || true; rm -f "$CML_GPU_WORKER_SOCKET"' EXIT
+          cleanup() {
+            kill "$worker_pid" 2>/dev/null || true
+            wait "$worker_pid" 2>/dev/null || true
+            rm -f "$ci_socket"
+          }
+          trap cleanup EXIT
 
-          for _ in $(seq 1 50); do
-            [[ -S "$CML_GPU_WORKER_SOCKET" ]] && break
+          for _ in $(seq 1 80); do
+            [[ -S "$ci_socket" ]] && "$CARGO_TARGET_DIR/release/cml-gpu-worker" ping >/dev/null 2>&1 && break
             sleep 0.1
           done
-          [[ -S "$CML_GPU_WORKER_SOCKET" ]]
-
+          [[ -S "$ci_socket" ]]
           test "$("$CARGO_TARGET_DIR/release/cml-gpu-worker" ping)" = "pong"
           "$CARGO_TARGET_DIR/release/cml-gpu-worker" probe
-          result="$("$CARGO_TARGET_DIR/release/cml-gpu-worker" add-i32 7 1 2 3 4)"
-          test "$result" = "8 9 10 11"
 
-          echo "GPU worker round trip: $result"
+          exact_result="$("$CARGO_TARGET_DIR/release/cml-gpu-worker" add-i32 7 1 2 3 4)"
+          test "$exact_result" = "8 9 10 11"
+          echo "exact-head worker round trip: $exact_result"
 
-          # File-backed workload: 32 MiB / 8,388,608 i32 values and 64
-          # admitted map steps. Only paths + offsets cross the socket; the
-          # worker keeps the CUDA session and compiled kernel cache alive.
+          # 32 MiB / 8,388,608 i32 values and 64 admitted map steps.
+          # Large payloads stay file-backed; only paths + offsets cross the socket.
           dd if=/dev/zero of=worker-input.i32 bs=1M count=32 status=none
           offsets=()
           for _ in $(seq 1 64); do offsets+=(1); done
 
           for iteration in 1 2 3; do
-            evidence="$("$CARGO_TARGET_DIR/release/cml-gpu-worker"               chain-file-i32 worker-input.i32 worker-output.i32 "${offsets[@]}")"
+            evidence="$("$CARGO_TARGET_DIR/release/cml-gpu-worker" chain-file-i32 worker-input.i32 worker-output.i32 "${offsets[@]}")"
             echo "heavy iteration $iteration: $evidence"
           done
 
