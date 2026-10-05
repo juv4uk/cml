@@ -164,8 +164,19 @@ jobs:
           test "$(grep -c '^CML-CONFORMANCE-CASE ' /tmp/cml-sens-oracle-import.txt)" -eq 2
           grep -F "CML-CONFORMANCE-IMPORT-GREEN cases=2" /tmp/cml-sens-oracle-import.txt
 
-      - name: Install Icarus Verilog
-        run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Resolve Icarus Verilog without sudo
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v iverilog >/dev/null 2>&1; then
+            iverilog -V
+            exit 0
+          fi
+          command -v guix >/dev/null 2>&1
+          iverilog_prefix="$(guix build iverilog)"
+          test -x "$iverilog_prefix/bin/iverilog"
+          echo "$iverilog_prefix/bin" >> "$GITHUB_PATH"
+          "$iverilog_prefix/bin/iverilog" -V
 
       - name: cargo fmt
         working-directory: cml
