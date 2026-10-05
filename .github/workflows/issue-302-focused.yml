@@ -10,14 +10,25 @@ on:
       - tests/ir_classification_matrix_test.rs
       - .github/workflows/issue-302-focused.yml
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   focused:
-    runs-on: ubuntu-24.04
+    runs-on: self-hosted
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
         with:
-          submodules: recursive
+          submodules: false
+      - name: Hydrate private SENS submodule from runner mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
+          git -C external/sens log -1 --format='external/sens %H'
       - uses: dtolnay/rust-toolchain@stable
       - name: Format check
         run: cargo fmt -p cml -- --check
