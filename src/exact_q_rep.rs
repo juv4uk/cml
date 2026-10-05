@@ -154,9 +154,14 @@ pub enum ExactQRepError {
 impl fmt::Display for ExactQRepError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ZeroDenominator => write!(formatter, "exact rational denominator must be nonzero"),
+            Self::ZeroDenominator => {
+                write!(formatter, "exact rational denominator must be nonzero")
+            }
             Self::InvalidImmediateRange { min, max } => {
-                write!(formatter, "invalid immediate exact-Q range: min {min} > max {max}")
+                write!(
+                    formatter,
+                    "invalid immediate exact-Q range: min {min} > max {max}"
+                )
             }
         }
     }
@@ -181,10 +186,7 @@ mod tests {
             q(i64::MIN / 2, 1),
             "normalization must not call signed abs on i64::MIN"
         );
-        assert_eq!(
-            ExactQ::new(1, 0),
-            Err(ExactQRepError::ZeroDenominator)
-        );
+        assert_eq!(ExactQ::new(1, 0), Err(ExactQRepError::ZeroDenominator));
     }
 
     #[test]
@@ -211,14 +213,8 @@ mod tests {
     fn positive_and_negative_range_boundaries_promote_without_wrap() {
         let range = ImmediateExactQRange::new(-8, 7).unwrap();
 
-        assert_eq!(
-            range.classify(q(-8, 1)),
-            ExactQRepClass::ImmediateExactQ
-        );
-        assert_eq!(
-            range.classify(q(7, 1)),
-            ExactQRepClass::ImmediateExactQ
-        );
+        assert_eq!(range.classify(q(-8, 1)), ExactQRepClass::ImmediateExactQ);
+        assert_eq!(range.classify(q(7, 1)), ExactQRepClass::ImmediateExactQ);
         assert_eq!(range.classify(q(-9, 1)), ExactQRepClass::BoxedExactQ);
         assert_eq!(range.classify(q(8, 1)), ExactQRepClass::BoxedExactQ);
     }
