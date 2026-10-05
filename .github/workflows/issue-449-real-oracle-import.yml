@@ -31,6 +31,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: juv4uk/sens
+          token: ${{ secrets.SENS_READ_TOKEN }}
           ref: ${{ steps.rev.outputs.sha }}
           path: sens
       - uses: dtolnay/rust-toolchain@stable
