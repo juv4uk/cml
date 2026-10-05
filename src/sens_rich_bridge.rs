@@ -218,13 +218,14 @@ mod tests {
     #[test]
     fn bridge_source_has_no_identity_decode_or_legacy_semantic_route() {
         let source = include_str!("sens_rich_bridge.rs");
-        for forbidden in [
-            "packed_bits(",
-            "Sid8",
-            "Sens8",
-            "compiler_execution_role(",
-            "domain_identity_for_surface",
-        ] {
+        let forbidden = [
+            ["packed", "_bits("].concat(),
+            ["Sid", "8"].concat(),
+            ["Sens", "8"].concat(),
+            ["compiler_execution_", "role("].concat(),
+            ["domain_identity_for_", "surface"].concat(),
+        ];
+        for forbidden in &forbidden {
             assert!(
                 !source.contains(forbidden),
                 "rich bridge reintroduced forbidden semantic route: {forbidden}"
