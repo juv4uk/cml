@@ -62,6 +62,7 @@ jobs:
         with:
           repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.supported_pin_sha }}
+          token: ${{ secrets.SENS_READ_TOKEN }}
           path: sens-supported
 
       - name: Checkout sens (observed-current)
@@ -69,6 +70,7 @@ jobs:
         with:
           repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
+          token: ${{ secrets.SENS_READ_TOKEN }}
           path: sens
 
       - name: Checkout sens (Core1 bootstrap source)
@@ -76,6 +78,7 @@ jobs:
         with:
           repository: juv4uk/sens
           ref: ${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}
+          token: ${{ secrets.SENS_READ_TOKEN }}
           path: sens-bootstrap
 
       - name: Validate Core1 bootstrap source

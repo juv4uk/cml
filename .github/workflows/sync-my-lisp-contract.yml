@@ -111,11 +111,12 @@ jobs:
       - name: Check out consumer repository
         uses: actions/checkout@v4
 
-      - name: Check out public sens authority
+      - name: Check out private sens authority
         uses: actions/checkout@v4
         with:
           repository: juv4uk/sens
           ref: main
+          token: ${{ secrets.SENS_READ_TOKEN }}
           fetch-depth: 0
           path: .upstream/sens
 
