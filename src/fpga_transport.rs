@@ -61,7 +61,8 @@ pub enum FpgaProtocolError {
     Transport(String),
 }
 
-/// Materialize a contiguous i32 buffer as ISA 1.1 tagged FIXNUM inputs.
+/// Materialize a contiguous i32 buffer through the extended register-input frame
+/// introduced in ISA 1.1 and retained by the reviewed ISA 1.4 target.
 ///
 /// This is deliberately an explicit host-staged boundary: F32 buffers and
 /// values outside the fpga-lisp FIXNUM range are rejected rather than
