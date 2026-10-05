@@ -28,6 +28,28 @@ def write_row(path: Path, contract: str) -> None:
         "producer_layer": "L0",
         "parity_status": "ORACLE",
         "legacy_identity_used": False,
+        "case_id": "case-" + "a" * 64,
+        "upstream_sha": "b" * 40,
+        "program_digest": "c" * 64,
+        "oracle_digest": "d" * 64,
+        "identity_trace_digest": "e" * 64,
+        "identity_trace": [{"domain": 3, "bits": "001"}],
+        "observable": {
+            "mechanism_status": "CALLABLE",
+            "result_kind": "VALUE",
+            "value": "()",
+            "error_kind": None,
+            "output": "",
+            "order_trace": [],
+        },
+        "evidence_scope": "bounded-exhaustive",
+        "exhaustive_bound": {
+            "grammar_profile": "d1-d3-structural-predicate-v1",
+            "domain_set": [1, 2, 3],
+            "max_ast_depth": 3,
+            "max_nodes": 11,
+            "argument_value_bound": 2,
+        },
     }
     path.write_text(json.dumps(row) + "\n", encoding="utf-8")
 
@@ -44,6 +66,17 @@ def main() -> int:
         rows = adapter.read_oracle_rows(current)
         assert len(rows) == 1
         assert rows[0]["contract"] == "11.6"
+
+        handoff = root / "fpga-handoff.lisp"
+        adapter.write_fpga_handoff(rows, handoff)
+        rendered = handoff.read_text(encoding="utf-8")
+        assert rendered.startswith("(fpga-conformance-handoff/v1 ")
+        assert '(contract . "11.6")' in rendered
+        assert '(case-id . "case-' + "a" * 64 + '")' in rendered
+        assert '(oracle-digest . "' + "d" * 64 + '")' in rendered
+        assert '(identity-trace-digest . "' + "e" * 64 + '")' in rendered
+        assert '(grammar-profile . "d1-d3-structural-predicate-v1")' in rendered
+        assert '(identity-trace . (((domain . 3) (bits . "001"))))' in rendered
 
         write_row(old, "11.5")
         try:
