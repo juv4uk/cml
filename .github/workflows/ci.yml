@@ -13,13 +13,21 @@ jobs:
       - name: Checkout cml
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.SENS_READ_TOKEN }}
           path: cml
           # external/sens is a real submodule now: sens is the contract dependency
           # (cml reads its .lisp source tree directly for the encoder bridge, CPU
           # profile, and conformance corpus), so it travels with cml's own
           # checkout instead of a separately pinned sibling checkout.
-          submodules: true
+          submodules: false
+
+      - name: Hydrate private SENS submodule from runner mirror
+        working-directory: cml
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
+          git -C external/sens log -1 --format='external/sens %H'
 
       - name: SENS conformance adapter self-test
         working-directory: cml
@@ -58,29 +66,35 @@ jobs:
           echo "upstream-channel observed-current sha=$observed_current_sha"
           echo "upstream-channel bootstrap-core1-source sha=$bootstrap_core1_sha"
 
-      - name: Checkout sens (supported evidence)
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.SENS_READ_TOKEN }}
-          repository: juv4uk/sens
-          ref: ${{ steps.upstream_revisions.outputs.supported_pin_sha }}
-          path: sens-supported
+      - name: Checkout sens (supported evidence) from runner mirror
+        shell: bash
+        env:
+          REVISION: ${{ steps.upstream_revisions.outputs.supported_pin_sha }}
+        run: |
+          set -euo pipefail
+          rm -rf sens-supported
+          git -c protocol.file.allow=always clone --no-checkout /home/agents/GitHub/sens sens-supported
+          git -C sens-supported checkout --detach "$REVISION"
 
-      - name: Checkout sens (observed-current)
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.SENS_READ_TOKEN }}
-          repository: juv4uk/sens
-          ref: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
-          path: sens
+      - name: Checkout sens (observed-current) from runner mirror
+        shell: bash
+        env:
+          REVISION: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
+        run: |
+          set -euo pipefail
+          rm -rf sens
+          git -c protocol.file.allow=always clone --no-checkout /home/agents/GitHub/sens sens
+          git -C sens checkout --detach "$REVISION"
 
-      - name: Checkout sens (Core1 bootstrap source)
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.SENS_READ_TOKEN }}
-          repository: juv4uk/sens
-          ref: ${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}
-          path: sens-bootstrap
+      - name: Checkout sens (Core1 bootstrap source) from runner mirror
+        shell: bash
+        env:
+          REVISION: ${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}
+        run: |
+          set -euo pipefail
+          rm -rf sens-bootstrap
+          git -c protocol.file.allow=always clone --no-checkout /home/agents/GitHub/sens sens-bootstrap
+          git -C sens-bootstrap checkout --detach "$REVISION"
 
       - name: Validate Core1 bootstrap source
         working-directory: cml
@@ -107,21 +121,21 @@ jobs:
           [[ -f ../sens-bootstrap/lib/core1-compiler-prelude.lisp ]] && bootstrap_prelude=present
           echo "((kind . cml-upstream-revision-drift) (build-source-sha . \"${{ steps.upstream_revisions.outputs.build_source_sha }}\") (supported-pin-sha . \"${{ steps.upstream_revisions.outputs.supported_pin_sha }}\") (observed-current-sha . \"${{ steps.upstream_revisions.outputs.observed_current_sha }}\") (bootstrap-core1-source-sha . \"${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}\") (bootstrap-core1-prelude . ${bootstrap_prelude}) (mathematical-result-v1 . ((build-source . ${build_math}) (supported-pin . ${supported_math}) (observed-current . ${observed_math}))))"
 
-      - name: Checkout fpga-lisp (sibling, provides RTL + simulator testbench)
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.SENS_READ_TOKEN }}
-          repository: juv4uk/fpga-lisp
-          ref: d1cb7eb79f675e8f2cc128c3b12918d6b08b9413
-          path: fpga-lisp
+      - name: Checkout fpga-lisp from runner mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf fpga-lisp
+          git -c protocol.file.allow=always clone --no-checkout /home/agents/GitHub/fpga-lisp fpga-lisp
+          git -C fpga-lisp checkout --detach d1cb7eb79f675e8f2cc128c3b12918d6b08b9413
 
-      - name: Checkout wsm-my-lisp (provides x86 asm nucleus witness)
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.SENS_READ_TOKEN }}
-          repository: juv4uk/wsm-my-lisp
-          ref: 1fe661664479c92da1968d60914b512320678ac2
-          path: wsm-my-lisp
+      - name: Checkout wsm-my-lisp from runner mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf wsm-my-lisp
+          git -c protocol.file.allow=always clone --no-checkout /home/agents/GitHub/wsm-my-lisp wsm-my-lisp
+          git -C wsm-my-lisp checkout --detach 1fe661664479c92da1968d60914b512320678ac2
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
