@@ -8,6 +8,10 @@ on:
       - tests/c_backend_conformance_test.rs
       - .github/workflows/issue-260-focused.yml
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   focused:
     runs-on: [self-hosted, guix]
