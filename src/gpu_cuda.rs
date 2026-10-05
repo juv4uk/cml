@@ -13,9 +13,26 @@ use crate::compute::{
 };
 use crate::ir::Ir;
 
-pub const CML_CUDA_LOWERING_SCHEMA_VERSION: u32 = 1;
+pub const CML_CUDA_LOWERING_SCHEMA_VERSION: u32 = 2;
 pub const CML_CUDA_KERNEL_ABI_VERSION: u32 = 1;
 pub const DEFAULT_CUDA_CACHE_CAPACITY: usize = 64;
+
+/// First-class CML compiler target for NVIDIA Driver JIT.
+///
+/// This identifies only the compilation mechanism boundary; it does not
+/// define or reinterpret any SENS semantic identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CudaCompilerTarget {
+    NvidiaDriverJit,
+}
+
+impl CudaCompilerTarget {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::NvidiaDriverJit => "NvidiaDriverJit",
+        }
+    }
+}
 
 /// Deterministic 64-bit FNV-1a digest.
 pub fn fnv1a64_digest(bytes: &[u8]) -> String {
@@ -122,6 +139,122 @@ impl CudaMapKernel {
         buf.extend_from_slice(self.source.as_bytes());
         fnv1a64_digest(&buf)
     }
+}
+
+/// First-class compiled CUDA artifact for the admitted associative bounded-i32 reduction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CudaReduceKernel {
+    pub numeric_domain: NumericDomain,
+    pub element_type: CudaElementType,
+    pub parameter_count: usize,
+    pub initial: i32,
+    pub entry_point: &'static str,
+    pub source: String,
+}
+
+impl CudaReduceKernel {
+    pub fn kernel_digest(&self) -> String {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"reduce-i32");
+        buf.extend_from_slice(&self.initial.to_be_bytes());
+        buf.push(2);
+        buf.push(1);
+        buf.extend_from_slice(&(self.parameter_count as u64).to_be_bytes());
+        buf.extend_from_slice(self.entry_point.as_bytes());
+        buf.extend_from_slice(self.source.as_bytes());
+        fnv1a64_digest(&buf)
+    }
+}
+
+/// Common CUDA lowering artifact for the currently admitted bulk families.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CudaKernelArtifact {
+    Map(CudaMapKernel),
+    Reduce(CudaReduceKernel),
+}
+
+impl CudaKernelArtifact {
+    pub fn source(&self) -> &str {
+        match self {
+            Self::Map(kernel) => &kernel.source,
+            Self::Reduce(kernel) => &kernel.source,
+        }
+    }
+
+    pub fn entry_point(&self) -> &'static str {
+        match self {
+            Self::Map(kernel) => kernel.entry_point,
+            Self::Reduce(kernel) => kernel.entry_point,
+        }
+    }
+}
+
+/// Lower an admitted CML compute region through one CUDA compiler boundary.
+pub fn lower_compute_kernel(ir: &Ir) -> Result<CudaKernelArtifact, CudaEmitError> {
+    let analysis = analyze(ir);
+    let region = analysis
+        .region
+        .as_ref()
+        .ok_or(CudaEmitError::UnsupportedRegion)?;
+    match region.operation {
+        BulkOperation::Map => Ok(CudaKernelArtifact::Map(lower_map_kernel(ir)?)),
+        BulkOperation::Reduce => {
+            lower_reduce_kernel_from_analysis(&analysis).map(CudaKernelArtifact::Reduce)
+        }
+    }
+}
+
+fn lower_reduce_kernel_from_analysis(
+    analysis: &crate::compute::ComputeAnalysis,
+) -> Result<CudaReduceKernel, CudaEmitError> {
+    if !analysis.gpu_eligible() {
+        return Err(CudaEmitError::NotEligible(analysis.gpu_blockers.clone()));
+    }
+    if !analysis
+        .reduction_proof
+        .as_ref()
+        .is_some_and(|proof| proof.is_parallel_eligible())
+    {
+        return Err(CudaEmitError::NotEligible(vec![
+            AdmissionBlocker::KernelNotLowerable,
+        ]));
+    }
+    let region = analysis.region.as_ref().ok_or(CudaEmitError::UnsupportedRegion)?;
+    let kernel = region.kernel.as_ref().ok_or(CudaEmitError::UnsupportedRegion)?;
+    let is_checked_add = matches!(
+        &kernel.body,
+        ScalarExpr::CheckedAdd(left, right)
+            if matches!(
+                (&**left, &**right),
+                (ScalarExpr::Parameter(0), ScalarExpr::Parameter(1))
+                    | (ScalarExpr::Parameter(1), ScalarExpr::Parameter(0))
+            )
+    );
+    if region.operation != BulkOperation::Reduce
+        || kernel.parameter_count != 2
+        || !is_checked_add
+        || analysis.numeric_domain != NumericDomain::FixedWidthInteger
+    {
+        return Err(CudaEmitError::UnsupportedRegion);
+    }
+    let Ir::Int(initial) = region.initial.as_ref().ok_or(CudaEmitError::UnsupportedRegion)? else {
+        return Err(CudaEmitError::UnsupportedRegion);
+    };
+    let initial = i32::try_from(*initial).map_err(|_| CudaEmitError::UnsupportedRegion)?;
+    Ok(CudaReduceKernel {
+        numeric_domain: analysis.numeric_domain,
+        element_type: CudaElementType::I32,
+        parameter_count: 2,
+        initial,
+        entry_point: "cml_reduce_i32",
+        source: render_reduce_kernel(),
+    })
+}
+
+/// The runtime must zero output_data and launch at least one thread.
+/// Thread zero contributes initial, so an empty reduction remains observable.
+fn render_reduce_kernel() -> String {
+    "extern \"C\" __global__ void cml_reduce_i32(const int *input_data, int *output_data, unsigned int length, int initial) { unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; if (i == 0) atomicAdd(output_data, initial); if (i >= length) return; atomicAdd(output_data, input_data[i]); }\n".to_string()
 }
 
 /// Cache key for portable NVRTC PTX compilation outputs.
@@ -537,6 +670,32 @@ impl CudaLatencyBreakdown {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compiler_target_exposes_nvidia_driver_jit() {
+        assert_eq!(CudaCompilerTarget::NvidiaDriverJit.name(), "NvidiaDriverJit");
+    }
+
+    #[test]
+    fn lower_compute_kernel_accepts_bounded_associative_i32_reduce() {
+        let expressions = crate::parser::parse("(reduce + 7 #i32(10 20 30))").unwrap();
+        let ir = crate::lower::lower_program(&expressions).unwrap().remove(0);
+        let artifact = lower_compute_kernel(&ir).expect("admitted reduce must lower");
+        match artifact {
+            CudaKernelArtifact::Reduce(kernel) => {
+                assert_eq!(kernel.initial, 7);
+                assert!(kernel.source.contains("atomicAdd(output_data, initial);"));
+            }
+            CudaKernelArtifact::Map(_) => panic!("reduce lowered as map"),
+        }
+    }
+
+    #[test]
+    fn lower_compute_kernel_rejects_non_associative_reduce_before_emission() {
+        let expressions = crate::parser::parse("(reduce (lambda (acc x) (+ (+ acc acc) x)) 0 #i32(1 2 3))").unwrap();
+        let ir = crate::lower::lower_program(&expressions).unwrap().remove(0);
+        assert!(matches!(lower_compute_kernel(&ir), Err(CudaEmitError::NotEligible(_))));
+    }
 
     #[test]
     fn fused_i32_emitter_preserves_scalar_grouping() {
