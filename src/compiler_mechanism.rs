@@ -5,7 +5,60 @@
 //! legacy Sid8/Sens8 identity. SENS owns meaning; CML owns target mechanism.
 
 use crate::slot_vm::{Slot, SlotInstr};
-use sens::CompilerExecutionRole;
+use sens::{CompilerExecutionRole, CompilerLoweringRole};
+
+/// CML-private mechanism family selected only after SENS has already derived
+/// one backend-neutral lowering role.  These values are implementation
+/// choices, never SENS identities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RichCompilerMechanismRef {
+    Quote,
+    AtomPredicateD1,
+    SelectorTail,
+    SelectorHead,
+    AtomEqualityD1,
+    ConditionalD1,
+    PairConstruct,
+    Lambda,
+    Define,
+}
+
+impl RichCompilerMechanismRef {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Quote => "cml.rich.quote",
+            Self::AtomPredicateD1 => "cml.rich.atom-d1",
+            Self::SelectorTail => "cml.rich.cdr",
+            Self::SelectorHead => "cml.rich.car",
+            Self::AtomEqualityD1 => "cml.rich.eq-d1",
+            Self::ConditionalD1 => "cml.rich.cond-d1",
+            Self::PairConstruct => "cml.rich.cons",
+            Self::Lambda => "cml.rich.lambda",
+            Self::Define => "cml.rich.define",
+        }
+    }
+}
+
+/// Mechanical binding from one already-verified SENS lowering role to the
+/// corresponding existing CML mechanism family.
+///
+/// This function is intentionally total over the current nine-role compiler
+/// nucleus closure.  Semantic admission happens upstream in SENS.
+pub const fn select_rich_compiler_mechanism(
+    role: CompilerLoweringRole,
+) -> RichCompilerMechanismRef {
+    match role {
+        CompilerLoweringRole::QuoteForm => RichCompilerMechanismRef::Quote,
+        CompilerLoweringRole::AtomPredicate => RichCompilerMechanismRef::AtomPredicateD1,
+        CompilerLoweringRole::SelectorTail => RichCompilerMechanismRef::SelectorTail,
+        CompilerLoweringRole::SelectorHead => RichCompilerMechanismRef::SelectorHead,
+        CompilerLoweringRole::AtomEquality => RichCompilerMechanismRef::AtomEqualityD1,
+        CompilerLoweringRole::CondForm => RichCompilerMechanismRef::ConditionalD1,
+        CompilerLoweringRole::PairConstruct => RichCompilerMechanismRef::PairConstruct,
+        CompilerLoweringRole::LambdaForm => RichCompilerMechanismRef::Lambda,
+        CompilerLoweringRole::DefineForm => RichCompilerMechanismRef::Define,
+    }
+}
 
 /// Stable CML-private reference to an admitted target mechanism.
 ///
@@ -84,6 +137,28 @@ mod tests {
             select_slot_vm_mechanism(CompilerExecutionRole::PairConstruct),
             CompilerMechanismRef::SlotVmCons
         );
+    }
+
+    #[test]
+    fn full_sens_lowering_roles_bind_to_one_rich_mechanism_layer() {
+        use sens::CompilerLoweringRole::*;
+
+        let cases = [
+            (QuoteForm, RichCompilerMechanismRef::Quote),
+            (AtomPredicate, RichCompilerMechanismRef::AtomPredicateD1),
+            (SelectorTail, RichCompilerMechanismRef::SelectorTail),
+            (SelectorHead, RichCompilerMechanismRef::SelectorHead),
+            (AtomEquality, RichCompilerMechanismRef::AtomEqualityD1),
+            (CondForm, RichCompilerMechanismRef::ConditionalD1),
+            (PairConstruct, RichCompilerMechanismRef::PairConstruct),
+            (LambdaForm, RichCompilerMechanismRef::Lambda),
+            (DefineForm, RichCompilerMechanismRef::Define),
+        ];
+
+        for (role, mechanism) in cases {
+            assert_eq!(select_rich_compiler_mechanism(role), mechanism);
+            assert!(mechanism.as_str().starts_with("cml.rich."));
+        }
     }
 
     #[test]
