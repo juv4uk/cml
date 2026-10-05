@@ -264,6 +264,12 @@ pub fn lower_expr(expr: &Expr) -> Result<Ir, LowerError> {
 fn lower_expr_admitted(expr: &Expr, env: &Env) -> Result<Ir, LowerError> {
     match expr {
         Expr::Sid(sid) => Ok(Ir::Sid(*sid)),
+        Expr::DomainIdentity(identity) => Err(LowerError::invalid_form(format!(
+            "exact DomainIdentity D{}:{:0width$b} reached AST but the canonical IR lane is not admitted yet (#406)",
+            identity.width(),
+            identity.packed_bits(),
+            width = identity.width()
+        ))),
         Expr::Integer(n) => Ok(Ir::Int(*n)),
         Expr::Rational(num, den) => Ok(Ir::Rational(*num, *den)),
         Expr::NumericBuffer(NumericBufferLiteral::I32(values)) => {
@@ -760,6 +766,12 @@ fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
         Expr::Sid(_) => Err(LowerError::invalid_form(
             "quoted SENS code is not a function identity; quoted/string/literal SID wrappers are forbidden",
         )),
+        Expr::DomainIdentity(identity) => Err(LowerError::invalid_form(format!(
+            "quoted exact DomainIdentity D{}:{:0width$b} has no canonical CML Quoted representation yet",
+            identity.width(),
+            identity.packed_bits(),
+            width = identity.width()
+        ))),
         Expr::Integer(n) => Ok(Quoted::Int(*n)),
         Expr::Rational(num, den) => Ok(Quoted::Rational(*num, *den)),
         // Case-preserving: unlike a symbol, a string's character content is
