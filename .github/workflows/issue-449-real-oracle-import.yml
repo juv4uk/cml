@@ -1,0 +1,54 @@
+name: Issue 449 real SENS oracle import
+
+on:
+  pull_request:
+    paths:
+      - upstream-revisions.lisp
+      - scripts/check-sens-execution-conformance.py
+      - scripts/test-sens-execution-conformance-adapter.py
+      - .github/workflows/ci.yml
+      - .github/workflows/issue-449-real-oracle-import.yml
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout cml
+        uses: actions/checkout@v5
+        with:
+          path: cml
+      - name: Resolve observed-current
+        id: rev
+        working-directory: cml
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(grep -F '(observed-current-sha . "' upstream-revisions.lisp | head -n1 | cut -d'"' -f2)"
+          test "${#sha}" -eq 40
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Checkout observed-current SENS
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/sens
+          ref: ${{ steps.rev.outputs.sha }}
+          path: sens
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Emit upstream real oracle rows
+        working-directory: sens
+        run: |
+          cargo build --release -p sens --example current_en_vs_d1d8_cpu
+          python3 benchmarks/execution-ladder-conformance/emit_oracle.py \
+            --manifest benchmarks/current-en-vs-d1d8/fixtures/d3-smoke.json \
+            --helper target/release/examples/current_en_vs_d1d8_cpu \
+            --out /tmp/sens-d3-oracle.jsonl
+          test "$(wc -l < /tmp/sens-d3-oracle.jsonl)" -eq 2
+      - name: Import through the CML adapter
+        working-directory: cml
+        run: |
+          python3 scripts/check-sens-execution-conformance.py \
+            /tmp/sens-d3-oracle.jsonl \
+            --sens-dir ../sens \
+            | tee /tmp/cml-sens-oracle-import.txt
+          test "$(grep -c '^CML-CONFORMANCE-CASE ' /tmp/cml-sens-oracle-import.txt)" -eq 2
+          grep -F "CML-CONFORMANCE-IMPORT-GREEN cases=2" /tmp/cml-sens-oracle-import.txt
