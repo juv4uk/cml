@@ -216,13 +216,21 @@ static Value *v_rat_div(Value *a, Value *b) {
 static Value *v_car(Value *v) { return v->u.cons.car; }
 static Value *v_cdr(Value *v) { return v->u.cons.cdr; }
 static int is_atom(Value *v) { return v->tag != TAG_CONS; }
-static int truthy(Value *v) { return v->tag != TAG_NIL; }
+static int predicate_bit(Value *v) {
+    if (v->tag != TAG_CONS)
+        runtime_error("Type", "cond test must return PredicateBit (0) or (1)");
+    Value *head = v->u.cons.car;
+    Value *tail = v->u.cons.cdr;
+    if (tail->tag != TAG_NIL || head->tag != TAG_INT || (head->u.i != 0 && head->u.i != 1))
+        runtime_error("Type", "cond test must return PredicateBit (0) or (1)");
+    return head->u.i == 1;
+}
 
 static Value *relation_record(const char *kind, const char *value) {
     return mk_cons(mk_sym(kind), mk_cons(mk_sym(value), &NIL_V));
 }
 
-/// Truthy result for primitives per corpus: (1) for true, (0) for false, () for nil/false in atom?.
+/// Exact PredicateBit projection used by current predicate mechanisms: (1) = YES, (0) = NO.
 static Value *truthy_val(int same) {
     return same ? mk_cons(mk_int(1), &NIL_V) : mk_cons(mk_int(0), &NIL_V);
 }
@@ -952,12 +960,12 @@ impl CBackend {
             let body_expr = self.compile_expr(body, env)?;
             if first {
                 out.push_str(&format!(
-                    " if (truthy({test_expr})) {{ _c = {body_expr}; }}"
+                    " if (predicate_bit({test_expr})) {{ _c = {body_expr}; }}"
                 ));
                 first = false;
             } else {
                 out.push_str(&format!(
-                    " else if (truthy({test_expr})) {{ _c = {body_expr}; }}"
+                    " else if (predicate_bit({test_expr})) {{ _c = {body_expr}; }}"
                 ));
             }
         }
