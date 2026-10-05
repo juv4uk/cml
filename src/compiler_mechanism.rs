@@ -17,7 +17,6 @@ pub enum CompilerMechanismRef {
     SlotVmCons,
 }
 
-
 /// Stable CML-private references to the existing rich compiler mechanisms.
 ///
 /// These names describe implementation seams, not SENS identities. The mapping
