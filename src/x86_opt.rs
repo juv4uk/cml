@@ -186,16 +186,11 @@ fn optimize_block_instructions(
                             }
                         }
                     }
-                    LirInst::DivRem { divisor, .. } => {
-                        // Preserve low/high as short-lived constrained temps.
-                        // Only the ordinary divisor is eligible for copy propagation.
-                        if let Some(&orig) = copy_map.get(divisor) {
-                            if orig != *divisor {
-                                *divisor = orig;
-                                report.copies_propagated += 1;
-                                changed = true;
-                            }
-                        }
+                    LirInst::DivRem { .. } => {
+                        // Keep all operand identities stable across this
+                        // constraint-sensitive destructive pseudo-op. Even the
+                        // ordinary divisor may be a deliberate copy used to
+                        // avoid aliasing the RAX/RDX dividend temps.
                     }
                     _ => {}
                 }
