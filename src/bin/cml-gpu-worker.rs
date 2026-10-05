@@ -11,6 +11,7 @@ fn main() {
 
 #[cfg(feature = "gpu-cuda")]
 mod enabled {
+    use cml::gpu_admission::{AdmissionProvenance, GpuAdmissionGuard, gpu_admission_lock_path, gpu_resource_key};
     use cml::gpu_cuda_runtime::{discover_devices, execute_map, execute_map_chain_i32_selected};
     use cml::gpu_worker_client::gpu_worker_socket_path;
     use cml::ir::{BufferLiteral, Ir, Params};
@@ -196,6 +197,7 @@ mod enabled {
                 write_response(stream, STATUS_OK, text.as_bytes()).map_err(io_error)
             }
             OP_ADD_I32 => {
+                let admission = acquire_gpu_admission(internal_provenance(OP_ADD_I32))?;
                 let (offset, values) = decode_add_request(&payload)?;
                 let ir = add_i32_ir(values, offset);
                 let execution = execute_map(&ir, 0)
@@ -207,6 +209,7 @@ mod enabled {
                 write_response(stream, STATUS_OK, &body).map_err(io_error)
             }
             OP_CHAIN_FILE_I32 => {
+                let admission = acquire_gpu_admission(internal_provenance(OP_CHAIN_FILE_I32))?;
                 let (input_path, output_path, offsets) = decode_chain_file_request(&payload)?;
                 let body = execute_chain_file_i32(&input_path, &output_path, &offsets)?;
                 write_response(stream, STATUS_OK, body.as_bytes()).map_err(io_error)
@@ -214,19 +217,34 @@ mod enabled {
             OP_CHAIN_FILE_I32_PROVENANCE => {
                 let (provenance, input_path, output_path, offsets) =
                     decode_chain_file_provenance_request(&payload)?;
+                let admission = acquire_gpu_admission(provenance.clone())?;
                 let evidence = execute_chain_file_i32(&input_path, &output_path, &offsets)?;
                 let body = format!(
-                    "repository={} run_id={} job={} case_id={} {}",
+                    "repository={} run_id={} job={} case_id={} admission_wait_ns={} {}",
                     provenance.repository,
                     provenance.run_id,
                     provenance.job,
                     provenance.case_id,
+                    admission.lease().wait_ns,
                     evidence
                 );
                 write_response(stream, STATUS_OK, body.as_bytes()).map_err(io_error)
             }
             other => Err(format!("unknown opcode {other}")),
         }
+    }
+
+    fn internal_provenance(opcode: u8) -> AdmissionProvenance {
+        AdmissionProvenance {
+            repository: "juv4uk/cml".into(),
+            run_id: format!("worker-{}", std::process::id()),
+            job: format!("opcode-{opcode}"),
+            case_id: "internal".into(),
+        }
+    }
+
+    fn acquire_gpu_admission(provenance: AdmissionProvenance) -> Result<GpuAdmissionGuard, String> {
+        GpuAdmissionGuard::acquire(gpu_admission_lock_path(), gpu_resource_key(), &provenance)
     }
 
     fn execute_chain_file_i32(
