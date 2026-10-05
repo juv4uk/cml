@@ -1,7 +1,10 @@
 # CML to fpga-lisp job protocol
 
 **Status:** M2c command transport, 2026-08-24.
-**Wire authority:** `fpga-lisp` ISA 1.0 RTL and monitor protocol.
+**Wire authority:** reviewed `fpga-lisp` ISA 1.4 at
+`d1cb7eb79f675e8f2cc128c3b12918d6b08b9413` and its monitor protocol.
+The legacy boot frame predates 1.1; the optional extended register-input frame
+was introduced in ISA 1.1 and remains wire-compatible in 1.4.
 
 `FpgaJobV1` describes one already-assembled program image and the register
 whose tagged Lisp word is the result. Version 1 deliberately mirrors the live
