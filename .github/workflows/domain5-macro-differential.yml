@@ -16,10 +16,14 @@ on:
       - "contracts/cml-operations.lisp"
       - ".github/workflows/domain5-macro-differential.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   differential:
     name: Rust MacroExpander vs Lisp reference
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, guix]
     steps:
       - name: Checkout CML with pinned SENS
         uses: actions/checkout@v4
