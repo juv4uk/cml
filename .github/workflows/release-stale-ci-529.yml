@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   release:
-    runs-on: [self-hosted, guix]
-    timeout-minutes: 2
+    if: ${{ false }}
+    runs-on: ubuntu-latest
     steps:
-      - run: echo "stale PR #528 CI occupancy released by concurrency control"
+      - run: echo "controller-only concurrency cancellation"
