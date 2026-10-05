@@ -1,9 +1,12 @@
 name: GPU runner worker live
 
 on:
-  # One controlled CML GPU runner was restored by owner direction 2026-10-05.
-  # Keep physical-GPU execution manual-only while the lane is being requalified.
+  # Master remains manual-only. This trusted branch trigger validates the
+  # exact canonical #589 / #476 timing head before merge.
   workflow_dispatch:
+  push:
+    branches:
+      - requal/gpu-worker-timing-20261005
 
 concurrency:
   group: gpu-gtx-1050-ti
