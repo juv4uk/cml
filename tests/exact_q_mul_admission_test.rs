@@ -14,7 +14,7 @@ fn exact_q_mul_is_admitted_by_upstream_semantic_identity_1002() {
     let operation = canon::find_operation_by_id(sens::sid!(00001110))
         .expect("admitted exact-Q multiplication identity must have compiler operation metadata");
     assert_eq!(operation.semantic_id, sens::sid!(00001110));
-    assert_eq!(operation.canonical_name, "*");
+    assert_eq!(operation.canonical_name, "times");
     assert_eq!(operation.cml_ir_projection, "Ir::App(Sid(00001110))");
     assert_eq!(operation.status, "partial");
 
