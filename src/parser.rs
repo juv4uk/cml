@@ -196,6 +196,50 @@ pub fn parse(input: &str) -> Result<Vec<Expr>, ParseError> {
     Ok(exprs)
 }
 
+fn canonical_location(span: sens::Span) -> SourceLocation {
+    SourceLocation {
+        line: 1,
+        column: span.start + 1,
+    }
+}
+
+fn import_canonical_expr(expr: &sens::Expr) -> Result<Expr, ParseError> {
+    let location = canonical_location(expr.span);
+    match &expr.kind {
+        sens::ExprKind::DomainIdentity(identity) => Ok(Expr::DomainIdentity(*identity)),
+        sens::ExprKind::List(items) => items
+            .iter()
+            .map(import_canonical_expr)
+            .collect::<Result<Vec<_>, _>>()
+            .map(Expr::List),
+        sens::ExprKind::Pair(head, tail) => {
+            let head = import_canonical_expr(head)?;
+            let tail = import_canonical_expr(tail)?;
+            Ok(Expr::DottedList(vec![head], Box::new(tail)))
+        }
+        other => Err(ParseError::unexpected_token(
+            format!("unsupported canonical SENS node: {other:?}"),
+            location,
+        )),
+    }
+}
+
+/// Parse current exact-domain visible-binary SENS without routing through the
+/// historical human/SID8 lexer. D2 structure is owned by the upstream reader;
+/// payloads arrive here carrying their exact domain identity.
+pub fn parse_canonical_binary(input: &str) -> Result<Vec<Expr>, ParseError> {
+    sens::parse_canonical_binary(input)
+        .map_err(|error| {
+            ParseError::unexpected_token(
+                format!("canonical SENS parse failed: {error}"),
+                SourceLocation { line: 1, column: 1 },
+            )
+        })?
+        .iter()
+        .map(import_canonical_expr)
+        .collect()
+}
+
 fn parse_expr(tokens: &mut Tokens) -> Result<Expr, ParseError> {
     let token = match tokens.next() {
         Some(token) => token,
@@ -511,6 +555,45 @@ mod comment_tests {
     fn a_file_consisting_only_of_comments_parses_as_empty() {
         let exprs = parse("; just a comment\n; another one").unwrap();
         assert!(exprs.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod exact_domain_identity_tests {
+    use super::*;
+
+    #[test]
+    fn canonical_d3_quote_empty_preserves_domain_identity() {
+        let exprs = parse_canonical_binary("10 001 00 000 01")
+            .expect("current exact-domain source must parse");
+        assert_eq!(exprs.len(), 1);
+        let Expr::List(items) = &exprs[0] else {
+            panic!("expected one canonical list");
+        };
+        assert_eq!(items.len(), 2);
+        let Expr::DomainIdentity(identity) = &items[0] else {
+            panic!("D3 quote head must remain DomainIdentity");
+        };
+        assert_eq!((identity.width(), identity.packed_bits()), (3, 0b001));
+        assert!(matches!(&items[1], Expr::List(empty) if empty.is_empty()));
+    }
+
+    #[test]
+    fn equal_payloads_across_widths_do_not_collapse() {
+        let exprs = parse_canonical_binary("001 0001")
+            .expect("D3/D4 exact identities must parse");
+        let [Expr::DomainIdentity(d3), Expr::DomainIdentity(d4)] = exprs.as_slice() else {
+            panic!("expected two exact domain identities");
+        };
+        assert_eq!(d3.packed_bits(), d4.packed_bits());
+        assert_eq!((d3.width(), d4.width()), (3, 4));
+        assert_ne!(d3, d4);
+    }
+
+    #[test]
+    fn legacy_human_parser_does_not_guess_three_bit_domain_identity() {
+        let exprs = parse("001").expect("historical human parser behavior");
+        assert_eq!(exprs, vec![Expr::Integer(1)]);
     }
 }
 

@@ -1,0 +1,466 @@
+//! Proof-carrying exact-domain SENS -> CML compiler boundary (#494).
+//!
+//! SENS owns semantic identity and identity -> execution-role projection.
+//! CML verifies the pinned authority bundle, validates the carried role against
+//! the SENS API, then binds that already-verified role to a private target
+//! mechanism. No domain coordinate is decoded in this module.
+
+use crate::compiler_mechanism::{
+    CompilerMechanismRef, select_slot_vm_mechanism,
+};
+use crate::ir::Ir;
+use std::fmt;
+
+const UPSTREAM_REVISIONS: &str = include_str!("../upstream-revisions.lisp");
+const LANGUAGE_CONTRACT: &str = include_str!("../external/sens/language-contract.lisp");
+const COMPILER_INPUT_CONTRACT: &str =
+    include_str!("../external/sens/contracts/compiler-semantic-input-v1.lisp");
+const D3_PROOF: &str =
+    include_str!("../external/sens/contracts/bija3-l1-l5-ratification.lisp");
+
+const SENS_REPOSITORY: &str = "juv4uk/sens";
+const AUTHORITY_PATH: &str = "language-contract.lisp";
+const D3_LAW_REF: &str = "language-contract.lisp:d3-foundation";
+const D3_PROOF_REF: &str = "contracts/bija3-l1-l5-ratification.lisp";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthorityProvenance {
+    pub repository: String,
+    pub revision: String,
+    pub authority_path: String,
+    pub authority_sha256: String,
+    pub language_contract_version: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SemanticStatus {
+    Current,
+    Research,
+    Unallocated,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MechanismStatus {
+    Admitted,
+    Blocked,
+    NotRequired,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SemanticRequest {
+    pub identity: sens::DomainIdentity,
+    pub execution_role: sens::CompilerExecutionRole,
+    pub law_ref: String,
+    pub proof_ref: String,
+    pub semantic_status: SemanticStatus,
+    pub mechanism_status: MechanismStatus,
+    pub provenance: AuthorityProvenance,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerifiedDomainCall {
+    identity: sens::DomainIdentity,
+    execution_role: sens::CompilerExecutionRole,
+    mechanism_ref: CompilerMechanismRef,
+    provenance: AuthorityProvenance,
+    args: Vec<Ir>,
+}
+
+impl VerifiedDomainCall {
+    pub const fn identity(&self) -> sens::DomainIdentity {
+        self.identity
+    }
+
+    pub const fn execution_role(&self) -> sens::CompilerExecutionRole {
+        self.execution_role
+    }
+
+    pub const fn mechanism_ref(&self) -> CompilerMechanismRef {
+        self.mechanism_ref
+    }
+
+    pub fn provenance(&self) -> &AuthorityProvenance {
+        &self.provenance
+    }
+
+    pub fn args(&self) -> &[Ir] {
+        &self.args
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BridgeError {
+    MissingAuthorityField(&'static str),
+    PinChannelMismatch,
+    RepositoryMismatch,
+    StaleAuthorityRevision,
+    AuthorityPathMismatch,
+    AuthorityDigestMismatch,
+    ContractVersionMismatch,
+    MissingLawReference,
+    MissingProofReference,
+    UnknownLawReference,
+    UnknownProofReference,
+    SemanticStatusNotCurrent,
+    MechanismNotAdmitted,
+    UnsupportedOrResearchIdentity,
+    UnsupportedExecutionRole,
+    ExecutionRoleMismatch,
+    UpstreamBoundaryContractMissing,
+}
+
+impl fmt::Display for BridgeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingAuthorityField(field) => {
+                write!(formatter, "missing pinned SENS authority field: {field}")
+            }
+            Self::PinChannelMismatch => {
+                write!(formatter, "CML build-source and supported SENS pins differ")
+            }
+            Self::RepositoryMismatch => write!(formatter, "SENS authority repository mismatch"),
+            Self::StaleAuthorityRevision => write!(formatter, "stale SENS authority revision"),
+            Self::AuthorityPathMismatch => write!(formatter, "SENS authority path mismatch"),
+            Self::AuthorityDigestMismatch => write!(formatter, "SENS authority digest mismatch"),
+            Self::ContractVersionMismatch => write!(formatter, "SENS contract version mismatch"),
+            Self::MissingLawReference => write!(formatter, "missing SENS law reference"),
+            Self::MissingProofReference => write!(formatter, "missing SENS proof reference"),
+            Self::UnknownLawReference => write!(formatter, "unknown SENS law reference"),
+            Self::UnknownProofReference => write!(formatter, "unknown SENS proof reference"),
+            Self::SemanticStatusNotCurrent => write!(formatter, "semantic status is not current"),
+            Self::MechanismNotAdmitted => write!(formatter, "execution mechanism is not admitted"),
+            Self::UnsupportedOrResearchIdentity => {
+                write!(formatter, "identity is not an admitted callable Core identity")
+            }
+            Self::UnsupportedExecutionRole => {
+                write!(formatter, "identity has no execution role in the first compiler slice")
+            }
+            Self::ExecutionRoleMismatch => {
+                write!(formatter, "carried execution role disagrees with pinned SENS authority")
+            }
+            Self::UpstreamBoundaryContractMissing => {
+                write!(formatter, "pinned SENS compiler boundary contract is incomplete")
+            }
+        }
+    }
+}
+
+impl std::error::Error for BridgeError {}
+
+fn dotted_quoted_field(source: &str, field: &str) -> Option<String> {
+    let needle = format!("({field} . \"");
+    let start = source.find(&needle)? + needle.len();
+    let rest = &source[start..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+fn contract_version() -> Option<String> {
+    let major_marker = "(major . #d";
+    let minor_marker = "(minor . ";
+    let major_start = LANGUAGE_CONTRACT.find(major_marker)? + major_marker.len();
+    let major_tail = &LANGUAGE_CONTRACT[major_start..];
+    let major_end = major_tail.find(')')?;
+    let minor_start = LANGUAGE_CONTRACT.find(minor_marker)? + minor_marker.len();
+    let minor_tail = &LANGUAGE_CONTRACT[minor_start..];
+    let minor_end = minor_tail.find(')')?;
+    Some(format!(
+        "{}.{}",
+        major_tail[..major_end].trim(),
+        minor_tail[..minor_end].trim()
+    ))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    sens::sha256_source(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// Exact authority bundle corresponding to CML's checked-in SENS gitlink.
+///
+/// Revision comes from `upstream-revisions.lisp`; digest/version are computed
+/// from the exact files compiled through `external/sens`.
+pub fn pinned_authority() -> Result<AuthorityProvenance, BridgeError> {
+    let build_source = dotted_quoted_field(UPSTREAM_REVISIONS, "build-source-sha")
+        .ok_or(BridgeError::MissingAuthorityField("build-source-sha"))?;
+    let supported = dotted_quoted_field(UPSTREAM_REVISIONS, "supported-pin-sha")
+        .ok_or(BridgeError::MissingAuthorityField("supported-pin-sha"))?;
+    if build_source != supported {
+        return Err(BridgeError::PinChannelMismatch);
+    }
+
+    Ok(AuthorityProvenance {
+        repository: SENS_REPOSITORY.to_string(),
+        revision: supported,
+        authority_path: AUTHORITY_PATH.to_string(),
+        authority_sha256: sha256_hex(LANGUAGE_CONTRACT.as_bytes()),
+        language_contract_version: contract_version()
+            .ok_or(BridgeError::MissingAuthorityField("language-contract-version"))?,
+    })
+}
+
+fn verify_boundary_contract() -> Result<(), BridgeError> {
+    let required = [
+        "(compiler-may-infer-meaning . no)",
+        "(backend-may-infer-meaning . no)",
+        "(execution-role . required)",
+        "(mechanism-ref . required-when-admitted)",
+        "(verify-before-lowering . required)",
+    ];
+    if required
+        .iter()
+        .all(|needle| COMPILER_INPUT_CONTRACT.contains(needle))
+    {
+        Ok(())
+    } else {
+        Err(BridgeError::UpstreamBoundaryContractMissing)
+    }
+}
+
+/// Validate one SENS semantic request before any target/backend execution.
+///
+/// The only identity -> role decision is delegated to
+/// `sens::compiler_execution_role`. CML never matches domain bits here.
+pub fn verify_call(
+    request: SemanticRequest,
+    args: Vec<Ir>,
+) -> Result<VerifiedDomainCall, BridgeError> {
+    verify_boundary_contract()?;
+    let pinned = pinned_authority()?;
+
+    if request.provenance.repository != pinned.repository {
+        return Err(BridgeError::RepositoryMismatch);
+    }
+    if request.provenance.revision != pinned.revision {
+        return Err(BridgeError::StaleAuthorityRevision);
+    }
+    if request.provenance.authority_path != pinned.authority_path {
+        return Err(BridgeError::AuthorityPathMismatch);
+    }
+    if request.provenance.authority_sha256 != pinned.authority_sha256 {
+        return Err(BridgeError::AuthorityDigestMismatch);
+    }
+    if request.provenance.language_contract_version != pinned.language_contract_version {
+        return Err(BridgeError::ContractVersionMismatch);
+    }
+
+    if request.law_ref.trim().is_empty() {
+        return Err(BridgeError::MissingLawReference);
+    }
+    if request.proof_ref.trim().is_empty() {
+        return Err(BridgeError::MissingProofReference);
+    }
+    if request.law_ref != D3_LAW_REF || !LANGUAGE_CONTRACT.contains("(d3-foundation") {
+        return Err(BridgeError::UnknownLawReference);
+    }
+    if request.proof_ref != D3_PROOF_REF
+        || !D3_PROOF.contains("(status . owner-ratified)")
+        || !D3_PROOF.contains("(domain . D3)")
+    {
+        return Err(BridgeError::UnknownProofReference);
+    }
+
+    if request.semantic_status != SemanticStatus::Current {
+        return Err(BridgeError::SemanticStatusNotCurrent);
+    }
+    if request.mechanism_status != MechanismStatus::Admitted {
+        return Err(BridgeError::MechanismNotAdmitted);
+    }
+
+    let core = request
+        .identity
+        .core_operation()
+        .ok_or(BridgeError::UnsupportedOrResearchIdentity)?;
+    let authoritative_role =
+        sens::compiler_execution_role(core).ok_or(BridgeError::UnsupportedExecutionRole)?;
+
+    if authoritative_role != request.execution_role {
+        return Err(BridgeError::ExecutionRoleMismatch);
+    }
+
+    let mechanism_ref = select_slot_vm_mechanism(authoritative_role);
+
+    Ok(VerifiedDomainCall {
+        identity: request.identity,
+        execution_role: authoritative_role,
+        mechanism_ref,
+        provenance: pinned,
+        args,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn d3(raw: u8) -> sens::DomainIdentity {
+        sens::DomainIdentity::D3(sens::Bija3::from_word(
+            sens::Bit3::new(raw).expect("valid D3 test identity"),
+        ))
+    }
+
+    fn d4(raw: u8) -> sens::DomainIdentity {
+        sens::DomainIdentity::D4(sens::CoreD4::from_word(
+            sens::Bit4::new(raw).expect("valid D4 test identity"),
+        ))
+    }
+
+    fn d8(raw: u8) -> sens::DomainIdentity {
+        sens::DomainIdentity::D8(sens::CoreD8::from_word(
+            sens::Bit8::new(raw).expect("valid D8 test identity"),
+        ))
+    }
+
+    fn role(identity: sens::DomainIdentity) -> sens::CompilerExecutionRole {
+        let core = identity.core_operation().expect("callable test identity");
+        sens::compiler_execution_role(core).expect("test identity has compiler role")
+    }
+
+    fn current_request(identity: sens::DomainIdentity) -> SemanticRequest {
+        SemanticRequest {
+            identity,
+            execution_role: role(identity),
+            law_ref: D3_LAW_REF.to_string(),
+            proof_ref: D3_PROOF_REF.to_string(),
+            semantic_status: SemanticStatus::Current,
+            mechanism_status: MechanismStatus::Admitted,
+            provenance: pinned_authority().expect("pinned authority must parse"),
+        }
+    }
+
+    #[test]
+    fn pinned_authority_is_computed_from_current_gitlink_and_contract_bytes() {
+        let authority = pinned_authority().unwrap();
+        assert_eq!(authority.repository, "juv4uk/sens");
+        assert_eq!(authority.revision.len(), 40);
+        assert_eq!(authority.authority_path, "language-contract.lisp");
+        assert_eq!(authority.authority_sha256.len(), 64);
+        assert_eq!(authority.language_contract_version, "11.6");
+    }
+
+    #[test]
+    fn pinned_authority_revision_matches_checked_out_sens_gitlink() {
+        let authority = pinned_authority().expect("pinned authority must parse");
+        let sens_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("external/sens");
+        let output = std::process::Command::new("git")
+            .arg("-c")
+            .arg(format!("safe.directory={}", sens_dir.display()))
+            .arg("-C")
+            .arg(&sens_dir)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .expect("focused pure-Guix evidence environment must provide git");
+        assert!(
+            output.status.success(),
+            "git rev-parse failed for {}: {}",
+            sens_dir.display(),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let actual = String::from_utf8(output.stdout)
+            .expect("git SHA must be UTF-8")
+            .trim()
+            .to_owned();
+        assert_eq!(
+            actual, authority.revision,
+            "proof-carrying provenance revision must equal the exact external/sens gitlink checkout"
+        );
+    }
+
+    #[test]
+    fn verified_head_role_selects_only_cml_private_slot_mechanism() {
+        let call = verify_call(current_request(d3(0b100)), vec![Ir::Nil]).unwrap();
+        assert_eq!(call.execution_role(), sens::CompilerExecutionRole::SelectorHead);
+        assert_eq!(
+            call.mechanism_ref(),
+            CompilerMechanismRef::SlotVmCar
+        );
+        assert_eq!(call.mechanism_ref().as_str(), "cml.slot-vm.car");
+    }
+
+    #[test]
+    fn verified_tail_role_selects_only_cml_private_slot_mechanism() {
+        let call = verify_call(current_request(d3(0b011)), vec![Ir::Nil]).unwrap();
+        assert_eq!(call.execution_role(), sens::CompilerExecutionRole::SelectorTail);
+        assert_eq!(
+            call.mechanism_ref(),
+            CompilerMechanismRef::SlotVmCdr
+        );
+        assert_eq!(call.mechanism_ref().as_str(), "cml.slot-vm.cdr");
+    }
+
+    #[test]
+    fn stale_or_wrong_authority_fails_before_mechanism_selection() {
+        let mut request = current_request(d3(0b100));
+        request.provenance.revision = "0".repeat(40);
+        assert_eq!(
+            verify_call(request, vec![Ir::Nil]).unwrap_err(),
+            BridgeError::StaleAuthorityRevision
+        );
+
+        let mut request = current_request(d3(0b100));
+        request.provenance.authority_sha256 = "00".repeat(32);
+        assert_eq!(
+            verify_call(request, vec![Ir::Nil]).unwrap_err(),
+            BridgeError::AuthorityDigestMismatch
+        );
+    }
+
+    #[test]
+    fn carried_role_must_equal_the_role_projected_by_sens() {
+        let mut request = current_request(d3(0b100));
+        request.execution_role = sens::CompilerExecutionRole::SelectorTail;
+        assert_eq!(
+            verify_call(request, vec![Ir::Nil]).unwrap_err(),
+            BridgeError::ExecutionRoleMismatch
+        );
+    }
+
+    #[test]
+    fn same_payload_in_wider_domain_does_not_become_d3_selector() {
+        let identity = d4(0b0100);
+        let request = SemanticRequest {
+            identity,
+            execution_role: sens::CompilerExecutionRole::SelectorHead,
+            law_ref: D3_LAW_REF.to_string(),
+            proof_ref: D3_PROOF_REF.to_string(),
+            semantic_status: SemanticStatus::Current,
+            mechanism_status: MechanismStatus::Admitted,
+            provenance: pinned_authority().unwrap(),
+        };
+        assert_eq!(
+            verify_call(request, vec![Ir::Nil]).unwrap_err(),
+            BridgeError::UnsupportedExecutionRole
+        );
+    }
+
+    #[test]
+    fn d8_research_identity_fails_closed_even_if_caller_claims_current_admitted() {
+        let request = SemanticRequest {
+            identity: d8(0b1000_0000),
+            execution_role: sens::CompilerExecutionRole::SelectorHead,
+            law_ref: D3_LAW_REF.to_string(),
+            proof_ref: D3_PROOF_REF.to_string(),
+            semantic_status: SemanticStatus::Current,
+            mechanism_status: MechanismStatus::Admitted,
+            provenance: pinned_authority().unwrap(),
+        };
+        assert_eq!(
+            verify_call(request, vec![Ir::Nil]).unwrap_err(),
+            BridgeError::UnsupportedOrResearchIdentity
+        );
+    }
+
+    #[test]
+    fn blocked_mechanism_fails_before_target_selection() {
+        let mut request = current_request(d3(0b011));
+        request.mechanism_status = MechanismStatus::Blocked;
+        assert_eq!(
+            verify_call(request, vec![Ir::Nil]).unwrap_err(),
+            BridgeError::MechanismNotAdmitted
+        );
+    }
+}
