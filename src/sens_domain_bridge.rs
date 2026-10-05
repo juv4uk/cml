@@ -24,7 +24,6 @@ const SENS_REPOSITORY: &str = "juv4uk/sens";
 const AUTHORITY_PATH: &str = "language-contract.lisp";
 const D3_LAW_REF: &str = "language-contract.lisp:d3-foundation";
 const D3_PROOF_REF: &str = "contracts/bija3-l1-l5-ratification.lisp";
-const D4_LAW_REF: &str = "language-contract.lisp:d4-bootstrap";
 const D4_PROOF_REF: &str = "contracts/d4-bootstrap-ratification.lisp";
 const COMPILER_ROLE_LAW_REF: &str =
     "lib/compiler-nucleus.lisp:compiler-lowering-role-from-laws";
@@ -92,7 +91,6 @@ impl VerifiedDomainMechanism {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-#[derive(Debug, Clone, PartialEq)]
 pub struct CompilerLoweringRequest {
     pub identity: sens::DomainIdentity,
     pub lowering_role: sens::CompilerLoweringRole,
@@ -129,6 +127,7 @@ impl VerifiedRichCompilerMechanism {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct VerifiedDomainCall {
     identity: sens::DomainIdentity,
     execution_role: sens::CompilerExecutionRole,
