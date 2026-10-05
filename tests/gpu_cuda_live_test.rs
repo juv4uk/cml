@@ -76,20 +76,30 @@ fn nvidia_driver_jit_target_executes_and_records_live_toolchain_provenance() {
         .execute(&ir)
         .expect("CPU reference rejected admitted case");
     let prepared = session
-        .compile_target(CudaCompilerTarget::NvidiaDriverJit, &ir, CudaKernelMode::Production)
+        .compile_target(
+            CudaCompilerTarget::NvidiaDriverJit,
+            &ir,
+            CudaKernelMode::Production,
+        )
         .expect("NvidiaDriverJit target rejected admitted case");
     let cuda = prepared
         .execute()
         .expect("NvidiaDriverJit execution failed");
 
     assert_eq!(cuda.output, cpu);
-    assert_eq!(CudaCompilerTarget::NvidiaDriverJit.name(), "NvidiaDriverJit");
+    assert_eq!(
+        CudaCompilerTarget::NvidiaDriverJit.name(),
+        "NvidiaDriverJit"
+    );
 
     let provenance = session.toolchain_provenance();
     assert!(provenance.nvrtc_version.major > 0);
     assert!(provenance.nvrtc_version.minor >= 0);
     assert!(provenance.driver_version > 0);
-    assert_eq!(cuda.device.compute_capability, session.device().compute_capability);
+    assert_eq!(
+        cuda.device.compute_capability,
+        session.device().compute_capability
+    );
 }
 
 #[test]
