@@ -62,7 +62,8 @@ pub struct InlineDecision {
 /// Computes the structural node count/cost of an IR expression.
 pub fn ir_cost(ir: &Ir) -> usize {
     match ir {
-        Ir::Sid(_)
+        Ir::DomainIdentity(_)
+        | Ir::Sid(_)
         | Ir::Int(_)
         | Ir::Float(_)
         | Ir::Rational(..)
@@ -102,6 +103,7 @@ pub fn ir_cost(ir: &Ir) -> usize {
 /// Renames free occurrences of variable names in an expression.
 fn substitute_vars(ir: &Ir, mapping: &HashMap<String, String>) -> Ir {
     match ir {
+        Ir::DomainIdentity(identity) => Ir::DomainIdentity(*identity),
         Ir::Sid(sid) => Ir::Sid(*sid),
         Ir::Var(name) => {
             if let Some(fresh) = mapping.get(name) {
