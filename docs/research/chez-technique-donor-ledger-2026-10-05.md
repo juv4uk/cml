@@ -151,7 +151,7 @@ Then measure:
 
 **ADOPT AS A BOUNDED FOLLOW-UP, NOT A NEW ALLOCATOR.**
 
-Keep CML linear scan. Borrow only the explicit constrained-temporary idea.
+Keep CML linear scan. Borrow only the explicit constrained-temporary idea. Implementation child: #523.
 
 ---
 
@@ -234,7 +234,7 @@ Per target, independently:
 |---|---|---|
 | Nanopass decomposition | ADOPT | Continue #453; future `ir-to-slot.lower` must be an explicit proof boundary |
 | Register allocator wholesale | REJECT | Existing deterministic linear scan stays |
-| Constrained/pre-colored temporaries | ADOPT bounded prototype | Create a backend-local x86 fixed-register-constraint child issue |
+| Constrained/pre-colored temporaries | ADOPT bounded prototype | #523 — backend-local x86 fixed-register constraints |
 | Chez pointer/tag layout | REJECT | Never promote it into canonical CML/SENS IR |
 | Representation layering | ADOPT | Continue #455 target-neutral class -> target-specific layout |
 
