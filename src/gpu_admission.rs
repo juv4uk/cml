@@ -57,9 +57,10 @@ fn validate_field(name: &str, value: &str) -> Result<(), String> {
     if value.len() > MAX_FIELD_BYTES {
         return Err(format!("admission {name} exceeds {MAX_FIELD_BYTES} bytes"));
     }
-    if !value.bytes().all(|b| {
-        b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'/' | b'-')
-    }) {
+    if !value
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'/' | b'-'))
+    {
         return Err(format!("admission {name} contains unsupported characters"));
     }
     Ok(())
@@ -101,9 +102,7 @@ impl GpuAdmissionGuard {
             .read(true)
             .write(true)
             .open(&lock_path)
-            .map_err(|error| {
-                format!("open GPU admission lock {}: {error}", lock_path.display())
-            })?;
+            .map_err(|error| format!("open GPU admission lock {}: {error}", lock_path.display()))?;
         let started = Instant::now();
         let rc = unsafe { flock(file.as_raw_fd(), LOCK_EX) };
         if rc != 0 {
@@ -126,7 +125,10 @@ impl GpuAdmissionGuard {
             file,
             lock_path,
             owner_path,
-            lease: AdmissionLease { wait_ns, resource_key },
+            lease: AdmissionLease {
+                wait_ns,
+                resource_key,
+            },
         })
     }
 
@@ -153,7 +155,10 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_lock() -> PathBuf {
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         std::env::temp_dir().join(format!("cml-gpu-admission-{nonce}.lock"))
     }
 
