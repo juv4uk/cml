@@ -550,6 +550,10 @@ impl CudaLatencyBreakdown {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn compiler_target_exposes_nvidia_driver_jit() {
+        assert_eq!(CudaCompilerTarget::NvidiaDriverJit.name(), "NvidiaDriverJit");
+    }
     use super::*;
 
     #[test]
