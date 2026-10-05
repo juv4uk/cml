@@ -29,21 +29,38 @@ impl fmt::Display for SlotBridgeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Arity { expected, actual } => {
-                write!(formatter, "verified SLOT bridge expects {expected} argument(s), got {actual}")
+                write!(
+                    formatter,
+                    "verified SLOT bridge expects {expected} argument(s), got {actual}"
+                )
             }
             Self::ArgumentMustBeCanonicalLiteral => {
-                write!(formatter, "first SLOT bridge accepts only an already-canonical literal value")
+                write!(
+                    formatter,
+                    "first SLOT bridge accepts only an already-canonical literal value"
+                )
             }
             Self::UnsupportedLiteral(kind) => {
-                write!(formatter, "literal kind is outside the first SLOT bridge slice: {kind}")
+                write!(
+                    formatter,
+                    "literal kind is outside the first SLOT bridge slice: {kind}"
+                )
             }
             Self::UnsupportedCanonicalForm(kind) => {
-                write!(formatter, "canonical form is outside the current exact-domain compiler slice: {kind}")
+                write!(
+                    formatter,
+                    "canonical form is outside the current exact-domain compiler slice: {kind}"
+                )
             }
             Self::UnsupportedVerifiedMechanism => {
-                write!(formatter, "verified mechanism is not valid for this SLOT lowering shape")
+                write!(
+                    formatter,
+                    "verified mechanism is not valid for this SLOT lowering shape"
+                )
             }
-            Self::Verification(error) => write!(formatter, "SENS request verification failed: {error}"),
+            Self::Verification(error) => {
+                write!(formatter, "SENS request verification failed: {error}")
+            }
             Self::SlotSpaceExhausted => write!(formatter, "SLOT bridge exhausted u16 slot space"),
         }
     }
@@ -90,10 +107,8 @@ impl Builder {
             Quoted::Nil => self.load_nil(),
             Quoted::Int(value) => {
                 let dst = self.alloc()?;
-                self.instructions.push(SlotInstr::LoadInt {
-                    dst,
-                    value: *value,
-                });
+                self.instructions
+                    .push(SlotInstr::LoadInt { dst, value: *value });
                 Ok(dst)
             }
             Quoted::List(items) => {
@@ -129,12 +144,12 @@ impl Builder {
             // as the empty list value. It is data, never a callable role.
             CExpr::List(items) if items.is_empty() => self.load_nil(),
             CExpr::List(items) => self.compile_canonical_call(items),
-            CExpr::DomainIdentity(_) => {
-                Err(SlotBridgeError::UnsupportedCanonicalForm("bare domain identity"))
-            }
-            CExpr::DottedList(_, _) => {
-                Err(SlotBridgeError::UnsupportedCanonicalForm("dotted source form"))
-            }
+            CExpr::DomainIdentity(_) => Err(SlotBridgeError::UnsupportedCanonicalForm(
+                "bare domain identity",
+            )),
+            CExpr::DottedList(_, _) => Err(SlotBridgeError::UnsupportedCanonicalForm(
+                "dotted source form",
+            )),
             CExpr::Sid(_) => Err(SlotBridgeError::UnsupportedCanonicalForm("legacy Sid8")),
             CExpr::Integer(_) => Err(SlotBridgeError::UnsupportedCanonicalForm("integer")),
             CExpr::Rational(_, _) => Err(SlotBridgeError::UnsupportedCanonicalForm("rational")),
@@ -292,9 +307,7 @@ mod tests {
     }
 
     fn d3(raw: u8) -> sens::DomainIdentity {
-        sens::DomainIdentity::D3(sens::Bija3::from_word(
-            sens::Bit3::new(raw).unwrap(),
-        ))
+        sens::DomainIdentity::D3(sens::Bija3::from_word(sens::Bit3::new(raw).unwrap()))
     }
 
     #[test]
@@ -351,14 +364,18 @@ mod tests {
         };
 
         let program = lower_canonical_expr_to_slot_program(expr, "full-source").unwrap();
-        assert!(program
-            .instructions
-            .iter()
-            .any(|instruction| matches!(instruction, SlotInstr::Cons { .. })));
-        assert!(program
-            .instructions
-            .iter()
-            .any(|instruction| matches!(instruction, SlotInstr::Car { .. })));
+        assert!(
+            program
+                .instructions
+                .iter()
+                .any(|instruction| matches!(instruction, SlotInstr::Cons { .. }))
+        );
+        assert!(
+            program
+                .instructions
+                .iter()
+                .any(|instruction| matches!(instruction, SlotInstr::Car { .. }))
+        );
 
         let result = execute(&program).expect("full-source SLOT program must execute");
         assert_eq!(result.value.to_string(), "(())");

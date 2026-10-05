@@ -5,9 +5,7 @@
 //! the SENS API, then binds that already-verified role to a private target
 //! mechanism. No domain coordinate is decoded in this module.
 
-use crate::compiler_mechanism::{
-    CompilerMechanismRef, select_slot_vm_mechanism,
-};
+use crate::compiler_mechanism::{CompilerMechanismRef, select_slot_vm_mechanism};
 use crate::ir::Ir;
 use std::fmt;
 
@@ -15,8 +13,7 @@ const UPSTREAM_REVISIONS: &str = include_str!("../upstream-revisions.lisp");
 const LANGUAGE_CONTRACT: &str = include_str!("../external/sens/language-contract.lisp");
 const COMPILER_INPUT_CONTRACT: &str =
     include_str!("../external/sens/contracts/compiler-semantic-input-v1.lisp");
-const D3_PROOF: &str =
-    include_str!("../external/sens/contracts/bija3-l1-l5-ratification.lisp");
+const D3_PROOF: &str = include_str!("../external/sens/contracts/bija3-l1-l5-ratification.lisp");
 
 const SENS_REPOSITORY: &str = "juv4uk/sens";
 const AUTHORITY_PATH: &str = "language-contract.lisp";
@@ -159,19 +156,31 @@ impl fmt::Display for BridgeError {
             Self::SemanticStatusNotCurrent => write!(formatter, "semantic status is not current"),
             Self::MechanismNotAdmitted => write!(formatter, "execution mechanism is not admitted"),
             Self::UnsupportedOrResearchIdentity => {
-                write!(formatter, "identity is not an admitted callable Core identity")
+                write!(
+                    formatter,
+                    "identity is not an admitted callable Core identity"
+                )
             }
             Self::UnsupportedExecutionRole => {
-                write!(formatter, "identity has no execution role in the first compiler slice")
+                write!(
+                    formatter,
+                    "identity has no execution role in the first compiler slice"
+                )
             }
             Self::RoleProjectionFailure(message) => {
                 write!(formatter, "SENS compiler role projection failed: {message}")
             }
             Self::ExecutionRoleMismatch => {
-                write!(formatter, "carried execution role disagrees with pinned SENS authority")
+                write!(
+                    formatter,
+                    "carried execution role disagrees with pinned SENS authority"
+                )
             }
             Self::UpstreamBoundaryContractMissing => {
-                write!(formatter, "pinned SENS compiler boundary contract is incomplete")
+                write!(
+                    formatter,
+                    "pinned SENS compiler boundary contract is incomplete"
+                )
             }
         }
     }
@@ -228,8 +237,9 @@ pub fn pinned_authority() -> Result<AuthorityProvenance, BridgeError> {
         revision: supported,
         authority_path: AUTHORITY_PATH.to_string(),
         authority_sha256: sha256_hex(LANGUAGE_CONTRACT.as_bytes()),
-        language_contract_version: contract_version()
-            .ok_or(BridgeError::MissingAuthorityField("language-contract-version"))?,
+        language_contract_version: contract_version().ok_or(BridgeError::MissingAuthorityField(
+            "language-contract-version",
+        ))?,
     })
 }
 
@@ -270,9 +280,7 @@ pub fn authoritative_execution_role(
 ///
 /// The identity -> role decision is executed by the pinned SENS-written law.
 /// CML only checks that the carried role agrees, then binds it to a mechanism.
-pub fn verify_request(
-    request: SemanticRequest,
-) -> Result<VerifiedDomainMechanism, BridgeError> {
+pub fn verify_request(request: SemanticRequest) -> Result<VerifiedDomainMechanism, BridgeError> {
     verify_boundary_contract()?;
     let pinned = pinned_authority()?;
 
@@ -373,7 +381,8 @@ mod tests {
     }
 
     fn role(identity: sens::DomainIdentity) -> sens::CompilerExecutionRole {
-        authoritative_execution_role(identity).expect("test identity has SENS-derived compiler role")
+        authoritative_execution_role(identity)
+            .expect("test identity has SENS-derived compiler role")
     }
 
     fn current_request(identity: sens::DomainIdentity) -> SemanticRequest {
@@ -433,32 +442,29 @@ mod tests {
             verified.execution_role(),
             sens::CompilerExecutionRole::PairConstruct
         );
-        assert_eq!(
-            verified.mechanism_ref(),
-            CompilerMechanismRef::SlotVmCons
-        );
+        assert_eq!(verified.mechanism_ref(), CompilerMechanismRef::SlotVmCons);
         assert_eq!(verified.mechanism_ref().as_str(), "cml.slot-vm.cons");
     }
 
     #[test]
     fn verified_head_role_selects_only_cml_private_slot_mechanism() {
         let call = verify_call(current_request(d3(0b100)), vec![Ir::Nil]).unwrap();
-        assert_eq!(call.execution_role(), sens::CompilerExecutionRole::SelectorHead);
         assert_eq!(
-            call.mechanism_ref(),
-            CompilerMechanismRef::SlotVmCar
+            call.execution_role(),
+            sens::CompilerExecutionRole::SelectorHead
         );
+        assert_eq!(call.mechanism_ref(), CompilerMechanismRef::SlotVmCar);
         assert_eq!(call.mechanism_ref().as_str(), "cml.slot-vm.car");
     }
 
     #[test]
     fn verified_tail_role_selects_only_cml_private_slot_mechanism() {
         let call = verify_call(current_request(d3(0b011)), vec![Ir::Nil]).unwrap();
-        assert_eq!(call.execution_role(), sens::CompilerExecutionRole::SelectorTail);
         assert_eq!(
-            call.mechanism_ref(),
-            CompilerMechanismRef::SlotVmCdr
+            call.execution_role(),
+            sens::CompilerExecutionRole::SelectorTail
         );
+        assert_eq!(call.mechanism_ref(), CompilerMechanismRef::SlotVmCdr);
         assert_eq!(call.mechanism_ref().as_str(), "cml.slot-vm.cdr");
     }
 
@@ -527,8 +533,9 @@ mod tests {
     #[test]
     fn production_bridge_source_does_not_call_rust_role_oracle() {
         let source = include_str!("sens_domain_bridge.rs");
+        let forbidden = ["sens::compiler_execution_", "role("].concat();
         assert!(
-            !source.contains("sens::compiler_execution_role("),
+            !source.contains(&forbidden),
             "production bridge must not call the Rust differential role oracle"
         );
         assert!(source.contains("sens::compiler_execution_role_from_sens("));
