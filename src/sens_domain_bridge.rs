@@ -13,7 +13,7 @@ use std::fmt;
 
 const CONTRACT_LOCK: &str = include_str!("../contracts/my-lisp/lock.lisp");
 const LANGUAGE_CONTRACT: &str = include_str!("../contracts/my-lisp/language-contract.lisp");
-const D3_PROOF: &str = include_str!("../contracts/my-lisp/language-contract.lisp");
+const D3_PROOF: &str = include_str!("../external/sens/contracts/bija3-l1-l5-ratification.lisp");
 const D3_LAW_REF: &str = "language-contract.lisp:d3-foundation";
 const D3_PROOF_REF: &str = "contracts/bija3-l1-l5-ratification.lisp";
 
@@ -175,7 +175,7 @@ pub fn verify_call(
     if request.law_ref != D3_LAW_REF || !LANGUAGE_CONTRACT.contains("(d3-foundation") {
         return Err(BridgeError::UnknownLawReference);
     }
-    if request.proof_ref != D3_PROOF_REF || !D3_PROOF.contains("(d3-foundation") {
+    if request.proof_ref != D3_PROOF_REF || !D3_PROOF.contains("(domain . D3)") {
         return Err(BridgeError::UnknownProofReference);
     }
     if request.semantic_status != SemanticStatus::Current {
