@@ -235,14 +235,12 @@ fn pci_config_read_composes_with_a_bounded_self_tail_call_retry_loop() {
 #[test]
 fn pci_config_call_arity_is_fail_closed() {
     let expressions = parser::parse("(pci-config-read16 0 5 0 0)").unwrap();
-    let program = lower::lower_program(&expressions).unwrap();
+    let error = lower::lower_program(&expressions)
+        .expect_err("target-ABI arity must fail closed before backend emission");
+    assert_eq!(error.kind, lower::LowerErrorKind::Arity);
     assert_eq!(
-        X86FreestandingBackend::new().compile_program(&program),
-        Err(CompileError::InvalidArity {
-            operation: "pci-config-read16",
-            expected: 5,
-            actual: 4,
-        })
+        error.detail,
+        "pci-config-read16 expects exactly 5 argument(s)"
     );
 }
 
