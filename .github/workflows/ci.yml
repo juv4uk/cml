@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: [self-hosted, guix]
+    runs-on: [self-hosted, guix, cml-cpu]
     steps:
       - name: Require private dependency read token
         env:
