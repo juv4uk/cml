@@ -195,11 +195,17 @@ impl fmt::Display for SlotVmError {
                 "truncated CMLSLOT1 artifact at byte {offset}: need {needed} more byte(s)"
             ),
             Self::LengthOverflow { field, value } => {
-                write!(formatter, "CMLSLOT1 {field} length {value} does not fit this host")
+                write!(
+                    formatter,
+                    "CMLSLOT1 {field} length {value} does not fit this host"
+                )
             }
             Self::InvalidUtf8 => write!(formatter, "CMLSLOT1 provenance is not valid UTF-8"),
             Self::UnknownOpcode { pc, opcode } => {
-                write!(formatter, "unknown CMLSLOT1 opcode 0x{opcode:02x} at instruction {pc}")
+                write!(
+                    formatter,
+                    "unknown CMLSLOT1 opcode 0x{opcode:02x} at instruction {pc}"
+                )
             }
             Self::TrailingBytes { offset, remaining } => write!(
                 formatter,
@@ -708,7 +714,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn encoding_round_trips_through_strict_v1_decoder() {
         let mut program = d3_fixture_prefix("випадок-d3");
@@ -724,7 +729,10 @@ mod tests {
         let decoded = SlotProgram::decode_v1(&bytes).expect("encoded v1 must decode");
         assert_eq!(decoded, program);
         assert_eq!(
-            execute(&decoded).expect("decoded program executes").value.to_string(),
+            execute(&decoded)
+                .expect("decoded program executes")
+                .value
+                .to_string(),
             "(())"
         );
     }
