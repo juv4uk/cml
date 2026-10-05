@@ -200,19 +200,37 @@ fn static_error(expr: &Expr) -> Option<&'static str> {
         return None;
     };
     let arguments = &items[1..];
-    let arity = match operator.as_str() {
-        "quote" | "car" | "cdr" | "atom" => Some(1),
-        "cons" | "eq" | "equal?" => Some(2),
-        "cond" | "lambda" | "let" => None,
-        _ => return Some("UnknownSymbol"),
+    let semantic_id =
+        cml::canon::find_operation_by_surface(operator).map(|operation| operation.semantic_id);
+    let arity = match semantic_id {
+        Some(id)
+            if id == sens::sid!(00000001)
+                || id == sens::sid!(00000010)
+                || id == sens::sid!(00000101)
+                || id == sens::sid!(00000110) =>
+        {
+            Some(1)
+        }
+        Some(id)
+            if id == sens::sid!(00000011)
+                || id == sens::sid!(00000100)
+                || id == sens::sid!(00100010) =>
+        {
+            Some(2)
+        }
+        Some(_) => None,
+        None if operator == "let" => None,
+        None => return Some("UnknownSymbol"),
     };
     if arity.is_some_and(|required| arguments.len() != required) {
         return Some("Arity");
     }
-    if operator == "eq"
+    if semantic_id == Some(sens::sid!(00000011))
         && arguments.iter().any(|argument| {
             matches!(argument, Expr::List(parts)
-                if matches!(parts.first(), Some(Expr::Symbol(name)) if name == "quote")
+                if matches!(parts.first(), Some(Expr::Symbol(name))
+                    if cml::canon::find_operation_by_surface(name)
+                        .is_some_and(|operation| operation.semantic_id == sens::sid!(00000001)))
                 && matches!(parts.get(1), Some(Expr::List(_) | Expr::DottedList(_, _))))
         })
     {
