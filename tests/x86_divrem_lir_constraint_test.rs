@@ -441,3 +441,77 @@ fn branch_simplifier_does_not_treat_post_div_remainder_as_pre_div_zero() {
         "20 % 6 = 2, so post-DIV high == 0 must be false"
     );
 }
+
+
+#[test]
+fn optimizer_preserves_deliberate_divisor_copy_away_from_rax_alias() {
+    let provenance = Provenance::new(None, "x86-divrem-divisor-copy");
+    let mut function = LirFunction::new("divrem_divisor_copy", provenance.clone());
+
+    let numerator = function.alloc_vreg();
+    let low = function.alloc_vreg();
+    let high = function.alloc_vreg();
+    let divisor_temp = function.alloc_vreg();
+    let result = function.alloc_vreg();
+
+    let block = function.block_mut(function.entry).expect("entry block");
+    block.instructions.push(LirInst::Const64 {
+        dst: numerator,
+        imm: 20,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::Copy {
+        dst: low,
+        src: numerator,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::Const64 {
+        dst: high,
+        imm: 0,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::Copy {
+        dst: divisor_temp,
+        src: low,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::DivRem {
+        low,
+        high,
+        divisor: divisor_temp,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::Copy {
+        dst: result,
+        src: low,
+        provenance: provenance.clone(),
+    });
+    block.terminator = LirTerminator::Ret {
+        val: Some(result),
+        provenance,
+    };
+
+    let _ = cml::x86_opt::optimize_lir(
+        &mut function,
+        cml::x86_opt::LocalOptConfig::all_enabled(),
+    );
+
+    let divisor_after = function.blocks[0]
+        .instructions
+        .iter()
+        .find_map(|inst| match inst {
+            LirInst::DivRem { divisor, .. } => Some(*divisor),
+            _ => None,
+        })
+        .expect("DivRem survives optimization");
+    assert_eq!(
+        divisor_after, divisor_temp,
+        "constraint-sensitive DIV must keep deliberate divisor temp identity"
+    );
+
+    let items = cml::x86_lir::lir_to_machine_items(&function)
+        .expect("optimized divisor-copy witness must emit");
+    let bytes = assemble_program(&items).expect("assemble divisor-copy witness");
+    let actual = NativeExecutable::load(&bytes).call();
+    assert_eq!(actual, 1, "20 / 20 quotient must remain 1");
+}
