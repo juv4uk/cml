@@ -46,7 +46,7 @@ fn exact_rationals() {
 fn symbols_and_truth() {
     assert_eq!(value("(quote foo)"), "FOO");
     assert_eq!(value("(quote t)"), "T");
-    assert_eq!(value("(atom (quote x))"), "T");
+    assert_eq!(value("(атом? (quote x))"), "(1)");
 }
 
 #[test]
@@ -61,6 +61,6 @@ fn proper_and_dotted_pairs() {
 fn strings_are_distinct_values() {
     assert_eq!(value("\"hello\""), "hello");
     assert_eq!(value("(quote \"hi\")"), "hi");
-    assert_eq!(value("(eq \"a\" \"a\")"), "T");
+    assert_eq!(value("(тотожне? \"a\" \"a\")"), "(1)");
     assert_eq!(value("(car (cons \"x\" 1))"), "x");
 }

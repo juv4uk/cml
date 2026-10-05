@@ -2,24 +2,24 @@ use cml::ir::{Ir, Quoted};
 use cml::{lower, parser};
 
 #[test]
-fn current_three_part_cond_clause_reaches_ir_without_truthiness_rewrite() {
-    // Upstream my-lisp control contract: (query expected-result body).
+fn migration_three_part_cond_clause_reaches_ir_without_truthiness_rewrite() {
+    // Migration CondMatch contract: (query expected-result body).
     // The middle form is result data to match explicitly, not code to execute
     // and not a generic truthy/falsy sentinel.
     let source = r#"
         (cond
-          ((eq (quote a) (quote a)) (1)
+          ((тотожне? (quote a) (quote a)) (1)
            (quote matched))
-          ((eq (quote a) (quote b)) (1)
+          ((тотожне? (quote a) (quote b)) (1)
            (quote impossible)))
     "#;
 
-    let expressions = parser::parse(source).expect("current upstream cond source must parse");
+    let expressions = parser::parse(source).expect("migration three-part cond source must parse");
     let lowered = lower::lower_program(&expressions)
-        .expect("CML must admit current three-part cond before #89 can compile real list walkers");
+        .expect("CML must preserve the migration three-part CondMatch shape without truthiness rewrite");
 
     let [Ir::CondMatch { branches }] = lowered.as_slice() else {
-        panic!("current three-part cond must have an explicit-match IR shape");
+        panic!("migration three-part cond must have an explicit-match IR shape");
     };
     assert_eq!(branches.len(), 2);
 
@@ -28,19 +28,7 @@ fn current_three_part_cond_clause_reaches_ir_without_truthiness_rewrite() {
         matches!(query, Ir::App { func, .. } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00000011)))
     );
     assert!(matches!(body, Ir::Quote(Quoted::Sym { original, .. }) if original == "matched"));
-    assert_eq!(
-        expected,
-        &Quoted::List(vec![
-            Quoted::Sym {
-                uppercased: "IDENTITY-RELATION".to_string(),
-                original: "identity-relation".to_string(),
-            },
-            Quoted::Sym {
-                uppercased: "SAME".to_string(),
-                original: "same".to_string(),
-            },
-        ])
-    );
+    assert_eq!(expected, &Quoted::List(vec![Quoted::Int(1)]));
 }
 
 #[test]
