@@ -9,7 +9,7 @@ use crate::compiler_mechanism::CompilerMechanismRef;
 use crate::ir::{Ir, Quoted};
 use crate::sens_domain_bridge::{
     BridgeError, MechanismStatus, SemanticRequest, SemanticStatus, VerifiedDomainCall,
-    pinned_authority, verify_request,
+    authoritative_execution_role, pinned_authority, verify_request,
 };
 use crate::slot_vm::{Slot, SlotInstr, SlotProgram};
 use std::fmt;
@@ -156,16 +156,7 @@ impl Builder {
             ));
         };
 
-        let core = identity
-            .core_operation()
-            .ok_or(SlotBridgeError::UnsupportedCanonicalForm(
-                "domain identity has no callable Core projection",
-            ))?;
-        let role = sens::compiler_execution_role(core).ok_or(
-            SlotBridgeError::UnsupportedCanonicalForm(
-                "domain identity has no admitted compiler execution role",
-            ),
-        )?;
+        let role = authoritative_execution_role(*identity)?;
 
         let verified = verify_request(SemanticRequest {
             identity: *identity,
