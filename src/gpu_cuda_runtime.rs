@@ -15,12 +15,13 @@ use crate::compute::{
 use crate::gpu_cuda::{
     CudaArtifactCache, CudaCacheDiagnosticEvidence, CudaComputeCapability, CudaDriverJitCacheKey,
     CudaDriverJitModuleArtifact, CudaElementType, CudaEmitError, CudaLatencyBreakdown,
-    CudaMapKernel, CudaPtxArtifact, CudaPtxCacheKey, emit_i32_compute_kernel, lower_map_kernel,
+    CudaMapKernel, CudaPtxArtifact, CudaPtxCacheKey, NvrtcVersion, emit_i32_compute_kernel,
+    lower_map_kernel,
 };
 use crate::ir::{BufferLiteral, Ir};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CudaDevice {
+/// Exact toolchain provenance used to compile and load CUDA artifacts in one session.\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub struct CudaToolchainProvenance {\n    pub nvrtc_version: NvrtcVersion,\n    pub driver_version: i32,\n}\n\npub struct CudaDevice {
     pub descriptor: AcceleratorDescriptor,
     pub ordinal: usize,
     pub compute_capability: (i32, i32),
@@ -172,6 +173,7 @@ struct ReusableBuffers<T> {
 pub struct CudaSession {
     context: Arc<CudaContext>,
     device: CudaDevice,
+    toolchain: CudaToolchainProvenance,
     artifact_cache: Mutex<CudaArtifactCache>,
     kernels: Mutex<HashMap<(CudaKernelMode, String), CudaFunction>>,
     i32_buffers: Mutex<Option<ReusableBuffers<i32>>>,
@@ -206,9 +208,15 @@ impl CudaSession {
             )
         })?;
         let device = device_evidence(&context)?;
+        let (nvrtc_major, nvrtc_minor) = query_nvrtc_version()?;
+        let toolchain = CudaToolchainProvenance {
+            nvrtc_version: NvrtcVersion::new(nvrtc_major as i32, nvrtc_minor as i32),
+            driver_version: query_driver_version()?,
+        };
         Ok(Self {
             context,
             device,
+            toolchain,
             artifact_cache: Mutex::new(CudaArtifactCache::default()),
             kernels: Mutex::new(HashMap::new()),
             i32_buffers: Mutex::new(None),
@@ -742,7 +750,7 @@ impl CudaSession {
         let ptx_key = CudaPtxCacheKey::new(
             kernel.kernel_digest(),
             self.device.compute_capability,
-            None,
+            Some(self.toolchain.nvrtc_version),
             options.clone(),
         );
 
@@ -775,7 +783,7 @@ impl CudaSession {
             ptx_digest,
             self.device.ordinal,
             self.device.compute_capability,
-            None,
+            Some(self.toolchain.driver_version),
         );
 
         let module = self
