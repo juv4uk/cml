@@ -50,21 +50,18 @@ The implementation must not introduce a second GPU scheduler in a consumer repos
 
 Acquisition evidence must expose at least:
 
-- lease id;
+- lock path/resource identity;
 - client provenance;
-- admission wait time;
-- granted TTL;
-- resource identity.
+- admission wait time.
 
-Release/expiry evidence must identify the same lease and provenance.
+The v1 guard itself is the ownership token. Release is the kernel file-descriptor close/Drop event.
 
 For CUDA execution, queue/admission wait, host/service time, transfer time, and kernel time remain separate measurements.
 
 ## Failure behavior
 
 - malformed provenance: reject;
-- invalid/expired lease id: reject;
-- expired holder: reclaim;
+- unavailable admission lock path: explicit error;
 - unavailable physical GPU: explicit blocked/error result;
 - GPU-classified work never silently falls back to CPU.
 
@@ -80,4 +77,4 @@ The client owns its already-admitted bounded workload; CML owns only the physica
 
 ## Falsification
 
-Two independent clients must never simultaneously hold a valid lease for the same physical GPU. A crashed holder must cease to block admission after the bounded TTL.
+Two independent clients must never simultaneously hold the same admission lock. A crashed holder must cease to block admission because the kernel releases the lock with the process/file-descriptor lifetime.
