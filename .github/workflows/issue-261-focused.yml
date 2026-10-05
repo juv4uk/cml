@@ -8,23 +8,32 @@ on:
       - tests/registry_driven_canon_callables_test.rs
       - .github/workflows/issue-261-focused.yml
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   focused:
-    runs-on: ubuntu-24.04
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, guix]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
         with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           path: cml
           submodules: recursive
       - uses: actions/checkout@v5
         with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           repository: juv4uk/fpga-lisp
           ref: d1cb7eb79f675e8f2cc128c3b12918d6b08b9413
           path: fpga-lisp
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install Icarus Verilog
-        run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Require Icarus Verilog
+        run: |
+          command -v iverilog
+          iverilog -V | head -n 1
       - name: FPGA compiler regression
         working-directory: cml
         run: cargo test --test compiler_test -- --nocapture
