@@ -171,6 +171,17 @@ fn optimize_block_instructions(
                             }
                         }
                     }
+                    LirInst::DivRem { divisor, .. } => {
+                        // Preserve low/high as short-lived constrained temps.
+                        // Only the ordinary divisor is eligible for copy propagation.
+                        if let Some(&orig) = copy_map.get(divisor) {
+                            if orig != *divisor {
+                                *divisor = orig;
+                                report.copies_propagated += 1;
+                                changed = true;
+                            }
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -452,6 +463,16 @@ fn eliminate_dead_code(
                     used_vregs.insert(*lhs);
                     used_vregs.insert(*rhs);
                 }
+                LirInst::DivRem {
+                    low,
+                    high,
+                    divisor,
+                    ..
+                } => {
+                    used_vregs.insert(*low);
+                    used_vregs.insert(*high);
+                    used_vregs.insert(*divisor);
+                }
                 LirInst::Const64 { .. } => {}
             }
         }
@@ -475,6 +496,7 @@ fn eliminate_dead_code(
                 | LirInst::UnboxFixnum { dst, .. }
                 | LirInst::BoxFixnum { dst, .. } => !used_vregs.contains(dst),
                 LirInst::Cmp { .. } => false, // Cmp affects flags, not dead
+                LirInst::DivRem { .. } => false, // DIV is destructive and may trap
             };
 
             if is_dead {
