@@ -1,0 +1,53 @@
+name: Issue 609 current D1 conditional mechanism
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "src/c_backend.rs"
+      - "tests/current_d1_c_backend_test.rs"
+      - "tests/current_d1_cond_codegen_test.rs"
+      - ".github/workflows/issue-609-focused.yml"
+  push:
+    branches: [master]
+    paths:
+      - "src/c_backend.rs"
+      - "tests/current_d1_c_backend_test.rs"
+      - "tests/current_d1_cond_codegen_test.rs"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, guix]
+    timeout-minutes: 20
+    steps:
+      - name: Require private dependency read token
+        env:
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+        run: test -n "$SENS_READ_TOKEN"
+
+      - name: Checkout CML with pinned SENS
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+          submodules: true
+
+      - name: Focused formatting
+        run: >-
+          guix shell --pure -m manifest.scm --
+          rustfmt --edition 2024 --check
+          src/c_backend.rs tests/current_d1_cond_codegen_test.rs
+
+      - name: Exact D1 conditional codegen witness
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --test current_d1_cond_codegen_test -- --nocapture
+
+      - name: Exact D1 carrier regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --test current_d1_c_backend_test -- --nocapture
