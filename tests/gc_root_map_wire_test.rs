@@ -153,11 +153,9 @@ fn quote_bounded_certificates_project_to_machine_readable_wire() {
     );
 }
 
-
 #[test]
 fn list_bounded_certificates_project_to_machine_readable_wire() {
-    let expressions =
-        parser::parse("(list (quote A) (quote B) (quote C) (quote D))").unwrap();
+    let expressions = parser::parse("(list (quote A) (quote B) (quote C) (quote D))").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
 
     let compiled = X86FreestandingBackend::new()
