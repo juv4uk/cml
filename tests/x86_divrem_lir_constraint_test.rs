@@ -215,8 +215,10 @@ fn spilled_divisor_reloads_through_nonallocatable_scratch_before_div() {
         .expect("baseline allocation");
     base.assignments.insert(low, AllocLocation::Reg(X86Reg::Rax));
     base.assignments.insert(high, AllocLocation::Reg(X86Reg::Rdx));
-    base.assignments.insert(divisor, AllocLocation::SpillSlot(0));
-    base.spill_count = base.spill_count.max(1);
+    let forced_slot = base.spill_count as u32;
+    base.assignments
+        .insert(divisor, AllocLocation::SpillSlot(forced_slot));
+    base.spill_count += 1;
 
     let plan = RegAllocPlan {
         assignments: base.assignments,
