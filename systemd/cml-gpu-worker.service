@@ -1,0 +1,26 @@
+[Unit]
+Description=CML persistent CUDA worker
+Documentation=https://github.com/juv4uk/cml/issues/468
+Wants=network-online.target
+After=network-online.target
+ConditionFileIsExecutable=/home/agents/.local/bin/cml-gpu-worker
+ConditionFileIsExecutable=/home/agents/ecosystem/scripts/cuda-host-profile.sh
+
+[Service]
+Type=simple
+User=agents
+RuntimeDirectory=cml-gpu-worker
+RuntimeDirectoryMode=0755
+Environment=CML_GPU_WORKER_SOCKET=/run/cml-gpu-worker/worker.sock
+Environment=CML_CUDA_HOST_PROBE=/home/agents/ecosystem/scripts/cuda-host-profile.sh
+Environment=CUDA_HOME=/usr/local/cuda-12.6
+Environment=CUDA_PATH=/usr/local/cuda-12.6
+Environment=LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/lib/wsm-gcc-runtime
+ExecStart=/home/agents/.local/bin/cml-gpu-worker serve
+Restart=always
+RestartSec=5s
+KillSignal=SIGINT
+TimeoutStopSec=120s
+
+[Install]
+WantedBy=multi-user.target
