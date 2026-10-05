@@ -3,7 +3,7 @@
 //! Verifies the v0 Cyberpunk script shape proposed in
 //! docs/CYBERPUNK-DISPATCH-PROPOSAL-2026-09-10.md and aligned with
 //! my-lisp docs/cyberpunk-host-dispatch-fixtures.md:
-//! named `def` + `cond` + `eq` + `car`/`cdr`, host data as ordinary lists.
+//! named `def` + `cond` + exact predicate results + `car`/`cdr`, host data as ordinary lists.
 //!
 //! First-class callback registries are explicitly out of scope (v0).
 
@@ -21,9 +21,9 @@ const DISPATCH_EN: &str = r#"
 (def dispatch
   (lambda (event)
     (cond
-      ((eq (car event) (quote give-weapon)) (car (cdr event)))
-      ((eq (car event) (quote heal-player)) (car (cdr event)))
-      (t (quote unknown-event)))))
+      ((тотожне? (car event) (quote give-weapon)) (car (cdr event)))
+      ((тотожне? (car event) (quote heal-player)) (car (cdr event)))
+      ((тотожне? (quote dispatch-fallback) (quote dispatch-fallback)) (quote unknown-event)))))
 "#;
 
 /// Ukrainian surface (my-lisp default; identifiers are ordinary symbols).
@@ -31,10 +31,10 @@ const DISPATCH_UK: &str = r#"
 (def диспетчер
   (lambda (event)
     (cond
-      ((eq (car event) (quote дай-зброю)) (car (cdr event)))
-      ((eq (car event) (quote телепортуй)) (car (cdr event)))
-      ((eq (car event) (quote збережи-гру)) (car (cdr event)))
-      (t (quote невідома-подія)))))
+      ((тотожне? (car event) (quote дай-зброю)) (car (cdr event)))
+      ((тотожне? (car event) (quote телепортуй)) (car (cdr event)))
+      ((тотожне? (car event) (quote збережи-гру)) (car (cdr event)))
+      ((тотожне? (quote dispatch-fallback) (quote dispatch-fallback)) (quote невідома-подія)))))
 "#;
 
 #[test]
