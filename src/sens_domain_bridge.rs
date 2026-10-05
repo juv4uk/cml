@@ -243,6 +243,30 @@ pub fn pinned_authority() -> Result<AuthorityProvenance, BridgeError> {
     })
 }
 
+pub(crate) fn verify_authority_provenance(
+    provenance: &AuthorityProvenance,
+) -> Result<AuthorityProvenance, BridgeError> {
+    let pinned = pinned_authority()?;
+
+    if provenance.repository != pinned.repository {
+        return Err(BridgeError::RepositoryMismatch);
+    }
+    if provenance.revision != pinned.revision {
+        return Err(BridgeError::StaleAuthorityRevision);
+    }
+    if provenance.authority_path != pinned.authority_path {
+        return Err(BridgeError::AuthorityPathMismatch);
+    }
+    if provenance.authority_sha256 != pinned.authority_sha256 {
+        return Err(BridgeError::AuthorityDigestMismatch);
+    }
+    if provenance.language_contract_version != pinned.language_contract_version {
+        return Err(BridgeError::ContractVersionMismatch);
+    }
+
+    Ok(pinned)
+}
+
 fn verify_boundary_contract() -> Result<(), BridgeError> {
     let required = [
         "(compiler-may-infer-meaning . no)",
@@ -282,23 +306,7 @@ pub fn authoritative_execution_role(
 /// CML only checks that the carried role agrees, then binds it to a mechanism.
 pub fn verify_request(request: SemanticRequest) -> Result<VerifiedDomainMechanism, BridgeError> {
     verify_boundary_contract()?;
-    let pinned = pinned_authority()?;
-
-    if request.provenance.repository != pinned.repository {
-        return Err(BridgeError::RepositoryMismatch);
-    }
-    if request.provenance.revision != pinned.revision {
-        return Err(BridgeError::StaleAuthorityRevision);
-    }
-    if request.provenance.authority_path != pinned.authority_path {
-        return Err(BridgeError::AuthorityPathMismatch);
-    }
-    if request.provenance.authority_sha256 != pinned.authority_sha256 {
-        return Err(BridgeError::AuthorityDigestMismatch);
-    }
-    if request.provenance.language_contract_version != pinned.language_contract_version {
-        return Err(BridgeError::ContractVersionMismatch);
-    }
+    let pinned = verify_authority_provenance(&request.provenance)?;
 
     if request.law_ref.trim().is_empty() {
         return Err(BridgeError::MissingLawReference);
