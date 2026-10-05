@@ -25,6 +25,7 @@ fn collect_symbols(expr: &Expr, out: &mut BTreeSet<String>) {
             collect_symbols(tail, out);
         }
         Expr::Sid(_)
+        | Expr::DomainIdentity(_)
         | Expr::Integer(_)
         | Expr::Rational(_, _)
         | Expr::String(_)
@@ -58,6 +59,11 @@ fn encode_expr(
         Expr::Sid(_) => {
             panic!(
                 "S4 target input transport has no admitted SID8 ABI yet; do not alias SID8 through a symbol/string/integer word"
+            )
+        }
+        Expr::DomainIdentity(_) => {
+            panic!(
+                "S4 target input transport has no admitted exact-domain ABI yet; keep DomainIdentity opaque"
             )
         }
         Expr::Integer(value) => X86InputValue::word(
