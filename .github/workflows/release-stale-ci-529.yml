@@ -9,7 +9,7 @@ on:
 # GitHub's control plane cancels that stale in-progress run before scheduling
 # this tiny trusted no-op. Remove this one-shot branch after requalification.
 concurrency:
-  group: Issue 304 repaired upstream UTF-8 closure-refs/pull/542/merge
+  group: CI-refs/pull/532/merge
   cancel-in-progress: true
 
 jobs:
