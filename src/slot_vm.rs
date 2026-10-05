@@ -84,29 +84,12 @@ impl fmt::Display for SlotValue {
 /// `Car` and `Cdr` are not an authority table for any SENS domain bits.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SlotInstr {
-    LoadInt {
-        dst: Slot,
-        value: i64,
-    },
-    LoadNil {
-        dst: Slot,
-    },
-    Cons {
-        dst: Slot,
-        head: Slot,
-        tail: Slot,
-    },
-    Car {
-        dst: Slot,
-        pair: Slot,
-    },
-    Cdr {
-        dst: Slot,
-        pair: Slot,
-    },
-    Return {
-        src: Slot,
-    },
+    LoadInt { dst: Slot, value: i64 },
+    LoadNil { dst: Slot },
+    Cons { dst: Slot, head: Slot, tail: Slot },
+    Car { dst: Slot, pair: Slot },
+    Cdr { dst: Slot, pair: Slot },
+    Return { src: Slot },
 }
 
 /// Deterministic SLOT-VM program artifact.
@@ -163,7 +146,11 @@ impl fmt::Display for SlotVmError {
                 slot.index()
             ),
             Self::UninitializedSlot { pc, slot } => {
-                write!(formatter, "read of uninitialized slot {} at pc {pc}", slot.index())
+                write!(
+                    formatter,
+                    "read of uninitialized slot {} at pc {pc}",
+                    slot.index()
+                )
             }
             Self::Type {
                 pc,
@@ -296,11 +283,7 @@ fn push_slot(bytes: &mut Vec<u8>, slot: Slot) {
     bytes.extend_from_slice(&slot.index().to_le_bytes());
 }
 
-fn read_slot(
-    slots: &[Option<SlotValue>],
-    pc: usize,
-    slot: Slot,
-) -> Result<SlotValue, SlotVmError> {
+fn read_slot(slots: &[Option<SlotValue>], pc: usize, slot: Slot) -> Result<SlotValue, SlotVmError> {
     slots[usize::from(slot.index())]
         .clone()
         .ok_or(SlotVmError::UninitializedSlot { pc, slot })
@@ -533,7 +516,9 @@ mod tests {
         other_case.source_case_id = Some("case-b".into());
         assert_ne!(
             first,
-            other_case.encode_v1().expect("same program, new provenance")
+            other_case
+                .encode_v1()
+                .expect("same program, new provenance")
         );
     }
 
