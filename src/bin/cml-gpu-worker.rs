@@ -227,13 +227,9 @@ mod enabled {
         let functions: Vec<Ir> = offsets.iter().copied().map(add_i32_function).collect();
         let input = BufferLiteral::I32(values);
         let cuda_started = Instant::now();
-        let execution = execute_map_chain_i32_selected(
-            &functions,
-            &input,
-            &[functions.len() - 1],
-            0,
-        )
-        .map_err(|error| format!("CUDA chain execution failed: {error:?}"))?;
+        let execution =
+            execute_map_chain_i32_selected(&functions, &input, &[functions.len() - 1], 0)
+                .map_err(|error| format!("CUDA chain execution failed: {error:?}"))?;
         let cuda_ns = cuda_started.elapsed().as_nanos();
         let Some((_, BufferLiteral::I32(output))) = execution.outputs.into_iter().next() else {
             return Err("CUDA chain returned no final i32 buffer".into());
@@ -478,10 +474,7 @@ mod enabled {
         Ok(())
     }
 
-    fn decode_provenance(
-        payload: &[u8],
-        cursor: &mut usize,
-    ) -> Result<ClientProvenance, String> {
+    fn decode_provenance(payload: &[u8], cursor: &mut usize) -> Result<ClientProvenance, String> {
         let provenance = ClientProvenance {
             repository: decode_provenance_field(payload, cursor, "repository")?,
             run_id: decode_provenance_field(payload, cursor, "run_id")?,
@@ -570,8 +563,7 @@ mod enabled {
         if payload.len().saturating_sub(*cursor) < 4 {
             return Err("chain offset count missing".into());
         }
-        let count =
-            u32::from_le_bytes(payload[*cursor..*cursor + 4].try_into().unwrap()) as usize;
+        let count = u32::from_le_bytes(payload[*cursor..*cursor + 4].try_into().unwrap()) as usize;
         *cursor += 4;
         if count == 0 {
             return Err("chain requires at least one offset".into());
