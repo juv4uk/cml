@@ -5,7 +5,10 @@
 //! the SENS API, then binds that already-verified role to a private target
 //! mechanism. No domain coordinate is decoded in this module.
 
-use crate::compiler_mechanism::{CompilerMechanismRef, select_slot_vm_mechanism};
+use crate::compiler_mechanism::{
+    CompilerMechanismRef, RichCompilerMechanismRef, select_rich_compiler_mechanism,
+    select_slot_vm_mechanism,
+};
 use crate::ir::Ir;
 use std::fmt;
 
@@ -13,12 +16,18 @@ const UPSTREAM_REVISIONS: &str = include_str!("../upstream-revisions.lisp");
 const LANGUAGE_CONTRACT: &str = include_str!("../external/sens/language-contract.lisp");
 const COMPILER_INPUT_CONTRACT: &str =
     include_str!("../external/sens/contracts/compiler-semantic-input-v1.lisp");
+const COMPILER_NUCLEUS: &str = include_str!("../external/sens/lib/compiler-nucleus.lisp");
 const D3_PROOF: &str = include_str!("../external/sens/contracts/bija3-l1-l5-ratification.lisp");
+const D4_PROOF: &str = include_str!("../external/sens/contracts/d4-bootstrap-ratification.lisp");
 
 const SENS_REPOSITORY: &str = "juv4uk/sens";
 const AUTHORITY_PATH: &str = "language-contract.lisp";
 const D3_LAW_REF: &str = "language-contract.lisp:d3-foundation";
 const D3_PROOF_REF: &str = "contracts/bija3-l1-l5-ratification.lisp";
+const D4_LAW_REF: &str = "language-contract.lisp:d4-bootstrap";
+const D4_PROOF_REF: &str = "contracts/d4-bootstrap-ratification.lisp";
+const COMPILER_ROLE_LAW_REF: &str =
+    "lib/compiler-nucleus.lisp:compiler-lowering-role-from-laws";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthorityProvenance {
@@ -83,6 +92,43 @@ impl VerifiedDomainMechanism {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompilerLoweringRequest {
+    pub identity: sens::DomainIdentity,
+    pub lowering_role: sens::CompilerLoweringRole,
+    pub law_ref: String,
+    pub proof_ref: String,
+    pub semantic_status: SemanticStatus,
+    pub mechanism_status: MechanismStatus,
+    pub provenance: AuthorityProvenance,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerifiedRichCompilerMechanism {
+    identity: sens::DomainIdentity,
+    lowering_role: sens::CompilerLoweringRole,
+    mechanism_ref: RichCompilerMechanismRef,
+    provenance: AuthorityProvenance,
+}
+
+impl VerifiedRichCompilerMechanism {
+    pub const fn identity(&self) -> sens::DomainIdentity {
+        self.identity
+    }
+
+    pub const fn lowering_role(&self) -> sens::CompilerLoweringRole {
+        self.lowering_role
+    }
+
+    pub const fn mechanism_ref(&self) -> RichCompilerMechanismRef {
+        self.mechanism_ref
+    }
+
+    pub fn provenance(&self) -> &AuthorityProvenance {
+        &self.provenance
+    }
+}
+
 pub struct VerifiedDomainCall {
     identity: sens::DomainIdentity,
     execution_role: sens::CompilerExecutionRole,
@@ -276,6 +322,113 @@ pub fn authoritative_execution_role(
         .ok_or(BridgeError::UnsupportedExecutionRole)
 }
 
+/// Ask the pinned SENS compiler nucleus for the authoritative full lowering role.
+///
+/// CML performs no identity/bit/name role lookup. The nine-role meaning comes
+/// from the executable SENS-owned compiler law introduced by sens#3824/#3826.
+pub fn authoritative_lowering_role(
+    identity: sens::DomainIdentity,
+) -> Result<sens::CompilerLoweringRole, BridgeError> {
+    let core = identity
+        .core_operation()
+        .ok_or(BridgeError::UnsupportedOrResearchIdentity)?;
+    sens::compiler_lowering_role_from_sens(core)
+        .map_err(|error| BridgeError::RoleProjectionFailure(error.to_string()))?
+        .ok_or(BridgeError::UnsupportedExecutionRole)
+}
+
+fn verify_lowering_law_and_proof(
+    role: sens::CompilerLoweringRole,
+    law_ref: &str,
+    proof_ref: &str,
+) -> Result<(), BridgeError> {
+    if law_ref != COMPILER_ROLE_LAW_REF
+        || !COMPILER_NUCLEUS.contains("(compiler-lowering-role-from-laws")
+    {
+        return Err(BridgeError::UnknownLawReference);
+    }
+
+    match role {
+        sens::CompilerLoweringRole::LambdaForm | sens::CompilerLoweringRole::DefineForm => {
+            if proof_ref != D4_PROOF_REF
+                || !D4_PROOF.contains("(status . owner-ratified)")
+                || !D4_PROOF.contains("(domain . D4)")
+                || !LANGUAGE_CONTRACT.contains("(d4-bootstrap")
+            {
+                return Err(BridgeError::UnknownProofReference);
+            }
+        }
+        sens::CompilerLoweringRole::QuoteForm
+        | sens::CompilerLoweringRole::AtomPredicate
+        | sens::CompilerLoweringRole::SelectorTail
+        | sens::CompilerLoweringRole::SelectorHead
+        | sens::CompilerLoweringRole::AtomEquality
+        | sens::CompilerLoweringRole::CondForm
+        | sens::CompilerLoweringRole::PairConstruct => {
+            if proof_ref != D3_PROOF_REF
+                || !D3_PROOF.contains("(status . owner-ratified)")
+                || !D3_PROOF.contains("(domain . D3)")
+                || !LANGUAGE_CONTRACT.contains("(d3-foundation")
+            {
+                return Err(BridgeError::UnknownProofReference);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Verify one full compiler lowering request and bind it to an existing rich
+/// mechanism. The SENS role is checked again immediately before CML mapping.
+pub fn verify_lowering_request(
+    request: CompilerLoweringRequest,
+) -> Result<VerifiedRichCompilerMechanism, BridgeError> {
+    verify_boundary_contract()?;
+    let pinned = pinned_authority()?;
+
+    if request.provenance.repository != pinned.repository {
+        return Err(BridgeError::RepositoryMismatch);
+    }
+    if request.provenance.revision != pinned.revision {
+        return Err(BridgeError::StaleAuthorityRevision);
+    }
+    if request.provenance.authority_path != pinned.authority_path {
+        return Err(BridgeError::AuthorityPathMismatch);
+    }
+    if request.provenance.authority_sha256 != pinned.authority_sha256 {
+        return Err(BridgeError::AuthorityDigestMismatch);
+    }
+    if request.provenance.language_contract_version != pinned.language_contract_version {
+        return Err(BridgeError::ContractVersionMismatch);
+    }
+    if request.semantic_status != SemanticStatus::Current {
+        return Err(BridgeError::SemanticStatusNotCurrent);
+    }
+    if request.mechanism_status != MechanismStatus::Admitted {
+        return Err(BridgeError::MechanismNotAdmitted);
+    }
+
+    verify_lowering_law_and_proof(
+        request.lowering_role,
+        &request.law_ref,
+        &request.proof_ref,
+    )?;
+
+    let authoritative_role = authoritative_lowering_role(request.identity)?;
+    if authoritative_role != request.lowering_role {
+        return Err(BridgeError::ExecutionRoleMismatch);
+    }
+
+    let mechanism_ref = select_rich_compiler_mechanism(authoritative_role);
+
+    Ok(VerifiedRichCompilerMechanism {
+        identity: request.identity,
+        lowering_role: authoritative_role,
+        mechanism_ref,
+        provenance: pinned,
+    })
+}
+
 /// Validate one SENS semantic request before any target/backend execution.
 ///
 /// The identity -> role decision is executed by the pinned SENS-written law.
@@ -395,6 +548,113 @@ mod tests {
             mechanism_status: MechanismStatus::Admitted,
             provenance: pinned_authority().expect("pinned authority must parse"),
         }
+    }
+
+    fn lowering_role(identity: sens::DomainIdentity) -> sens::CompilerLoweringRole {
+        authoritative_lowering_role(identity)
+            .expect("test identity has SENS-derived lowering role")
+    }
+
+    fn current_lowering_request(
+        identity: sens::DomainIdentity,
+    ) -> CompilerLoweringRequest {
+        let role = lowering_role(identity);
+        let (law_ref, proof_ref) = match role {
+            sens::CompilerLoweringRole::LambdaForm
+            | sens::CompilerLoweringRole::DefineForm => {
+                (D4_LAW_REF, D4_PROOF_REF)
+            }
+            _ => (D3_LAW_REF, D3_PROOF_REF),
+        };
+
+        CompilerLoweringRequest {
+            identity,
+            lowering_role: role,
+            law_ref: COMPILER_ROLE_LAW_REF.into(),
+            proof_ref: proof_ref.into(),
+            semantic_status: SemanticStatus::Current,
+            mechanism_status: MechanismStatus::Admitted,
+            provenance: pinned_authority().unwrap(),
+        }
+    }
+
+    #[test]
+    fn all_current_nucleus_roles_are_verified_by_sens_before_rich_binding() {
+        let cases = [
+            (d3(0b001), sens::CompilerLoweringRole::QuoteForm),
+            (d3(0b010), sens::CompilerLoweringRole::AtomPredicate),
+            (d3(0b011), sens::CompilerLoweringRole::SelectorTail),
+            (d3(0b100), sens::CompilerLoweringRole::SelectorHead),
+            (d3(0b101), sens::CompilerLoweringRole::AtomEquality),
+            (d3(0b110), sens::CompilerLoweringRole::CondForm),
+            (d3(0b111), sens::CompilerLoweringRole::PairConstruct),
+            (d4(0b0010), sens::CompilerLoweringRole::LambdaForm),
+            (d4(0b0011), sens::CompilerLoweringRole::DefineForm),
+        ];
+
+        for (identity, expected) in cases {
+            let verified =
+                verify_lowering_request(current_lowering_request(identity)).unwrap();
+            assert_eq!(verified.identity(), identity);
+            assert_eq!(verified.lowering_role(), expected);
+        }
+    }
+
+    #[test]
+    fn rich_role_binding_is_mechanism_only() {
+        let expected = [
+            (d3(0b001), "cml.rich.quote"),
+            (d3(0b010), "cml.rich.atom-predicate-d1"),
+            (d3(0b011), "cml.rich.cdr"),
+            (d3(0b100), "cml.rich.car"),
+            (d3(0b101), "cml.rich.atom-equality-d1"),
+            (d3(0b110), "cml.rich.cond-exact-d1"),
+            (d3(0b111), "cml.rich.cons"),
+            (d4(0b0010), "cml.rich.lambda"),
+            (d4(0b0011), "cml.rich.define"),
+        ];
+
+        for (identity, mechanism) in expected {
+            let verified =
+                verify_lowering_request(current_lowering_request(identity)).unwrap();
+            assert_eq!(verified.mechanism_ref().as_str(), mechanism);
+        }
+    }
+
+    #[test]
+    fn wrong_domain_payload_cannot_inherit_a_d3_rich_role() {
+        let identity = d4(0b0010);
+        let request = CompilerLoweringRequest {
+            identity,
+            lowering_role: sens::CompilerLoweringRole::QuoteForm,
+            law_ref: COMPILER_ROLE_LAW_REF.into(),
+            proof_ref: D3_PROOF_REF.into(),
+            semantic_status: SemanticStatus::Current,
+            mechanism_status: MechanismStatus::Admitted,
+            provenance: pinned_authority().unwrap(),
+        };
+
+        assert_eq!(
+            verify_lowering_request(request).unwrap_err(),
+            BridgeError::ExecutionRoleMismatch
+        );
+    }
+
+    #[test]
+    fn stale_lowering_provenance_fails_before_rich_mechanism_selection() {
+        let mut request = current_lowering_request(d3(0b110));
+        request.provenance.revision = "0".repeat(40);
+        assert_eq!(
+            verify_lowering_request(request).unwrap_err(),
+            BridgeError::StaleAuthorityRevision
+        );
+
+        let mut request = current_lowering_request(d4(0b0010));
+        request.provenance.authority_sha256 = "00".repeat(32);
+        assert_eq!(
+            verify_lowering_request(request).unwrap_err(),
+            BridgeError::AuthorityDigestMismatch
+        );
     }
 
     #[test]
@@ -533,12 +793,19 @@ mod tests {
     #[test]
     fn production_bridge_source_does_not_call_rust_role_oracle() {
         let source = include_str!("sens_domain_bridge.rs");
-        let forbidden = ["sens::compiler_execution_", "role("].concat();
+        let forbidden = [
+            "sens::compiler_execution_role(",
+            "sens::compiler_lowering_role(",
+            "core.bits",
+            "packed_bits",
+        ]
+        .concat();
         assert!(
             !source.contains(&forbidden),
-            "production bridge must not call the Rust differential role oracle"
+            "production bridge must not reconstruct SENS role meaning locally"
         );
         assert!(source.contains("sens::compiler_execution_role_from_sens("));
+        assert!(source.contains("sens::compiler_lowering_role_from_sens("));
     }
 
     #[test]
