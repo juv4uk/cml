@@ -46,8 +46,5 @@ fn live_shared_cuda_worker_executes_admitted_map() {
         )
         .unwrap();
 
-    assert_eq!(
-        outcome.value,
-        BufferLiteral::I32(vec![8, 9, 10, 11])
-    );
+    assert_eq!(outcome.value, BufferLiteral::I32(vec![8, 9, 10, 11]));
 }
