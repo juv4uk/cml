@@ -30,6 +30,11 @@ mod enabled {
     const STATUS_OK: u8 = 0;
     const STATUS_ERR: u8 = 1;
     const MAX_PROVENANCE_FIELD_BYTES: usize = 128;
+    const TIMING_ENV: &str = "CML_GPU_WORKER_TIMING";
+
+    fn timing_enabled() -> bool {
+        env::var(TIMING_ENV).is_ok_and(|value| value == "1")
+    }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct ClientProvenance {
@@ -187,6 +192,7 @@ mod enabled {
     }
 
     fn handle(stream: &mut UnixStream) -> Result<(), String> {
+        let service_started = Instant::now();
         let (opcode, payload) = read_request(stream)?;
         match opcode {
             OP_PING => write_response(stream, STATUS_OK, b"pong").map_err(io_error),
@@ -210,20 +216,41 @@ mod enabled {
             OP_CHAIN_FILE_I32 => {
                 let (input_path, output_path, offsets) = decode_chain_file_request(&payload)?;
                 let body = execute_chain_file_i32(&input_path, &output_path, &offsets)?;
+                let body = if timing_enabled() {
+                    format!(
+                        "service_ns={} {}",
+                        service_started.elapsed().as_nanos(),
+                        body
+                    )
+                } else {
+                    body
+                };
                 write_response(stream, STATUS_OK, body.as_bytes()).map_err(io_error)
             }
             OP_CHAIN_FILE_I32_PROVENANCE => {
                 let (provenance, input_path, output_path, offsets) =
                     decode_chain_file_provenance_request(&payload)?;
                 let evidence = execute_chain_file_i32(&input_path, &output_path, &offsets)?;
-                let body = format!(
-                    "repository={} run_id={} job={} case_id={} {}",
-                    provenance.repository,
-                    provenance.run_id,
-                    provenance.job,
-                    provenance.case_id,
-                    evidence
-                );
+                let body = if timing_enabled() {
+                    format!(
+                        "repository={} run_id={} job={} case_id={} service_ns={} {}",
+                        provenance.repository,
+                        provenance.run_id,
+                        provenance.job,
+                        provenance.case_id,
+                        service_started.elapsed().as_nanos(),
+                        evidence
+                    )
+                } else {
+                    format!(
+                        "repository={} run_id={} job={} case_id={} {}",
+                        provenance.repository,
+                        provenance.run_id,
+                        provenance.job,
+                        provenance.case_id,
+                        evidence
+                    )
+                };
                 write_response(stream, STATUS_OK, body.as_bytes()).map_err(io_error)
             }
             other => Err(format!("unknown opcode {other}")),
@@ -348,8 +375,18 @@ mod enabled {
         offsets: &[i64],
     ) -> Result<(), String> {
         let payload = encode_chain_file_payload(input, output, offsets)?;
-        let body = transact(socket, OP_CHAIN_FILE_I32, &payload)?;
-        println!("{}", String::from_utf8_lossy(&body));
+        if timing_enabled() {
+            let client_started = Instant::now();
+            let body = transact(socket, OP_CHAIN_FILE_I32, &payload)?;
+            println!(
+                "client_total_ns={} {}",
+                client_started.elapsed().as_nanos(),
+                String::from_utf8_lossy(&body)
+            );
+        } else {
+            let body = transact(socket, OP_CHAIN_FILE_I32, &payload)?;
+            println!("{}", String::from_utf8_lossy(&body));
+        }
         Ok(())
     }
 
@@ -363,8 +400,18 @@ mod enabled {
         let mut payload = Vec::new();
         encode_provenance(&mut payload, provenance)?;
         payload.extend_from_slice(&encode_chain_file_payload(input, output, offsets)?);
-        let body = transact(socket, OP_CHAIN_FILE_I32_PROVENANCE, &payload)?;
-        println!("{}", String::from_utf8_lossy(&body));
+        if timing_enabled() {
+            let client_started = Instant::now();
+            let body = transact(socket, OP_CHAIN_FILE_I32_PROVENANCE, &payload)?;
+            println!(
+                "client_total_ns={} {}",
+                client_started.elapsed().as_nanos(),
+                String::from_utf8_lossy(&body)
+            );
+        } else {
+            let body = transact(socket, OP_CHAIN_FILE_I32_PROVENANCE, &payload)?;
+            println!("{}", String::from_utf8_lossy(&body));
+        }
         Ok(())
     }
 
