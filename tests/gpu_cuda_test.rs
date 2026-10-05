@@ -1,8 +1,7 @@
-use cml::compute::AdmissionBlocker;
-use cml::gpu_cuda::{CudaEmitError, emit_map_kernel};
+use cml::compute::{AdmissionBlocker, NumericDomain};
+use cml::gpu_cuda::{CudaElementType, CudaEmitError, emit_map_kernel, lower_map_kernel};
 use cml::ir::{BufferLiteral, Ir, Params};
 use cml::{lower, parser};
-use sens::Sens8;
 
 fn lower_one(source: &str) -> Ir {
     let expressions = parser::parse(source).unwrap();
@@ -25,15 +24,34 @@ fn f32_map_ir(values: &[f32], body: Ir) -> Ir {
 }
 
 #[test]
-fn admitted_i32_map_emits_bounds_checked_cuda_kernel() {
-    let source = emit_map_kernel(&lower_one(
+fn admitted_i32_map_lowers_to_typed_cuda_artifact() {
+    let artifact = lower_map_kernel(&lower_one(
         "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3))",
     ))
     .unwrap();
-    assert!(source.contains("extern \"C\" __global__ void cml_map"));
-    assert!(source.contains("const int *input_data"));
-    assert!(source.contains("if (i >= length) return;"));
-    assert!(source.contains("output_data[i] = (x + 1);"));
+
+    assert_eq!(artifact.identity, sens::sens!(01011001));
+    assert_eq!(artifact.numeric_domain, NumericDomain::FixedWidthInteger);
+    assert_eq!(artifact.element_type, CudaElementType::I32);
+    assert_eq!(artifact.parameter_count, 1);
+    assert_eq!(artifact.entry_point, "cml_map");
+    assert!(
+        artifact
+            .source
+            .contains("extern \"C\" __global__ void cml_map")
+    );
+    assert!(artifact.source.contains("const int *input_data"));
+    assert!(artifact.source.contains("if (i >= length) return;"));
+    assert!(artifact.source.contains("output_data[i] = (x + 1);"));
+}
+
+#[test]
+fn compatibility_emitter_preserves_lowered_source() {
+    let ir = lower_one("(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3))");
+    assert_eq!(
+        emit_map_kernel(&ir).unwrap(),
+        lower_map_kernel(&ir).unwrap().source
+    );
 }
 
 #[test]

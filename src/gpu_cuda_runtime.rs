@@ -9,7 +9,7 @@ use crate::accelerator::{
     AcceleratorApi, AcceleratorClass, AcceleratorDescriptor, AcceleratorVendor,
 };
 use crate::compute::{I32Range, fuse_i32_map_chain, i32_buffer_range, prove_i32_map_range};
-use crate::gpu_cuda::{CudaEmitError, emit_i32_compute_kernel, emit_map_kernel};
+use crate::gpu_cuda::{CudaEmitError, emit_i32_compute_kernel, lower_map_kernel};
 use crate::ir::{BufferLiteral, Ir};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -236,7 +236,7 @@ impl CudaSession {
         ir: &'a Ir,
         mode: CudaKernelMode,
     ) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
-        let source = emit_map_kernel(ir)?;
+        let source = lower_map_kernel(ir)?.source;
         let buffer = map_input(ir).ok_or(CudaRuntimeError::UnsupportedInput)?;
         if matches!(buffer, BufferLiteral::I32(values) if values.is_empty())
             || matches!(buffer, BufferLiteral::F32(values) if values.is_empty())
@@ -471,8 +471,9 @@ impl CudaSession {
             let next_range = prove_i32_map_range(function_ir, range)
                 .ok_or_else(|| fail(step, CudaRuntimeError::UnsupportedInput))?;
             let probe = i32_range_probe_ir(function_ir, range);
-            let source = emit_map_kernel(&probe)
-                .map_err(|error| fail(step, CudaRuntimeError::Emit(error)))?;
+            let source = lower_map_kernel(&probe)
+                .map_err(|error| fail(step, CudaRuntimeError::Emit(error)))?
+                .source;
             let function = self
                 .function_for_source(CudaKernelMode::Production, source)
                 .map_err(|error| fail(step, error))?;
