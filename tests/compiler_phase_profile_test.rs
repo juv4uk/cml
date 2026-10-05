@@ -42,7 +42,8 @@ fn profile_command_emits_phase_rows_without_changing_the_artifact() {
         String::from_utf8_lossy(&profiled.stderr)
     );
 
-    let normal_artifact = fs::read(&normal_path).expect("ordinary compile must emit an artifact");
+    let normal_artifact =
+        fs::read(&normal_path).expect("ordinary compile must emit an artifact");
     let profiled_artifact =
         fs::read(&profile_path).expect("profiled compile must emit an artifact");
     let _ = fs::remove_file(&normal_path);
