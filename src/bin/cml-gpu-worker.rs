@@ -28,6 +28,11 @@ mod enabled {
     const OP_CHAIN_FILE_I32: u8 = 4;
     const STATUS_OK: u8 = 0;
     const STATUS_ERR: u8 = 1;
+    const TIMING_ENV: &str = "CML_GPU_WORKER_TIMING";
+
+    fn timing_enabled() -> bool {
+        env::var(TIMING_ENV).is_ok_and(|value| value == "1")
+    }
 
     fn socket_path() -> PathBuf {
         env::var_os("CML_GPU_WORKER_SOCKET")
@@ -165,15 +170,25 @@ mod enabled {
                     return Err("CUDA chain returned no final i32 buffer".into());
                 };
                 write_i32_file(&output_path, &output)?;
-                let service_ns = service_started.elapsed().as_nanos();
-                let body = format!(
-                    "count={} steps={} service_ns={} cuda_ns={} output={}",
-                    output.len(),
-                    offsets.len(),
-                    service_ns,
-                    cuda_ns,
-                    output_path.display()
-                );
+                let body = if timing_enabled() {
+                    let service_ns = service_started.elapsed().as_nanos();
+                    format!(
+                        "count={} steps={} service_ns={} cuda_ns={} output={}",
+                        output.len(),
+                        offsets.len(),
+                        service_ns,
+                        cuda_ns,
+                        output_path.display()
+                    )
+                } else {
+                    format!(
+                        "count={} steps={} cuda_ns={} output={}",
+                        output.len(),
+                        offsets.len(),
+                        cuda_ns,
+                        output_path.display()
+                    )
+                };
                 write_response(stream, STATUS_OK, body.as_bytes()).map_err(io_error)
             }
             other => Err(format!("unknown opcode {other}")),
@@ -278,14 +293,19 @@ mod enabled {
         for offset in offsets {
             payload.extend_from_slice(&offset.to_le_bytes());
         }
-        let client_started = Instant::now();
-        let body = transact(socket, OP_CHAIN_FILE_I32, &payload)?;
-        let client_total_ns = client_started.elapsed().as_nanos();
-        println!(
-            "client_total_ns={} {}",
-            client_total_ns,
-            String::from_utf8_lossy(&body)
-        );
+        if timing_enabled() {
+            let client_started = Instant::now();
+            let body = transact(socket, OP_CHAIN_FILE_I32, &payload)?;
+            let client_total_ns = client_started.elapsed().as_nanos();
+            println!(
+                "client_total_ns={} {}",
+                client_total_ns,
+                String::from_utf8_lossy(&body)
+            );
+        } else {
+            let body = transact(socket, OP_CHAIN_FILE_I32, &payload)?;
+            println!("{}", String::from_utf8_lossy(&body));
+        }
         Ok(())
     }
 
