@@ -216,13 +216,16 @@ static Value *v_rat_div(Value *a, Value *b) {
 static Value *v_car(Value *v) { return v->u.cons.car; }
 static Value *v_cdr(Value *v) { return v->u.cons.cdr; }
 static int is_atom(Value *v) { return v->tag != TAG_CONS; }
-static int predicate_bit(Value *v) {
+static int cond_selects(Value *v) {
+    /* SENS answer-contract/3: D1:1 selects; D1:0 and structural EMPTY both continue.
+       EMPTY is not predicate FALSE, but it has the same non-selection control force. */
+    if (v->tag == TAG_NIL) return 0;
     if (v->tag != TAG_CONS)
-        runtime_error("Type", "cond test must return PredicateBit (0) or (1)");
+        runtime_error("Type", "cond test must be D1:1, D1:0, or structural EMPTY ()");
     Value *head = v->u.cons.car;
     Value *tail = v->u.cons.cdr;
     if (tail->tag != TAG_NIL || head->tag != TAG_INT || (head->u.i != 0 && head->u.i != 1))
-        runtime_error("Type", "cond test must return PredicateBit (0) or (1)");
+        runtime_error("Type", "cond test must be D1:1, D1:0, or structural EMPTY ()");
     return head->u.i == 1;
 }
 
@@ -960,12 +963,12 @@ impl CBackend {
             let body_expr = self.compile_expr(body, env)?;
             if first {
                 out.push_str(&format!(
-                    " if (predicate_bit({test_expr})) {{ _c = {body_expr}; }}"
+                    " if (cond_selects({test_expr})) {{ _c = {body_expr}; }}"
                 ));
                 first = false;
             } else {
                 out.push_str(&format!(
-                    " else if (predicate_bit({test_expr})) {{ _c = {body_expr}; }}"
+                    " else if (cond_selects({test_expr})) {{ _c = {body_expr}; }}"
                 ));
             }
         }
