@@ -15,11 +15,13 @@ concurrency:
 
 jobs:
   focused:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, guix]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
         with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: recursive
       - name: Current predicate record-domain witness
         run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test c_backend_current_predicates_return_upstream_record_domains -- --exact --nocapture
