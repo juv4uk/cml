@@ -16,14 +16,20 @@ on:
       - "contracts/cml-operations.lisp"
       - ".github/workflows/domain5-macro-differential.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   differential:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Rust MacroExpander vs Lisp reference
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, guix]
     steps:
       - name: Checkout CML with pinned SENS
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: true
 
       - name: Install Rust toolchain
