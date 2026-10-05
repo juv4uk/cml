@@ -485,6 +485,52 @@ fn cuda_f32(value: f32) -> String {
     }
 }
 
+/// Breakdown of time spent across compilation, JIT loading, memory transfers,
+/// and kernel execution on the concrete GPU target (#491).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CudaLatencyBreakdown {
+    /// Time to lower CML IR to CudaMapKernel representation.
+    pub cml_ir_lowering_ns: u64,
+    /// Time for NVRTC to compile CUDA C++ source to PTX.
+    pub nvrtc_compile_ns: u64,
+    /// Time for CUDA Driver API to JIT/load PTX into a device module.
+    pub driver_jit_load_ns: u64,
+    /// Time to look up the kernel function entry point in the loaded module.
+    pub function_lookup_ns: u64,
+    /// Time to transfer input buffer from Host to Device.
+    pub htod_transfer_ns: u64,
+    /// Time to execute the kernel on device (including stream sync).
+    pub kernel_execution_ns: u64,
+    /// Time to transfer output buffer from Device to Host (materialization).
+    pub dtoh_transfer_ns: u64,
+    /// Total cold latency (lowering + NVRTC + driver JIT + lookup + HtoD + launch + DtoH).
+    pub total_cold_ns: u64,
+    /// Total warm execution latency with pre-compiled kernel and reusable context/buffers.
+    pub total_warm_ns: u64,
+    /// Reference execution time on CPU compute backend.
+    pub cpu_reference_ns: u64,
+}
+
+impl CudaLatencyBreakdown {
+    /// Ratio of cold compile+JIT+execution over warm reuse latency.
+    pub fn cold_over_warm_ratio(&self) -> f64 {
+        if self.total_warm_ns == 0 {
+            0.0
+        } else {
+            self.total_cold_ns as f64 / self.total_warm_ns as f64
+        }
+    }
+
+    /// Speedup of warm GPU execution compared to CPU reference (CPU / warm GPU).
+    pub fn warm_speedup_over_cpu(&self) -> f64 {
+        if self.total_warm_ns == 0 {
+            0.0
+        } else {
+            self.cpu_reference_ns as f64 / self.total_warm_ns as f64
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
