@@ -820,9 +820,9 @@ impl CudaSession {
         let cml_ir_lowering_ns = t_lowering.elapsed().as_nanos() as u64;
 
         let t_cpu = std::time::Instant::now();
-        let cpu_output = CpuComputeBackend
-            .execute(ir)
-            .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::InternalState, format!("{error:?}")))?;
+        let cpu_output = CpuComputeBackend.execute(ir).map_err(|error| {
+            CudaRuntimeError::driver(CudaDriverStage::InternalState, format!("{error:?}"))
+        })?;
         let cpu_reference_ns = t_cpu.elapsed().as_nanos() as u64;
 
         let options = nvrtc_options_for(mode, self.device.compute_capability);
@@ -856,12 +856,15 @@ impl CudaSession {
 
         let (htod_transfer_ns, kernel_execution_ns, dtoh_transfer_ns, gpu_output) = match buffer {
             BufferLiteral::I32(values) => {
-                let length = u32::try_from(values.len())
-                    .map_err(|_| CudaRuntimeError::UnsupportedInput)?;
-                let mut dev_in = unsafe { stream.alloc::<i32>(values.len()) }
-                    .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Allocation, error))?;
-                let mut dev_out = unsafe { stream.alloc::<i32>(values.len()) }
-                    .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Allocation, error))?;
+                let length =
+                    u32::try_from(values.len()).map_err(|_| CudaRuntimeError::UnsupportedInput)?;
+                let mut dev_in = unsafe { stream.alloc::<i32>(values.len()) }.map_err(|error| {
+                    CudaRuntimeError::driver(CudaDriverStage::Allocation, error)
+                })?;
+                let mut dev_out =
+                    unsafe { stream.alloc::<i32>(values.len()) }.map_err(|error| {
+                        CudaRuntimeError::driver(CudaDriverStage::Allocation, error)
+                    })?;
 
                 let t_htod = std::time::Instant::now();
                 stream
@@ -904,12 +907,15 @@ impl CudaSession {
             }
             BufferLiteral::F32(bits) => {
                 let values: Vec<f32> = bits.iter().copied().map(f32::from_bits).collect();
-                let length = u32::try_from(values.len())
-                    .map_err(|_| CudaRuntimeError::UnsupportedInput)?;
-                let mut dev_in = unsafe { stream.alloc::<f32>(values.len()) }
-                    .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Allocation, error))?;
-                let mut dev_out = unsafe { stream.alloc::<f32>(values.len()) }
-                    .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Allocation, error))?;
+                let length =
+                    u32::try_from(values.len()).map_err(|_| CudaRuntimeError::UnsupportedInput)?;
+                let mut dev_in = unsafe { stream.alloc::<f32>(values.len()) }.map_err(|error| {
+                    CudaRuntimeError::driver(CudaDriverStage::Allocation, error)
+                })?;
+                let mut dev_out =
+                    unsafe { stream.alloc::<f32>(values.len()) }.map_err(|error| {
+                        CudaRuntimeError::driver(CudaDriverStage::Allocation, error)
+                    })?;
 
                 let t_htod = std::time::Instant::now();
                 stream
