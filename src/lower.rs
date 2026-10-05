@@ -758,6 +758,9 @@ fn lower_def(args: &[Expr], env: &Env) -> Result<Ir, LowerError> {
 
 fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
     match expr {
+        Expr::DomainIdentity(_) => Err(LowerError::invalid_form(
+            "quoted exact-domain callable identity is not admitted as quoted data in the carrier slice",
+        )),
         Expr::Sid(_) => Err(LowerError::invalid_form(
             "quoted SENS code is not a function identity; quoted/string/literal SID wrappers are forbidden",
         )),
