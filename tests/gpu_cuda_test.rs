@@ -118,10 +118,7 @@ fn ptx_cache_key_deterministic_and_sensitive_to_exact_provenance() {
         digest.clone(),
         CudaComputeCapability::new(7, 5),
         Some(NvrtcVersion::new(12, 2)),
-        vec![
-            "-arch=compute_75".to_string(),
-            "-fmad=false".to_string(),
-        ],
+        vec!["-arch=compute_75".to_string(), "-fmad=false".to_string()],
     );
     assert_ne!(base_key, fmad_key);
     assert_ne!(base_key.digest(), fmad_key.digest());
@@ -165,40 +162,24 @@ fn ptx_cache_key_deterministic_and_sensitive_to_exact_provenance() {
 fn driver_jit_cache_key_sensitive_to_device_and_driver_provenance() {
     let ptx_digest = "fnv1a64:0123456789abcdef";
 
-    let base_key = CudaDriverJitCacheKey::new(
-        ptx_digest,
-        0,
-        CudaComputeCapability::new(7, 5),
-        Some(12020),
-    );
+    let base_key =
+        CudaDriverJitCacheKey::new(ptx_digest, 0, CudaComputeCapability::new(7, 5), Some(12020));
 
     // Identical inputs produce identical key and digest.
-    let identical_key = CudaDriverJitCacheKey::new(
-        ptx_digest,
-        0,
-        CudaComputeCapability::new(7, 5),
-        Some(12020),
-    );
+    let identical_key =
+        CudaDriverJitCacheKey::new(ptx_digest, 0, CudaComputeCapability::new(7, 5), Some(12020));
     assert_eq!(base_key, identical_key);
     assert_eq!(base_key.digest(), identical_key.digest());
 
     // Different device ordinal causes miss.
-    let dev1_key = CudaDriverJitCacheKey::new(
-        ptx_digest,
-        1,
-        CudaComputeCapability::new(7, 5),
-        Some(12020),
-    );
+    let dev1_key =
+        CudaDriverJitCacheKey::new(ptx_digest, 1, CudaComputeCapability::new(7, 5), Some(12020));
     assert_ne!(base_key, dev1_key);
     assert_ne!(base_key.digest(), dev1_key.digest());
 
     // Driver version change causes miss.
-    let driver_new_key = CudaDriverJitCacheKey::new(
-        ptx_digest,
-        0,
-        CudaComputeCapability::new(7, 5),
-        Some(12040),
-    );
+    let driver_new_key =
+        CudaDriverJitCacheKey::new(ptx_digest, 0, CudaComputeCapability::new(7, 5), Some(12040));
     assert_ne!(base_key, driver_new_key);
     assert_ne!(base_key.digest(), driver_new_key.digest());
 
@@ -221,14 +202,23 @@ fn artifact_cache_tracks_ptx_and_driver_artifacts_with_bounded_eviction() {
     assert_eq!(cache.diagnostics().ptx_misses, 1);
 
     // Insert 1 & 2 up to capacity.
-    cache.insert_ptx(CudaPtxArtifact::new(k1.clone(), ".version 7.5\n// ptx1".into()));
-    cache.insert_ptx(CudaPtxArtifact::new(k2.clone(), ".version 7.5\n// ptx2".into()));
+    cache.insert_ptx(CudaPtxArtifact::new(
+        k1.clone(),
+        ".version 7.5\n// ptx1".into(),
+    ));
+    cache.insert_ptx(CudaPtxArtifact::new(
+        k2.clone(),
+        ".version 7.5\n// ptx2".into(),
+    ));
 
     assert_eq!(cache.get_ptx(&k1).unwrap().ptx, ".version 7.5\n// ptx1");
     assert_eq!(cache.diagnostics().ptx_hits, 1);
 
     // Insert 3 exceeds capacity 2 -> evicts k1 (oldest).
-    cache.insert_ptx(CudaPtxArtifact::new(k3.clone(), ".version 7.5\n// ptx3".into()));
+    cache.insert_ptx(CudaPtxArtifact::new(
+        k3.clone(),
+        ".version 7.5\n// ptx3".into(),
+    ));
     assert_eq!(cache.diagnostics().ptx_evictions, 1);
 
     // k1 is now evicted (miss), while k2 and k3 are present.
