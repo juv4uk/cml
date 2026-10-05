@@ -253,6 +253,9 @@ fn verify_boundary_contract() -> Result<(), BridgeError> {
 
 /// Ask the pinned SENS compiler law for the authoritative bounded execution role.
 ///
+/// Cutover invariant: this production path has no fallback to the Rust
+/// differential oracle; failure in the SENS law is a named bridge failure.
+///
 /// CML does not inspect domain coordinates and never falls back to the Rust
 /// differential oracle if SENS evaluation fails.
 pub fn authoritative_execution_role(
