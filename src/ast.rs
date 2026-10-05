@@ -7,8 +7,11 @@ pub enum NumericBufferLiteral {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    /// Exact Lisp-owned semantic/function identity. This is not a symbol,
-    /// string, integer alias, or surface spelling.
+    /// Поточна точна доменно-кваліфікована callable-ідентичність.
+    /// Домен є частиною тотожності; payload сам по собі значення не визначає.
+    DomainIdentity(sens::CoreDomainIdentity),
+    /// Історична exact-eight compatibility-ідентичність. Не є поточним
+    /// канонічним шляхом нової семантики.
     Sid(sens::Sid8),
     Integer(i64),
     /// Exact rational numeral `n/d` (d > 0, gcd-reduced at parse time).
