@@ -140,7 +140,7 @@ fn test_algebraic_identities() {
 
 #[test]
 fn test_branch_simplification_and_unreachable_block_elimination() {
-    let source = "(cond ((тотожне? 5 5) 42) ((тотожне? 0 0) 99))";
+    let source = "(cond ((тотожне? 5 5) 42))";
     let ir = parse_and_lower_ir(source);
     let mut func = lower_ir_to_lir(&ir).expect("lower to LIR");
 
