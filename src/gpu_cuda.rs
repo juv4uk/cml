@@ -94,7 +94,6 @@ impl NvrtcVersion {
 /// mint a new semantic meaning from it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CudaMapKernel {
-    pub identity: sens::Sens8,
     pub numeric_domain: NumericDomain,
     pub element_type: CudaElementType,
     pub parameter_count: usize,
@@ -138,7 +137,7 @@ pub struct CudaReduceKernel {
 impl CudaReduceKernel {
     pub fn kernel_digest(&self) -> String {
         let mut buf = Vec::new();
-        write!(&mut buf, "{}", self.identity).unwrap();
+        buf.extend_from_slice(b"reduce-i32");
         buf.push(2);
         buf.push(1);
         buf.extend_from_slice(&(self.parameter_count as u64).to_be_bytes());
