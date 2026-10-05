@@ -23,7 +23,10 @@ fn temp_lock() -> PathBuf {
 }
 
 fn now_ns() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
 }
 
 #[test]
