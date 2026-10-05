@@ -3,7 +3,7 @@
 //! This binary is mechanism only: it reuses the already admitted CML pipeline
 //! and owns no Lisp expected semantic answers.
 
-use std::{env, fs, path::Path, process::ExitCode};
+use std::{env, fs, path::Path, process::ExitCode, time::Instant};
 
 use cml::{
     elf64::Elf64Executable, lisp_asm_vertical::select_arithmetic_slice, lower,
@@ -24,26 +24,42 @@ fn main() -> ExitCode {
 fn run() -> Result<(), String> {
     let mut args = env::args_os();
     let _program = args.next();
-    let command = args
-        .next()
-        .ok_or_else(|| "usage: cml-compile x86-elf <source.lisp> <output>".to_string())?;
-    let source = args
-        .next()
-        .ok_or_else(|| "usage: cml-compile x86-elf <source.lisp> <output>".to_string())?;
-    let output = args
-        .next()
-        .ok_or_else(|| "usage: cml-compile x86-elf <source.lisp> <output>".to_string())?;
-    if args.next().is_some() {
-        return Err("usage: cml-compile x86-elf <source.lisp> <output>".into());
+    const USAGE: &str = "usage: cml-compile x86-elf <source.lisp> <output> | \
+cml-compile x86-elf-profile <source.lisp> <output> | cml-compile passes";
+    let command = args.next().ok_or_else(|| USAGE.to_string())?;
+
+    if command == "passes" {
+        if args.next().is_some() {
+            return Err(USAGE.into());
+        }
+        for pass in cml::compiler_passes::pass_manifest() {
+            println!(
+                "CML-PASS\tid={}\tinput={}\toutput={}\tevidence={}\tobligation={}",
+                pass.id,
+                pass.input,
+                pass.output,
+                pass.current_evidence.as_str(),
+                pass.obligation
+            );
+        }
+        return Ok(());
     }
 
-    if command != "x86-elf" {
+    let source = args.next().ok_or_else(|| USAGE.to_string())?;
+    let output = args.next().ok_or_else(|| USAGE.to_string())?;
+    if args.next().is_some() {
+        return Err(USAGE.into());
+    }
+
+    let profile = command == "x86-elf-profile";
+    if command != "x86-elf" && !profile {
         return Err(format!(
             "unsupported compiler target: {}",
             command.to_string_lossy()
         ));
     }
 
+    let total_started = Instant::now();
     let source_path = Path::new(&source);
     if source_path
         .extension()
@@ -53,30 +69,59 @@ fn run() -> Result<(), String> {
         return Err("compiler source must use the canonical .lisp extension".into());
     }
 
+    let phase_started = Instant::now();
     let source_text = fs::read_to_string(source_path)
         .map_err(|error| format!("could not read {}: {error}", source_path.display()))?;
+    emit_phase(profile, "load", phase_started.elapsed());
+
+    let phase_started = Instant::now();
     let expressions =
         parser::parse(&source_text).map_err(|error| parse_diagnostic(source_path, &error))?;
+    emit_phase(profile, "parse", phase_started.elapsed());
+
+    let phase_started = Instant::now();
     let expanded = MacroExpander::new()
         .process(&expressions)
         .map_err(|error| error.to_string())?;
+    emit_phase(profile, "macro-expand", phase_started.elapsed());
+
+    let phase_started = Instant::now();
     let ir = lower::lower_program(&expanded).map_err(|error| error.to_string())?;
+    emit_phase(profile, "lower", phase_started.elapsed());
+
+    let phase_started = Instant::now();
     if let Ok(machine_items) = select_arithmetic_slice(&ir) {
         let bytes = assemble_program(&machine_items).map_err(|error| error.to_string())?;
+        emit_phase(profile, "target-codegen", phase_started.elapsed());
+
+        let phase_started = Instant::now();
         Elf64Executable::new(bytes)
             .write_executable(&output)
             .map_err(|error| {
                 format!("could not write {}: {error}", Path::new(&output).display())
             })?;
+        emit_phase(profile, "emit", phase_started.elapsed());
+        emit_phase(profile, "total", total_started.elapsed());
         return Ok(());
     }
 
     let assembly = X86FreestandingBackend::new()
         .compile_program(&ir)
         .map_err(|error| error.to_string())?;
+    emit_phase(profile, "target-codegen", phase_started.elapsed());
+
+    let phase_started = Instant::now();
     cml::x86_elf::link_x86_elf(&assembly, Path::new(&output))?;
+    emit_phase(profile, "emit", phase_started.elapsed());
+    emit_phase(profile, "total", total_started.elapsed());
 
     Ok(())
+}
+
+fn emit_phase(enabled: bool, name: &str, elapsed: std::time::Duration) {
+    if enabled {
+        eprintln!("CML-PHASE\tname={name}\telapsed_ns={}", elapsed.as_nanos());
+    }
 }
 
 fn parse_diagnostic(path: &Path, error: &parser::ParseError) -> String {
