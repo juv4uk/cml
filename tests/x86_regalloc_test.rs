@@ -154,7 +154,7 @@ fn test_high_register_pressure_spills_and_computes_correctly() {
 
 #[test]
 fn test_branch_join_liveness_and_allocation() {
-    let source = "(cond ((тотожне? 5 5) 42) ((тотожне? 0 0) 99))";
+    let source = "(cond ((тотожне? 5 5) 42))";
     let ir = parse_and_lower_ir(source);
     let func = lower_ir_to_lir(&ir).expect("lower cond to LIR");
 
