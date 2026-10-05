@@ -263,6 +263,7 @@ pub fn lower_expr(expr: &Expr) -> Result<Ir, LowerError> {
 
 fn lower_expr_admitted(expr: &Expr, env: &Env) -> Result<Ir, LowerError> {
     match expr {
+        Expr::DomainIdentity(identity) => Ok(Ir::DomainIdentity(*identity)),
         Expr::Sid(sid) => Ok(Ir::Sid(*sid)),
         Expr::Integer(n) => Ok(Ir::Int(*n)),
         Expr::Rational(num, den) => Ok(Ir::Rational(*num, *den)),
