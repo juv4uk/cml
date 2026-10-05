@@ -4,6 +4,7 @@ pub mod build;
 pub mod c_backend;
 pub mod canon;
 pub mod compiler;
+pub mod compiler_mechanism;
 pub mod compiler_passes;
 pub mod compute;
 pub mod core_profile;
