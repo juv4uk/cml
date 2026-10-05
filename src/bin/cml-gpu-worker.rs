@@ -129,6 +129,7 @@ mod enabled {
     }
 
     fn handle(stream: &mut UnixStream) -> Result<(), String> {
+        let service_started = Instant::now();
         let (opcode, payload) = read_request(stream)?;
         match opcode {
             OP_PING => write_response(stream, STATUS_OK, b"pong").map_err(io_error),
@@ -164,10 +165,12 @@ mod enabled {
                     return Err("CUDA chain returned no final i32 buffer".into());
                 };
                 write_i32_file(&output_path, &output)?;
+                let service_ns = service_started.elapsed().as_nanos();
                 let body = format!(
-                    "count={} steps={} cuda_ns={} output={}",
+                    "count={} steps={} service_ns={} cuda_ns={} output={}",
                     output.len(),
                     offsets.len(),
+                    service_ns,
                     cuda_ns,
                     output_path.display()
                 );
@@ -275,8 +278,14 @@ mod enabled {
         for offset in offsets {
             payload.extend_from_slice(&offset.to_le_bytes());
         }
+        let client_started = Instant::now();
         let body = transact(socket, OP_CHAIN_FILE_I32, &payload)?;
-        println!("{}", String::from_utf8_lossy(&body));
+        let client_total_ns = client_started.elapsed().as_nanos();
+        println!(
+            "client_total_ns={} {}",
+            client_total_ns,
+            String::from_utf8_lossy(&body)
+        );
         Ok(())
     }
 
