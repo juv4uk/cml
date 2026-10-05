@@ -17,6 +17,60 @@ pub enum CompilerMechanismRef {
     SlotVmCons,
 }
 
+
+/// Stable CML-private references to the existing rich compiler mechanisms.
+///
+/// These names describe implementation seams, not SENS identities. The mapping
+/// is intentionally role -> mechanism and therefore never receives a domain,
+/// packed bits, surface spelling, or legacy Sid8 value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RichCompilerMechanismRef {
+    Quote,
+    AtomPredicateD1,
+    SelectorTail,
+    SelectorHead,
+    AtomEqualityD1,
+    CondExactD1,
+    PairConstruct,
+    Lambda,
+    Define,
+}
+
+impl RichCompilerMechanismRef {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Quote => "cml.rich.quote",
+            Self::AtomPredicateD1 => "cml.rich.atom-predicate-d1",
+            Self::SelectorTail => "cml.rich.cdr",
+            Self::SelectorHead => "cml.rich.car",
+            Self::AtomEqualityD1 => "cml.rich.atom-equality-d1",
+            Self::CondExactD1 => "cml.rich.cond-exact-d1",
+            Self::PairConstruct => "cml.rich.cons",
+            Self::Lambda => "cml.rich.lambda",
+            Self::Define => "cml.rich.define",
+        }
+    }
+}
+
+/// Bind one SENS-verified full lowering role to an existing rich C/x86
+/// compiler mechanism. This table is CML implementation structure only; it is
+/// not a second semantic authority.
+pub const fn select_rich_compiler_mechanism(
+    role: sens::CompilerLoweringRole,
+) -> RichCompilerMechanismRef {
+    match role {
+        sens::CompilerLoweringRole::QuoteForm => RichCompilerMechanismRef::Quote,
+        sens::CompilerLoweringRole::AtomPredicate => RichCompilerMechanismRef::AtomPredicateD1,
+        sens::CompilerLoweringRole::SelectorTail => RichCompilerMechanismRef::SelectorTail,
+        sens::CompilerLoweringRole::SelectorHead => RichCompilerMechanismRef::SelectorHead,
+        sens::CompilerLoweringRole::AtomEquality => RichCompilerMechanismRef::AtomEqualityD1,
+        sens::CompilerLoweringRole::CondForm => RichCompilerMechanismRef::CondExactD1,
+        sens::CompilerLoweringRole::PairConstruct => RichCompilerMechanismRef::PairConstruct,
+        sens::CompilerLoweringRole::LambdaForm => RichCompilerMechanismRef::Lambda,
+        sens::CompilerLoweringRole::DefineForm => RichCompilerMechanismRef::Define,
+    }
+}
+
 impl CompilerMechanismRef {
     /// Deterministic provenance label suitable for compiler artifacts.
     pub const fn as_str(self) -> &'static str {
@@ -69,6 +123,50 @@ pub const fn select_slot_vm_mechanism(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn all_verified_sens_lowering_roles_bind_to_rich_mechanisms() {
+        let cases = [
+            (sens::CompilerLoweringRole::QuoteForm, RichCompilerMechanismRef::Quote),
+            (
+                sens::CompilerLoweringRole::AtomPredicate,
+                RichCompilerMechanismRef::AtomPredicateD1,
+            ),
+            (
+                sens::CompilerLoweringRole::SelectorTail,
+                RichCompilerMechanismRef::SelectorTail,
+            ),
+            (
+                sens::CompilerLoweringRole::SelectorHead,
+                RichCompilerMechanismRef::SelectorHead,
+            ),
+            (
+                sens::CompilerLoweringRole::AtomEquality,
+                RichCompilerMechanismRef::AtomEqualityD1,
+            ),
+            (
+                sens::CompilerLoweringRole::CondForm,
+                RichCompilerMechanismRef::CondExactD1,
+            ),
+            (
+                sens::CompilerLoweringRole::PairConstruct,
+                RichCompilerMechanismRef::PairConstruct,
+            ),
+            (
+                sens::CompilerLoweringRole::LambdaForm,
+                RichCompilerMechanismRef::Lambda,
+            ),
+            (
+                sens::CompilerLoweringRole::DefineForm,
+                RichCompilerMechanismRef::Define,
+            ),
+        ];
+
+        for (role, mechanism) in cases {
+            assert_eq!(select_rich_compiler_mechanism(role), mechanism);
+            assert!(!mechanism.as_str().is_empty());
+        }
+    }
 
     #[test]
     fn verified_roles_bind_to_slot_mechanisms_without_identity_decode() {
