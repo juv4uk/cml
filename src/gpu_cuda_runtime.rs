@@ -1,15 +1,18 @@
 //! Optional NVIDIA CUDA execution for admitted map regions.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::hash::Hash;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use cudarc::driver::{CudaContext, CudaFunction, CudaSlice, LaunchConfig, PushKernelArg};
+use cudarc::nvrtc::Ptx;
 
 use crate::accelerator::{
     AcceleratorApi, AcceleratorClass, AcceleratorDescriptor, AcceleratorVendor,
 };
 use crate::compute::{I32Range, fuse_i32_map_chain, i32_buffer_range, prove_i32_map_range};
-use crate::gpu_cuda::{CudaEmitError, emit_i32_compute_kernel, lower_map_kernel};
+use crate::gpu_cuda::{CudaEmitError, CudaMapKernel, emit_i32_compute_kernel, lower_map_kernel};
 use crate::ir::{BufferLiteral, Ir};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +48,7 @@ pub enum CudaDriverStage {
     ContextCreate { ordinal: usize },
     ContextBind,
     DeviceEvidence,
+    DriverVersion,
     MemoryQuery,
     Allocation,
     HostToDeviceCopy,
@@ -134,6 +138,160 @@ impl Default for CudaKernelMode {
     }
 }
 
+pub const CUDA_KERNEL_ABI_SCHEMA_VERSION: u32 = 1;
+pub const CUDA_LOWERING_SCHEMA_VERSION: u32 = 1;
+const CUDA_PTX_CACHE_CAPACITY: usize = 64;
+const CUDA_LOADED_CACHE_CAPACITY: usize = 64;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CudaPtxCacheKey {
+    pub source_sha256: String,
+    pub compute_capability: (i32, i32),
+    pub nvrtc_version: (i32, i32),
+    pub compile_options: Vec<String>,
+    pub kernel_abi_schema: u32,
+    pub lowering_schema: u32,
+    pub cml_version: String,
+    pub entry_point: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CudaLoadedCacheKey {
+    pub ptx: CudaPtxCacheKey,
+    pub device_ordinal: usize,
+    pub driver_version: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct CudaPtxArtifact {
+    pub key: CudaPtxCacheKey,
+    pub ptx_sha256: String,
+    pub ptx_len_bytes: usize,
+    ptx: Ptx,
+}
+
+impl CudaPtxArtifact {
+    fn ptx(&self) -> Ptx {
+        self.ptx.clone()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CudaLoadedKernelArtifact {
+    pub key: CudaLoadedCacheKey,
+    pub ptx_sha256: String,
+    pub entry_point: String,
+    function: CudaFunction,
+}
+
+impl CudaLoadedKernelArtifact {
+    fn function(&self) -> CudaFunction {
+        self.function.clone()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CudaJitCacheStats {
+    pub ptx_hits: u64,
+    pub ptx_misses: u64,
+    pub loaded_hits: u64,
+    pub loaded_misses: u64,
+}
+
+#[derive(Debug)]
+struct BoundedCache<K, V> {
+    capacity: usize,
+    entries: HashMap<K, V>,
+    order: VecDeque<K>,
+}
+
+impl<K: Eq + Hash + Clone, V> BoundedCache<K, V> {
+    fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            entries: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+
+    fn get(&self, key: &K) -> Option<&V> {
+        self.entries.get(key)
+    }
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    fn insert(&mut self, key: K, value: V) {
+        if self.capacity == 0 {
+            return;
+        }
+        if self.entries.contains_key(&key) {
+            self.entries.insert(key, value);
+            return;
+        }
+        if self.entries.len() >= self.capacity
+            && let Some(oldest) = self.order.pop_front()
+        {
+            self.entries.remove(&oldest);
+        }
+        self.order.push_back(key.clone());
+        self.entries.insert(key, value);
+    }
+}
+
+static CUDA_PTX_CACHE: OnceLock<Mutex<BoundedCache<CudaPtxCacheKey, CudaPtxArtifact>>> =
+    OnceLock::new();
+static CUDA_PTX_HITS: AtomicU64 = AtomicU64::new(0);
+static CUDA_PTX_MISSES: AtomicU64 = AtomicU64::new(0);
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    sens::sha256_source(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn nvrtc_version() -> Result<(i32, i32), CudaRuntimeError> {
+    let mut major = 0;
+    let mut minor = 0;
+    unsafe {
+        cudarc::nvrtc::sys::nvrtcVersion(&mut major, &mut minor)
+            .result()
+            .map_err(|error| CudaRuntimeError::Nvrtc(format!("nvrtcVersion: {error}")))?;
+    }
+    Ok((major, minor))
+}
+
+fn cuda_driver_version() -> Result<i32, CudaRuntimeError> {
+    let mut version = 0;
+    unsafe {
+        cudarc::driver::sys::cuDriverGetVersion(&mut version)
+            .result()
+            .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::DriverVersion, error))?;
+    }
+    Ok(version)
+}
+
+fn ptx_cache_key(
+    source: &str,
+    compute_capability: (i32, i32),
+    nvrtc_version: (i32, i32),
+    compile_options: Vec<String>,
+    entry_point: &str,
+) -> CudaPtxCacheKey {
+    CudaPtxCacheKey {
+        source_sha256: sha256_hex(source.as_bytes()),
+        compute_capability,
+        nvrtc_version,
+        compile_options,
+        kernel_abi_schema: CUDA_KERNEL_ABI_SCHEMA_VERSION,
+        lowering_schema: CUDA_LOWERING_SCHEMA_VERSION,
+        cml_version: env!("CARGO_PKG_VERSION").to_string(),
+        entry_point: entry_point.to_string(),
+    }
+}
+
 /// NVRTC options for a kernel compiled in `mode` for `compute_capability`.
 /// Pure mechanism: no device access, unit-testable without CUDA hardware.
 pub fn nvrtc_options_for(mode: CudaKernelMode, compute_capability: (i32, i32)) -> Vec<String> {
@@ -165,7 +323,10 @@ struct ReusableBuffers<T> {
 pub struct CudaSession {
     context: Arc<CudaContext>,
     device: CudaDevice,
-    kernels: Mutex<HashMap<(CudaKernelMode, String), CudaFunction>>,
+    driver_version: i32,
+    loaded_kernels: Mutex<BoundedCache<CudaLoadedCacheKey, CudaLoadedKernelArtifact>>,
+    loaded_hits: AtomicU64,
+    loaded_misses: AtomicU64,
     i32_buffers: Mutex<Option<ReusableBuffers<i32>>>,
     f32_buffers: Mutex<Option<ReusableBuffers<f32>>>,
 }
@@ -198,10 +359,14 @@ impl CudaSession {
             )
         })?;
         let device = device_evidence(&context)?;
+        let driver_version = cuda_driver_version()?;
         Ok(Self {
             context,
             device,
-            kernels: Mutex::new(HashMap::new()),
+            driver_version,
+            loaded_kernels: Mutex::new(BoundedCache::new(CUDA_LOADED_CACHE_CAPACITY)),
+            loaded_hits: AtomicU64::new(0),
+            loaded_misses: AtomicU64::new(0),
             i32_buffers: Mutex::new(None),
             f32_buffers: Mutex::new(None),
         })
@@ -214,15 +379,61 @@ impl CudaSession {
     /// Number of distinct executable map kernels currently resident in this
     /// session. Exposed as mechanism evidence for reuse tests/benchmarks.
     pub fn cached_kernel_count(&self) -> Result<usize, CudaRuntimeError> {
-        self.kernels
+        self.loaded_kernels
             .lock()
             .map(|kernels| kernels.len())
             .map_err(|error| {
                 CudaRuntimeError::driver(
                     CudaDriverStage::InternalState,
-                    format!("kernel cache mutex poisoned: {error}"),
+                    format!("loaded-kernel cache mutex poisoned: {error}"),
                 )
             })
+    }
+
+    pub fn jit_cache_stats(&self) -> CudaJitCacheStats {
+        CudaJitCacheStats {
+            ptx_hits: CUDA_PTX_HITS.load(Ordering::Relaxed),
+            ptx_misses: CUDA_PTX_MISSES.load(Ordering::Relaxed),
+            loaded_hits: self.loaded_hits.load(Ordering::Relaxed),
+            loaded_misses: self.loaded_misses.load(Ordering::Relaxed),
+        }
+    }
+
+    pub fn driver_version(&self) -> i32 {
+        self.driver_version
+    }
+
+    pub fn cached_ptx_count(&self) -> Result<usize, CudaRuntimeError> {
+        CUDA_PTX_CACHE
+            .get_or_init(|| Mutex::new(BoundedCache::new(CUDA_PTX_CACHE_CAPACITY)))
+            .lock()
+            .map(|cache| cache.len())
+            .map_err(|error| {
+                CudaRuntimeError::driver(
+                    CudaDriverStage::InternalState,
+                    format!("PTX cache mutex poisoned: {error}"),
+                )
+            })
+    }
+
+    /// Compile an admitted CML map through NVRTC and return the portable PTX artifact.
+    pub fn compile_map_ptx(
+        &self,
+        ir: &Ir,
+        mode: CudaKernelMode,
+    ) -> Result<CudaPtxArtifact, CudaRuntimeError> {
+        let kernel = lower_map_kernel(ir)?;
+        self.ptx_artifact_for_source(mode, &kernel.source, kernel.entry_point)
+    }
+
+    /// Compile and Driver-JIT/load an admitted map for this exact CUDA device/session.
+    pub fn load_map_artifact(
+        &self,
+        ir: &Ir,
+        mode: CudaKernelMode,
+    ) -> Result<CudaLoadedKernelArtifact, CudaRuntimeError> {
+        let kernel = lower_map_kernel(ir)?;
+        self.loaded_artifact_for_source(mode, &kernel.source, kernel.entry_point)
     }
 
     pub fn prepare_map<'a>(&'a self, ir: &'a Ir) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
@@ -236,7 +447,7 @@ impl CudaSession {
         ir: &'a Ir,
         mode: CudaKernelMode,
     ) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
-        let source = lower_map_kernel(ir)?.source;
+        let kernel = lower_map_kernel(ir)?;
         let buffer = map_input(ir).ok_or(CudaRuntimeError::UnsupportedInput)?;
         if matches!(buffer, BufferLiteral::I32(values) if values.is_empty())
             || matches!(buffer, BufferLiteral::F32(values) if values.is_empty())
@@ -244,7 +455,7 @@ impl CudaSession {
             return Err(CudaRuntimeError::UnsupportedInput);
         }
 
-        let function = self.function_for_source(mode, source)?;
+        let function = self.function_for_kernel(mode, &kernel)?;
         Ok(PreparedCudaMap {
             session: self,
             function,
@@ -471,11 +682,10 @@ impl CudaSession {
             let next_range = prove_i32_map_range(function_ir, range)
                 .ok_or_else(|| fail(step, CudaRuntimeError::UnsupportedInput))?;
             let probe = i32_range_probe_ir(function_ir, range);
-            let source = lower_map_kernel(&probe)
-                .map_err(|error| fail(step, CudaRuntimeError::Emit(error)))?
-                .source;
+            let kernel = lower_map_kernel(&probe)
+                .map_err(|error| fail(step, CudaRuntimeError::Emit(error)))?;
             let function = self
-                .function_for_source(CudaKernelMode::Production, source)
+                .function_for_kernel(CudaKernelMode::Production, &kernel)
                 .map_err(|error| fail(step, error))?;
             prepared.push(function);
             range = next_range;
@@ -609,7 +819,7 @@ impl CudaSession {
         let source = emit_i32_compute_kernel(&kernel)
             .map_err(|error| fail(final_step, CudaRuntimeError::Emit(error)))?;
         let function = self
-            .function_for_source(CudaKernelMode::Production, source)
+            .function_for_source(CudaKernelMode::Production, &source, "cml_map")
             .map_err(|error| fail(final_step, error))?;
 
         let length = u32::try_from(input_values.len())
@@ -692,40 +902,134 @@ impl CudaSession {
         }))
     }
 
+    fn function_for_kernel(
+        &self,
+        mode: CudaKernelMode,
+        kernel: &CudaMapKernel,
+    ) -> Result<CudaFunction, CudaRuntimeError> {
+        self.function_for_source(mode, &kernel.source, kernel.entry_point)
+    }
+
     fn function_for_source(
         &self,
         mode: CudaKernelMode,
-        source: String,
+        source: &str,
+        entry_point: &str,
     ) -> Result<CudaFunction, CudaRuntimeError> {
-        let mut kernels = self.kernels.lock().map_err(|error| {
-            CudaRuntimeError::driver(
-                CudaDriverStage::InternalState,
-                format!("kernel cache mutex poisoned: {error}"),
-            )
-        })?;
-        let cache_key = (mode, source.clone());
-        if let Some(function) = kernels.get(&cache_key) {
-            return Ok(function.clone());
+        Ok(self
+            .loaded_artifact_for_source(mode, source, entry_point)?
+            .function())
+    }
+
+    fn loaded_artifact_for_source(
+        &self,
+        mode: CudaKernelMode,
+        source: &str,
+        entry_point: &str,
+    ) -> Result<CudaLoadedKernelArtifact, CudaRuntimeError> {
+        let ptx_artifact = self.ptx_artifact_for_source(mode, source, entry_point)?;
+        let loaded_key = CudaLoadedCacheKey {
+            ptx: ptx_artifact.key.clone(),
+            device_ordinal: self.device.ordinal,
+            driver_version: self.driver_version,
+        };
+
+        {
+            let loaded = self.loaded_kernels.lock().map_err(|error| {
+                CudaRuntimeError::driver(
+                    CudaDriverStage::InternalState,
+                    format!("loaded-kernel cache mutex poisoned: {error}"),
+                )
+            })?;
+            if let Some(artifact) = loaded.get(&loaded_key) {
+                self.loaded_hits.fetch_add(1, Ordering::Relaxed);
+                return Ok(artifact.clone());
+            }
         }
 
+        self.loaded_misses.fetch_add(1, Ordering::Relaxed);
+        let module = self
+            .context
+            .load_module(ptx_artifact.ptx())
+            .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::ModuleLoad, error))?;
+        let function = module
+            .load_function(entry_point)
+            .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::FunctionLoad, error))?;
+
+        let loaded_artifact = CudaLoadedKernelArtifact {
+            key: loaded_key.clone(),
+            ptx_sha256: ptx_artifact.ptx_sha256.clone(),
+            entry_point: entry_point.to_string(),
+            function: function.clone(),
+        };
+        let mut loaded = self.loaded_kernels.lock().map_err(|error| {
+            CudaRuntimeError::driver(
+                CudaDriverStage::InternalState,
+                format!("loaded-kernel cache mutex poisoned: {error}"),
+            )
+        })?;
+        loaded.insert(loaded_key, loaded_artifact.clone());
+        Ok(loaded_artifact)
+    }
+
+    fn ptx_artifact_for_source(
+        &self,
+        mode: CudaKernelMode,
+        source: &str,
+        entry_point: &str,
+    ) -> Result<CudaPtxArtifact, CudaRuntimeError> {
         let options = nvrtc_options_for(mode, self.device.compute_capability);
+        let key = ptx_cache_key(
+            source,
+            self.device.compute_capability,
+            nvrtc_version()?,
+            options.clone(),
+            entry_point,
+        );
+
+        let cache =
+            CUDA_PTX_CACHE.get_or_init(|| Mutex::new(BoundedCache::new(CUDA_PTX_CACHE_CAPACITY)));
+        {
+            let cache = cache.lock().map_err(|error| {
+                CudaRuntimeError::driver(
+                    CudaDriverStage::InternalState,
+                    format!("PTX cache mutex poisoned: {error}"),
+                )
+            })?;
+            if let Some(artifact) = cache.get(&key) {
+                CUDA_PTX_HITS.fetch_add(1, Ordering::Relaxed);
+                return Ok(artifact.clone());
+            }
+        }
+
+        CUDA_PTX_MISSES.fetch_add(1, Ordering::Relaxed);
         let ptx = cudarc::nvrtc::compile_ptx_with_opts(
-            source.clone(),
+            source,
             cudarc::nvrtc::CompileOptions {
                 options,
                 ..Default::default()
             },
         )
         .map_err(|error| CudaRuntimeError::Nvrtc(error.to_string()))?;
-        let module = self
-            .context
-            .load_module(ptx)
-            .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::ModuleLoad, error))?;
-        let function = module
-            .load_function("cml_map")
-            .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::FunctionLoad, error))?;
-        kernels.insert(cache_key, function.clone());
-        Ok(function)
+        let ptx_bytes = ptx
+            .as_bytes()
+            .map(<[u8]>::to_vec)
+            .unwrap_or_else(|| ptx.to_src().into_bytes());
+        let artifact = CudaPtxArtifact {
+            key: key.clone(),
+            ptx_sha256: sha256_hex(&ptx_bytes),
+            ptx_len_bytes: ptx_bytes.len(),
+            ptx,
+        };
+
+        let mut cache = cache.lock().map_err(|error| {
+            CudaRuntimeError::driver(
+                CudaDriverStage::InternalState,
+                format!("PTX cache mutex poisoned: {error}"),
+            )
+        })?;
+        cache.insert(key, artifact.clone());
+        Ok(artifact)
     }
 }
 
@@ -897,5 +1201,55 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn sha256_evidence_is_stable() {
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn ptx_cache_key_changes_when_target_or_options_change() {
+        let base = ptx_cache_key(
+            "kernel",
+            (6, 1),
+            (12, 6),
+            vec!["-arch=compute_61".to_string()],
+            "cml_map",
+        );
+        let different_arch = ptx_cache_key(
+            "kernel",
+            (7, 5),
+            (12, 6),
+            vec!["-arch=compute_75".to_string()],
+            "cml_map",
+        );
+        let different_mode = ptx_cache_key(
+            "kernel",
+            (6, 1),
+            (12, 6),
+            vec![
+                "-arch=compute_61".to_string(),
+                NVRTC_NO_FMA_CONTRACTION.to_string(),
+            ],
+            "cml_map",
+        );
+        assert_ne!(base, different_arch);
+        assert_ne!(base, different_mode);
+    }
+
+    #[test]
+    fn bounded_cache_evicts_oldest_entry() {
+        let mut cache = BoundedCache::new(2);
+        cache.insert("a", 1);
+        cache.insert("b", 2);
+        cache.insert("c", 3);
+        assert!(cache.get(&"a").is_none());
+        assert_eq!(cache.get(&"b"), Some(&2));
+        assert_eq!(cache.get(&"c"), Some(&3));
+        assert_eq!(cache.len(), 2);
     }
 }
