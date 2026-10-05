@@ -4,14 +4,14 @@ use std::fs;
 use cml::canon::find_operation_by_id;
 use cml::coverage::{BackendEvidenceState, CoverageLedger};
 
-const EXPECTED: &[(sens::Sid8, BackendEvidenceState)] = &[
-    (sens::sid!(00000001), BackendEvidenceState::Executable),
-    (sens::sid!(00000010), BackendEvidenceState::AssemblyWitness),
-    (sens::sid!(00000011), BackendEvidenceState::Executable),
-    (sens::sid!(00000100), BackendEvidenceState::Executable),
-    (sens::sid!(00000101), BackendEvidenceState::AssemblyWitness),
-    (sens::sid!(00000110), BackendEvidenceState::AssemblyWitness),
-    (sens::sid!(00000111), BackendEvidenceState::Executable),
+const EXPECTED: &[(sens::Sid8, &str, BackendEvidenceState)] = &[
+    (sens::sid!(00000001), "quote", BackendEvidenceState::Executable),
+    (sens::sid!(00000010), "atom", BackendEvidenceState::AssemblyWitness),
+    (sens::sid!(00000011), "eq", BackendEvidenceState::Executable),
+    (sens::sid!(00000100), "cons", BackendEvidenceState::Executable),
+    (sens::sid!(00000101), "car", BackendEvidenceState::AssemblyWitness),
+    (sens::sid!(00000110), "cdr", BackendEvidenceState::AssemblyWitness),
+    (sens::sid!(00000111), "cond", BackendEvidenceState::Executable),
 ];
 
 fn read_repo(path: &str) -> String {
@@ -38,12 +38,12 @@ fn x86_canon_evidence_reconciles_matrix_ledger_and_pushed_witnesses() {
     let ledger = CoverageLedger::build_source();
 
     let mut x86_rows = 0usize;
-    for (semantic_id, expected_state) in EXPECTED {
+    for (semantic_id, capability_key, expected_state) in EXPECTED {
         let operation = find_operation_by_id(*semantic_id)
             .unwrap_or_else(|| panic!("Canon operation {semantic_id} must exist"));
         assert!(
-            x86.contains(&format!("({} . supported)", operation.canonical_name)),
-            "x86 capability matrix must keep {} supported while ledger claims x86 evidence",
+            x86.contains(&format!("({capability_key} . supported)")),
+            "x86 capability matrix must keep capability {capability_key} supported while Canon operation {} has x86 evidence",
             operation.canonical_name
         );
 
@@ -67,10 +67,10 @@ fn x86_canon_evidence_reconciles_matrix_ledger_and_pushed_witnesses() {
         );
         assert!(
             x86.contains(&format!(
-                "({} . {:?})",
-                operation.canonical_name, evidence.evidence
+                "({capability_key} . {:?})",
+                evidence.evidence
             )),
-            "capability matrix must own the same named evidence as the ledger for {}",
+            "capability matrix must own the same named evidence as the ledger for capability {capability_key} / Canon {}",
             operation.canonical_name
         );
 
