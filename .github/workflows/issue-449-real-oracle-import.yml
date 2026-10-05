@@ -9,9 +9,13 @@ on:
       - .github/workflows/ci.yml
       - .github/workflows/issue-449-real-oracle-import.yml
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   focused:
-    runs-on: ubuntu-24.04
+    runs-on: self-hosted
     timeout-minutes: 25
     steps:
       - name: Checkout cml
@@ -27,12 +31,15 @@ jobs:
           sha="$(grep -F '(observed-current-sha . "' upstream-revisions.lisp | head -n1 | cut -d'"' -f2)"
           test "${#sha}" -eq 40
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-      - name: Checkout observed-current SENS
-        uses: actions/checkout@v5
-        with:
-          repository: juv4uk/sens
-          ref: ${{ steps.rev.outputs.sha }}
-          path: sens
+      - name: Checkout observed-current SENS from runner mirror
+        shell: bash
+        env:
+          SENS_SHA: ${{ steps.rev.outputs.sha }}
+        run: |
+          set -euo pipefail
+          rm -rf sens
+          git -c protocol.file.allow=always clone --no-checkout /home/agents/GitHub/sens sens
+          git -C sens checkout --detach "$SENS_SHA"
       - uses: dtolnay/rust-toolchain@stable
       - name: Emit upstream real oracle rows
         working-directory: sens
