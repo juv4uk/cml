@@ -527,8 +527,9 @@ mod tests {
     #[test]
     fn production_bridge_source_does_not_call_rust_role_oracle() {
         let source = include_str!("sens_domain_bridge.rs");
+        let forbidden = ["sens::compiler_execution_", "role("].concat();
         assert!(
-            !source.contains("sens::compiler_execution_role("),
+            !source.contains(&forbidden),
             "production bridge must not call the Rust differential role oracle"
         );
         assert!(source.contains("sens::compiler_execution_role_from_sens("));
