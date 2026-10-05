@@ -545,14 +545,24 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
                 low,
                 high,
                 divisor: divisor_vreg,
-                provenance: prov,
+                provenance: prov.clone(),
             });
 
-            if *func.as_ref() == Ir::Sid(sens::sid!(00010100)) {
-                Ok(low)
+            // Move the selected result out of the pre-colored temp
+            // immediately so RAX/RDX live ranges stay backend-short even
+            // when this semantic expression is nested in a larger one.
+            let selected = if *func.as_ref() == Ir::Sid(sens::sid!(00010100)) {
+                low
             } else {
-                Ok(high)
-            }
+                high
+            };
+            let result = ctx.func.alloc_vreg();
+            ctx.emit(LirInst::Copy {
+                dst: result,
+                src: selected,
+                provenance: prov,
+            });
+            Ok(result)
         }
         Ir::Cond { branches } => {
             if branches.is_empty() {
