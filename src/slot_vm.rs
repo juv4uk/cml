@@ -131,6 +131,27 @@ pub enum SlotVmError {
     ReturnNotLast {
         pc: usize,
     },
+    InvalidMagic,
+    InvalidProvenanceTag {
+        tag: u8,
+    },
+    Truncated {
+        offset: usize,
+        needed: usize,
+    },
+    LengthOverflow {
+        field: &'static str,
+        value: u64,
+    },
+    InvalidUtf8,
+    UnknownOpcode {
+        pc: usize,
+        opcode: u8,
+    },
+    TrailingBytes {
+        offset: usize,
+        remaining: usize,
+    },
 }
 
 impl fmt::Display for SlotVmError {
@@ -165,6 +186,25 @@ impl fmt::Display for SlotVmError {
             Self::ReturnNotLast { pc } => {
                 write!(formatter, "return at pc {pc} is not the final instruction")
             }
+            Self::InvalidMagic => write!(formatter, "invalid CMLSLOT1 artifact magic/version"),
+            Self::InvalidProvenanceTag { tag } => {
+                write!(formatter, "invalid CMLSLOT1 provenance tag {tag}")
+            }
+            Self::Truncated { offset, needed } => write!(
+                formatter,
+                "truncated CMLSLOT1 artifact at byte {offset}: need {needed} more byte(s)"
+            ),
+            Self::LengthOverflow { field, value } => {
+                write!(formatter, "CMLSLOT1 {field} length {value} does not fit this host")
+            }
+            Self::InvalidUtf8 => write!(formatter, "CMLSLOT1 provenance is not valid UTF-8"),
+            Self::UnknownOpcode { pc, opcode } => {
+                write!(formatter, "unknown CMLSLOT1 opcode 0x{opcode:02x} at instruction {pc}")
+            }
+            Self::TrailingBytes { offset, remaining } => write!(
+                formatter,
+                "CMLSLOT1 artifact has {remaining} trailing byte(s) at byte {offset}"
+            ),
         }
     }
 }
@@ -276,6 +316,152 @@ impl SlotProgram {
         }
 
         Ok(bytes)
+    }
+
+    /// Decode and structurally validate one exact v1 SLOT-VM artifact.
+    ///
+    /// The decoder is intentionally strict: the magic/version, provenance
+    /// tag, UTF-8, opcode set, declared instruction count, slot bounds, return
+    /// shape, and end-of-input must all agree. There is no version fallback or
+    /// ignored trailer.
+    pub fn decode_v1(bytes: &[u8]) -> Result<Self, SlotVmError> {
+        let mut decoder = Decoder::new(bytes);
+
+        if decoder.take_exact::<8>()? != *b"CMLSLOT1" {
+            return Err(SlotVmError::InvalidMagic);
+        }
+
+        let slot_count = decoder.take_u16()?;
+        let source_case_id = match decoder.take_u8()? {
+            0 => None,
+            1 => {
+                let length_u64 = decoder.take_u64()?;
+                let length =
+                    usize::try_from(length_u64).map_err(|_| SlotVmError::LengthOverflow {
+                        field: "provenance",
+                        value: length_u64,
+                    })?;
+                let raw = decoder.take_bytes(length)?;
+                Some(
+                    std::str::from_utf8(raw)
+                        .map_err(|_| SlotVmError::InvalidUtf8)?
+                        .to_string(),
+                )
+            }
+            tag => return Err(SlotVmError::InvalidProvenanceTag { tag }),
+        };
+
+        let instruction_count_u64 = decoder.take_u64()?;
+        let instruction_count =
+            usize::try_from(instruction_count_u64).map_err(|_| SlotVmError::LengthOverflow {
+                field: "instruction-count",
+                value: instruction_count_u64,
+            })?;
+
+        let mut instructions = Vec::new();
+        for pc in 0..instruction_count {
+            let opcode = decoder.take_u8()?;
+            let instruction = match opcode {
+                0x01 => SlotInstr::LoadInt {
+                    dst: decoder.take_slot()?,
+                    value: decoder.take_i64()?,
+                },
+                0x02 => SlotInstr::LoadNil {
+                    dst: decoder.take_slot()?,
+                },
+                0x10 => SlotInstr::Cons {
+                    dst: decoder.take_slot()?,
+                    head: decoder.take_slot()?,
+                    tail: decoder.take_slot()?,
+                },
+                0x11 => SlotInstr::Car {
+                    dst: decoder.take_slot()?,
+                    pair: decoder.take_slot()?,
+                },
+                0x12 => SlotInstr::Cdr {
+                    dst: decoder.take_slot()?,
+                    pair: decoder.take_slot()?,
+                },
+                0xff => SlotInstr::Return {
+                    src: decoder.take_slot()?,
+                },
+                opcode => return Err(SlotVmError::UnknownOpcode { pc, opcode }),
+            };
+            instructions.push(instruction);
+        }
+
+        if decoder.remaining() != 0 {
+            return Err(SlotVmError::TrailingBytes {
+                offset: decoder.offset(),
+                remaining: decoder.remaining(),
+            });
+        }
+
+        let program = Self {
+            source_case_id,
+            slot_count,
+            instructions,
+        };
+        program.validate()?;
+        Ok(program)
+    }
+}
+
+struct Decoder<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> Decoder<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, offset: 0 }
+    }
+
+    fn offset(&self) -> usize {
+        self.offset
+    }
+
+    fn remaining(&self) -> usize {
+        self.bytes.len().saturating_sub(self.offset)
+    }
+
+    fn take_bytes(&mut self, length: usize) -> Result<&'a [u8], SlotVmError> {
+        if self.remaining() < length {
+            return Err(SlotVmError::Truncated {
+                offset: self.offset,
+                needed: length - self.remaining(),
+            });
+        }
+        let start = self.offset;
+        self.offset += length;
+        Ok(&self.bytes[start..self.offset])
+    }
+
+    fn take_exact<const N: usize>(&mut self) -> Result<[u8; N], SlotVmError> {
+        let raw = self.take_bytes(N)?;
+        let mut result = [0_u8; N];
+        result.copy_from_slice(raw);
+        Ok(result)
+    }
+
+    fn take_u8(&mut self) -> Result<u8, SlotVmError> {
+        Ok(self.take_exact::<1>()?[0])
+    }
+
+    fn take_u16(&mut self) -> Result<u16, SlotVmError> {
+        Ok(u16::from_le_bytes(self.take_exact::<2>()?))
+    }
+
+    fn take_u64(&mut self) -> Result<u64, SlotVmError> {
+        Ok(u64::from_le_bytes(self.take_exact::<8>()?))
+    }
+
+    fn take_i64(&mut self) -> Result<i64, SlotVmError> {
+        Ok(i64::from_le_bytes(self.take_exact::<8>()?))
+    }
+
+    fn take_slot(&mut self) -> Result<Slot, SlotVmError> {
+        Ok(Slot::new(self.take_u16()?))
     }
 }
 
@@ -519,6 +705,99 @@ mod tests {
             other_case
                 .encode_v1()
                 .expect("same program, new provenance")
+        );
+    }
+
+
+    #[test]
+    fn encoding_round_trips_through_strict_v1_decoder() {
+        let mut program = d3_fixture_prefix("випадок-d3");
+        program.instructions.extend([
+            SlotInstr::Car {
+                dst: Slot::new(3),
+                pair: Slot::new(2),
+            },
+            SlotInstr::Return { src: Slot::new(3) },
+        ]);
+
+        let bytes = program.encode_v1().expect("valid program");
+        let decoded = SlotProgram::decode_v1(&bytes).expect("encoded v1 must decode");
+        assert_eq!(decoded, program);
+        assert_eq!(
+            execute(&decoded).expect("decoded program executes").value.to_string(),
+            "(())"
+        );
+    }
+
+    #[test]
+    fn decoder_rejects_magic_opcode_truncation_and_trailing_bytes() {
+        let program = SlotProgram {
+            source_case_id: None,
+            slot_count: 1,
+            instructions: vec![
+                SlotInstr::LoadNil { dst: Slot::new(0) },
+                SlotInstr::Return { src: Slot::new(0) },
+            ],
+        };
+        let bytes = program.encode_v1().expect("valid program");
+
+        let mut bad_magic = bytes.clone();
+        bad_magic[0] ^= 1;
+        assert_eq!(
+            SlotProgram::decode_v1(&bad_magic),
+            Err(SlotVmError::InvalidMagic)
+        );
+
+        // No provenance: 8 magic + 2 slot_count + 1 tag + 8 instruction_count.
+        let mut bad_opcode = bytes.clone();
+        bad_opcode[19] = 0x7f;
+        assert_eq!(
+            SlotProgram::decode_v1(&bad_opcode),
+            Err(SlotVmError::UnknownOpcode {
+                pc: 0,
+                opcode: 0x7f,
+            })
+        );
+
+        let truncated = &bytes[..bytes.len() - 1];
+        assert!(matches!(
+            SlotProgram::decode_v1(truncated),
+            Err(SlotVmError::Truncated { .. })
+        ));
+
+        let mut trailing = bytes.clone();
+        trailing.push(0);
+        assert!(matches!(
+            SlotProgram::decode_v1(&trailing),
+            Err(SlotVmError::TrailingBytes { remaining: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn decoder_rejects_invalid_provenance_tag_and_utf8() {
+        let program = SlotProgram {
+            source_case_id: Some("x".into()),
+            slot_count: 1,
+            instructions: vec![
+                SlotInstr::LoadNil { dst: Slot::new(0) },
+                SlotInstr::Return { src: Slot::new(0) },
+            ],
+        };
+        let bytes = program.encode_v1().expect("valid program");
+
+        let mut bad_tag = bytes.clone();
+        bad_tag[10] = 2;
+        assert_eq!(
+            SlotProgram::decode_v1(&bad_tag),
+            Err(SlotVmError::InvalidProvenanceTag { tag: 2 })
+        );
+
+        // 8 magic + 2 slot_count + 1 tag + 8 provenance length.
+        let mut bad_utf8 = bytes.clone();
+        bad_utf8[19] = 0xff;
+        assert_eq!(
+            SlotProgram::decode_v1(&bad_utf8),
+            Err(SlotVmError::InvalidUtf8)
         );
     }
 
