@@ -104,8 +104,10 @@ pub enum BufferLiteral {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ir {
-    /// Exact Lisp-owned semantic/function identity after surface resolution.
-    /// Backends must route this value by its exact 8 bits, never by a name.
+    /// Поточна точна доменно-кваліфікована callable-ідентичність.
+    /// Lowering переносить її без зміни домену або payload.
+    DomainIdentity(sens::CoreDomainIdentity),
+    /// Історична exact-eight compatibility-ідентичність.
     Sid(sens::Sid8),
     Int(i64),
     Float(f64),
