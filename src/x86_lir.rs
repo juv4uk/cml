@@ -141,6 +141,18 @@ pub enum LirInst {
         rhs: VReg,
         provenance: Provenance,
     },
+    /// Unsigned destructive divide using the x86 RDX:RAX convention.
+    ///
+    /// `low` and `high` are both inputs and outputs: before execution they
+    /// hold the low/high halves of the dividend; afterwards `low` holds the
+    /// quotient and `high` holds the remainder. The physical RAX/RDX
+    /// requirements are backend-local allocation constraints, not semantic IR.
+    DivRem {
+        low: VReg,
+        high: VReg,
+        divisor: VReg,
+        provenance: Provenance,
+    },
     /// Untag a boxed fixnum into raw 64-bit integer: `dst = src >> 3`
     UnboxFixnum {
         dst: VReg,
@@ -163,7 +175,7 @@ impl LirInst {
             | Self::Alu { dst, .. }
             | Self::UnboxFixnum { dst, .. }
             | Self::BoxFixnum { dst, .. } => Some(*dst),
-            Self::Cmp { .. } => None,
+            Self::Cmp { .. } | Self::DivRem { .. } => None,
         }
     }
 
@@ -173,6 +185,7 @@ impl LirInst {
             | Self::Copy { provenance, .. }
             | Self::Alu { provenance, .. }
             | Self::Cmp { provenance, .. }
+            | Self::DivRem { provenance, .. }
             | Self::UnboxFixnum { provenance, .. }
             | Self::BoxFixnum { provenance, .. } => provenance,
         }
@@ -331,6 +344,16 @@ impl LirFunction {
                     }
                     LirInst::Cmp { lhs, rhs, .. } => {
                         out.push_str(&format!("cmp {lhs}, {rhs}\n"));
+                    }
+                    LirInst::DivRem {
+                        low,
+                        high,
+                        divisor,
+                        ..
+                    } => {
+                        out.push_str(&format!(
+                            "divrem low={low}, high={high}, divisor={divisor}\n"
+                        ));
                     }
                     LirInst::UnboxFixnum { dst, src, .. } => {
                         out.push_str(&format!("{dst} = unbox_fixnum {src}\n"));
@@ -634,7 +657,8 @@ impl std::error::Error for LirEmitError {}
 
 /// Compiles an `LirFunction` CFG into a structured sequence of `MachineItem`s via register allocation.
 pub fn lir_to_machine_items(func: &LirFunction) -> Result<Vec<MachineItem>, LirEmitError> {
-    let plan = crate::x86_regalloc::allocate_registers(func)
+    let constraints = crate::x86_regalloc::fixed_constraints_for_function(func);
+    let plan = crate::x86_regalloc::allocate_registers_with_constraints(func, &constraints)
         .map_err(|e| LirEmitError::RegisterExhaustion(format!("{e}")))?;
     crate::x86_regalloc::emit_machine_items_with_plan(func, &plan)
         .map_err(|e| LirEmitError::RegisterExhaustion(format!("{e}")))
