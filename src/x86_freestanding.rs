@@ -2966,10 +2966,7 @@ impl Emitter {
         for index in (0..slots.len()).rev() {
             let slot = slots[index];
             self.line("    movq %rax, %rdx");
-            self.line(&format!(
-                "    movq {}(%rsp), %rsi",
-                Self::slot_offset(slot)
-            ));
+            self.line(&format!("    movq {}(%rsp), %rsi", Self::slot_offset(slot)));
             self.line("    movq %r12, %rdi");
 
             let gc_return_label = if let Some(outer_slots) = &certificate_outer_slots {

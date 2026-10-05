@@ -644,11 +644,9 @@ fn quoted_list_in_unproved_lexical_context_emits_no_partial_certificate() {
     );
 }
 
-
 #[test]
 fn sid8_list_emits_exact_shrinking_pending_argument_roots() {
-    let expressions =
-        parser::parse("(list (quote A) (quote B) (quote C) (quote D))").unwrap();
+    let expressions = parser::parse("(list (quote A) (quote B) (quote C) (quote D))").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
@@ -678,10 +676,7 @@ fn sid8_list_emits_exact_shrinking_pending_argument_roots() {
 
     for pair in list.windows(2) {
         assert_eq!(
-            pair[0]
-                .stack_roots
-                .difference(&pair[1].stack_roots)
-                .count(),
+            pair[0].stack_roots.difference(&pair[1].stack_roots).count(),
             1
         );
         assert!(pair[1].stack_roots.is_subset(&pair[0].stack_roots));
@@ -725,11 +720,9 @@ fn nested_sid8_list_preserves_the_older_outer_structured_spill() {
         .collect();
     assert_eq!(shared.len(), 1);
 }
-
 #[test]
 fn sid8_list_fails_closed_in_unproved_lexical_context() {
-    let expressions =
-        parser::parse("((lambda (x) (list x (quote A))) (quote X))").unwrap();
+    let expressions = parser::parse("((lambda (x) (list x (quote A))) (quote X))").unwrap();
     let program = lower::lower_program(&expressions).unwrap();
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
