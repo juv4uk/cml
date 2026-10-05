@@ -32,5 +32,5 @@ fn assert_explicit_rejection(source: &str, expected_reason: &'static str) {
 fn known_but_unsupported_source_forms_never_disappear_on_x86() {
     assert_explicit_rejection("0.5", "Rational");
     assert_explicit_rejection(r#""hello""#, "String");
-    assert_explicit_rejection("(< 1 2)", "exact-Q < primitive");
+    // exact-Q `<` is now an admitted x86 mechanism; keep this corpus on genuinely unsupported classes.
 }
