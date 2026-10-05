@@ -1598,6 +1598,7 @@ impl Emitter {
 
     fn emit_ir_inner(&mut self, ir: &Ir) -> Result<(), CompileError> {
         match ir {
+            Ir::DomainIdentity(_) => Err(CompileError::UnsupportedVariant("DomainIdentity")),
             Ir::Sid(_) => Err(CompileError::UnsupportedVariant("standalone SID8 value")),
             Ir::Int(value) => {
                 let word = wsm_os_target::encode_fixnum(*value)
