@@ -1,19 +1,19 @@
 # Local GPU execution lane
 
-This repository owns the single self-hosted GPU execution lane for the SENS ecosystem.
+This repository owns the single persistent CUDA execution service and CUDA admission/cost mechanism for the SENS ecosystem. Primary repo runners may advertise GPU capability, but they delegate eligible execution to the CML-owned service.
 
 ## Topology
 
 ```text
-GitHub Actions (juv4uk/cml only)
+GitHub Actions (primary repo runners)
         |
-        v
-wsm-i5-6400
-self-hosted Linux/X64 runner
+        +--> repo-local CPU / orchestration work
         |
-        +--> direct CML CUDA tests
-        |
-        +--> /run/cml-gpu-worker/worker.sock
+        `--> CML admission / shared CUDA mechanism
+                    |
+                    +--> direct CML CUDA witnesses
+                    |
+                    `--> /run/cml-gpu-worker/worker.sock
               |
               v
       cml-gpu-worker.service
@@ -33,9 +33,9 @@ Windows keeps the Ubuntu WSL instance alive with a per-user Startup keepalive pr
 
 ## Runner policy
 
-The old per-repository runner fleet is retired. Only the CML repository should have the GPU runner registration.
+Runner registration is not semantic authority. The current owner policy allows all primary repo runners to advertise `gpu,gtx-1050-ti,cuda-12.6`; CML remains the owner of the single persistent CUDA execution service and admission/cost mechanism.
 
-Required labels:
+The CML repo itself keeps one CML-specific runner registration with labels:
 
 ```text
 self-hosted
@@ -46,7 +46,7 @@ gtx-1050-ti
 cuda-12.6
 ```
 
-Physical-GPU workflows remain `workflow_dispatch` while the lane is being requalified. Do not enable untrusted pull-request execution on this runner.
+Other primary repos may carry equivalent capability labels, but must not create competing CUDA semantics or persistent workers. Physical-GPU workflows remain controlled/manual while the lane is being requalified. Do not enable untrusted pull-request execution on the owner machine.
 
 ## One-card serialization
 
