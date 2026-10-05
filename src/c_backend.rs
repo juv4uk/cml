@@ -96,7 +96,7 @@ const RUNTIME: &str = r##"
 #include <stdint.h>
 
 typedef struct Value Value;
-typedef enum { TAG_NIL, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_SID_CALLABLE, TAG_RATIONAL, TAG_STRING } Tag;
+typedef enum { TAG_NIL, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_SID_CALLABLE, TAG_RATIONAL, TAG_STRING, TAG_PREDICATE_BIT } Tag;
 struct Value {
     Tag tag;
     union {
@@ -107,6 +107,7 @@ struct Value {
         struct { Value *(*fn)(Value *args, Value *env); Value *env; } closure;
         struct { const char *name; Value *(*fn)(Value *args, Value *env); } builtin;
         uint8_t sid;
+        uint8_t predicate_bit;
         struct { long num; long den; } rat;
         const char *str;
     } u;
@@ -150,6 +151,16 @@ static Value *mk_i32_buffer(const int *data, size_t len) { Value *v = checked_ma
 static Value *mk_closure(Value *(*fn)(Value*, Value*), Value *env) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_CLOSURE; v->u.closure.fn = fn; v->u.closure.env = env; return v; }
 static Value *mk_builtin(const char *name, Value *(*fn)(Value*, Value*)) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_BUILTIN; v->u.builtin.name = name; v->u.builtin.fn = fn; return v; }
 static Value *mk_sid_callable(uint8_t sid) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_SID_CALLABLE; v->u.sid = sid; return v; }
+/* Current SENS D1 is an exact one-bit domain value, not NIL, integer 0/1,
+ * a one-element list, a symbol, or host/C truth. This is a backend-private
+ * carrier only; SENS still owns when a computation has D1 semantics. */
+static Value *mk_predicate_bit(int bit) {
+    if (bit != 0 && bit != 1) runtime_error("Type", "PredicateBit must be exactly 0 or 1");
+    Value *v = checked_malloc(sizeof(Value));
+    v->tag = TAG_PREDICATE_BIT;
+    v->u.predicate_bit = (uint8_t)bit;
+    return v;
+}
 static Value *mk_string(const char *s) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_STRING; v->u.str = s; return v; }
 
 static long rational_gcd(long a, long b) {
@@ -245,21 +256,35 @@ static Value *structural_relation(int same) {
     return truthy_val(same);
 }
 
-static Value *v_eq(Value *a, Value *b) {
-    if (a->tag != b->tag) return truthy_val(0);
-    int same = 0;
+static int v_eq_same(Value *a, Value *b) {
+    if (a->tag != b->tag) return 0;
     switch (a->tag) {
-        case TAG_NIL: same = 1; break;
-        case TAG_INT: same = a->u.i == b->u.i; break;
+        case TAG_NIL: return 1;
+        case TAG_INT: return a->u.i == b->u.i;
         case TAG_RATIONAL:
-            same = rational_checked_mul(a->u.rat.num, b->u.rat.den)
+            return rational_checked_mul(a->u.rat.num, b->u.rat.den)
                 == rational_checked_mul(b->u.rat.num, a->u.rat.den);
-            break;
-        case TAG_SYM: same = strcmp(a->u.sym, b->u.sym) == 0; break;
-        case TAG_STRING: same = strcmp(a->u.str, b->u.str) == 0; break;
-        default: same = a == b; break;
+        case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0;
+        case TAG_STRING: return strcmp(a->u.str, b->u.str) == 0;
+        case TAG_PREDICATE_BIT: return a->u.predicate_bit == b->u.predicate_bit;
+        default: return a == b;
     }
-    return truthy_val(same);
+}
+
+static Value *v_eq(Value *a, Value *b) {
+    return truthy_val(v_eq_same(a, b));
+}
+
+/* Current exact-domain predicate mechanisms. They are deliberately separate
+ * from the historical builtin/Sid8 mechanisms below, whose observable result
+ * carrier remains the compatibility (1)/(0) list representation. */
+static Value *v_atom_predicate(Value *v) {
+    return mk_predicate_bit(is_atom(v));
+}
+
+static Value *v_eq_predicate(Value *a, Value *b) {
+    if (a->tag == TAG_CONS || b->tag == TAG_CONS) runtime_error("Type", "eq");
+    return mk_predicate_bit(v_eq_same(a, b));
 }
 
 static int v_equal_p(Value *a, Value *b) {
@@ -355,6 +380,13 @@ static void require_min_arity(Value *args, int minimum, const char *name) {
 
 static void require_tag(Value *value, Tag expected, const char *name) {
     if (value->tag != expected) runtime_error("Type", name);
+}
+
+/* Mechanism seam for current exact COND (#609): consume D1 by tag/payload,
+ * never via generic truthiness or numeric/list coercion. */
+static int require_predicate_bit(Value *value, const char *name) {
+    if (value->tag != TAG_PREDICATE_BIT) runtime_error("Type", name);
+    return value->u.predicate_bit == 1;
 }
 
 static Value *arg_at(Value *args, int index) {
