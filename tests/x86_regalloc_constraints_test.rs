@@ -138,6 +138,23 @@ fn non_allocatable_scratch_register_cannot_be_requested() {
 }
 
 #[test]
+fn duplicate_identical_constraint_is_idempotent() {
+    let function = overlapping_three_value_function();
+    let constraint = FixedRegConstraint::new(VReg(0), X86Reg::Rdx);
+
+    let once = allocate_registers_with_constraints(&function, &[constraint])
+        .expect("single fixed requirement");
+    let twice = allocate_registers_with_constraints(&function, &[constraint, constraint])
+        .expect("identical duplicate must not change the plan");
+
+    assert_eq!(twice, once);
+    assert_eq!(
+        twice.fixed_constraints.get(&VReg(0)),
+        Some(&X86Reg::Rdx)
+    );
+}
+
+#[test]
 fn contradictory_constraints_for_one_vreg_fail_closed() {
     let function = overlapping_three_value_function();
 
