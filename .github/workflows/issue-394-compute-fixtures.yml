@@ -8,9 +8,13 @@ on:
       - tests/gpu_wgsl_test.rs
       - .github/workflows/issue-394-compute-fixtures.yml
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   focused:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, guix]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
