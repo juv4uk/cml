@@ -8,9 +8,11 @@
 
 use cml::machine_inst::{MachineInst, MachineItem, Provenance, X86Reg, assemble_program};
 use cml::native_baseline::NativeExecutable;
-use cml::x86_lir::{LirFunction, LirInst, LirTerminator};
+use cml::x86_isel::{ScalarIselConfig, emit_machine_items_with_isel};
+use cml::x86_lir::{LirAluOp, LirFunction, LirInst, LirTerminator};
 use cml::x86_regalloc::{
-    AllocLocation, allocate_registers_with_constraints, fixed_constraints_for_function,
+    AllocLocation, RegAllocPlan, SCRATCH_REG_A, allocate_registers_with_constraints,
+    emit_machine_items_with_plan, fixed_constraints_for_function,
 };
 
 #[derive(Clone, Copy)]
@@ -186,4 +188,145 @@ fn optimizer_preserves_divrem_quotient_and_remainder_values() {
             "optimizer must not resurrect pre-DIV low/high facts"
         );
     }
+}
+
+
+#[test]
+fn spilled_divisor_reloads_through_nonallocatable_scratch_before_div() {
+    let function = divrem_function(20, 6, ResultKind::Remainder);
+    let intervals = cml::x86_regalloc::build_live_intervals(&function);
+
+    let (low, high, divisor) = function.blocks[0]
+        .instructions
+        .iter()
+        .find_map(|inst| match inst {
+            LirInst::DivRem {
+                low,
+                high,
+                divisor,
+                ..
+            } => Some((*low, *high, *divisor)),
+            _ => None,
+        })
+        .expect("DivRem must exist");
+
+    let constraints = fixed_constraints_for_function(&function);
+    let mut base = allocate_registers_with_constraints(&function, &constraints)
+        .expect("baseline allocation");
+    base.assignments.insert(low, AllocLocation::Reg(X86Reg::Rax));
+    base.assignments.insert(high, AllocLocation::Reg(X86Reg::Rdx));
+    base.assignments.insert(divisor, AllocLocation::SpillSlot(0));
+    base.spill_count = base.spill_count.max(1);
+
+    let plan = RegAllocPlan {
+        assignments: base.assignments,
+        spill_count: base.spill_count,
+        intervals,
+        fixed_constraints: base.fixed_constraints,
+    };
+    let items = emit_machine_items_with_plan(&function, &plan)
+        .expect("spilled divisor must be reloadable for DIV");
+
+    let div_index = items
+        .iter()
+        .position(|item| {
+            matches!(
+                item,
+                MachineItem::Inst(MachineInst::DivReg {
+                    divisor,
+                    ..
+                }) if *divisor == SCRATCH_REG_A
+            )
+        })
+        .expect("DIV must consume the dedicated scratch register");
+
+    assert!(
+        items[..div_index].iter().any(|item| {
+            matches!(
+                item,
+                MachineItem::Inst(MachineInst::MovLoad {
+                    dst,
+                    ..
+                }) if *dst == SCRATCH_REG_A
+            )
+        }),
+        "spilled divisor must be loaded into scratch before DIV"
+    );
+    assert_ne!(SCRATCH_REG_A, X86Reg::Rax);
+    assert_ne!(SCRATCH_REG_A, X86Reg::Rdx);
+}
+
+
+#[test]
+fn isel_does_not_reuse_pre_div_high_zero_as_post_div_remainder_constant() {
+    let provenance = Provenance::new(None, "x86-divrem-isel-stale-const");
+    let mut function = LirFunction::new("divrem_isel_stale_const", provenance.clone());
+
+    let numerator = function.alloc_vreg();
+    let divisor = function.alloc_vreg();
+    let low = function.alloc_vreg();
+    let high = function.alloc_vreg();
+    let ten = function.alloc_vreg();
+    let sum = function.alloc_vreg();
+
+    let block = function.block_mut(function.entry).expect("entry block");
+    block.instructions.push(LirInst::Const64 {
+        dst: numerator,
+        imm: 20,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::Const64 {
+        dst: divisor,
+        imm: 6,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::Copy {
+        dst: low,
+        src: numerator,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::Const64 {
+        dst: high,
+        imm: 0,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::DivRem {
+        low,
+        high,
+        divisor,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::Const64 {
+        dst: ten,
+        imm: 10,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::Alu {
+        op: LirAluOp::Add,
+        dst: sum,
+        lhs: ten,
+        rhs: high,
+        provenance: provenance.clone(),
+    });
+    block.terminator = LirTerminator::Ret {
+        val: Some(sum),
+        provenance,
+    };
+
+    let constraints = fixed_constraints_for_function(&function);
+    let plan = allocate_registers_with_constraints(&function, &constraints)
+        .expect("div-rem + post-remainder ALU must allocate");
+    let items = emit_machine_items_with_isel(
+        &function,
+        &plan,
+        &ScalarIselConfig::default_skylake(),
+    )
+    .expect("isel must preserve post-DIV remainder value");
+
+    let bytes = assemble_program(&items).expect("assemble isel div-rem witness");
+    let result = NativeExecutable::load(&bytes).call();
+    assert_eq!(
+        result, 12,
+        "20 % 6 is 2; post-DIV high must be 2, not stale pre-DIV constant 0"
+    );
 }
