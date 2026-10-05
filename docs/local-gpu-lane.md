@@ -77,6 +77,43 @@ CML admission + cost model
 
 GPU availability, speed, device residency, fusion, transfer cost, and the local hardware profile cannot define SENS meaning.
 
+## Worker service source of truth
+
+The repository-owned service contract is:
+
+```text
+systemd/cml-gpu-worker.service
+```
+
+It describes the already-existing **system** service. It is not a second worker.
+
+The unit pins the live lane facts that must survive host recovery:
+
+- `User=agents`;
+- runtime socket `/run/cml-gpu-worker/worker.sock`;
+- CUDA 12.6 toolkit paths and WSL driver-library precedence;
+- `CML_CUDA_HOST_PROBE=/home/agents/ecosystem/scripts/cuda-host-profile.sh`;
+- restartable long-lived `cml-gpu-worker serve`.
+
+When the authorized host is available, re-install the unit atomically rather
+than recreating it from memory:
+
+```bash
+sudo install -m 0644 systemd/cml-gpu-worker.service /etc/systemd/system/cml-gpu-worker.service
+sudo systemd-analyze verify /etc/systemd/system/cml-gpu-worker.service
+sudo systemctl daemon-reload
+sudo systemctl restart cml-gpu-worker.service
+sudo systemctl status --no-pager cml-gpu-worker.service
+```
+
+Restart **only** `cml-gpu-worker.service`. Do not restart WSL or create a
+second worker. If a unit update needs rollback, restore the previously known
+unit file, run `daemon-reload`, and restart the same service.
+
+The unit carries no GitHub registration token, PAT, repository secret, or SENS
+semantic authority. Host capability comes from the ecosystem probe; language
+admission remains in CML/SENS layers above it.
+
 ## Worker validation
 
 `.github/workflows/gpu-worker-live.yml` has two independent phases:
