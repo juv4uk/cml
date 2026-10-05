@@ -25,8 +25,7 @@ const AUTHORITY_PATH: &str = "language-contract.lisp";
 const D3_LAW_REF: &str = "language-contract.lisp:d3-foundation";
 const D3_PROOF_REF: &str = "contracts/bija3-l1-l5-ratification.lisp";
 const D4_PROOF_REF: &str = "contracts/d4-bootstrap-ratification.lisp";
-const COMPILER_ROLE_LAW_REF: &str =
-    "lib/compiler-nucleus.lisp:compiler-lowering-role-from-laws";
+const COMPILER_ROLE_LAW_REF: &str = "lib/compiler-nucleus.lisp:compiler-lowering-role-from-laws";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthorityProvenance {
@@ -414,11 +413,7 @@ pub fn verify_lowering_request(
         return Err(BridgeError::MissingProofReference);
     }
 
-    verify_lowering_law_and_proof(
-        request.lowering_role,
-        &request.law_ref,
-        &request.proof_ref,
-    )?;
+    verify_lowering_law_and_proof(request.lowering_role, &request.law_ref, &request.proof_ref)?;
 
     let authoritative_role = authoritative_lowering_role(request.identity)?;
     if authoritative_role != request.lowering_role {
@@ -557,20 +552,16 @@ mod tests {
     }
 
     fn lowering_role(identity: sens::DomainIdentity) -> sens::CompilerLoweringRole {
-        authoritative_lowering_role(identity)
-            .expect("test identity has SENS-derived lowering role")
+        authoritative_lowering_role(identity).expect("test identity has SENS-derived lowering role")
     }
 
-    fn current_lowering_request(
-        identity: sens::DomainIdentity,
-    ) -> CompilerLoweringRequest {
+    fn current_lowering_request(identity: sens::DomainIdentity) -> CompilerLoweringRequest {
         let role = lowering_role(identity);
-        let (law_ref, proof_ref) = match role {
-            sens::CompilerLoweringRole::LambdaForm
-            | sens::CompilerLoweringRole::DefineForm => {
-                (D4_LAW_REF, D4_PROOF_REF)
+        let proof_ref = match role {
+            sens::CompilerLoweringRole::LambdaForm | sens::CompilerLoweringRole::DefineForm => {
+                D4_PROOF_REF
             }
-            _ => (D3_LAW_REF, D3_PROOF_REF),
+            _ => D3_PROOF_REF,
         };
 
         CompilerLoweringRequest {
@@ -599,8 +590,7 @@ mod tests {
         ];
 
         for (identity, expected) in cases {
-            let verified =
-                verify_lowering_request(current_lowering_request(identity)).unwrap();
+            let verified = verify_lowering_request(current_lowering_request(identity)).unwrap();
             assert_eq!(verified.identity(), identity);
             assert_eq!(verified.lowering_role(), expected);
         }
@@ -621,8 +611,7 @@ mod tests {
         ];
 
         for (identity, mechanism) in expected {
-            let verified =
-                verify_lowering_request(current_lowering_request(identity)).unwrap();
+            let verified = verify_lowering_request(current_lowering_request(identity)).unwrap();
             assert_eq!(verified.mechanism_ref().as_str(), mechanism);
         }
     }
