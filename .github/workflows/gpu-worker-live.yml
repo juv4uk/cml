@@ -20,7 +20,8 @@ jobs:
       RUSTC_WRAPPER: /usr/bin/sccache
       SCCACHE_DIR: /home/agents/.cache/sccache
       SCCACHE_CACHE_SIZE: 30G
-      CARGO_BUILD_JOBS: 4
+      # Owner host has no useful Windows pagefile headroom; keep CPU compilation bounded.
+      CARGO_BUILD_JOBS: 1
       CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v4
