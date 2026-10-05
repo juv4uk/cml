@@ -191,9 +191,8 @@ impl SlotArtifactEnvelope {
         let program = SlotProgram::decode_v1(inner)?;
         Self::validate_program_digest(&program, &provenance)?;
 
-        let authority = pinned_authority().map_err(|_| {
-            ArtifactEnvelopeError::SensRevisionMismatch
-        })?;
+        let authority =
+            pinned_authority().map_err(|_| ArtifactEnvelopeError::SensRevisionMismatch)?;
         if provenance.sens_revision != authority.revision {
             return Err(ArtifactEnvelopeError::SensRevisionMismatch);
         }
@@ -247,12 +246,14 @@ impl<'a> Decoder<'a> {
 
     fn take_u32(&mut self) -> Result<u32, ArtifactEnvelopeError> {
         let raw = self.take(4)?;
-        Ok(u32::from_le_bytes(raw.try_into().expect("exact 4-byte slice")))
+        Ok(u32::from_le_bytes(
+            raw.try_into().expect("exact 4-byte slice"),
+        ))
     }
 
     fn take_blob(&mut self) -> Result<&'a [u8], ArtifactEnvelopeError> {
-        let len = usize::try_from(self.take_u32()?)
-            .map_err(|_| ArtifactEnvelopeError::LengthOverflow)?;
+        let len =
+            usize::try_from(self.take_u32()?).map_err(|_| ArtifactEnvelopeError::LengthOverflow)?;
         self.take(len)
     }
 
@@ -275,8 +276,7 @@ mod tests {
 
     const CML_REV_A: &str = "1111111111111111111111111111111111111111";
     const CML_REV_B: &str = "2222222222222222222222222222222222222222";
-    const PROGRAM_DIGEST: &str =
-        "0b36aad2d404292ab70ce7510f103d51dc5ec02ac9e8e7281dcddbe818c8deb3";
+    const PROGRAM_DIGEST: &str = "0b36aad2d404292ab70ce7510f103d51dc5ec02ac9e8e7281dcddbe818c8deb3";
 
     fn program() -> SlotProgram {
         SlotProgram {
@@ -322,8 +322,7 @@ mod tests {
     fn recomputed_checksum_cannot_hide_a_stale_sens_revision() {
         let authority = pinned_authority().unwrap();
         let mut envelope = SlotArtifactEnvelope::new(program(), &authority, CML_REV_A).unwrap();
-        envelope.provenance.sens_revision =
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into();
+        envelope.provenance.sens_revision = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into();
 
         // Encoding is structurally valid and gets a fresh checksum, but decode
         // still verifies semantic provenance against the SENS authority pinned
@@ -354,7 +353,10 @@ mod tests {
         let a = SlotArtifactEnvelope::new(program(), &authority, CML_REV_A).unwrap();
         let b = SlotArtifactEnvelope::new(program(), &authority, CML_REV_B).unwrap();
 
-        assert_eq!(a.program.encode_v1().unwrap(), b.program.encode_v1().unwrap());
+        assert_eq!(
+            a.program.encode_v1().unwrap(),
+            b.program.encode_v1().unwrap()
+        );
         assert_ne!(a.encode_v1().unwrap(), b.encode_v1().unwrap());
     }
 }
