@@ -141,6 +141,55 @@ fn host_capability_error_has_runtime_display_text() {
 }
 
 #[test]
+fn failed_strict_bootstrap_removes_stale_worker_socket_before_cuda_admission() {
+    use std::fs;
+    use std::os::unix::net::UnixListener;
+    use std::process::Command;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock after epoch")
+        .as_nanos();
+    let base = std::env::temp_dir().join(format!(
+        "cml-gpu-stale-socket-{}-{nonce}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&base).expect("create temp directory");
+    let socket = base.join("worker.sock");
+    let probe = base.join("fail-probe.sh");
+
+    let listener = UnixListener::bind(&socket).expect("create stale unix socket path");
+    drop(listener);
+    assert!(socket.exists(), "precondition: stale socket path exists");
+
+    fs::write(
+        &probe,
+        "#!/bin/sh\nprintf '%s\\n' 'CUDA_HOST_SCHEMA=sens-cuda-host-v1' 'CUDA_HOST_STATUS=unavailable:test'\n",
+    )
+    .expect("write failing host probe");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_cml-gpu-worker"))
+        .arg("serve")
+        .env("CML_GPU_WORKER_SOCKET", &socket)
+        .env("CML_CUDA_HOST_PROBE", &probe)
+        .output()
+        .expect("run exact worker binary");
+
+    assert!(
+        !output.status.success(),
+        "strict bootstrap must fail for unavailable host capability"
+    );
+    assert!(
+        !socket.exists(),
+        "failed strict bootstrap must not leave the stale worker socket path behind; stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let _ = fs::remove_dir_all(&base);
+}
+
+#[test]
 fn duplicate_keys_are_rejected() {
     let record = format!("{}\nCUDA_HOST_SCHEMA=sens-cuda-host-v1", ready_record());
     let error = CudaHostCapability::parse_env_record(&record).unwrap_err();
