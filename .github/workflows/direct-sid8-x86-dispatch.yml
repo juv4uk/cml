@@ -16,20 +16,22 @@ on:
 
 jobs:
   direct-sid8-x86:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v5
         with:
+          token: ${{ secrets.SENS_READ_TOKEN }}
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
       - name: Exact direct SID8 x86 dispatch witness
         run: cargo test --test direct_sid8_x86_dispatch_test -- --nocapture
 
   direct-sid8-c:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v5
         with:
+          token: ${{ secrets.SENS_READ_TOKEN }}
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
       - name: Rustfmt changed SID8 files
