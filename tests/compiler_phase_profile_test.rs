@@ -3,34 +3,58 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+fn temp_path(prefix: &str, nonce: u128) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("{prefix}-{nonce}"))
+}
+
 #[test]
-fn profile_command_emits_phase_rows_without_changing_the_artifact_boundary() {
+fn profile_command_emits_phase_rows_without_changing_the_artifact() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let source_path = manifest_dir.join("tests/fixtures/vertical_witness_add.lisp");
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let output_path = std::env::temp_dir().join(format!("cml-profile-{nonce}"));
+    let normal_path = temp_path("cml-normal", nonce);
+    let profile_path = temp_path("cml-profile", nonce);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_cml-compile"))
-        .arg("x86-elf-profile")
+    let normal = Command::new(env!("CARGO_BIN_EXE_cml-compile"))
+        .arg("x86-elf")
         .arg(&source_path)
-        .arg(&output_path)
+        .arg(&normal_path)
         .output()
-        .expect("launch profiled compiler");
-
+        .expect("launch ordinary compiler");
     assert!(
-        output.status.success(),
-        "profiled compiler failed: {}",
-        String::from_utf8_lossy(&output.stderr)
+        normal.status.success(),
+        "ordinary compiler failed: {}",
+        String::from_utf8_lossy(&normal.stderr)
     );
 
-    let artifact = fs::read(&output_path).expect("profiled compile must emit an artifact");
-    let _ = fs::remove_file(&output_path);
-    assert!(artifact.starts_with(b"\x7fELF"));
+    let profiled = Command::new(env!("CARGO_BIN_EXE_cml-compile"))
+        .arg("x86-elf-profile")
+        .arg(&source_path)
+        .arg(&profile_path)
+        .output()
+        .expect("launch profiled compiler");
+    assert!(
+        profiled.status.success(),
+        "profiled compiler failed: {}",
+        String::from_utf8_lossy(&profiled.stderr)
+    );
 
-    let stderr = String::from_utf8(output.stderr).expect("phase output must be UTF-8");
+    let normal_artifact = fs::read(&normal_path).expect("ordinary compile must emit an artifact");
+    let profiled_artifact =
+        fs::read(&profile_path).expect("profiled compile must emit an artifact");
+    let _ = fs::remove_file(&normal_path);
+    let _ = fs::remove_file(&profile_path);
+
+    assert!(profiled_artifact.starts_with(b"\x7fELF"));
+    assert_eq!(
+        profiled_artifact, normal_artifact,
+        "observational profiling must not change emitted bytes"
+    );
+
+    let stderr = String::from_utf8(profiled.stderr).expect("phase output must be UTF-8");
     let mut names = Vec::new();
     for line in stderr.lines().filter(|line| line.starts_with("CML-PHASE\t")) {
         let mut name = None;
