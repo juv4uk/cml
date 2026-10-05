@@ -56,6 +56,8 @@ int main(void) {";
 
 int main(void) {{
     const size_t value_size = sizeof(Value);
+    const size_t pointer_size = sizeof(void *);
+    const size_t long_size = sizeof(long);
 
     size_t before = cml_bytes_allocated;
     Value *int_one = mk_int(1);
@@ -81,11 +83,15 @@ int main(void) {{
 
     printf(
         "CML-EXACT-Q-C-BASELINE "
-        "value_size=%zu int_bytes=%zu rat_half_bytes=%zu "
+        "value_size=%zu pointer_size=%zu long_size=%zu stdc_version=%ld "
+        "int_bytes=%zu rat_half_bytes=%zu "
         "rat_one_bytes=%zu rat_large_bytes=%zu add_chain_bytes=%zu "
         "int_tag=%d rat_one_tag=%d rat_one_den=%ld "
         "print_int=",
         value_size,
+        pointer_size,
+        long_size,
+        (long)__STDC_VERSION__,
         int_bytes,
         rat_half_bytes,
         rat_one_bytes,
@@ -117,6 +123,9 @@ int main(void) {{
 #[derive(Debug)]
 struct BaselineRow {
     value_size: usize,
+    pointer_size: usize,
+    long_size: usize,
+    stdc_version: i64,
     int_bytes: usize,
     rat_half_bytes: usize,
     rat_one_bytes: usize,
@@ -138,6 +147,9 @@ fn parse_row(stdout: &str) -> BaselineRow {
         .expect("measurement row prefix");
 
     let mut value_size = None;
+    let mut pointer_size = None;
+    let mut long_size = None;
+    let mut stdc_version = None;
     let mut int_bytes = None;
     let mut rat_half_bytes = None;
     let mut rat_one_bytes = None;
@@ -157,6 +169,9 @@ fn parse_row(stdout: &str) -> BaselineRow {
             .expect("every measurement field must be key=value");
         match key {
             "value_size" => value_size = Some(value.parse().expect("value_size usize")),
+            "pointer_size" => pointer_size = Some(value.parse().expect("pointer_size usize")),
+            "long_size" => long_size = Some(value.parse().expect("long_size usize")),
+            "stdc_version" => stdc_version = Some(value.parse().expect("stdc_version i64")),
             "int_bytes" => int_bytes = Some(value.parse().expect("int_bytes usize")),
             "rat_half_bytes" => {
                 rat_half_bytes = Some(value.parse().expect("rat_half_bytes usize"))
@@ -183,6 +198,9 @@ fn parse_row(stdout: &str) -> BaselineRow {
 
     BaselineRow {
         value_size: value_size.expect("value_size"),
+        pointer_size: pointer_size.expect("pointer_size"),
+        long_size: long_size.expect("long_size"),
+        stdc_version: stdc_version.expect("stdc_version"),
         int_bytes: int_bytes.expect("int_bytes"),
         rat_half_bytes: rat_half_bytes.expect("rat_half_bytes"),
         rat_one_bytes: rat_one_bytes.expect("rat_one_bytes"),
@@ -242,6 +260,9 @@ fn current_c_exact_q_representation_has_measured_heap_and_observer_baseline() {
     let row = parse_row(&stdout);
 
     assert!(row.value_size > 0, "Value must occupy storage");
+    assert!(row.pointer_size > 0);
+    assert!(row.long_size > 0);
+    assert!(row.stdc_version >= 201112, "witness is compiled as C11 or newer");
     assert_eq!(row.int_bytes, row.value_size);
     assert_eq!(row.rat_half_bytes, row.value_size);
     assert_eq!(row.rat_one_bytes, row.value_size);
@@ -269,5 +290,20 @@ fn current_c_exact_q_representation_has_measured_heap_and_observer_baseline() {
     );
     assert_eq!(row.chain_sum, "5/6");
 
+    let compiler = gcc_command()
+        .arg("--version")
+        .output()
+        .expect("query gcc version");
+    let compiler_line = String::from_utf8_lossy(&compiler.stdout)
+        .lines()
+        .next()
+        .unwrap_or("unknown")
+        .replace(' ', "_");
     eprintln!("{}", stdout.trim());
+    eprintln!(
+        "CML-EXACT-Q-C-BASELINE-PROVENANCE compiler={} rust_target_arch={} rust_target_os={}",
+        compiler_line,
+        std::env::consts::ARCH,
+        std::env::consts::OS
+    );
 }
