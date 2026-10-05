@@ -26,6 +26,7 @@
 //! 32-bit words on a heap array.
 
 use crate::ir::{BufferLiteral, Ir, Params, Quoted};
+use crate::sens_domain_bridge::VerifiedDomainCall;
 use std::fmt;
 
 /// Sanitizes a my-lisp def name into a valid C identifier for use as a raw
@@ -599,6 +600,63 @@ impl CBackend {
     fn next_fn_name(&mut self) -> String {
         self.fn_counter += 1;
         format!("cml_lambda_{}", self.fn_counter)
+    }
+
+    /// Компілює вже перевірений exact-domain виклик без Sid8/Sens8 проєкції.
+    ///
+    /// Semantic admission/provenance належать `sens_domain_bridge`; тут C backend
+    /// вибирає лише приватний механізм для D3 resident, який він реально підтримує.
+    pub fn compile_verified_domain_call(
+        &mut self,
+        call: &VerifiedDomainCall,
+    ) -> Result<String, CompileError> {
+        let expr = self.compile_verified_domain_call_expr(call, "global_env")?;
+        Ok(format!(
+            "{RUNTIME}\n{}\n\nint main(void) {{\n    bootstrap_builtins();\n    {{ Value *result = {expr}; print_value(result); printf(\"\\n\"); }}\n    return 0;\n}}\n",
+            self.functions.join("\n"),
+        ))
+    }
+
+    fn compile_verified_domain_call_expr(
+        &mut self,
+        call: &VerifiedDomainCall,
+        env: &str,
+    ) -> Result<String, CompileError> {
+        let identity = call.identity();
+        let args = call.args();
+
+        let require_arity = |expected: usize| {
+            if args.len() == expected {
+                Ok(())
+            } else {
+                Err(CompileError::UnsupportedVariant(
+                    "exact-domain call arity mismatch",
+                ))
+            }
+        };
+
+        match identity {
+            sens::CoreDomainIdentity::D3(word) => match word.word().packed_bits() {
+                // Це target-mechanism mapping, не semantic meaning table:
+                // значення D3 resident приходить уже перевіреним із SENS.
+                0b100 => {
+                    require_arity(1)?;
+                    let value = self.compile_expr(&args[0], env)?;
+                    Ok(format!("v_car({value})"))
+                }
+                0b011 => {
+                    require_arity(1)?;
+                    let value = self.compile_expr(&args[0], env)?;
+                    Ok(format!("v_cdr({value})"))
+                }
+                _ => Err(CompileError::UnsupportedVariant(
+                    "D3 mechanism not implemented in first domain bridge slice",
+                )),
+            },
+            _ => Err(CompileError::UnsupportedVariant(
+                "non-D3 identity reached first domain bridge slice",
+            )),
+        }
     }
 
     /// Compiles a whole program into a self-contained C source file. Every
