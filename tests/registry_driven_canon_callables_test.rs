@@ -97,8 +97,18 @@ fn every_admitted_canon_callable_surface_lowers_to_one_semantic_operation() {
             "(quote (1 2))",
             &["решта", "śeṣa", ":р"],
         ),
-        (sens::sid!(00001100), "plus", "1 2", &["додати", "yoga", "+"]),
-        (sens::sid!(00001101), "difference", "3 1", &["відняти", "viyoga", "-"]),
+        (
+            sens::sid!(00001100),
+            "plus",
+            "1 2",
+            &["додати", "yoga", "+"],
+        ),
+        (
+            sens::sid!(00001101),
+            "difference",
+            "3 1",
+            &["відняти", "viyoga", "-"],
+        ),
         (
             sens::sid!(00100010),
             "equal?",
@@ -131,7 +141,11 @@ fn every_admitted_canon_callable_surface_is_the_same_first_class_value() {
         (sens::sid!(00000101), "car", &["перше", "ādi", ":п"]),
         (sens::sid!(00000110), "cdr", &["решта", "śeṣa", ":р"]),
         (sens::sid!(00001100), "plus", &["додати", "yoga", "+"]),
-        (sens::sid!(00001101), "difference", &["відняти", "viyoga", "-"]),
+        (
+            sens::sid!(00001101),
+            "difference",
+            &["відняти", "viyoga", "-"],
+        ),
         (sens::sid!(00100010), "equal?", &["однакові?", "tulya?"]),
     ];
 
