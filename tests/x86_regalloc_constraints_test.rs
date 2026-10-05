@@ -7,7 +7,7 @@ use cml::machine_inst::{Provenance, X86Reg};
 use cml::x86_lir::{LirAluOp, LirFunction, LirInst, LirTerminator, VReg};
 use cml::x86_regalloc::{
     AllocLocation, FixedRegConstraint, RegAllocError, allocate_registers,
-    allocate_registers_with_constraints,
+    allocate_registers_with_constraints, unsigned_dividend_constraints,
 };
 
 fn overlapping_three_value_function() -> LirFunction {
@@ -83,6 +83,19 @@ fn fixed_interval_takes_required_register_and_spills_ordinary_owner() {
     ));
     assert_eq!(plan.spill_count, 1);
     assert!(plan.dump().contains("must=%rax"));
+}
+
+#[test]
+fn unsigned_dividend_recipe_binds_low_to_rax_and_high_to_rdx() {
+    let constraints = unsigned_dividend_constraints(VReg(10), VReg(11));
+
+    assert_eq!(
+        constraints,
+        [
+            FixedRegConstraint::new(VReg(10), X86Reg::Rax),
+            FixedRegConstraint::new(VReg(11), X86Reg::Rdx),
+        ]
+    );
 }
 
 #[test]
