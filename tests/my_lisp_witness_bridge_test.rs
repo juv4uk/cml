@@ -64,7 +64,7 @@ fn lisp_owned_verdict_passes(row: &str, actual: &str) {
     eval_program(&runner, &mut session).expect("pinned witness-runner.lisp must load");
 
     let verdict = eval_program(
-        &format!("(witness-pass? (witness-verdict (quote {row}) (quote {actual})))"),
+        &format!("(witness-status (witness-verdict (quote {row}) (quote {actual})))"),
         &mut session,
     )
     .expect("Lisp-owned witness verdict must execute")
@@ -72,8 +72,8 @@ fn lisp_owned_verdict_passes(row: &str, actual: &str) {
     .to_string();
 
     assert_eq!(
-        verdict, "t",
-        "semantic PASS must come from Lisp-owned witness-verdict, actual={actual}"
+        verdict, "pass",
+        "semantic PASS must come from Lisp-owned witness-status, actual={actual}"
     );
 }
 
