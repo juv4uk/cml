@@ -8,7 +8,9 @@ use std::path::PathBuf;
 use cml::lisp_asm_vertical::select_arithmetic_slice;
 use cml::machine_inst::{MachineInst, MachineItem, assemble_program};
 use cml::native_baseline::NativeExecutable;
-use cml::x86_lir::{LirLowerError, lower_ir_to_lir, lir_to_machine_items};
+use cml::x86_lir::{
+    LirInst, LirLowerError, LirTerminator, lower_ir_to_lir, lir_to_machine_items,
+};
 use cml::{lower, parser};
 use sens::{ErrorKind, Session, eval_program};
 
@@ -210,4 +212,40 @@ fn mod_lir_path_matches_manual_vertical_div_mechanism_shape() {
         plan.spill_count, 0,
         "small bounded literal mod witness should not need a spill"
     );
+}
+
+
+#[test]
+fn semantic_lowering_copies_div_result_out_of_precolored_temp_immediately() {
+    for (source, select_low) in [("(mod 20 6)", false), ("(quotient 20 6)", true)] {
+        let ir = parse_lower_one(source);
+        let lir = lower_ir_to_lir(&ir).expect("bounded source lowers");
+
+        let (low, high) = lir.blocks[0]
+            .instructions
+            .iter()
+            .find_map(|inst| match inst {
+                LirInst::DivRem { low, high, .. } => Some((*low, *high)),
+                _ => None,
+            })
+            .expect("DivRem must exist");
+
+        let ret = match lir.blocks[0].terminator {
+            LirTerminator::Ret { val: Some(v), .. } => v,
+            ref other => panic!("bounded expression must return a value, got {other:?}"),
+        };
+
+        assert_ne!(ret, low, "semantic result must not keep RAX temp live to return");
+        assert_ne!(ret, high, "semantic result must not keep RDX temp live to return");
+
+        let intervals = cml::x86_regalloc::build_live_intervals(&lir);
+        let selected = if select_low { low } else { high };
+        assert!(
+            intervals[&selected].end < intervals[&ret].end,
+            "selected pre-colored temp must die before ordinary result vreg: source={source}, selected={:?}, ret={:?}, intervals={:?}",
+            selected,
+            ret,
+            intervals
+        );
+    }
 }
