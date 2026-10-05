@@ -96,3 +96,24 @@ fn bounded_divrem_lir_boundary_rejects_wrong_arity() {
         }
     }
 }
+
+
+#[test]
+fn bounded_divrem_rejects_nonliteral_and_out_of_range_operands() {
+    let max = cml::numeric_specialization::MAX_FIXNUM;
+
+    for ir in [
+        cml::ir::Ir::App {
+            func: Box::new(cml::ir::Ir::Sid(sens::sid!(00010011))),
+            args: vec![cml::ir::Ir::Var("N".to_string()), cml::ir::Ir::Int(3)],
+        },
+        cml::ir::Ir::App {
+            func: Box::new(cml::ir::Ir::Sid(sens::sid!(00010100))),
+            args: vec![cml::ir::Ir::Int(max + 1), cml::ir::Ir::Int(3)],
+        },
+    ] {
+        let error =
+            lower_ir_to_lir(&ir).expect_err("unproven operand must stay outside bounded divide");
+        assert!(matches!(error, LirLowerError::Unsupported(_)));
+    }
+}
