@@ -46,6 +46,43 @@ fn overlapping_three_value_function() -> LirFunction {
     function
 }
 
+
+fn non_overlapping_two_value_function() -> LirFunction {
+    let provenance = Provenance::new(Some("0104"), "fixed-reg-reuse-test");
+    let mut function = LirFunction::new("fixed_reg_reuse", provenance.clone());
+    let block = function
+        .block_mut(function.entry)
+        .expect("entry block must exist");
+
+    let first = VReg(0);
+    let first_use = VReg(2);
+    let second = VReg(1);
+
+    block.instructions.push(LirInst::Const64 {
+        dst: first,
+        imm: 20,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::Alu {
+        op: LirAluOp::Add,
+        dst: first_use,
+        lhs: first,
+        rhs: first,
+        provenance: provenance.clone(),
+    });
+    block.instructions.push(LirInst::Const64 {
+        dst: second,
+        imm: 22,
+        provenance: provenance.clone(),
+    });
+    block.terminator = LirTerminator::Ret {
+        val: Some(second),
+        provenance,
+    };
+
+    function
+}
+
 #[test]
 fn empty_constraint_set_is_exactly_legacy_allocation() {
     let function = overlapping_three_value_function();
@@ -96,6 +133,31 @@ fn unsigned_dividend_recipe_binds_low_to_rax_and_high_to_rdx() {
             FixedRegConstraint::new(VReg(11), X86Reg::Rdx),
         ]
     );
+}
+
+
+#[test]
+fn same_fixed_register_can_be_reused_after_live_range_expires() {
+    let function = non_overlapping_two_value_function();
+
+    let plan = allocate_registers_with_constraints(
+        &function,
+        &[
+            FixedRegConstraint::new(VReg(0), X86Reg::Rax),
+            FixedRegConstraint::new(VReg(1), X86Reg::Rax),
+        ],
+    )
+    .expect("non-overlapping fixed intervals may reuse one physical register");
+
+    assert_eq!(
+        plan.assignments.get(&VReg(0)),
+        Some(&AllocLocation::Reg(X86Reg::Rax))
+    );
+    assert_eq!(
+        plan.assignments.get(&VReg(1)),
+        Some(&AllocLocation::Reg(X86Reg::Rax))
+    );
+    assert_eq!(plan.spill_count, 0);
 }
 
 #[test]
