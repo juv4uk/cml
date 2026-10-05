@@ -12,6 +12,7 @@ fn main() {
 #[cfg(feature = "gpu-cuda")]
 mod enabled {
     use cml::gpu_cuda_runtime::{discover_devices, execute_map, execute_map_chain_i32_selected};
+    use cml::gpu_worker_client::gpu_worker_socket_path;
     use cml::ir::{BufferLiteral, Ir, Params};
     use std::env;
     use std::fs;
@@ -30,9 +31,7 @@ mod enabled {
     const STATUS_ERR: u8 = 1;
 
     fn socket_path() -> PathBuf {
-        env::var_os("CML_GPU_WORKER_SOCKET")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("/tmp/cml-gpu-worker.sock"))
+        gpu_worker_socket_path()
     }
 
     struct SocketGuard(PathBuf);
