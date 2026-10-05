@@ -211,6 +211,12 @@ fn inst_vregs(inst: &LirInst) -> (Vec<VReg>, Vec<VReg>) {
         LirInst::Copy { dst, src, .. } => (vec![*src], vec![*dst]),
         LirInst::Alu { dst, lhs, rhs, .. } => (vec![*lhs, *rhs], vec![*dst]),
         LirInst::Cmp { lhs, rhs, .. } => (vec![*lhs, *rhs], Vec::new()),
+        LirInst::DivRem {
+            low,
+            high,
+            divisor,
+            ..
+        } => (vec![*low, *high, *divisor], vec![*low, *high]),
         LirInst::UnboxFixnum { dst, src, .. } => (vec![*src], vec![*dst]),
         LirInst::BoxFixnum { dst, src, .. } => (vec![*src], vec![*dst]),
     }
@@ -372,6 +378,20 @@ pub fn build_live_intervals(func: &LirFunction) -> HashMap<VReg, LiveInterval> {
         .into_iter()
         .map(|(vreg, (start, end))| (vreg, LiveInterval { vreg, start, end }))
         .collect()
+}
+
+/// Derive backend-local physical-register requirements from LIR mechanism
+/// nodes. This is intentionally target-only: shared IR remains register-free.
+pub fn fixed_constraints_for_function(func: &LirFunction) -> Vec<FixedRegConstraint> {
+    let mut constraints = Vec::new();
+    for block in &func.blocks {
+        for inst in &block.instructions {
+            if let LirInst::DivRem { low, high, .. } = inst {
+                constraints.extend(unsigned_dividend_constraints(*low, *high));
+            }
+        }
+    }
+    constraints
 }
 
 /// Allocates physical registers or stack spill slots using deterministic
@@ -723,6 +743,51 @@ pub fn emit_machine_items_with_plan(
                             provenance: provenance.clone(),
                         }));
                     }
+                }
+                LirInst::DivRem {
+                    low,
+                    high,
+                    divisor,
+                    provenance,
+                } => {
+                    let low_loc = get_loc(*low)?;
+                    let high_loc = get_loc(*high)?;
+                    if low_loc != AllocLocation::Reg(X86Reg::Rax) {
+                        return Err(RegAllocError::Internal(format!(
+                            "div-rem low {low} must be allocated to %rax, got {low_loc}"
+                        )));
+                    }
+                    if high_loc != AllocLocation::Reg(X86Reg::Rdx) {
+                        return Err(RegAllocError::Internal(format!(
+                            "div-rem high {high} must be allocated to %rdx, got {high_loc}"
+                        )));
+                    }
+
+                    let divisor_reg = match get_loc(*divisor)? {
+                        AllocLocation::Reg(reg) => {
+                            if reg == X86Reg::Rax || reg == X86Reg::Rdx {
+                                return Err(RegAllocError::Internal(format!(
+                                    "div-rem divisor {divisor} aliases fixed dividend register {}",
+                                    reg.name()
+                                )));
+                            }
+                            reg
+                        }
+                        AllocLocation::SpillSlot(slot) => {
+                            items.push(MachineItem::Inst(MachineInst::MovLoad {
+                                dst: SCRATCH_REG_A,
+                                base: X86Reg::Rsp,
+                                disp: (slot * 8) as i32,
+                                provenance: provenance.clone(),
+                            }));
+                            SCRATCH_REG_A
+                        }
+                    };
+
+                    items.push(MachineItem::Inst(MachineInst::DivReg {
+                        divisor: divisor_reg,
+                        provenance: provenance.clone(),
+                    }));
                 }
                 LirInst::Cmp {
                     lhs,
