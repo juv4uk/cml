@@ -1,7 +1,8 @@
 name: GPU runner worker live
 
 on:
-  # Local GitHub Actions runners were retired by owner directive 2026-09-28.
+  # One controlled CML GPU runner was restored by owner direction 2026-10-05.
+  # Keep physical-GPU execution manual-only while the lane is being requalified.
   workflow_dispatch:
 
 concurrency:
@@ -21,7 +22,6 @@ jobs:
       SCCACHE_CACHE_SIZE: 30G
       CARGO_BUILD_JOBS: 4
       CARGO_INCREMENTAL: 0
-      CML_GPU_WORKER_SOCKET: /tmp/cml-gpu-worker-ci.sock
     steps:
       - uses: actions/checkout@v4
 
@@ -35,40 +35,70 @@ jobs:
           git config submodule.external/sens.url /home/agents/GitHub/sens
           git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
 
-      - name: Build persistent worker
+      - name: Build exact-head persistent worker
         run: cargo build --release --features gpu-cuda --bin cml-gpu-worker
 
-      - name: Runner to worker to CUDA round trip
+      - name: Install exact-head worker and prove runner -> persistent worker -> CUDA
         shell: bash
         run: |
-          set -euo pipefail
-          rm -f "$CML_GPU_WORKER_SOCKET"
-          "$CARGO_TARGET_DIR/release/cml-gpu-worker" serve >worker.out 2>worker.err &
-          worker_pid=$!
-          trap 'kill "$worker_pid" 2>/dev/null || true; wait "$worker_pid" 2>/dev/null || true; rm -f "$CML_GPU_WORKER_SOCKET"' EXIT
+          set -Eeuo pipefail
 
-          for _ in $(seq 1 50); do
-            [[ -S "$CML_GPU_WORKER_SOCKET" ]] && break
+          worker="$HOME/.local/bin/cml-gpu-worker"
+          backup="$HOME/.local/bin/cml-gpu-worker.pre-ci"
+          runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+          socket="$runtime_dir/cml-gpu-worker.sock"
+          export CML_GPU_WORKER_SOCKET="$socket"
+
+          mkdir -p "$HOME/.local/bin"
+          rm -f "$backup"
+          if [[ -x "$worker" ]]; then
+            cp -a "$worker" "$backup"
+          fi
+
+          rollback() {
+            rc=$?
+            if (( rc != 0 )); then
+              echo "GPU worker witness failed; restoring previous persistent worker" >&2
+              systemctl --user stop cml-gpu-worker.service || true
+              if [[ -f "$backup" ]]; then
+                mv -f "$backup" "$worker"
+                systemctl --user start cml-gpu-worker.service || true
+              fi
+            fi
+            exit "$rc"
+          }
+          trap rollback EXIT
+
+          systemctl --user stop cml-gpu-worker.service
+          install -m 0755 "$CARGO_TARGET_DIR/release/cml-gpu-worker" "$worker.new"
+          mv -f "$worker.new" "$worker"
+          systemctl --user start cml-gpu-worker.service
+
+          for _ in $(seq 1 80); do
+            [[ -S "$socket" ]] && "$worker" ping >/dev/null 2>&1 && break
             sleep 0.1
           done
-          [[ -S "$CML_GPU_WORKER_SOCKET" ]]
+          [[ -S "$socket" ]]
+          test "$("$worker" ping)" = "pong"
+          "$worker" probe
 
-          test "$("$CARGO_TARGET_DIR/release/cml-gpu-worker" ping)" = "pong"
-          "$CARGO_TARGET_DIR/release/cml-gpu-worker" probe
-          result="$("$CARGO_TARGET_DIR/release/cml-gpu-worker" add-i32 7 1 2 3 4)"
+          echo "runner=$RUNNER_NAME os=$RUNNER_OS arch=$RUNNER_ARCH"
+          echo "worker_sha256=$(sha256sum "$worker" | awk '{print $1}')"
+          /usr/lib/wsl/lib/nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
+
+          result="$("$worker" add-i32 7 1 2 3 4)"
           test "$result" = "8 9 10 11"
-
           echo "GPU worker round trip: $result"
 
           # File-backed workload: 32 MiB / 8,388,608 i32 values and 64
           # admitted map steps. Only paths + offsets cross the socket; the
-          # worker keeps the CUDA session and compiled kernel cache alive.
+          # systemd worker keeps the CUDA session and compiled kernel cache alive.
           dd if=/dev/zero of=worker-input.i32 bs=1M count=32 status=none
           offsets=()
           for _ in $(seq 1 64); do offsets+=(1); done
 
           for iteration in 1 2 3; do
-            evidence="$("$CARGO_TARGET_DIR/release/cml-gpu-worker"               chain-file-i32 worker-input.i32 worker-output.i32 "${offsets[@]}")"
+            evidence="$("$worker" chain-file-i32 worker-input.i32 worker-output.i32 "${offsets[@]}")"
             echo "heavy iteration $iteration: $evidence"
           done
 
@@ -83,4 +113,8 @@ jobs:
           print(f"file-backed CUDA witness: first={first} last={last}")
           PY
 
-          cat worker.err
+          systemctl --user is-active --quiet cml-gpu-worker.service
+          journalctl --user -u cml-gpu-worker.service -n 30 --no-pager
+
+          rm -f "$backup"
+          trap - EXIT
