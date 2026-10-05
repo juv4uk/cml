@@ -52,11 +52,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Isolate Cargo target by rustc build
+      - name: Isolate Cargo target and sccache by rustc build
         run: |
+          set -euo pipefail
           rustc_key="$(rustc -vV | sha256sum | cut -c1-16)"
           test -n "$rustc_key"
           echo "CARGO_TARGET_DIR=/home/agents/.cache/cargo-target/cml/rustc-$rustc_key" >> "$GITHUB_ENV"
+
+          marker="$SCCACHE_DIR/cml-gpu-rustc-key"
+          previous="$(cat "$marker" 2>/dev/null || true)"
+          if [[ "$previous" != "$rustc_key" ]]; then
+            # A stale sccache entry from another compiler produced E0514 on
+            # this owner runner. Rebuild once, then reuse the refreshed cache.
+            echo "SCCACHE_RECACHE=1" >> "$GITHUB_ENV"
+            printf '%s\n' "$rustc_key" > "$marker"
+            echo "sccache recache: rustc $previous -> $rustc_key"
+          else
+            echo "SCCACHE_RECACHE=0" >> "$GITHUB_ENV"
+          fi
 
       - name: external/sens from the local clone
         run: |
