@@ -117,10 +117,7 @@ fn dormant_f32_cpu_ir_matches_the_live_canonical_evaluator() {
             "(numeric-buffer-map (lambda (x) (+ (+ x 10) -3)) #f32(1.0 -2.5 0.1))",
             f32_map_ir(
                 &[1.0, -2.5, 0.1],
-                sid_add(
-                    sid_add(Ir::Var("X".to_string()), Ir::Int(10)),
-                    Ir::Int(-3),
-                ),
+                sid_add(sid_add(Ir::Var("X".to_string()), Ir::Int(10)), Ir::Int(-3)),
             ),
         ),
     ];
