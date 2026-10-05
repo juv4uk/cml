@@ -4,14 +4,13 @@ on:
   schedule:
     - cron: "11 4 * * *"
   workflow_dispatch: {}
+  # Any master update may consume SENS semantics, so refresh the pinned
+  # upstream authority instead of waiting for the daily cron.
   push:
     branches: [master]
-    paths:
-      - ".github/workflows/sync-my-lisp-contract.yml"
+  # Every PR must prove that its compiler work is based on the exact pinned
+  # upstream SENS contract; semantic drift must fail before merge.
   pull_request:
-    paths:
-      - "contracts/my-lisp/**"
-      - ".github/workflows/sync-my-lisp-contract.yml"
 
 jobs:
   sync:
