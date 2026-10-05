@@ -17,8 +17,9 @@ fn top_level_registered_callable_self_reference_uses_the_definition() {
         (def mod
           (lambda (a b)
             (cond
-              ((eq a 0) 0)
-              (t (mod (- a 1) b)))))
+              ((тотожне? a 0) 0)
+              ((тотожне? (quote mod-fallback) (quote mod-fallback))
+               (mod (- a 1) b)))))
         (mod 3 99)
     "#;
 
