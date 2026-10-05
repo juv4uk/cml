@@ -13,6 +13,9 @@ use std::fmt;
 
 const CONTRACT_LOCK: &str = include_str!("../contracts/my-lisp/lock.lisp");
 const LANGUAGE_CONTRACT: &str = include_str!("../contracts/my-lisp/language-contract.lisp");
+const D3_PROOF: &str = include_str!("../contracts/my-lisp/language-contract.lisp");
+const D3_LAW_REF: &str = "language-contract.lisp:d3-foundation";
+const D3_PROOF_REF: &str = "contracts/bija3-l1-l5-ratification.lisp";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthorityProvenance {
@@ -69,6 +72,8 @@ pub enum BridgeError {
     ContractVersionMismatch,
     MissingLawReference,
     MissingProofReference,
+    UnknownLawReference,
+    UnknownProofReference,
     SemanticStatusNotCurrent,
     MechanismNotAdmitted,
     D8ResearchRejected,
@@ -86,6 +91,8 @@ impl fmt::Display for BridgeError {
             Self::ContractVersionMismatch => write!(f, "SENS contract version mismatch"),
             Self::MissingLawReference => write!(f, "missing SENS law reference"),
             Self::MissingProofReference => write!(f, "missing SENS proof reference"),
+            Self::UnknownLawReference => write!(f, "unknown SENS law reference"),
+            Self::UnknownProofReference => write!(f, "unknown SENS proof reference"),
             Self::SemanticStatusNotCurrent => write!(f, "semantic status is not current"),
             Self::MechanismNotAdmitted => write!(f, "execution mechanism is not admitted"),
             Self::D8ResearchRejected => write!(f, "D8 research identity rejected in production bridge"),
@@ -165,6 +172,12 @@ pub fn verify_call(
     if request.proof_ref.trim().is_empty() {
         return Err(BridgeError::MissingProofReference);
     }
+    if request.law_ref != D3_LAW_REF || !LANGUAGE_CONTRACT.contains("(d3-foundation") {
+        return Err(BridgeError::UnknownLawReference);
+    }
+    if request.proof_ref != D3_PROOF_REF || !D3_PROOF.contains("(d3-foundation") {
+        return Err(BridgeError::UnknownProofReference);
+    }
     if request.semantic_status != SemanticStatus::Current {
         return Err(BridgeError::SemanticStatusNotCurrent);
     }
@@ -214,6 +227,23 @@ mod tests {
         let call = verify_call(current_request(d3(0b100)), vec![Ir::Nil]).unwrap();
         assert_eq!(call.identity().width(), 3);
         assert_eq!(call.identity().packed_bits(), 0b100);
+    }
+
+    #[test]
+    fn unknown_law_or_proof_fails_before_backend_selection() {
+        let mut request = current_request(d3(0b100));
+        request.law_ref = "host-local-table".into();
+        assert_eq!(
+            verify_call(request, vec![Ir::Nil]).unwrap_err(),
+            BridgeError::UnknownLawReference
+        );
+
+        let mut request = current_request(d3(0b100));
+        request.proof_ref = "host-local-proof".into();
+        assert_eq!(
+            verify_call(request, vec![Ir::Nil]).unwrap_err(),
+            BridgeError::UnknownProofReference
+        );
     }
 
     #[test]
