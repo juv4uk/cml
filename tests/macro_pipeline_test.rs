@@ -76,12 +76,20 @@ fn compatibility_cond_rejects_bare_t_instead_of_coercing_truthiness() {
     match compile_and_run("(cond (t 1))").expect("compile_and_run") {
         Observation::Error(error) => {
             assert!(
-                error.contains("Type") && error.contains("PredicateBit"),
-                "compatibility COND must reject non-PredicateBit test values: {error}"
+                error.contains("Type") && error.contains("D1:1") && error.contains("EMPTY"),
+                "canonical COND must reject values outside D1:1 / D1:0 / D3:000 EMPTY: {error}"
             );
         }
-        other => panic!("expected PredicateBit Type error, got {other:?}"),
+        other => panic!("expected exact-control Type error, got {other:?}"),
     }
+}
+
+#[test]
+fn canonical_cond_accepts_structural_empty_as_non_selection() {
+    assert_eq!(
+        value("(cond (() 1) ((тотожне? (quote x) (quote x)) 42))"),
+        "42"
+    );
 }
 
 #[test]
