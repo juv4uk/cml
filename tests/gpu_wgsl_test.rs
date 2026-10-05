@@ -48,10 +48,7 @@ fn dormant_affine_f32_ir_is_flattened_to_one_binary32_add() {
     // напряму, щоб окремо зберегти доказ своєї внутрішньої арифметики.
     let shader = emit_map_shader(&f32_map_ir(
         &[1.0, 2.0],
-        sid_add(
-            sid_add(Ir::Var("X".to_string()), Ir::Int(10)),
-            Ir::Int(-3),
-        ),
+        sid_add(sid_add(Ir::Var("X".to_string()), Ir::Int(10)), Ir::Int(-3)),
     ))
     .unwrap();
     assert!(shader.contains("array<f32>"));
@@ -63,10 +60,7 @@ fn dormant_affine_f32_ir_is_flattened_to_one_binary32_add() {
 fn emitter_rejects_non_affine_f32_ir() {
     let error = emit_map_shader(&f32_map_ir(
         &[1.0],
-        sid_add(
-            Ir::Var("X".to_string()),
-            Ir::Var("X".to_string()),
-        ),
+        sid_add(Ir::Var("X".to_string()), Ir::Var("X".to_string())),
     ))
     .unwrap_err();
     assert!(matches!(
