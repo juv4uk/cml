@@ -428,7 +428,7 @@ fn branch_simplifier_does_not_treat_post_div_remainder_as_pre_div_zero() {
 
     let entry_after = function.block(entry).expect("entry after optimize");
     assert!(
-        matches!(entry_after.terminator, LirTerminator::BranchCond { .. }),
+        matches!(&entry_after.terminator, LirTerminator::BranchCond { .. }),
         "branch must not fold from stale pre-DIV high=0 fact"
     );
 
