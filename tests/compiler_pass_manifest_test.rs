@@ -23,10 +23,7 @@ fn cli_emits_the_ordered_machine_readable_pass_manifest() {
         assert!(line.contains(&format!("\tid={}\t", pass.id)));
         assert!(line.contains(&format!("\tinput={}\t", pass.input)));
         assert!(line.contains(&format!("\toutput={}\t", pass.output)));
-        assert!(line.contains(&format!(
-            "\tevidence={}\t",
-            pass.current_evidence.as_str()
-        )));
+        assert!(line.contains(&format!("\tevidence={}\t", pass.current_evidence.as_str())));
         assert!(line.ends_with(&format!("obligation={}", pass.obligation)));
     }
 }
