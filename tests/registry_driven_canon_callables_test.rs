@@ -72,10 +72,10 @@ fn every_admitted_canon_callable_surface_lowers_to_one_semantic_operation() {
     // These peer spellings are the stable surfaces of semantic IDs 0002..0006, 0104, 1001, 1022
     // in my-lisp/lib/surface/semantic-registry.wsm.
     let cases: &[(sens::Sid8, &str, &str, &[&str])] = &[
-        (sens::sid!(00000010), "atom", "1", &["атом?", "aṇu", ".?"]),
+        (sens::sid!(00000010), "atom?", "1", &["атом?", "aṇu", ".?"]),
         (
             sens::sid!(00000011),
-            "eq",
+            "eq?",
             "1 1",
             &["тотожне?", "abheda", "=?"],
         ),
@@ -83,7 +83,7 @@ fn every_admitted_canon_callable_surface_lowers_to_one_semantic_operation() {
             sens::sid!(00000100),
             "cons",
             "1 (quote ())",
-            &["сполучити", "saṃyuj", ":"],
+            &["сполучити", "saṃyuj"],
         ),
         (
             sens::sid!(00000101),
@@ -97,8 +97,8 @@ fn every_admitted_canon_callable_surface_lowers_to_one_semantic_operation() {
             "(quote (1 2))",
             &["решта", "śeṣa", ":р"],
         ),
-        (sens::sid!(00001100), "+", "1 2", &["додати", "yoga"]),
-        (sens::sid!(00001101), "-", "3 1", &["відняти", "viyoga"]),
+        (sens::sid!(00001100), "plus", "1 2", &["додати", "yoga", "+"]),
+        (sens::sid!(00001101), "difference", "3 1", &["відняти", "viyoga", "-"]),
         (
             sens::sid!(00100010),
             "equal?",
@@ -125,13 +125,13 @@ fn every_admitted_canon_callable_surface_is_the_same_first_class_value() {
     // A peer surface used as a value must therefore lower to the same builtin
     // identity as its English peer instead of becoming a spelling-named Var.
     let cases: &[(sens::Sid8, &str, &[&str])] = &[
-        (sens::sid!(00000010), "atom", &["атом?", "aṇu", ".?"]),
-        (sens::sid!(00000011), "eq", &["тотожне?", "abheda", "=?"]),
-        (sens::sid!(00000100), "cons", &["сполучити", "saṃyuj", ":"]),
+        (sens::sid!(00000010), "atom?", &["атом?", "aṇu", ".?"]),
+        (sens::sid!(00000011), "eq?", &["тотожне?", "abheda", "=?"]),
+        (sens::sid!(00000100), "cons", &["сполучити", "saṃyuj"]),
         (sens::sid!(00000101), "car", &["перше", "ādi", ":п"]),
         (sens::sid!(00000110), "cdr", &["решта", "śeṣa", ":р"]),
-        (sens::sid!(00001100), "+", &["додати", "yoga"]),
-        (sens::sid!(00001101), "-", &["відняти", "viyoga"]),
+        (sens::sid!(00001100), "plus", &["додати", "yoga", "+"]),
+        (sens::sid!(00001101), "difference", &["відняти", "viyoga", "-"]),
         (sens::sid!(00100010), "equal?", &["однакові?", "tulya?"]),
     ];
 
@@ -157,7 +157,7 @@ fn canon_operations_table_is_fully_populated_and_queryable() {
     // Verify lookup by ID and by surface
     let add_op = find_operation_by_id(sens::sid!(00001100))
         .expect("0104 (+) must exist in operations table");
-    assert_eq!(add_op.canonical_name, "+");
+    assert_eq!(add_op.canonical_name, "plus");
     assert_eq!(add_op.formal_action, "primitive:add");
     assert_eq!(
         find_operation_by_surface("додати"),
