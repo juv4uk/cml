@@ -20,6 +20,10 @@ jobs:
           # checkout instead of a separately pinned sibling checkout.
           submodules: true
 
+      - name: SENS conformance adapter self-test
+        working-directory: cml
+        run: python3 scripts/test-sens-execution-conformance-adapter.py
+
       - name: Resolve sens revision channels
         id: upstream_revisions
         working-directory: cml
