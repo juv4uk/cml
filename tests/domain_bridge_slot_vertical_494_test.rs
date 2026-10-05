@@ -12,8 +12,7 @@ use cml::sens_slot_bridge::lower_canonical_expr_to_slot_program;
 use cml::slot_vm::{SlotVmError, execute};
 use sens::{ErrorKind, Session};
 
-const CORPUS: &str =
-    include_str!("../external/sens/contracts/compiler-d3-selector-corpus-v1.tsv");
+const CORPUS: &str = include_str!("../external/sens/contracts/compiler-d3-selector-corpus-v1.tsv");
 
 const FALLBACK_CML_REVISION: &str = "7572dbc0868d69de4c3c10d4542b635c050bed0f";
 
