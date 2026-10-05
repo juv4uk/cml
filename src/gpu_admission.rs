@@ -175,4 +175,17 @@ mod tests {
         p.job = "x".repeat(MAX_FIELD_BYTES + 1);
         assert!(p.validate().is_err());
     }
+    #[test]
+    fn dropped_holder_releases_lock_for_next_client() {
+        let path = temp_lock();
+        {
+            let holder = GpuAdmissionGuard::acquire(&path, "cuda:0", &provenance("holder")).unwrap();
+            assert_eq!(holder.lease().resource_key, "cuda:0");
+        }
+        let next = GpuAdmissionGuard::acquire(&path, "cuda:0", &provenance("next")).unwrap();
+        assert!(next.lease().wait_ns < 50_000_000);
+        drop(next);
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(format!("{}.owner", path.display()));
+    }
 }
