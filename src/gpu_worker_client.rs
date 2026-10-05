@@ -95,7 +95,7 @@ fn admitted_add_i32(ir: &Ir) -> Result<(i64, Vec<i32>), String> {
             );
         }
     };
-    let BufferLiteral::I32(values) = region.input else {
+    let Ir::Buffer(BufferLiteral::I32(values)) = region.input else {
         return Err("shared CUDA worker protocol v1 admits only i32 buffers".into());
     };
     if values.is_empty() {
@@ -116,8 +116,8 @@ fn encode_add_request(offset: i64, values: &[i32]) -> Result<Vec<u8>, String> {
 }
 
 fn transact(path: &Path, opcode: u8, payload: &[u8]) -> Result<Vec<u8>, String> {
-    let mut stream =
-        UnixStream::connect(path).map_err(|error| format!("connect {}: {error}", path.display()))?;
+    let mut stream = UnixStream::connect(path)
+        .map_err(|error| format!("connect {}: {error}", path.display()))?;
     write_request(&mut stream, opcode, payload).map_err(|error| error.to_string())?;
     let (status, body) = read_frame(&mut stream)?;
     if status == STATUS_OK {
@@ -136,7 +136,9 @@ fn write_request(stream: &mut UnixStream, opcode: u8, payload: &[u8]) -> std::io
 
 fn read_frame(stream: &mut UnixStream) -> Result<(u8, Vec<u8>), String> {
     let mut header = [0u8; 10];
-    stream.read_exact(&mut header).map_err(|error| error.to_string())?;
+    stream
+        .read_exact(&mut header)
+        .map_err(|error| error.to_string())?;
     if &header[..4] != MAGIC {
         return Err("bad GPU worker frame magic".into());
     }
@@ -152,7 +154,9 @@ fn read_frame(stream: &mut UnixStream) -> Result<(u8, Vec<u8>), String> {
         return Err("GPU worker frame exceeds 64 MiB".into());
     }
     let mut body = vec![0u8; len];
-    stream.read_exact(&mut body).map_err(|error| error.to_string())?;
+    stream
+        .read_exact(&mut body)
+        .map_err(|error| error.to_string())?;
     Ok((kind, body))
 }
 
@@ -206,7 +210,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        env::temp_dir().join(format!("cml-shared-worker-test-{}-{nonce}.sock", std::process::id()))
+        env::temp_dir().join(format!(
+            "cml-shared-worker-test-{}-{nonce}.sock",
+            std::process::id()
+        ))
     }
 
     #[test]

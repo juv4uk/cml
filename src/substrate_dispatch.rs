@@ -268,7 +268,9 @@ mod tests {
     #[test]
     fn small_admitted_map_routes_to_cpu() {
         let mut dispatcher = SubstrateDispatcher::new(PlacementConfig::default(), 4);
-        let outcome = dispatcher.execute_numeric_map(&add_map(16, 1), None).unwrap();
+        let outcome = dispatcher
+            .execute_numeric_map(&add_map(16, 1), None)
+            .unwrap();
         assert_eq!(outcome.value, BufferLiteral::I32((1..=16).collect()));
         assert!(matches!(
             outcome.decision.unwrap().target,
@@ -307,9 +309,8 @@ mod tests {
                 dtoh_byte_cost: 0,
             },
         };
-        let mut dispatcher = SubstrateDispatcher::new(config, 4).with_accelerator_evidence(vec![
-            AcceleratorCapabilityEvidence::proven_gpu("test-gpu"),
-        ]);
+        let mut dispatcher = SubstrateDispatcher::new(config, 4)
+            .with_accelerator_evidence(vec![AcceleratorCapabilityEvidence::proven_gpu("test-gpu")]);
         dispatcher.register_gpu("test-gpu", ParallelCpuNodeExecutor::new(1));
 
         let outcome = dispatcher
@@ -388,9 +389,7 @@ mod tests {
     #[test]
     fn numeric_map_to_fpga_is_named_fail_closed_until_lowering_exists() {
         let mut dispatcher = SubstrateDispatcher::new(PlacementConfig::default(), 4)
-            .with_accelerator_evidence(vec![AcceleratorCapabilityEvidence::live_fpga(
-                "fpga-test",
-            )]);
+            .with_accelerator_evidence(vec![AcceleratorCapabilityEvidence::live_fpga("fpga-test")]);
         let error = dispatcher
             .execute_numeric_map(
                 &add_map(16, 1),
