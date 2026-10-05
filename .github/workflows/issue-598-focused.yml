@@ -13,6 +13,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Requires the repository runner's custom `guix` label; runner 21 was
+# verified online with Guix installed before this gate was retriggered.
 jobs:
   focused:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
