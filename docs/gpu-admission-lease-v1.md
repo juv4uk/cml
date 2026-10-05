@@ -25,21 +25,21 @@ Fields are ASCII, non-empty, and bounded to prevent unbounded metadata growth.
 
 ## Lifecycle
 
+The v1 mechanism is a kernel-backed advisory lock on the canonical resource path:
+
 ```text
-acquire(provenance, ttl)
-    -> granted(lease_id, wait_ns, ttl)
-
-renew(lease_id, ttl)
-    -> renewed(lease_id, ttl)
-
-release(lease_id)
-    -> released(lease_id)
+open(lock_path)
+    -> flock(EXCLUSIVE)
+    -> granted(wait_ns)
+    -> bounded external/worker CUDA work
+    -> close/Drop releases the lock
 ```
 
-A lease expires automatically when its bounded TTL elapses without renewal. A stale holder cannot release or renew a successor's lease.
+The owning process keeps the lock file descriptor for the full bounded workload. A crashed process releases the kernel lock automatically, so a crash does not leave a permanently held admission token.
 
-The client is responsible for bounded work duration and periodic renewal before expiry.
+The owner record is an observational sidecar (`<lock>.owner`) containing bounded provenance and admission wait. A stale sidecar is overwritten by the next admitted holder.
 
+Clients must still bound their workload duration with their normal runner/process timeout. v1 does not add a command runner or an arbitrary process supervisor.
 ## Scheduling
 
 Admission is serialized by the CML-owned resource mechanism. A client that cannot acquire immediately waits in the shared admission path rather than starting CUDA concurrently.
