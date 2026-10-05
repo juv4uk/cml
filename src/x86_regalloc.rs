@@ -84,6 +84,22 @@ impl FixedRegConstraint {
     }
 }
 
+/// Backend-local x86-64 unsigned-DIV input constraint recipe.
+///
+/// The ISA consumes the 128-bit dividend from RDX:RAX. This helper carries
+/// only that physical fact: callers remain responsible for creating
+/// short-lived backend temporaries and for selecting DIV only after semantic
+/// admission.
+pub const fn unsigned_dividend_constraints(
+    low: VReg,
+    high: VReg,
+) -> [FixedRegConstraint; 2] {
+    [
+        FixedRegConstraint::new(low, X86Reg::Rax),
+        FixedRegConstraint::new(high, X86Reg::Rdx),
+    ]
+}
+
 /// Results and provenance of the register allocation pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegAllocPlan {
