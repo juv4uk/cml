@@ -72,10 +72,7 @@ fn fixed_interval_takes_required_register_and_spills_ordinary_owner() {
         plan.assignments.get(&VReg(1)),
         Some(&AllocLocation::Reg(X86Reg::Rax))
     );
-    assert_eq!(
-        plan.fixed_constraints.get(&VReg(1)),
-        Some(&X86Reg::Rax)
-    );
+    assert_eq!(plan.fixed_constraints.get(&VReg(1)), Some(&X86Reg::Rax));
 
     // v0 starts first and takes RAX on the ordinary linear-scan route. When
     // overlapping fixed v1 arrives it must evict/spill v0 rather than silently
