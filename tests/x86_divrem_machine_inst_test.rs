@@ -55,7 +55,7 @@ fn mechanism_provenance() -> Provenance {
 
 #[test]
 fn unsigned_divq_register_projection_matches_gnu_oracle_without_semantic_identity() {
-    for divisor in [X86Reg::Rcx, X86Reg::R9] {
+    for divisor in [X86Reg::Rcx, X86Reg::R9, X86Reg::R10] {
         let inst = MachineInst::DivReg {
             divisor,
             provenance: mechanism_provenance(),
