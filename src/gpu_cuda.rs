@@ -315,7 +315,10 @@ impl CudaArtifactCache {
         self.ptx_cache.insert(key, artifact);
     }
 
-    pub fn get_module(&mut self, key: &CudaDriverJitCacheKey) -> Option<&CudaDriverJitModuleArtifact> {
+    pub fn get_module(
+        &mut self,
+        key: &CudaDriverJitCacheKey,
+    ) -> Option<&CudaDriverJitModuleArtifact> {
         if let Some(artifact) = self.module_cache.get(key) {
             self.diagnostics.module_hits += 1;
             Some(artifact)
