@@ -231,9 +231,9 @@ fn semantic_lowering_copies_div_result_out_of_precolored_temp_immediately() {
             })
             .expect("DivRem must exist");
 
-        let ret = match lir.blocks[0].terminator {
-            LirTerminator::Ret { val: Some(v), .. } => v,
-            ref other => panic!("bounded expression must return a value, got {other:?}"),
+        let ret = match &lir.blocks[0].terminator {
+            LirTerminator::Ret { val: Some(v), .. } => *v,
+            other => panic!("bounded expression must return a value, got {other:?}"),
         };
 
         assert_ne!(ret, low, "semantic result must not keep RAX temp live to return");
