@@ -7,6 +7,7 @@ on:
       - "macros.lisp"
       - "tests/domain5_macro_differential_test.rs"
       - "contracts/cml-operations.lisp"
+      - "manifest.scm"
       - ".github/workflows/domain5-macro-differential.yml"
   push:
     branches: [master]
@@ -36,10 +37,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Check focused formatting
-        run: cargo fmt -p cml -- --check
+        run: guix shell --pure -m manifest.scm -- cargo fmt -p cml -- --check
 
       - name: Run D5 macro differential
-        run: cargo test -p cml --test domain5_macro_differential_test -- --nocapture
+        run: guix shell --pure -m manifest.scm -- cargo test -p cml --test domain5_macro_differential_test -- --nocapture
 
       - name: Publish D5 summary
         if: always()
