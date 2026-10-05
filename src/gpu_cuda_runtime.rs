@@ -12,7 +12,7 @@ use crate::compute::{I32Range, fuse_i32_map_chain, i32_buffer_range, prove_i32_m
 use crate::gpu_cuda::{
     CudaArtifactCache, CudaCacheDiagnosticEvidence, CudaComputeCapability, CudaDriverJitCacheKey,
     CudaDriverJitModuleArtifact, CudaElementType, CudaEmitError, CudaMapKernel, CudaPtxArtifact,
-    CudaPtxCacheKey, emit_i32_compute_kernel, lower_map_kernel,
+    CudaPtxCacheKey, NvrtcVersion, emit_i32_compute_kernel, lower_map_kernel,
 };
 use crate::ir::{BufferLiteral, Ir};
 
@@ -63,6 +63,16 @@ pub enum CudaDriverStage {
 pub enum CudaCapabilityStatus {
     RuntimePresentNoDevices,
     Live(Vec<CudaDevice>),
+}
+
+/// Exact CUDA toolchain provenance used to key generated GPU artifacts.
+///
+/// NVRTC version comes from the runtime NVRTC library; driver version comes
+/// from the CUDA Driver API. Neither is semantic authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CudaToolchainProvenance {
+    pub nvrtc_version: NvrtcVersion,
+    pub driver_version: i32,
 }
 
 #[derive(Debug)]
@@ -169,6 +179,7 @@ struct ReusableBuffers<T> {
 pub struct CudaSession {
     context: Arc<CudaContext>,
     device: CudaDevice,
+    toolchain: CudaToolchainProvenance,
     artifact_cache: Mutex<CudaArtifactCache>,
     kernels: Mutex<HashMap<(CudaKernelMode, String), CudaFunction>>,
     i32_buffers: Mutex<Option<ReusableBuffers<i32>>>,
@@ -203,9 +214,11 @@ impl CudaSession {
             )
         })?;
         let device = device_evidence(&context)?;
+        let toolchain = cuda_toolchain_provenance()?;
         Ok(Self {
             context,
             device,
+            toolchain,
             artifact_cache: Mutex::new(CudaArtifactCache::default()),
             kernels: Mutex::new(HashMap::new()),
             i32_buffers: Mutex::new(None),
@@ -739,7 +752,7 @@ impl CudaSession {
         let ptx_key = CudaPtxCacheKey::new(
             kernel.kernel_digest(),
             self.device.compute_capability,
-            None,
+            Some(self.toolchain.nvrtc_version),
             options.clone(),
         );
 
@@ -772,7 +785,7 @@ impl CudaSession {
             ptx_digest,
             self.device.ordinal,
             self.device.compute_capability,
-            None,
+            Some(self.toolchain.driver_version),
         );
 
         let module = self
@@ -896,6 +909,32 @@ fn device_evidence(context: &CudaContext) -> Result<CudaDevice, CudaRuntimeError
         ordinal: context.ordinal(),
         compute_capability,
         total_memory_bytes,
+    })
+}
+
+fn cuda_toolchain_provenance() -> Result<CudaToolchainProvenance, CudaRuntimeError> {
+    let driver_version = {
+        let mut raw = 0;
+        unsafe { cudarc::driver::sys::cuDriverGetVersion(&mut raw) }
+            .result()
+            .map_err(|error| {
+                CudaRuntimeError::driver(CudaDriverStage::DeviceEvidence, error)
+            })?;
+        raw
+    };
+
+    let nvrtc_version = {
+        let mut major = 0;
+        let mut minor = 0;
+        unsafe { cudarc::nvrtc::sys::nvrtcVersion(&mut major, &mut minor) }
+            .result()
+            .map_err(|error| CudaRuntimeError::Nvrtc(error.to_string()))?;
+        NvrtcVersion::new(major, minor)
+    };
+
+    Ok(CudaToolchainProvenance {
+        nvrtc_version,
+        driver_version,
     })
 }
 
