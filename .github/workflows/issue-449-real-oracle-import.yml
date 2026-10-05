@@ -49,6 +49,12 @@ jobs:
           python3 scripts/check-sens-execution-conformance.py \
             /tmp/sens-d3-oracle.jsonl \
             --sens-dir ../sens \
+            --fpga-handoff-out /tmp/cml-fpga-handoff.lisp \
             | tee /tmp/cml-sens-oracle-import.txt
           test "$(grep -c '^CML-CONFORMANCE-CASE ' /tmp/cml-sens-oracle-import.txt)" -eq 2
+          grep -F "CML-FPGA-HANDOFF-GREEN cases=2" /tmp/cml-sens-oracle-import.txt
           grep -F "CML-CONFORMANCE-IMPORT-GREEN cases=2" /tmp/cml-sens-oracle-import.txt
+          test "$(grep -c '^(fpga-conformance-handoff/v1 ' /tmp/cml-fpga-handoff.lisp)" -eq 2
+          grep -F '(contract . "11.6")' /tmp/cml-fpga-handoff.lisp
+          grep -F '(oracle-digest . "' /tmp/cml-fpga-handoff.lisp
+          grep -F '(identity-trace-digest . "' /tmp/cml-fpga-handoff.lisp
