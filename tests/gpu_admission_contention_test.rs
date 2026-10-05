@@ -1,7 +1,7 @@
 use cml::gpu_admission::{AdmissionProvenance, GpuAdmissionGuard};
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -61,6 +61,8 @@ fn two_processes_never_hold_the_same_gpu_admission_concurrently() {
             .env("CML_GPU_ADMISSION_LOCK", &lock)
             .env("CML_GPU_ADMISSION_CASE", case_id)
             .env("CML_GPU_ADMISSION_HOLD_MS", "200")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
             .unwrap()
     };
