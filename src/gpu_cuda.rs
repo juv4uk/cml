@@ -219,8 +219,14 @@ fn lower_reduce_kernel_from_analysis(
             AdmissionBlocker::KernelNotLowerable,
         ]));
     }
-    let region = analysis.region.as_ref().ok_or(CudaEmitError::UnsupportedRegion)?;
-    let kernel = region.kernel.as_ref().ok_or(CudaEmitError::UnsupportedRegion)?;
+    let region = analysis
+        .region
+        .as_ref()
+        .ok_or(CudaEmitError::UnsupportedRegion)?;
+    let kernel = region
+        .kernel
+        .as_ref()
+        .ok_or(CudaEmitError::UnsupportedRegion)?;
     let is_checked_add = matches!(
         &kernel.body,
         ScalarExpr::CheckedAdd(left, right)
@@ -237,7 +243,11 @@ fn lower_reduce_kernel_from_analysis(
     {
         return Err(CudaEmitError::UnsupportedRegion);
     }
-    let Ir::Int(initial) = region.initial.as_ref().ok_or(CudaEmitError::UnsupportedRegion)? else {
+    let Ir::Int(initial) = region
+        .initial
+        .as_ref()
+        .ok_or(CudaEmitError::UnsupportedRegion)?
+    else {
         return Err(CudaEmitError::UnsupportedRegion);
     };
     let initial = i32::try_from(*initial).map_err(|_| CudaEmitError::UnsupportedRegion)?;
@@ -673,21 +683,20 @@ mod tests {
 
     #[test]
     fn compiler_target_exposes_nvidia_driver_jit() {
-        assert_eq!(CudaCompilerTarget::NvidiaDriverJit.name(), "NvidiaDriverJit");
+        assert_eq!(
+            CudaCompilerTarget::NvidiaDriverJit.name(),
+            "NvidiaDriverJit"
+        );
     }
 
     #[test]
     fn lower_compute_kernel_accepts_map_and_reduce_through_one_boundary() {
-        let map_exprs = crate::parser::parse(
-            "(map (lambda (x) (+ x 1)) #i32(10 20 30))",
-        )
-        .unwrap();
+        let map_exprs = crate::parser::parse("(map (lambda (x) (+ x 1)) #i32(10 20 30))").unwrap();
         let map_ir = crate::lower::lower_program(&map_exprs).unwrap().remove(0);
         assert!(matches!(
             lower_compute_kernel(&map_ir),
             Ok(CudaKernelArtifact::Map(_))
         ));
-
     }
 
     #[test]
@@ -706,9 +715,14 @@ mod tests {
 
     #[test]
     fn lower_compute_kernel_rejects_non_associative_reduce_before_emission() {
-        let expressions = crate::parser::parse("(reduce (lambda (acc x) (+ (+ acc acc) x)) 0 #i32(1 2 3))").unwrap();
+        let expressions =
+            crate::parser::parse("(reduce (lambda (acc x) (+ (+ acc acc) x)) 0 #i32(1 2 3))")
+                .unwrap();
         let ir = crate::lower::lower_program(&expressions).unwrap().remove(0);
-        assert!(matches!(lower_compute_kernel(&ir), Err(CudaEmitError::NotEligible(_))));
+        assert!(matches!(
+            lower_compute_kernel(&ir),
+            Err(CudaEmitError::NotEligible(_))
+        ));
     }
 
     #[test]

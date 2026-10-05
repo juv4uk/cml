@@ -2,7 +2,7 @@
 
 use cml::accelerator::{AcceleratorApi, AcceleratorVendor, SelectionPolicy, select_accelerator};
 use cml::compute::{AdmissionBlocker, ComputeBackend, ComputeExecutionError, CpuComputeBackend};
-use cml::gpu_cuda::CudaEmitError;
+use cml::gpu_cuda::{CudaCompilerTarget, CudaEmitError};
 use cml::gpu_cuda_runtime::{
     CudaCapabilityStatus, CudaKernelMode, CudaRuntimeError, CudaSession, discover_devices,
     execute_map, probe_capability,
@@ -63,6 +63,42 @@ fn assert_cpu_cuda_parity_with_mode(session: &CudaSession, ir: &Ir, mode: CudaKe
     assert_eq!(
         cuda.output, cpu,
         "CUDA output must exactly equal the CPU/reference output for the same admitted IR"
+    );
+}
+
+#[test]
+#[ignore = "requires a live NVIDIA CUDA device"]
+fn nvidia_driver_jit_target_executes_and_records_live_toolchain_provenance() {
+    let session = CudaSession::new(0).expect("CUDA session creation failed");
+    let ir = i32_map_ir(vec![1, 2, 3, 257], 5);
+
+    let cpu = CpuComputeBackend
+        .execute(&ir)
+        .expect("CPU reference rejected admitted case");
+    let prepared = session
+        .compile_target(
+            CudaCompilerTarget::NvidiaDriverJit,
+            &ir,
+            CudaKernelMode::Production,
+        )
+        .expect("NvidiaDriverJit target rejected admitted case");
+    let cuda = prepared
+        .execute()
+        .expect("NvidiaDriverJit execution failed");
+
+    assert_eq!(cuda.output, cpu);
+    assert_eq!(
+        CudaCompilerTarget::NvidiaDriverJit.name(),
+        "NvidiaDriverJit"
+    );
+
+    let provenance = session.toolchain_provenance();
+    assert!(provenance.nvrtc_version.major > 0);
+    assert!(provenance.nvrtc_version.minor >= 0);
+    assert!(provenance.driver_version > 0);
+    assert_eq!(
+        cuda.device.compute_capability,
+        session.device().compute_capability
     );
 }
 

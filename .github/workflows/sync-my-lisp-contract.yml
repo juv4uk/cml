@@ -12,6 +12,10 @@ on:
   # upstream SENS contract; semantic drift must fail before merge.
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sync:
     if: github.event_name != 'pull_request'
