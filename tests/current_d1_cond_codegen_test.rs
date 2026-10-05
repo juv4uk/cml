@@ -44,9 +44,7 @@ fn current_exact_d1_mode_uses_only_the_exact_predicate_gate() {
         .expect("current D1 conditional codegen");
     let main = main_section(&source);
 
-    assert!(main.contains(
-        "if (require_predicate_bit(mk_int(1), \"current-cond\"))"
-    ));
+    assert!(main.contains("if (require_predicate_bit(mk_int(1), \"current-cond\"))"));
     assert!(
         !main.contains("truthy("),
         "current exact D1 conditional path must not use legacy truthiness: {main}"
