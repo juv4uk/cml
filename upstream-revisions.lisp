@@ -29,7 +29,7 @@
  (supported-pin-source . external/sens-gitlink)
  (supported-pin-sha . "a69f4dd1246f668a4bfefa3bf11863a1def24af3")
  (observed-current-source . exact-github-commit)
- (observed-current-sha . "f21c802874f9479ae7056a9d951ea9a23f27b7ae")
+ (observed-current-sha . "5f165cfba4255ad4b4f662776652259f39cee060")
  (bootstrap-core1-source . exact-github-commit)
  (bootstrap-core1-source-sha . "d359c4885e0609a6c8350daf45de157b40cf48f3")
  (historical
