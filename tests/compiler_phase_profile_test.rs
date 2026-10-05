@@ -42,8 +42,7 @@ fn profile_command_emits_phase_rows_without_changing_the_artifact() {
         String::from_utf8_lossy(&profiled.stderr)
     );
 
-    let normal_artifact =
-        fs::read(&normal_path).expect("ordinary compile must emit an artifact");
+    let normal_artifact = fs::read(&normal_path).expect("ordinary compile must emit an artifact");
     let profiled_artifact =
         fs::read(&profile_path).expect("profiled compile must emit an artifact");
     let _ = fs::remove_file(&normal_path);
@@ -57,7 +56,10 @@ fn profile_command_emits_phase_rows_without_changing_the_artifact() {
 
     let stderr = String::from_utf8(profiled.stderr).expect("phase output must be UTF-8");
     let mut names = Vec::new();
-    for line in stderr.lines().filter(|line| line.starts_with("CML-PHASE\t")) {
+    for line in stderr
+        .lines()
+        .filter(|line| line.starts_with("CML-PHASE\t"))
+    {
         let mut name = None;
         let mut elapsed = None;
         for field in line.split('\t').skip(1) {
