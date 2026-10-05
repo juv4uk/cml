@@ -9,7 +9,7 @@
 use cml::machine_inst::{MachineInst, MachineItem, Provenance, X86Reg, assemble_program};
 use cml::native_baseline::NativeExecutable;
 use cml::x86_isel::{ScalarIselConfig, emit_machine_items_with_isel};
-use cml::x86_lir::{LirAluOp, LirFunction, LirInst, LirTerminator};
+use cml::x86_lir::{LirAluOp, LirCond, LirFunction, LirInst, LirTerminator};
 use cml::x86_regalloc::{
     AllocLocation, RegAllocPlan, SCRATCH_REG_A, allocate_registers_with_constraints,
     emit_machine_items_with_plan, fixed_constraints_for_function,
@@ -328,5 +328,116 @@ fn isel_does_not_reuse_pre_div_high_zero_as_post_div_remainder_constant() {
     assert_eq!(
         result, 12,
         "20 % 6 is 2; post-DIV high must be 2, not stale pre-DIV constant 0"
+    );
+}
+
+
+#[test]
+fn branch_simplifier_does_not_treat_post_div_remainder_as_pre_div_zero() {
+    let provenance = Provenance::new(None, "x86-divrem-branch-stale-const");
+    let mut function = LirFunction::new("divrem_branch_stale_const", provenance.clone());
+
+    let numerator = function.alloc_vreg();
+    let divisor = function.alloc_vreg();
+    let low = function.alloc_vreg();
+    let high = function.alloc_vreg();
+    let zero = function.alloc_vreg();
+    let true_value = function.alloc_vreg();
+    let false_value = function.alloc_vreg();
+
+    let true_block = function.create_block();
+    let false_block = function.create_block();
+    let entry = function.entry;
+
+    {
+        let block = function.block_mut(entry).expect("entry block");
+        block.instructions.push(LirInst::Const64 {
+            dst: numerator,
+            imm: 20,
+            provenance: provenance.clone(),
+        });
+        block.instructions.push(LirInst::Const64 {
+            dst: divisor,
+            imm: 6,
+            provenance: provenance.clone(),
+        });
+        block.instructions.push(LirInst::Copy {
+            dst: low,
+            src: numerator,
+            provenance: provenance.clone(),
+        });
+        block.instructions.push(LirInst::Const64 {
+            dst: high,
+            imm: 0,
+            provenance: provenance.clone(),
+        });
+        block.instructions.push(LirInst::DivRem {
+            low,
+            high,
+            divisor,
+            provenance: provenance.clone(),
+        });
+        block.instructions.push(LirInst::Const64 {
+            dst: zero,
+            imm: 0,
+            provenance: provenance.clone(),
+        });
+        block.instructions.push(LirInst::Cmp {
+            lhs: high,
+            rhs: zero,
+            provenance: provenance.clone(),
+        });
+        block.terminator = LirTerminator::BranchCond {
+            cond: LirCond::Equal,
+            true_block,
+            false_block,
+            provenance: provenance.clone(),
+        };
+    }
+
+    {
+        let block = function.block_mut(true_block).expect("true block");
+        block.instructions.push(LirInst::Const64 {
+            dst: true_value,
+            imm: 111,
+            provenance: provenance.clone(),
+        });
+        block.terminator = LirTerminator::Ret {
+            val: Some(true_value),
+            provenance: provenance.clone(),
+        };
+    }
+
+    {
+        let block = function.block_mut(false_block).expect("false block");
+        block.instructions.push(LirInst::Const64 {
+            dst: false_value,
+            imm: 222,
+            provenance: provenance.clone(),
+        });
+        block.terminator = LirTerminator::Ret {
+            val: Some(false_value),
+            provenance,
+        };
+    }
+
+    let _ = cml::x86_opt::optimize_lir(
+        &mut function,
+        cml::x86_opt::LocalOptConfig::all_enabled(),
+    );
+
+    let entry_after = function.block(entry).expect("entry after optimize");
+    assert!(
+        matches!(entry_after.terminator, LirTerminator::BranchCond { .. }),
+        "branch must not fold from stale pre-DIV high=0 fact"
+    );
+
+    let items = cml::x86_lir::lir_to_machine_items(&function)
+        .expect("optimized div-rem branch function must emit");
+    let bytes = assemble_program(&items).expect("assemble div-rem branch witness");
+    let result = NativeExecutable::load(&bytes).call();
+    assert_eq!(
+        result, 222,
+        "20 % 6 = 2, so post-DIV high == 0 must be false"
     );
 }
