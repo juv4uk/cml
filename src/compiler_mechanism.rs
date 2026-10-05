@@ -14,6 +14,7 @@ use sens::CompilerExecutionRole;
 pub enum CompilerMechanismRef {
     SlotVmCar,
     SlotVmCdr,
+    SlotVmCons,
 }
 
 impl CompilerMechanismRef {
@@ -22,17 +23,32 @@ impl CompilerMechanismRef {
         match self {
             Self::SlotVmCar => "cml.slot-vm.car",
             Self::SlotVmCdr => "cml.slot-vm.cdr",
+            Self::SlotVmCons => "cml.slot-vm.cons",
         }
     }
 
-    /// Materialize the already-selected SLOT-VM mechanism.
+    /// Materialize an already-selected one-input selector mechanism.
     ///
-    /// No SENS meaning is inferred here: the caller supplies the mechanism ref
-    /// chosen from a verified upstream execution role.
-    pub const fn slot_instruction(self, dst: Slot, pair: Slot) -> SlotInstr {
+    /// Pair construction is deliberately not accepted here; callers must use
+    /// `pair_instruction` so selector arity and constructor arity cannot blur.
+    pub const fn selector_instruction(self, dst: Slot, pair: Slot) -> Option<SlotInstr> {
         match self {
-            Self::SlotVmCar => SlotInstr::Car { dst, pair },
-            Self::SlotVmCdr => SlotInstr::Cdr { dst, pair },
+            Self::SlotVmCar => Some(SlotInstr::Car { dst, pair }),
+            Self::SlotVmCdr => Some(SlotInstr::Cdr { dst, pair }),
+            Self::SlotVmCons => None,
+        }
+    }
+
+    /// Materialize an already-selected two-input pair-construction mechanism.
+    pub const fn pair_instruction(
+        self,
+        dst: Slot,
+        head: Slot,
+        tail: Slot,
+    ) -> Option<SlotInstr> {
+        match self {
+            Self::SlotVmCons => Some(SlotInstr::Cons { dst, head, tail }),
+            Self::SlotVmCar | Self::SlotVmCdr => None,
         }
     }
 }
@@ -46,6 +62,7 @@ pub const fn select_slot_vm_mechanism(
     match role {
         CompilerExecutionRole::SelectorHead => CompilerMechanismRef::SlotVmCar,
         CompilerExecutionRole::SelectorTail => CompilerMechanismRef::SlotVmCdr,
+        CompilerExecutionRole::PairConstruct => CompilerMechanismRef::SlotVmCons,
     }
 }
 
@@ -54,7 +71,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn verified_selector_roles_bind_to_slot_mechanisms_without_identity_decode() {
+    fn verified_roles_bind_to_slot_mechanisms_without_identity_decode() {
         assert_eq!(
             select_slot_vm_mechanism(CompilerExecutionRole::SelectorHead),
             CompilerMechanismRef::SlotVmCar
@@ -63,25 +80,43 @@ mod tests {
             select_slot_vm_mechanism(CompilerExecutionRole::SelectorTail),
             CompilerMechanismRef::SlotVmCdr
         );
+        assert_eq!(
+            select_slot_vm_mechanism(CompilerExecutionRole::PairConstruct),
+            CompilerMechanismRef::SlotVmCons
+        );
     }
 
     #[test]
-    fn mechanism_refs_are_stable_and_materialize_existing_slot_instructions() {
+    fn mechanism_refs_are_stable_and_arity_specific() {
         let dst = Slot::new(2);
         let pair = Slot::new(1);
 
         let head = CompilerMechanismRef::SlotVmCar;
         assert_eq!(head.as_str(), "cml.slot-vm.car");
         assert_eq!(
-            head.slot_instruction(dst, pair),
-            SlotInstr::Car { dst, pair }
+            head.selector_instruction(dst, pair),
+            Some(SlotInstr::Car { dst, pair })
         );
+        assert_eq!(head.pair_instruction(dst, Slot::new(0), pair), None);
 
         let tail = CompilerMechanismRef::SlotVmCdr;
         assert_eq!(tail.as_str(), "cml.slot-vm.cdr");
         assert_eq!(
-            tail.slot_instruction(dst, pair),
-            SlotInstr::Cdr { dst, pair }
+            tail.selector_instruction(dst, pair),
+            Some(SlotInstr::Cdr { dst, pair })
+        );
+        assert_eq!(tail.pair_instruction(dst, Slot::new(0), pair), None);
+
+        let cons = CompilerMechanismRef::SlotVmCons;
+        assert_eq!(cons.as_str(), "cml.slot-vm.cons");
+        assert_eq!(cons.selector_instruction(dst, pair), None);
+        assert_eq!(
+            cons.pair_instruction(dst, Slot::new(0), pair),
+            Some(SlotInstr::Cons {
+                dst,
+                head: Slot::new(0),
+                tail: pair,
+            })
         );
     }
 }
