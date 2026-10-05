@@ -75,19 +75,24 @@ fn bounded_divrem_rejects_unsupported_rows_fail_closed() {
 }
 
 #[test]
-fn bounded_divrem_rejects_wrong_arity_before_machine_lowering() {
-    for source in ["(mod 7)", "(quotient 7)", "(mod 7 3 1)", "(quotient 7 3 1)"] {
-        let ir = parse_lower_one(source);
-        let error = lower_ir_to_lir(&ir).expect_err("wrong arity must fail closed");
-        assert!(
-            matches!(
-                error,
-                LirLowerError::InvalidArity {
-                    expected: 2,
-                    ..
-                }
-            ),
-            "unexpected error for {source}: {error:?}"
-        );
+fn bounded_divrem_lir_boundary_rejects_wrong_arity() {
+    for sid in [sens::sid!(00010011), sens::sid!(00010100)] {
+        for args in [vec![cml::ir::Ir::Int(7)], vec![cml::ir::Ir::Int(7), cml::ir::Ir::Int(3), cml::ir::Ir::Int(1)]] {
+            let ir = cml::ir::Ir::App {
+                func: Box::new(cml::ir::Ir::Sid(sid)),
+                args,
+            };
+            let error = lower_ir_to_lir(&ir).expect_err("wrong arity must fail closed at x86 LIR boundary");
+            assert!(
+                matches!(
+                    error,
+                    LirLowerError::InvalidArity {
+                        expected: 2,
+                        ..
+                    }
+                ),
+                "unexpected error for {ir:?}: {error:?}"
+            );
+        }
     }
 }
