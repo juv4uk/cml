@@ -120,6 +120,26 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Import real SENS Contract 11.6 oracle rows
+        working-directory: cml
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd ../sens
+            cargo build --release -p sens --example current_en_vs_d1d8_cpu
+            python3 benchmarks/execution-ladder-conformance/emit_oracle.py \
+              --manifest benchmarks/current-en-vs-d1d8/fixtures/d3-smoke.json \
+              --helper target/release/examples/current_en_vs_d1d8_cpu \
+              --out /tmp/sens-d3-oracle.jsonl
+          )
+          python3 scripts/check-sens-execution-conformance.py \
+            /tmp/sens-d3-oracle.jsonl \
+            --sens-dir ../sens \
+            | tee /tmp/cml-sens-oracle-import.txt
+          test "$(grep -c '^CML-CONFORMANCE-CASE ' /tmp/cml-sens-oracle-import.txt)" -eq 2
+          grep -F "CML-CONFORMANCE-IMPORT-GREEN cases=2" /tmp/cml-sens-oracle-import.txt
+
       - name: Install Icarus Verilog
         run: sudo apt-get update && sudo apt-get install -y iverilog
 
