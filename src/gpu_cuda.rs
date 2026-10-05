@@ -17,6 +17,23 @@ pub const CML_CUDA_LOWERING_SCHEMA_VERSION: u32 = 1;
 pub const CML_CUDA_KERNEL_ABI_VERSION: u32 = 1;
 pub const DEFAULT_CUDA_CACHE_CAPACITY: usize = 64;
 
+/// First-class CML compiler target for NVIDIA Driver JIT.
+///
+/// This enum identifies only the compilation mechanism boundary. It does not
+/// define or reinterpret any SENS semantic identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CudaCompilerTarget {
+    NvidiaDriverJit,
+}
+
+impl CudaCompilerTarget {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::NvidiaDriverJit => "NvidiaDriverJit",
+        }
+    }
+}
+
 /// Deterministic 64-bit FNV-1a digest.
 pub fn fnv1a64_digest(bytes: &[u8]) -> String {
     let mut hash = 0xcbf29ce484222325u64;

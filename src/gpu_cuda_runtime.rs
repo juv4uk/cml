@@ -13,7 +13,8 @@ use crate::compute::{
     prove_i32_map_range,
 };
 use crate::gpu_cuda::{
-    CudaArtifactCache, CudaCacheDiagnosticEvidence, CudaComputeCapability, CudaDriverJitCacheKey,
+    CudaArtifactCache, CudaCacheDiagnosticEvidence, CudaCompilerTarget, CudaComputeCapability,
+    CudaDriverJitCacheKey,
     CudaDriverJitModuleArtifact, CudaElementType, CudaEmitError, CudaLatencyBreakdown,
     CudaMapKernel, CudaPtxArtifact, CudaPtxCacheKey, emit_i32_compute_kernel, lower_map_kernel,
 };
@@ -247,13 +248,32 @@ impl CudaSession {
             })
     }
 
+    pub fn compile_target<'a>(
+        &'a self,
+        target: CudaCompilerTarget,
+        ir: &'a Ir,
+        mode: CudaKernelMode,
+    ) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
+        match target {
+            CudaCompilerTarget::NvidiaDriverJit => self.prepare_map_with_mode_inner(ir, mode),
+        }
+    }
+
     pub fn prepare_map<'a>(&'a self, ir: &'a Ir) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
-        self.prepare_map_with_mode(ir, CudaKernelMode::Production)
+        self.compile_target(CudaCompilerTarget::NvidiaDriverJit, ir, CudaKernelMode::Production)
     }
 
     /// Witness variant of [`CudaSession::prepare_map`]: the kernel is
     /// compiled by NVRTC with `-fmad=false` (cml#360, sens#1585 A1).
     pub fn prepare_map_with_mode<'a>(
+        &'a self,
+        ir: &'a Ir,
+        mode: CudaKernelMode,
+    ) -> Result<PreparedCudaMap<'a>, CudaRuntimeError> {
+        self.compile_target(CudaCompilerTarget::NvidiaDriverJit, ir, mode)
+    }
+
+    fn prepare_map_with_mode_inner<'a>(
         &'a self,
         ir: &'a Ir,
         mode: CudaKernelMode,
