@@ -12,7 +12,7 @@ use crate::compute::{I32Range, fuse_i32_map_chain, i32_buffer_range, prove_i32_m
 use crate::gpu_cuda::{
     CudaArtifactCache, CudaCacheDiagnosticEvidence, CudaComputeCapability, CudaDriverJitCacheKey,
     CudaDriverJitModuleArtifact, CudaElementType, CudaEmitError, CudaMapKernel, CudaPtxArtifact,
-    CudaPtxCacheKey, emit_i32_compute_kernel, lower_map_kernel,
+    CudaPtxCacheKey, NvrtcVersion, emit_i32_compute_kernel, lower_map_kernel,
 };
 use crate::ir::{BufferLiteral, Ir};
 
