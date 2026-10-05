@@ -671,6 +671,7 @@ impl CBackend {
 
     fn compile_expr(&mut self, ir: &Ir, env: &str) -> Result<String, CompileError> {
         match ir {
+            Ir::DomainIdentity(_) => Err(CompileError::UnsupportedVariant("DomainIdentity")),
             Ir::Sid(sid) => Ok(format!("mk_sid_callable(0b{sid})")),
             Ir::Int(n) => Ok(format!("mk_int({n})")),
             Ir::Float(_) => Err(CompileError::UnsupportedVariant("Float")),
