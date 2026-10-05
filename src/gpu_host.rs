@@ -184,7 +184,7 @@ impl CudaHostCapability {
             cuda_include: PathBuf::from(required(&fields, "CUDA_INCLUDE")?),
             cuda_toolkit_lib: PathBuf::from(required(&fields, "CUDA_TOOLKIT_LIB")?),
             cuda_driver_lib: PathBuf::from(required(&fields, "CUDA_DRIVER_LIB")?),
-            cuda_nvrtc_lib: PathBuf::from(required(&fields, "CUDA_NVRTC_LIB")?),
+            cuda_nvrtc_lib: PathBuf::from(optional(&fields, "CUDA_NVRTC_LIB")),
             nvidia_smi: PathBuf::from(required(&fields, "NVIDIA_SMI")?),
             header_present: boolean(&fields, "CUDA_HEADER_PRESENT")?,
             driver_present: boolean(&fields, "CUDA_DRIVER_PRESENT")?,
@@ -214,6 +214,9 @@ impl CudaHostCapability {
         }
         if !capability.nvrtc_library_present {
             return Err(CudaHostCapabilityError::NvrtcLibraryUnavailable);
+        }
+        if capability.cuda_nvrtc_lib.as_os_str().is_empty() {
+            return Err(CudaHostCapabilityError::MissingField("CUDA_NVRTC_LIB"));
         }
 
         Ok(capability)
