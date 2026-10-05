@@ -161,11 +161,13 @@ impl Builder {
             .ok_or(SlotBridgeError::UnsupportedCanonicalForm(
                 "domain identity has no callable Core projection",
             ))?;
-        let role = sens::compiler_execution_role(core).ok_or(
-            SlotBridgeError::UnsupportedCanonicalForm(
+        let role = sens::compiler_execution_role_from_sens(core)
+            .map_err(|_| {
+                SlotBridgeError::Verification(BridgeError::LanguageRoleDerivationFailed)
+            })?
+            .ok_or(SlotBridgeError::UnsupportedCanonicalForm(
                 "domain identity has no admitted compiler execution role",
-            ),
-        )?;
+            ))?;
 
         let verified = verify_request(SemanticRequest {
             identity: *identity,
