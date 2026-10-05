@@ -81,6 +81,7 @@ fn bounded_divrem_rejects_unsupported_rows_fail_closed() {
         "(quotient 7 0)",
         "(mod 7 -3)",
         "(quotient 7 -3)",
+        "(mod (/ 1 2) 1)",
     ] {
         let ir = parse_lower_one(source);
         let error = lower_ir_to_lir(&ir).expect_err("row must remain outside bounded x86 divide slice");
