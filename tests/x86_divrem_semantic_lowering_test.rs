@@ -5,7 +5,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use cml::machine_inst::assemble_program;
+use cml::lisp_asm_vertical::select_arithmetic_slice;
+use cml::machine_inst::{MachineInst, MachineItem, assemble_program};
 use cml::native_baseline::NativeExecutable;
 use cml::x86_lir::{LirLowerError, lower_ir_to_lir, lir_to_machine_items};
 use cml::{lower, parser};
@@ -146,4 +147,67 @@ fn zero_divisor_rejection_matches_upstream_named_error() {
             .expect_err("bounded x86 LIR must fail closed before hardware DIV");
         assert!(matches!(local, LirLowerError::Unsupported(_)));
     }
+}
+
+
+#[test]
+fn mod_lir_path_matches_manual_vertical_div_mechanism_shape() {
+    let source = "(mod 20 6)";
+    let ir = parse_lower_one(source);
+
+    let manual = select_arithmetic_slice(&[ir.clone()])
+        .expect("current bounded manual mod oracle must still lower");
+    let lir = lower_ir_to_lir(&ir).expect("bounded mod lowers to DivRem LIR");
+    let plan_constraints = cml::x86_regalloc::fixed_constraints_for_function(&lir);
+    let plan = cml::x86_regalloc::allocate_registers_with_constraints(&lir, &plan_constraints)
+        .expect("bounded mod LIR must allocate");
+    let via_lir = lir_to_machine_items(&lir).expect("bounded mod LIR must emit");
+
+    let manual_divs = manual
+        .iter()
+        .filter(|item| matches!(item, MachineItem::Inst(MachineInst::DivReg { .. })))
+        .count();
+    let lir_divs = via_lir
+        .iter()
+        .filter(|item| matches!(item, MachineItem::Inst(MachineInst::DivReg { .. })))
+        .count();
+
+    assert_eq!(manual_divs, 1);
+    assert_eq!(lir_divs, 1);
+
+    for items in [&manual, &via_lir] {
+        for item in items.iter() {
+            if let MachineItem::Inst(MachineInst::DivReg { provenance, .. }) = item {
+                assert!(
+                    provenance.semantic_id.is_none(),
+                    "physical divide remains mechanism-only on both paths"
+                );
+            }
+        }
+    }
+
+    let lir_moves = via_lir
+        .iter()
+        .filter(|item| matches!(
+            item,
+            MachineItem::Inst(
+                MachineInst::MovRegReg { .. }
+                    | MachineInst::MovLoad { .. }
+                    | MachineInst::MovStore { .. }
+            )
+        ))
+        .count();
+
+    eprintln!(
+        "CML-DIVREM-LIR-COST source={source:?} manual_items={} lir_items={} lir_moves={} lir_spills={}",
+        manual.len(),
+        via_lir.len(),
+        lir_moves,
+        plan.spill_count
+    );
+
+    assert_eq!(
+        plan.spill_count, 0,
+        "small bounded literal mod witness should not need a spill"
+    );
 }
