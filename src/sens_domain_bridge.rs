@@ -407,6 +407,13 @@ pub fn verify_lowering_request(
         return Err(BridgeError::MechanismNotAdmitted);
     }
 
+    if request.law_ref.trim().is_empty() {
+        return Err(BridgeError::MissingLawReference);
+    }
+    if request.proof_ref.trim().is_empty() {
+        return Err(BridgeError::MissingProofReference);
+    }
+
     verify_lowering_law_and_proof(
         request.lowering_role,
         &request.law_ref,
