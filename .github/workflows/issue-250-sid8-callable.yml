@@ -16,8 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          token: ${{ secrets.SENS_READ_TOKEN }}
-          submodules: recursive
+          submodules: false
+      - name: Hydrate private SENS submodule from runner mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
+          git -C external/sens log -1 --format='external/sens %H'
       - uses: dtolnay/rust-toolchain@stable
       - name: C frontend preserves exact Sid8
         run: cargo test --test c_frontend_sid8_identity_test -- --nocapture
