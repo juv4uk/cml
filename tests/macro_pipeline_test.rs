@@ -48,8 +48,12 @@ fn defmacro_my_if_expands_to_cond_result() {
     let src = r#"(defmacro my-if (test then else)
   (cons (quote cond)
         (cons (cons test (cons then (quote ())))
-              (cons (cons (quote t) (cons else (quote ()))) (quote ())))))
-(my-if (eq 1 1) 42 0)"#;
+              (cons
+                (cons
+                  (quote (тотожне? (quote my-if-fallback) (quote my-if-fallback)))
+                  (cons else (quote ())))
+                (quote ())))))
+(my-if (тотожне? 1 1) 42 0)"#;
     assert_eq!(value(src), "42");
 }
 
@@ -58,9 +62,26 @@ fn defmacro_my_if_else_branch() {
     let src = r#"(defmacro my-if (test then else)
   (cons (quote cond)
         (cons (cons test (cons then (quote ())))
-              (cons (cons (quote t) (cons else (quote ()))) (quote ())))))
-(my-if (eq 1 0) 1 99)"#;
+              (cons
+                (cons
+                  (quote (тотожне? (quote my-if-fallback) (quote my-if-fallback)))
+                  (cons else (quote ())))
+                (quote ())))))
+(my-if (тотожне? 1 0) 1 99)"#;
     assert_eq!(value(src), "99");
+}
+
+#[test]
+fn current_cond_rejects_bare_t_instead_of_coercing_truthiness() {
+    match compile_and_run("(cond (t 1))").expect("compile_and_run") {
+        Observation::Error(error) => {
+            assert!(
+                error.contains("Type") && error.contains("PredicateBit"),
+                "current COND must reject non-PredicateBit test values: {error}"
+            );
+        }
+        other => panic!("expected PredicateBit Type error, got {other:?}"),
+    }
 }
 
 #[test]
