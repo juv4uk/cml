@@ -13,6 +13,7 @@ concurrency:
 jobs:
   test:
     runs-on: [self-hosted, guix]
+    timeout-minutes: 60
     steps:
       - name: Require private dependency read token
         env:
@@ -174,4 +175,5 @@ jobs:
 
       - name: cargo test
         working-directory: cml
+        timeout-minutes: 30
         run: cargo test --verbose --no-fail-fast
