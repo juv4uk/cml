@@ -53,7 +53,27 @@ mod enabled {
     fn run() -> Result<(), String> {
         let mut args = env::args().skip(1);
         match args.next().as_deref() {
-            Some("serve") => serve(socket_path()),
+            Some("serve") => {
+                let mut reserve_bytes = None;
+                while let Some(arg) = args.next() {
+                    if arg == "--reserve-bytes" {
+                        let bytes: usize = args
+                            .next()
+                            .ok_or("--reserve-bytes requires <bytes>")?
+                            .parse()
+                            .map_err(|error| format!("invalid reserve-bytes: {error}"))?;
+                        reserve_bytes = Some(bytes);
+                    } else {
+                        return Err(format!("unknown serve argument: {arg}"));
+                    }
+                }
+                if let Some(bytes) = reserve_bytes {
+                    unsafe {
+                        env::set_var("CML_CUDA_MEMORY_RESERVE_BYTES", bytes.to_string());
+                    }
+                }
+                serve(socket_path())
+            }
             Some("ping") => client_ping(&socket_path()),
             Some("probe") => client_probe(&socket_path()),
             Some("add-i32") => {
@@ -63,7 +83,11 @@ mod enabled {
                     .parse()
                     .map_err(|error| format!("invalid offset: {error}"))?;
                 let values = args
-                    .map(|value| value.parse::<i32>().map_err(|error| format!("invalid i32 {value}: {error}")))
+                    .map(|value| {
+                        value
+                            .parse::<i32>()
+                            .map_err(|error| format!("invalid i32 {value}: {error}"))
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 if values.is_empty() {
                     return Err("add-i32 requires at least one value".into());
@@ -78,7 +102,11 @@ mod enabled {
                     .next()
                     .ok_or("chain-file-i32 requires <input.bin> <output.bin> <offset>...")?;
                 let offsets = args
-                    .map(|value| value.parse::<i64>().map_err(|error| format!("invalid offset {value}: {error}")))
+                    .map(|value| {
+                        value
+                            .parse::<i64>()
+                            .map_err(|error| format!("invalid offset {value}: {error}"))
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 if offsets.is_empty() {
                     return Err("chain-file-i32 requires at least one offset".into());
@@ -91,7 +119,7 @@ mod enabled {
                 )
             }
             _ => Err(
-                "usage: cml-gpu-worker serve|ping|probe|add-i32 <offset> <value>...|chain-file-i32 <input.bin> <output.bin> <offset>..."
+                "usage: cml-gpu-worker serve [--reserve-bytes <bytes>]|ping|probe|add-i32 <offset> <value>...|chain-file-i32 <input.bin> <output.bin> <offset>..."
                     .into(),
             ),
         }
