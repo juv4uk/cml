@@ -350,8 +350,69 @@ fn lower_list(list: &[Expr], env: &Env) -> Result<Ir, LowerError> {
         lower_call(func, &list[1..], env)
     } else if let Expr::Sid(sid) = &list[0] {
         lower_sid_head(*sid, &list[1..], env)
+    } else if let Expr::DomainIdentity(identity) = &list[0] {
+        lower_domain_head(*identity, &list[1..], env)
     } else {
         lower_generic_call(&list[0], &list[1..], env)
+    }
+}
+
+fn lower_domain_prim(
+    op: PrimOp,
+    name: &'static str,
+    arity: usize,
+    args: &[Expr],
+    env: &Env,
+) -> Result<Ir, LowerError> {
+    if args.len() != arity {
+        return Err(LowerError::arity(format!(
+            "{name} expects exactly {arity} argument(s)"
+        )));
+    }
+    Ok(Ir::Prim {
+        op,
+        args: args
+            .iter()
+            .map(|expr| lower_expr_admitted(expr, env))
+            .collect::<Result<_, _>>()?,
+    })
+}
+
+/// Current exact-domain head lowering. This is deliberately narrower than the
+/// upstream residency set: only D3 mechanisms with an already-existing CML IR
+/// representation are admitted here. The semantic identity is consumed once
+/// at compile time and does not become a second backend registry.
+fn lower_domain_head(
+    identity: sens::DomainIdentity,
+    args: &[Expr],
+    env: &Env,
+) -> Result<Ir, LowerError> {
+    if identity.width() != 3 {
+        return Err(LowerError::invalid_form(format!(
+            "exact DomainIdentity D{}:{:0width$b} is not admitted by the first canonical lowering slice",
+            identity.width(),
+            identity.packed_bits(),
+            width = identity.width()
+        )));
+    }
+
+    match identity.packed_bits() {
+        0b000 => Err(LowerError::invalid_form(
+            "D3 000 structural empty cannot head a call",
+        )),
+        0b001 => match args {
+            [single] => Ok(Ir::Quote(lower_quoted(single)?)),
+            _ => Err(LowerError::arity("D3 QUOTE expects exactly one argument")),
+        },
+        0b010 => lower_domain_prim(PrimOp::Atom, "D3 ATOM", 1, args, env),
+        0b011 => lower_domain_prim(PrimOp::Cdr, "D3 CDR", 1, args, env),
+        0b100 => lower_domain_prim(PrimOp::Car, "D3 CAR", 1, args, env),
+        0b101 => lower_domain_prim(PrimOp::Eq, "D3 EQ", 2, args, env),
+        0b110 => Err(LowerError::invalid_form(
+            "D3 COND is blocked until CML carries Contract 11.6 two-part exact-PredicateBit control explicitly",
+        )),
+        0b111 => lower_domain_prim(PrimOp::Cons, "D3 CONS", 2, args, env),
+        _ => unreachable!("D3 payload is exactly three bits"),
     }
 }
 
@@ -800,6 +861,54 @@ fn lower_quoted(expr: &Expr) -> Result<Quoted, LowerError> {
         Expr::NumericBuffer(_) => Err(LowerError::invalid_form(
             "numeric buffers are self-evaluating values and must not be quoted",
         )),
+    }
+}
+
+
+#[cfg(test)]
+mod exact_domain_lowering_tests {
+    use super::*;
+
+    fn one(source: &str) -> Expr {
+        let mut exprs = crate::parser::parse_canonical_binary(source)
+            .expect("upstream canonical source must parse");
+        assert_eq!(exprs.len(), 1);
+        exprs.remove(0)
+    }
+
+    #[test]
+    fn real_d3_quote_empty_case_lowers_without_sid8_projection() {
+        let expr = one("10 001 00 10 01 01");
+        let ir = lower_expr(&expr).expect("exact D3 quote case lowers");
+        assert!(matches!(ir, Ir::Quote(Quoted::Nil)));
+    }
+
+    #[test]
+    fn real_d3_car_empty_case_compiles_identity_away_to_private_car_mechanism() {
+        let expr = one("10 100 00 10 001 00 10 10 01 01 01 01");
+        let ir = lower_expr(&expr).expect("exact D3 CAR case lowers");
+        let Ir::Prim { op: PrimOp::Car, args } = ir else {
+            panic!("expected private CAR mechanism IR");
+        };
+        assert_eq!(args.len(), 1);
+        assert!(matches!(args[0], Ir::Quote(Quoted::Nil)));
+    }
+
+    #[test]
+    fn current_d3_cond_fails_closed_instead_of_using_stale_cond_ir() {
+        let expr = one("10 110 01");
+        let error = lower_expr(&expr).expect_err("D3 COND must remain blocked in this slice");
+        assert!(
+            error.to_string().contains("Contract 11.6 two-part exact-PredicateBit"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn d4_head_is_not_silently_truncated_or_zero_padded_to_d3_or_sid8() {
+        let expr = one("10 0001 00 10 01 01");
+        let error = lower_expr(&expr).expect_err("D4 is outside first exact-domain lowering slice");
+        assert!(error.to_string().contains("D4:0001"), "{error}");
     }
 }
 
