@@ -91,7 +91,7 @@ fn upstream_revision_channels_are_explicit_and_checkout_aligned() {
         "#84 supported-pin declaration must match the external/sens gitlink checkout"
     );
 
-    let observed_checkout = sibling("my-lisp");
+    let observed_checkout = sibling("sens");
     assert_eq!(
         head(&observed_checkout),
         observed,
@@ -121,6 +121,22 @@ fn ci_resolves_active_my_lisp_revisions_from_the_channel_manifest() {
     assert!(
         workflow.contains("steps.upstream_revisions.outputs.observed_current_sha"),
         "#84 observed-current checkout must consume the manifest-derived CI output"
+    );
+    assert!(
+        workflow.contains("CML_SENS_DEPLOY_KEY"),
+        "#478 private sens checkouts must use the dedicated read-only deploy-key secret"
+    );
+    assert!(
+        workflow.contains("CML_FPGA_LISP_DEPLOY_KEY"),
+        "#478 private fpga-lisp checkout must use its dedicated read-only deploy-key secret"
+    );
+    assert!(
+        workflow.contains("CML_WSM_MY_LISP_DEPLOY_KEY"),
+        "#478 private wsm-my-lisp checkout must use its dedicated read-only deploy-key secret"
+    );
+    assert!(
+        workflow.contains("submodules: false"),
+        "#478 CML checkout must not recursively fetch private sibling repos with the repo-scoped GITHUB_TOKEN"
     );
     assert!(
         !workflow.contains("d4ad7e7c7717a610599875ffb90123b713ac05c7"),
