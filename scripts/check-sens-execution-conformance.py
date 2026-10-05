@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 SCHEMA = "sens-execution-conformance/v1"
+CURRENT_CONTRACT = "11.6"
 
 
 def upstream_validator(sens_dir: Path) -> Path:
@@ -27,7 +28,7 @@ def upstream_validator(sens_dir: Path) -> Path:
     if not path.is_file():
         raise FileNotFoundError(
             f"upstream SENS conformance validator not found: {path}; "
-            "requires juv4uk/sens#3575 or successor"
+            "requires juv4uk/sens#3593/#3594 or current successor"
         )
     return path
 
@@ -49,6 +50,11 @@ def read_oracle_rows(jsonl: Path) -> list[dict[str, object]]:
         row = json.loads(raw)
         if row.get("schema") != SCHEMA:
             raise ValueError(f"line {line_no}: unexpected schema")
+        if row.get("contract") != CURRENT_CONTRACT:
+            raise ValueError(
+                f"line {line_no}: current CML import requires "
+                f"contract={CURRENT_CONTRACT}, got {row.get('contract')!r}"
+            )
         if row.get("producer_layer") != "L0":
             raise ValueError(
                 f"line {line_no}: CML import expects upstream L0 oracle rows"
