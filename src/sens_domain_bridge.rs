@@ -60,6 +60,32 @@ pub struct SemanticRequest {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct VerifiedDomainMechanism {
+    identity: sens::DomainIdentity,
+    execution_role: sens::CompilerExecutionRole,
+    mechanism_ref: CompilerMechanismRef,
+    provenance: AuthorityProvenance,
+}
+
+impl VerifiedDomainMechanism {
+    pub const fn identity(&self) -> sens::DomainIdentity {
+        self.identity
+    }
+
+    pub const fn execution_role(&self) -> sens::CompilerExecutionRole {
+        self.execution_role
+    }
+
+    pub const fn mechanism_ref(&self) -> CompilerMechanismRef {
+        self.mechanism_ref
+    }
+
+    pub fn provenance(&self) -> &AuthorityProvenance {
+        &self.provenance
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct VerifiedDomainCall {
     identity: sens::DomainIdentity,
     execution_role: sens::CompilerExecutionRole,
@@ -225,10 +251,9 @@ fn verify_boundary_contract() -> Result<(), BridgeError> {
 ///
 /// The only identity -> role decision is delegated to
 /// `sens::compiler_execution_role`. CML never matches domain bits here.
-pub fn verify_call(
+pub fn verify_request(
     request: SemanticRequest,
-    args: Vec<Ir>,
-) -> Result<VerifiedDomainCall, BridgeError> {
+) -> Result<VerifiedDomainMechanism, BridgeError> {
     verify_boundary_contract()?;
     let pinned = pinned_authority()?;
 
@@ -284,11 +309,29 @@ pub fn verify_call(
 
     let mechanism_ref = select_slot_vm_mechanism(authoritative_role);
 
-    Ok(VerifiedDomainCall {
+    Ok(VerifiedDomainMechanism {
         identity: request.identity,
         execution_role: authoritative_role,
         mechanism_ref,
         provenance: pinned,
+    })
+}
+
+/// Compatibility wrapper for callers that already have lowered arguments.
+///
+/// Verification is deliberately args-independent: semantic admission and
+/// role/mechanism selection happen before target-specific argument lowering.
+pub fn verify_call(
+    request: SemanticRequest,
+    args: Vec<Ir>,
+) -> Result<VerifiedDomainCall, BridgeError> {
+    let verified = verify_request(request)?;
+
+    Ok(VerifiedDomainCall {
+        identity: verified.identity,
+        execution_role: verified.execution_role,
+        mechanism_ref: verified.mechanism_ref,
+        provenance: verified.provenance,
         args,
     })
 }
@@ -368,6 +411,20 @@ mod tests {
             actual, authority.revision,
             "proof-carrying provenance revision must equal the exact external/sens gitlink checkout"
         );
+    }
+
+    #[test]
+    fn verified_pair_construct_role_selects_only_cml_private_cons_mechanism() {
+        let verified = verify_request(current_request(d3(0b111))).unwrap();
+        assert_eq!(
+            verified.execution_role(),
+            sens::CompilerExecutionRole::PairConstruct
+        );
+        assert_eq!(
+            verified.mechanism_ref(),
+            CompilerMechanismRef::SlotVmCons
+        );
+        assert_eq!(verified.mechanism_ref().as_str(), "cml.slot-vm.cons");
     }
 
     #[test]

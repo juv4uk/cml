@@ -1,0 +1,48 @@
+name: Issue 595 full-source D3 compiler vertical
+
+on:
+  pull_request:
+    paths:
+      - "external/sens"
+      - "upstream-revisions.lisp"
+      - "src/compiler_mechanism.rs"
+      - "src/sens_domain_bridge.rs"
+      - "src/sens_slot_bridge.rs"
+      - "tests/domain_bridge_slot_vertical_494_test.rs"
+      - ".github/workflows/issue-595-focused.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, guix]
+    timeout-minutes: 20
+    steps:
+      - name: Require private dependency read token
+        env:
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+        run: test -n "$SENS_READ_TOKEN"
+
+      - name: Checkout CML with pinned SENS
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+          submodules: true
+
+      - name: Rustfmt contract
+        run: guix shell --pure -m manifest.scm -- cargo fmt -p cml -- --check
+
+      - name: Role to private mechanism mapping
+        run: guix shell --pure -m manifest.scm -- cargo test -p cml compiler_mechanism::tests -- --nocapture
+
+      - name: Proof-carrying request verification
+        run: guix shell --pure -m manifest.scm -- cargo test -p cml sens_domain_bridge::tests -- --nocapture
+
+      - name: Recursive canonical source to SLOT lowering
+        run: guix shell --pure -m manifest.scm -- cargo test -p cml sens_slot_bridge::tests -- --nocapture
+
+      - name: Full shared D3 corpus differential
+        run: guix shell --pure -m manifest.scm -- cargo test -p cml --test domain_bridge_slot_vertical_494_test -- --nocapture
