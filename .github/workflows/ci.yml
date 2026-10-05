@@ -12,14 +12,14 @@ jobs:
     steps:
       - name: Require private dependency read token
         env:
-          SENS_READ_TOKEN: ${{ secrets.SENS_READ_TOKEN }}
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
         run: test -n "$SENS_READ_TOKEN"
 
       - name: Checkout cml
         uses: actions/checkout@v4
         with:
           path: cml
-          token: ${{ secrets.SENS_READ_TOKEN }}
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           # external/sens is a real submodule now: sens is the contract dependency
           # (cml reads its .lisp source tree directly for the encoder bridge, CPU
           # profile, and conformance corpus), so it travels with cml's own
@@ -67,7 +67,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: juv4uk/sens
-          token: ${{ secrets.SENS_READ_TOKEN }}
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           ref: ${{ steps.upstream_revisions.outputs.supported_pin_sha }}
           path: sens-supported
 
@@ -75,7 +75,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: juv4uk/sens
-          token: ${{ secrets.SENS_READ_TOKEN }}
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           ref: ${{ steps.upstream_revisions.outputs.observed_current_sha }}
           path: sens
 
@@ -83,7 +83,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: juv4uk/sens
-          token: ${{ secrets.SENS_READ_TOKEN }}
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           ref: ${{ steps.upstream_revisions.outputs.bootstrap_core1_sha }}
           path: sens-bootstrap
 
@@ -116,7 +116,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: juv4uk/fpga-lisp
-          token: ${{ secrets.SENS_READ_TOKEN }}
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           ref: d1cb7eb79f675e8f2cc128c3b12918d6b08b9413
           path: fpga-lisp
 
@@ -124,7 +124,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: juv4uk/wsm-my-lisp
-          token: ${{ secrets.SENS_READ_TOKEN }}
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           ref: 1fe661664479c92da1968d60914b512320678ac2
           path: wsm-my-lisp
 

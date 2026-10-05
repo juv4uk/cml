@@ -15,7 +15,7 @@ on:
 jobs:
   sync:
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, guix]
     permissions:
       contents: write
     env:
@@ -36,7 +36,7 @@ jobs:
         with:
           repository: juv4uk/sens
           ref: main
-          token: ${{ secrets.SENS_READ_TOKEN }}
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           fetch-depth: 0
           path: .upstream/sens
 
@@ -99,7 +99,7 @@ jobs:
 
   verify:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, guix]
     permissions:
       contents: read
     env:
@@ -115,6 +115,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: juv4uk/sens
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           ref: main
           fetch-depth: 0
           path: .upstream/sens

@@ -16,14 +16,14 @@ jobs:
     steps:
       - name: Require private dependency read token
         env:
-          SENS_READ_TOKEN: ${{ secrets.SENS_READ_TOKEN }}
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
         run: test -n "$SENS_READ_TOKEN"
 
       - name: Checkout cml
         uses: actions/checkout@v5
         with:
           path: cml
-          token: ${{ secrets.SENS_READ_TOKEN }}
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
       - name: Resolve observed-current
         id: rev
         working-directory: cml
@@ -39,7 +39,7 @@ jobs:
           repository: juv4uk/sens
           ref: ${{ steps.rev.outputs.sha }}
           path: sens
-          token: ${{ secrets.SENS_READ_TOKEN }}
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
       - uses: dtolnay/rust-toolchain@stable
       - name: Emit upstream real oracle rows
         working-directory: sens

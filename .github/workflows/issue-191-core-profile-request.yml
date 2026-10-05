@@ -19,14 +19,14 @@ jobs:
     steps:
       - name: Require private dependency read token
         env:
-          SENS_READ_TOKEN: ${{ secrets.SENS_READ_TOKEN }}
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
         run: test -n "$SENS_READ_TOKEN"
 
       - name: Checkout CML with pinned my-lisp
         uses: actions/checkout@v5
         with:
           submodules: recursive
-          token: ${{ secrets.SENS_READ_TOKEN }}
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
