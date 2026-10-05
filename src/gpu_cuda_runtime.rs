@@ -20,8 +20,15 @@ use crate::gpu_cuda::{
 };
 use crate::ir::{BufferLiteral, Ir};
 
+/// Exact toolchain provenance used to compile and load CUDA artifacts in one session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CudaToolchainProvenance {
+    pub nvrtc_version: NvrtcVersion,
+    pub driver_version: i32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-/// Exact toolchain provenance used to compile and load CUDA artifacts in one session.\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub struct CudaToolchainProvenance {\n    pub nvrtc_version: NvrtcVersion,\n    pub driver_version: i32,\n}\n\npub struct CudaDevice {
+pub struct CudaDevice {
     pub descriptor: AcceleratorDescriptor,
     pub ordinal: usize,
     pub compute_capability: (i32, i32),
