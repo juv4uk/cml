@@ -116,6 +116,14 @@ jobs:
       - name: CUDA resident/fused chain — parity
         run: cargo test --release --features gpu-cuda --test gpu_cuda_resident_chain_live_test fused_final_only_chain_matches_resident_semantics -- --ignored --nocapture
 
+      - name: Placement calibration
+        if: ${{ github.event_name != 'pull_request' }}
+        run: cargo test --release --features gpu-cuda --test placement_cost_calibration_live_test -- --include-ignored --nocapture
+
+      - name: Resident-chain calibration
+        if: ${{ github.event_name != 'pull_request' }}
+        run: cargo test --release --features gpu-cuda --test gpu_cuda_resident_chain_live_test owner_gtx_1050_ti_resident_chain_witness -- --ignored --nocapture
+
       - name: Crossover calibration
         if: ${{ github.event_name != 'pull_request' }}
         run: cargo test --release --features gpu-cuda --test gpu_cuda_crossover_live_test -- --include-ignored --nocapture
