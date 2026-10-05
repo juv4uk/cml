@@ -4,7 +4,7 @@ Documentation=https://github.com/juv4uk/cml/issues/468
 Wants=network-online.target
 After=network-online.target
 ConditionFileIsExecutable=/home/agents/.local/bin/cml-gpu-worker
-ConditionFileIsExecutable=/home/agents/ecosystem/scripts/cuda-host-profile.sh
+ConditionPathExists=/home/agents/ecosystem/scripts/cuda-host-profile.sh
 
 [Service]
 Type=simple
