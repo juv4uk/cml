@@ -8,11 +8,14 @@ use cudarc::driver::{CudaContext, CudaFunction, CudaSlice, LaunchConfig, PushKer
 use crate::accelerator::{
     AcceleratorApi, AcceleratorClass, AcceleratorDescriptor, AcceleratorVendor,
 };
-use crate::compute::{I32Range, fuse_i32_map_chain, i32_buffer_range, prove_i32_map_range};
+use crate::compute::{
+    ComputeBackend, CpuComputeBackend, I32Range, fuse_i32_map_chain, i32_buffer_range,
+    prove_i32_map_range,
+};
 use crate::gpu_cuda::{
     CudaArtifactCache, CudaCacheDiagnosticEvidence, CudaComputeCapability, CudaDriverJitCacheKey,
-    CudaDriverJitModuleArtifact, CudaElementType, CudaEmitError, CudaMapKernel, CudaPtxArtifact,
-    CudaPtxCacheKey, emit_i32_compute_kernel, lower_map_kernel,
+    CudaDriverJitModuleArtifact, CudaElementType, CudaEmitError, CudaLatencyBreakdown,
+    CudaMapKernel, CudaPtxArtifact, CudaPtxCacheKey, emit_i32_compute_kernel, lower_map_kernel,
 };
 use crate::ir::{BufferLiteral, Ir};
 
@@ -804,6 +807,216 @@ impl CudaSession {
             source,
         };
         self.function_for_kernel(mode, &kernel)
+    }
+
+    /// Measure fine-grained compile-to-execution latency breakdown for an admitted IR (#491).
+    pub fn measure_latency_breakdown(
+        &self,
+        ir: &Ir,
+        mode: CudaKernelMode,
+    ) -> Result<CudaLatencyBreakdown, CudaRuntimeError> {
+        let t_lowering = std::time::Instant::now();
+        let kernel = lower_map_kernel(ir)?;
+        let cml_ir_lowering_ns = t_lowering.elapsed().as_nanos() as u64;
+
+        let t_cpu = std::time::Instant::now();
+        let cpu_output = CpuComputeBackend
+            .execute(ir)
+            .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::InternalState, format!("{error:?}")))?;
+        let cpu_reference_ns = t_cpu.elapsed().as_nanos() as u64;
+
+        let options = nvrtc_options_for(mode, self.device.compute_capability);
+        let t_nvrtc = std::time::Instant::now();
+        let compiled = cudarc::nvrtc::compile_ptx_with_opts(
+            kernel.source.clone(),
+            cudarc::nvrtc::CompileOptions {
+                options,
+                ..Default::default()
+            },
+        )
+        .map_err(|error| CudaRuntimeError::Nvrtc(error.to_string()))?;
+        let nvrtc_compile_ns = t_nvrtc.elapsed().as_nanos() as u64;
+        let ptx_src = compiled.to_src();
+
+        let t_driver = std::time::Instant::now();
+        let module = self
+            .context
+            .load_module(cudarc::nvrtc::Ptx::from_src(ptx_src))
+            .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::ModuleLoad, error))?;
+        let driver_jit_load_ns = t_driver.elapsed().as_nanos() as u64;
+
+        let t_func = std::time::Instant::now();
+        let function = module
+            .load_function(kernel.entry_point)
+            .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::FunctionLoad, error))?;
+        let function_lookup_ns = t_func.elapsed().as_nanos() as u64;
+
+        let buffer = map_input(ir).ok_or(CudaRuntimeError::UnsupportedInput)?;
+        let stream = self.context.default_stream();
+
+        let (htod_transfer_ns, kernel_execution_ns, dtoh_transfer_ns, gpu_output) = match buffer {
+            BufferLiteral::I32(values) => {
+                let length = u32::try_from(values.len())
+                    .map_err(|_| CudaRuntimeError::UnsupportedInput)?;
+                let mut dev_in = unsafe { stream.alloc::<i32>(values.len()) }
+                    .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Allocation, error))?;
+                let mut dev_out = unsafe { stream.alloc::<i32>(values.len()) }
+                    .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Allocation, error))?;
+
+                let t_htod = std::time::Instant::now();
+                stream
+                    .memcpy_htod(values.as_slice(), &mut dev_in)
+                    .map_err(|error| {
+                        CudaRuntimeError::driver(CudaDriverStage::HostToDeviceCopy, error)
+                    })?;
+                let htod_transfer_ns = t_htod.elapsed().as_nanos() as u64;
+
+                let t_exec = std::time::Instant::now();
+                unsafe {
+                    stream
+                        .launch_builder(&function)
+                        .arg(&dev_in)
+                        .arg(&mut dev_out)
+                        .arg(&length)
+                        .launch(LaunchConfig::for_num_elems(length))
+                }
+                .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Launch, error))?;
+                stream
+                    .synchronize()
+                    .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Launch, error))?;
+                let kernel_execution_ns = t_exec.elapsed().as_nanos() as u64;
+
+                let mut out_vec = vec![0i32; values.len()];
+                let t_dtoh = std::time::Instant::now();
+                stream
+                    .memcpy_dtoh(&dev_out, &mut out_vec)
+                    .map_err(|error| {
+                        CudaRuntimeError::driver(CudaDriverStage::DeviceToHostCopy, error)
+                    })?;
+                let dtoh_transfer_ns = t_dtoh.elapsed().as_nanos() as u64;
+
+                (
+                    htod_transfer_ns,
+                    kernel_execution_ns,
+                    dtoh_transfer_ns,
+                    BufferLiteral::I32(out_vec),
+                )
+            }
+            BufferLiteral::F32(bits) => {
+                let values: Vec<f32> = bits.iter().copied().map(f32::from_bits).collect();
+                let length = u32::try_from(values.len())
+                    .map_err(|_| CudaRuntimeError::UnsupportedInput)?;
+                let mut dev_in = unsafe { stream.alloc::<f32>(values.len()) }
+                    .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Allocation, error))?;
+                let mut dev_out = unsafe { stream.alloc::<f32>(values.len()) }
+                    .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Allocation, error))?;
+
+                let t_htod = std::time::Instant::now();
+                stream
+                    .memcpy_htod(values.as_slice(), &mut dev_in)
+                    .map_err(|error| {
+                        CudaRuntimeError::driver(CudaDriverStage::HostToDeviceCopy, error)
+                    })?;
+                let htod_transfer_ns = t_htod.elapsed().as_nanos() as u64;
+
+                let t_exec = std::time::Instant::now();
+                unsafe {
+                    stream
+                        .launch_builder(&function)
+                        .arg(&dev_in)
+                        .arg(&mut dev_out)
+                        .arg(&length)
+                        .launch(LaunchConfig::for_num_elems(length))
+                }
+                .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Launch, error))?;
+                stream
+                    .synchronize()
+                    .map_err(|error| CudaRuntimeError::driver(CudaDriverStage::Launch, error))?;
+                let kernel_execution_ns = t_exec.elapsed().as_nanos() as u64;
+
+                let mut out_vec = vec![0.0f32; values.len()];
+                let t_dtoh = std::time::Instant::now();
+                stream
+                    .memcpy_dtoh(&dev_out, &mut out_vec)
+                    .map_err(|error| {
+                        CudaRuntimeError::driver(CudaDriverStage::DeviceToHostCopy, error)
+                    })?;
+                let dtoh_transfer_ns = t_dtoh.elapsed().as_nanos() as u64;
+
+                (
+                    htod_transfer_ns,
+                    kernel_execution_ns,
+                    dtoh_transfer_ns,
+                    BufferLiteral::F32(out_vec.iter().map(|f| f.to_bits()).collect()),
+                )
+            }
+        };
+
+        if gpu_output != cpu_output {
+            return Err(CudaRuntimeError::driver(
+                CudaDriverStage::InternalState,
+                "GPU observable diverged from CPU reference in benchmark",
+            ));
+        }
+
+        let total_cold_ns = cml_ir_lowering_ns
+            + nvrtc_compile_ns
+            + driver_jit_load_ns
+            + function_lookup_ns
+            + htod_transfer_ns
+            + kernel_execution_ns
+            + dtoh_transfer_ns;
+
+        // Warm run using cached session mechanisms
+        let _ = self.execute_map_with_mode(ir, mode)?;
+        let t_warm = std::time::Instant::now();
+        let warm_exec = self.execute_map_with_mode(ir, mode)?;
+        let total_warm_ns = t_warm.elapsed().as_nanos() as u64;
+        if warm_exec.output != cpu_output {
+            return Err(CudaRuntimeError::driver(
+                CudaDriverStage::InternalState,
+                "Warm GPU observable diverged from CPU reference",
+            ));
+        }
+
+        Ok(CudaLatencyBreakdown {
+            cml_ir_lowering_ns,
+            nvrtc_compile_ns,
+            driver_jit_load_ns,
+            function_lookup_ns,
+            htod_transfer_ns,
+            kernel_execution_ns,
+            dtoh_transfer_ns,
+            total_cold_ns,
+            total_warm_ns,
+            cpu_reference_ns,
+        })
+    }
+}
+
+pub fn query_driver_version() -> Result<i32, CudaRuntimeError> {
+    let mut version = 0;
+    let res = unsafe { cudarc::driver::sys::cuDriverGetVersion(&mut version) };
+    if res == cudarc::driver::sys::CUresult::CUDA_SUCCESS {
+        Ok(version)
+    } else {
+        Err(CudaRuntimeError::driver(
+            CudaDriverStage::DeviceEvidence,
+            format!("cuDriverGetVersion failed with code {res:?}"),
+        ))
+    }
+}
+
+pub fn query_nvrtc_version() -> Result<(usize, usize), CudaRuntimeError> {
+    let mut major = 0;
+    let mut minor = 0;
+    let res = unsafe { cudarc::nvrtc::sys::nvrtcVersion(&mut major, &mut minor) };
+    if res == cudarc::nvrtc::sys::nvrtcResult::NVRTC_SUCCESS {
+        Ok((major as usize, minor as usize))
+    } else {
+        Err(CudaRuntimeError::Nvrtc(format!(
+            "nvrtcVersion failed with code {res:?}"
+        )))
     }
 }
 
