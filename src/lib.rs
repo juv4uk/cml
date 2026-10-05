@@ -27,7 +27,6 @@ pub mod gpu_wgsl;
 #[cfg(unix)]
 pub mod gpu_admission;
 pub mod gpu_worker_client;
-pub mod gpu_worker_client;
 pub mod ir;
 pub mod lisp_asm_vertical;
 pub mod lisp_encoder_bridge;
