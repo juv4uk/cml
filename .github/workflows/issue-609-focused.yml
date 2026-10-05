@@ -7,6 +7,7 @@ on:
       - "src/c_backend.rs"
       - "tests/current_d1_c_backend_test.rs"
       - "tests/current_d1_cond_codegen_test.rs"
+      - "tests/current_d1_cond_backend_test.rs"
       - ".github/workflows/issue-609-focused.yml"
   push:
     branches: [master]
@@ -40,14 +41,26 @@ jobs:
         run: >-
           guix shell --pure -m manifest.scm --
           rustfmt --edition 2024 --check
-          src/c_backend.rs tests/current_d1_cond_codegen_test.rs
+          src/c_backend.rs
+          tests/current_d1_cond_codegen_test.rs
+          tests/current_d1_cond_backend_test.rs
 
       - name: Exact D1 conditional codegen witness
         run: >-
           guix shell --pure -m manifest.scm --
           cargo test -p cml --test current_d1_cond_codegen_test -- --nocapture
 
+      - name: Exact D1 conditional executable witness
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --test current_d1_cond_backend_test -- --nocapture
+
       - name: Exact D1 carrier regression
         run: >-
           guix shell --pure -m manifest.scm --
           cargo test -p cml --test current_d1_c_backend_test -- --nocapture
+
+      - name: Historical explicit-match control regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --test explicit_cond_backend_test -- --nocapture
