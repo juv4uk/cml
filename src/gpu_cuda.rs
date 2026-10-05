@@ -4,11 +4,28 @@
 //! admission. NVRTC compilation, device transfer, launch, and readback belong
 //! to the optional CUDA runtime layer.
 
+use std::collections::{HashMap, VecDeque};
+use std::io::Write;
+
 use crate::compute::{
     AdmissionBlocker, BulkOperation, ComputeKernel, F32MapKernel, NumericDomain, ScalarExpr,
     analyze,
 };
 use crate::ir::Ir;
+
+pub const CML_CUDA_LOWERING_SCHEMA_VERSION: u32 = 1;
+pub const CML_CUDA_KERNEL_ABI_VERSION: u32 = 1;
+pub const DEFAULT_CUDA_CACHE_CAPACITY: usize = 64;
+
+/// Deterministic 64-bit FNV-1a digest.
+pub fn fnv1a64_digest(bytes: &[u8]) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for &byte in bytes {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("fnv1a64:{hash:016x}")
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CudaEmitError {
@@ -34,6 +51,42 @@ impl CudaElementType {
     }
 }
 
+/// Target architecture / compute capability for CUDA compilation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CudaComputeCapability {
+    pub major: i32,
+    pub minor: i32,
+}
+
+impl CudaComputeCapability {
+    pub const fn new(major: i32, minor: i32) -> Self {
+        Self { major, minor }
+    }
+
+    pub fn nvrtc_arch(self) -> String {
+        format!("compute_{}{}", self.major, self.minor)
+    }
+}
+
+impl From<(i32, i32)> for CudaComputeCapability {
+    fn from((major, minor): (i32, i32)) -> Self {
+        Self::new(major, minor)
+    }
+}
+
+/// NVRTC version metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NvrtcVersion {
+    pub major: i32,
+    pub minor: i32,
+}
+
+impl NvrtcVersion {
+    pub const fn new(major: i32, minor: i32) -> Self {
+        Self { major, minor }
+    }
+}
+
 /// First-class result of lowering one admitted CML map region for NVIDIA CUDA.
 ///
 /// Keeping identity/domain/ABI beside the source makes the compiler boundary
@@ -47,6 +100,269 @@ pub struct CudaMapKernel {
     pub parameter_count: usize,
     pub entry_point: &'static str,
     pub source: String,
+}
+
+impl CudaMapKernel {
+    /// Compute a deterministic digest of the kernel source and its ABI/domain facts.
+    pub fn kernel_digest(&self) -> String {
+        let mut buf = Vec::new();
+        write!(&mut buf, "{}", self.identity).unwrap();
+        buf.push(match self.numeric_domain {
+            NumericDomain::Exact => 1,
+            NumericDomain::FixedWidthInteger => 2,
+            NumericDomain::InexactFloat => 3,
+            NumericDomain::Unknown => 4,
+        });
+        buf.push(match self.element_type {
+            CudaElementType::I32 => 1,
+            CudaElementType::F32 => 2,
+        });
+        buf.extend_from_slice(&(self.parameter_count as u64).to_be_bytes());
+        buf.extend_from_slice(self.entry_point.as_bytes());
+        buf.extend_from_slice(self.source.as_bytes());
+        fnv1a64_digest(&buf)
+    }
+}
+
+/// Cache key for portable NVRTC PTX compilation outputs.
+///
+/// PTX depends only on the kernel definition, target compute capability,
+/// compile options, NVRTC version, and schema versions. It does not depend
+/// on a physical device ordinal or driver session binding.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CudaPtxCacheKey {
+    pub kernel_digest: String,
+    pub compute_capability: CudaComputeCapability,
+    pub nvrtc_version: Option<NvrtcVersion>,
+    pub options: Vec<String>,
+    pub kernel_abi_version: u32,
+    pub lowering_schema_version: u32,
+}
+
+impl CudaPtxCacheKey {
+    pub fn new(
+        kernel_digest: impl Into<String>,
+        compute_capability: impl Into<CudaComputeCapability>,
+        nvrtc_version: Option<NvrtcVersion>,
+        options: Vec<String>,
+    ) -> Self {
+        Self {
+            kernel_digest: kernel_digest.into(),
+            compute_capability: compute_capability.into(),
+            nvrtc_version,
+            options,
+            kernel_abi_version: CML_CUDA_KERNEL_ABI_VERSION,
+            lowering_schema_version: CML_CUDA_LOWERING_SCHEMA_VERSION,
+        }
+    }
+
+    pub fn digest(&self) -> String {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(self.kernel_digest.as_bytes());
+        buf.extend_from_slice(&self.compute_capability.major.to_be_bytes());
+        buf.extend_from_slice(&self.compute_capability.minor.to_be_bytes());
+        if let Some(v) = self.nvrtc_version {
+            buf.extend_from_slice(&v.major.to_be_bytes());
+            buf.extend_from_slice(&v.minor.to_be_bytes());
+        } else {
+            buf.extend_from_slice(&[0xFF; 8]);
+        }
+        for opt in &self.options {
+            buf.extend_from_slice(opt.as_bytes());
+            buf.push(0);
+        }
+        buf.extend_from_slice(&self.kernel_abi_version.to_be_bytes());
+        buf.extend_from_slice(&self.lowering_schema_version.to_be_bytes());
+        fnv1a64_digest(&buf)
+    }
+}
+
+/// First-class compiled PTX artifact carrying its NVRTC provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CudaPtxArtifact {
+    pub key: CudaPtxCacheKey,
+    pub ptx: String,
+    pub ptx_digest: String,
+}
+
+impl CudaPtxArtifact {
+    pub fn new(key: CudaPtxCacheKey, ptx: String) -> Self {
+        let ptx_digest = fnv1a64_digest(ptx.as_bytes());
+        Self {
+            key,
+            ptx,
+            ptx_digest,
+        }
+    }
+}
+
+/// Cache key for driver-JIT-loaded modules on a specific device session.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CudaDriverJitCacheKey {
+    pub ptx_digest: String,
+    pub device_ordinal: usize,
+    pub compute_capability: CudaComputeCapability,
+    pub driver_version: Option<i32>,
+}
+
+impl CudaDriverJitCacheKey {
+    pub fn new(
+        ptx_digest: impl Into<String>,
+        device_ordinal: usize,
+        compute_capability: impl Into<CudaComputeCapability>,
+        driver_version: Option<i32>,
+    ) -> Self {
+        Self {
+            ptx_digest: ptx_digest.into(),
+            device_ordinal,
+            compute_capability: compute_capability.into(),
+            driver_version,
+        }
+    }
+
+    pub fn digest(&self) -> String {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(self.ptx_digest.as_bytes());
+        buf.extend_from_slice(&(self.device_ordinal as u64).to_be_bytes());
+        buf.extend_from_slice(&self.compute_capability.major.to_be_bytes());
+        buf.extend_from_slice(&self.compute_capability.minor.to_be_bytes());
+        if let Some(v) = self.driver_version {
+            buf.extend_from_slice(&v.to_be_bytes());
+        } else {
+            buf.extend_from_slice(&[0xFF; 4]);
+        }
+        fnv1a64_digest(&buf)
+    }
+}
+
+/// First-class loaded driver JIT module metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CudaDriverJitModuleArtifact {
+    pub key: CudaDriverJitCacheKey,
+    pub entry_point: &'static str,
+    pub module_digest: String,
+}
+
+impl CudaDriverJitModuleArtifact {
+    pub fn new(key: CudaDriverJitCacheKey, entry_point: &'static str) -> Self {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(key.digest().as_bytes());
+        buf.extend_from_slice(entry_point.as_bytes());
+        let module_digest = fnv1a64_digest(&buf);
+        Self {
+            key,
+            entry_point,
+            module_digest,
+        }
+    }
+}
+
+/// Diagnostic evidence for artifact cache hits, misses, and evictions.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CudaCacheDiagnosticEvidence {
+    pub ptx_hits: usize,
+    pub ptx_misses: usize,
+    pub ptx_evictions: usize,
+    pub module_hits: usize,
+    pub module_misses: usize,
+    pub module_evictions: usize,
+}
+
+/// Bounded cache for PTX artifacts and driver-JIT module artifacts.
+#[derive(Debug)]
+pub struct CudaArtifactCache {
+    capacity: usize,
+    ptx_cache: HashMap<CudaPtxCacheKey, CudaPtxArtifact>,
+    ptx_order: VecDeque<CudaPtxCacheKey>,
+    module_cache: HashMap<CudaDriverJitCacheKey, CudaDriverJitModuleArtifact>,
+    module_order: VecDeque<CudaDriverJitCacheKey>,
+    diagnostics: CudaCacheDiagnosticEvidence,
+}
+
+impl CudaArtifactCache {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            capacity: capacity.max(1),
+            ptx_cache: HashMap::new(),
+            ptx_order: VecDeque::new(),
+            module_cache: HashMap::new(),
+            module_order: VecDeque::new(),
+            diagnostics: CudaCacheDiagnosticEvidence::default(),
+        }
+    }
+
+    pub fn get_ptx(&mut self, key: &CudaPtxCacheKey) -> Option<&CudaPtxArtifact> {
+        if let Some(artifact) = self.ptx_cache.get(key) {
+            self.diagnostics.ptx_hits += 1;
+            Some(artifact)
+        } else {
+            self.diagnostics.ptx_misses += 1;
+            None
+        }
+    }
+
+    pub fn insert_ptx(&mut self, artifact: CudaPtxArtifact) {
+        let key = artifact.key.clone();
+        if !self.ptx_cache.contains_key(&key) {
+            if self.ptx_cache.len() >= self.capacity {
+                if let Some(oldest) = self.ptx_order.pop_front() {
+                    self.ptx_cache.remove(&oldest);
+                    self.diagnostics.ptx_evictions += 1;
+                }
+            }
+            self.ptx_order.push_back(key.clone());
+        }
+        self.ptx_cache.insert(key, artifact);
+    }
+
+    pub fn get_module(&mut self, key: &CudaDriverJitCacheKey) -> Option<&CudaDriverJitModuleArtifact> {
+        if let Some(artifact) = self.module_cache.get(key) {
+            self.diagnostics.module_hits += 1;
+            Some(artifact)
+        } else {
+            self.diagnostics.module_misses += 1;
+            None
+        }
+    }
+
+    pub fn insert_module(&mut self, artifact: CudaDriverJitModuleArtifact) {
+        let key = artifact.key.clone();
+        if !self.module_cache.contains_key(&key) {
+            if self.module_cache.len() >= self.capacity {
+                if let Some(oldest) = self.module_order.pop_front() {
+                    self.module_cache.remove(&oldest);
+                    self.diagnostics.module_evictions += 1;
+                }
+            }
+            self.module_order.push_back(key.clone());
+        }
+        self.module_cache.insert(key, artifact);
+    }
+
+    pub fn record_ptx_hit(&mut self) {
+        self.diagnostics.ptx_hits += 1;
+    }
+
+    pub fn record_module_hit(&mut self) {
+        self.diagnostics.module_hits += 1;
+    }
+
+    pub fn diagnostics(&self) -> CudaCacheDiagnosticEvidence {
+        self.diagnostics
+    }
+
+    pub fn clear(&mut self) {
+        self.ptx_cache.clear();
+        self.ptx_order.clear();
+        self.module_cache.clear();
+        self.module_order.clear();
+    }
+}
+
+impl Default for CudaArtifactCache {
+    fn default() -> Self {
+        Self::new(DEFAULT_CUDA_CACHE_CAPACITY)
+    }
 }
 
 /// Lower canonical CML IR into one bounded CUDA map-kernel artifact.
