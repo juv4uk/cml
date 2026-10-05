@@ -9,26 +9,32 @@ on:
       - tests/c_backend_conformance_test.rs
       - tests/exact_q_mul_upstream_execution_test.rs
       - tests/exact_rational_upstream_authority_test.rs
+      - manifest.scm
       - .github/workflows/issue-291-delete-reifier.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   focused:
-    runs-on: ubuntu-24.04
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, guix]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
         with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: recursive
-      - uses: dtolnay/rust-toolchain@stable
       - name: Format check
-        run: cargo fmt -p cml -- --check
+        run: guix shell --pure -m manifest.scm -- cargo fmt -p cml -- --check
       - name: Standard Sid8 lowering guard
-        run: cargo test --test sid8_standard_lowering_guard_test -- --nocapture
+        run: guix shell --pure -m manifest.scm -- cargo test --test sid8_standard_lowering_guard_test -- --nocapture
       - name: C backend regression
-        run: cargo test --test c_backend_test -- --nocapture
+        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test -- --nocapture
       - name: C backend conformance
-        run: cargo test --test c_backend_conformance_test -- --nocapture
+        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_conformance_test -- --nocapture
       - name: Exact-Q multiplication upstream execution
-        run: cargo test --test exact_q_mul_upstream_execution_test -- --nocapture
+        run: guix shell --pure -m manifest.scm -- cargo test --test exact_q_mul_upstream_execution_test -- --nocapture
       - name: Exact rational upstream authority
-        run: cargo test --test exact_rational_upstream_authority_test -- --nocapture
+        run: guix shell --pure -m manifest.scm -- cargo test --test exact_rational_upstream_authority_test -- --nocapture
