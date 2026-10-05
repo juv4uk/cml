@@ -87,7 +87,11 @@ mod tests {
     fn pass_ids_are_unique_and_obligations_are_nonempty() {
         let mut ids = HashSet::new();
         for pass in PASS_MANIFEST {
-            assert!(ids.insert(pass.id), "duplicate compiler pass id: {}", pass.id);
+            assert!(
+                ids.insert(pass.id),
+                "duplicate compiler pass id: {}",
+                pass.id
+            );
             assert!(!pass.input.is_empty());
             assert!(!pass.output.is_empty());
             assert!(!pass.obligation.is_empty());
