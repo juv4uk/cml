@@ -81,6 +81,19 @@ pub fn emit_machine_items_with_isel(
         }
     }
 
+    // Destructive DIV redefines its constrained low/high temps. Any constant
+    // facts collected from their pre-DIV definitions are stale afterwards.
+    // Remove them conservatively for the whole function because this isel
+    // map is not SSA/versioned.
+    for block in &func.blocks {
+        for inst in &block.instructions {
+            if let LirInst::DivRem { low, high, .. } = inst {
+                known_consts.remove(low);
+                known_consts.remove(high);
+            }
+        }
+    }
+
     // Frame size for spill slots: 16-byte aligned
     let frame_size = if plan.spill_count > 0 {
         ((plan.spill_count * 8 + 15) / 16) * 16
