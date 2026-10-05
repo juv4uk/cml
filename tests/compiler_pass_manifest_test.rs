@@ -21,6 +21,7 @@ fn cli_emits_the_ordered_machine_readable_pass_manifest() {
     for (line, pass) in lines.iter().zip(pass_manifest()) {
         assert!(line.starts_with("CML-PASS\t"));
         assert!(line.contains(&format!("\tid={}\t", pass.id)));
+        assert!(line.contains(&format!("\tversion={}\t", pass.version)));
         assert!(line.contains(&format!("\tinput={}\t", pass.input)));
         assert!(line.contains(&format!("\toutput={}\t", pass.output)));
         assert!(line.contains(&format!("\tevidence={}\t", pass.current_evidence.as_str())));
