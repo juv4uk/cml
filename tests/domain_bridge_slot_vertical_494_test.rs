@@ -5,13 +5,17 @@
 //! directly to SLOT-VM; the live pinned SENS evaluator is differential oracle
 //! only and never constructs compiler operands.
 
+use cml::compiler_artifact::SlotArtifactEnvelope;
 use cml::parser;
+use cml::sens_domain_bridge::pinned_authority;
 use cml::sens_slot_bridge::lower_canonical_expr_to_slot_program;
 use cml::slot_vm::{SlotVmError, execute};
 use sens::{ErrorKind, Session};
 
 const CORPUS: &str =
     include_str!("../external/sens/contracts/compiler-d3-selector-corpus-v1.tsv");
+
+const TEST_CML_REVISION: &str = "7572dbc0868d69de4c3c10d4542b635c050bed0f";
 
 struct Case {
     name: String,
@@ -83,12 +87,29 @@ fn slot_observation(source: &str, digest: &str) -> Observation {
         .expect("canonical source must lower directly to verified SLOT-VM");
     assert_eq!(program.source_case_id.as_deref(), Some(digest));
 
-    let encoded = program.encode_v1().expect("verified SLOT artifact must encode");
-    let decoded = cml::slot_vm::SlotProgram::decode_v1(&encoded)
-        .expect("encoded vertical artifact must decode exactly");
-    assert_eq!(decoded.source_case_id.as_deref(), Some(digest));
+    let authority = pinned_authority().expect("pinned SENS authority must resolve");
+    let envelope = SlotArtifactEnvelope::new(program, &authority, TEST_CML_REVISION)
+        .expect("verified SLOT program must accept compiler provenance");
+    let encoded = envelope
+        .encode_v1()
+        .expect("provenance-wrapped SLOT artifact must encode");
+    let decoded = SlotArtifactEnvelope::decode_verified_v1(&encoded)
+        .expect("provenance-wrapped SLOT artifact must verify and decode");
 
-    match execute(&decoded) {
+    assert_eq!(decoded.provenance.program_digest, digest);
+    assert_eq!(decoded.provenance.sens_revision, authority.revision);
+    assert_eq!(
+        decoded.provenance.sens_authority_sha256,
+        authority.authority_sha256
+    );
+    assert_eq!(
+        decoded.provenance.sens_contract_version,
+        authority.language_contract_version
+    );
+    assert_eq!(decoded.provenance.cml_revision, TEST_CML_REVISION);
+    assert_eq!(decoded.program.source_case_id.as_deref(), Some(digest));
+
+    match execute(&decoded.program) {
         Ok(result) => {
             assert_eq!(result.source_case_id.as_deref(), Some(digest));
             Observation::Value(result.value.to_string())
