@@ -129,6 +129,21 @@ fn optimize_block_instructions(
         }
     }
 
+    // Destructive DIV redefines its constrained low/high temps. The optimizer's
+    // maps are function-wide rather than SSA/versioned, so any fact about the
+    // pre-DIV value of those vregs must be killed conservatively before
+    // rewriting later uses.
+    for block in &func.blocks {
+        for inst in &block.instructions {
+            if let LirInst::DivRem { low, high, .. } = inst {
+                const_map.remove(low);
+                const_map.remove(high);
+                copy_map.remove(low);
+                copy_map.remove(high);
+            }
+        }
+    }
+
     // Second pass: rewrite instructions
     for block in &mut func.blocks {
         let mut new_insts = Vec::with_capacity(block.instructions.len());
