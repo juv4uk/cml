@@ -166,3 +166,24 @@ fn optimizer_keeps_destructive_divrem_and_constrained_temps() {
         .expect("optimized div-rem must remain allocatable");
     assert_eq!(plan.fixed_constraints.len(), 2);
 }
+
+
+#[test]
+fn optimizer_preserves_divrem_quotient_and_remainder_values() {
+    for (kind, expected) in [(ResultKind::Quotient, 3_u64), (ResultKind::Remainder, 2_u64)] {
+        let mut function = divrem_function(20, 6, kind);
+        let _ = cml::x86_opt::optimize_lir(
+            &mut function,
+            cml::x86_opt::LocalOptConfig::all_enabled(),
+        );
+
+        let items = cml::x86_lir::lir_to_machine_items(&function)
+            .expect("optimized div-rem must emit");
+        let bytes = assemble_program(&items).expect("assemble optimized div-rem");
+        let result = NativeExecutable::load(&bytes).call();
+        assert_eq!(
+            result, expected,
+            "optimizer must not resurrect pre-DIV low/high facts"
+        );
+    }
+}
