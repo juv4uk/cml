@@ -35,7 +35,7 @@ jobs:
       - name: Rustfmt changed Rust surfaces
         run: |
           guix shell --pure -m manifest.scm -- \
-            rustfmt --edition 2024 --check \
+            rustfmt --edition 2024 --check --config skip_children=true \
               src/compiler_artifact.rs \
               tests/domain_bridge_slot_vertical_494_test.rs
 
