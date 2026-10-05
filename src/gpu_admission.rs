@@ -58,7 +58,9 @@ fn validate_field(name: &str, value: &str) -> Result<(), String> {
     if value.len() > MAX_FIELD_BYTES {
         return Err(format!("admission {name} exceeds {MAX_FIELD_BYTES} bytes"));
     }
-    if !value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'/' | b'-')) {
+    if !value.bytes().all(|b| {
+        b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'/' | b'-')
+    }) {
         return Err(format!("admission {name} contains unsupported characters"));
     }
     Ok(())
@@ -88,7 +90,9 @@ impl GpuAdmissionGuard {
         let lock_path = lock_path.into();
         if let Some(parent) = lock_path.parent() {
             fs::create_dir_all(parent)
-                .map_err(|error| format!("create admission directory {}: {error}", parent.display()))?;
+                .map_err(|error| {
+                    format!("create admission directory {}: {error}", parent.display())
+                })?;
         }
         let owner_path = PathBuf::from(format!("{}.owner", lock_path.display()));
         let file = OpenOptions::new()
@@ -96,11 +100,17 @@ impl GpuAdmissionGuard {
             .read(true)
             .write(true)
             .open(&lock_path)
-            .map_err(|error| format!("open GPU admission lock {}: {error}", lock_path.display()))?;
+            .map_err(|error| {
+                format!("open GPU admission lock {}: {error}", lock_path.display())
+            })?;
         let started = Instant::now();
         let rc = unsafe { flock(file.as_raw_fd(), LOCK_EX) };
         if rc != 0 {
-            return Err(format!("acquire GPU admission lock {} failed: {}", lock_path.display(), std::io::Error::last_os_error()));
+            return Err(format!(
+                "acquire GPU admission lock {} failed: {}",
+                lock_path.display(),
+                std::io::Error::last_os_error()
+            ));
         }
         let wait_ns = started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
         let resource_key = resource_key.into();
@@ -110,7 +120,9 @@ impl GpuAdmissionGuard {
             provenance.repository, provenance.run_id, provenance.job, provenance.case_id, resource_key, wait_ns
         );
         fs::write(&owner_path, owner_record)
-            .map_err(|error| format!("write GPU admission owner {}: {error}", owner_path.display()))?;
+            .map_err(|error| {
+                format!("write GPU admission owner {}: {error}", owner_path.display())
+            })?;
         Ok(Self {
             file,
             lock_path,
@@ -160,7 +172,12 @@ mod tests {
         let path = temp_lock();
         let first = GpuAdmissionGuard::acquire(&path, "cuda:0", &provenance("first")).unwrap();
         let path2 = path.clone();
-        let handle = thread::spawn(move || GpuAdmissionGuard::acquire(&path2, "cuda:0", &provenance("second")).unwrap().lease().wait_ns);
+        let handle = thread::spawn(move || {
+            GpuAdmissionGuard::acquire(&path2, "cuda:0", &provenance("second"))
+                .unwrap()
+                .lease()
+                .wait_ns
+        });
         thread::sleep(std::time::Duration::from_millis(20));
         drop(first);
         let wait_ns = handle.join().unwrap();
@@ -179,7 +196,8 @@ mod tests {
     fn dropped_holder_releases_lock_for_next_client() {
         let path = temp_lock();
         {
-            let holder = GpuAdmissionGuard::acquire(&path, "cuda:0", &provenance("holder")).unwrap();
+            let holder =
+                GpuAdmissionGuard::acquire(&path, "cuda:0", &provenance("holder")).unwrap();
             assert_eq!(holder.lease().resource_key, "cuda:0");
         }
         let next = GpuAdmissionGuard::acquire(&path, "cuda:0", &provenance("next")).unwrap();
