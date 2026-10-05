@@ -26,8 +26,18 @@ mod enabled {
     const OP_PROBE: u8 = 2;
     const OP_ADD_I32: u8 = 3;
     const OP_CHAIN_FILE_I32: u8 = 4;
+    const OP_CHAIN_FILE_I32_PROVENANCE: u8 = 5;
     const STATUS_OK: u8 = 0;
     const STATUS_ERR: u8 = 1;
+    const MAX_PROVENANCE_FIELD_BYTES: usize = 128;
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct ClientProvenance {
+        repository: String,
+        run_id: String,
+        job: String,
+        case_id: String,
+    }
 
     fn socket_path() -> PathBuf {
         env::var_os("CML_GPU_WORKER_SOCKET")
@@ -90,8 +100,44 @@ mod enabled {
                     &offsets,
                 )
             }
+            Some("chain-file-i32-provenance") => {
+                let provenance = ClientProvenance {
+                    repository: args.next().ok_or(
+                        "chain-file-i32-provenance requires <repository> <run-id> <job> <case-id> <input.bin> <output.bin> <offset>..."
+                    )?,
+                    run_id: args.next().ok_or(
+                        "chain-file-i32-provenance requires <repository> <run-id> <job> <case-id> <input.bin> <output.bin> <offset>..."
+                    )?,
+                    job: args.next().ok_or(
+                        "chain-file-i32-provenance requires <repository> <run-id> <job> <case-id> <input.bin> <output.bin> <offset>..."
+                    )?,
+                    case_id: args.next().ok_or(
+                        "chain-file-i32-provenance requires <repository> <run-id> <job> <case-id> <input.bin> <output.bin> <offset>..."
+                    )?,
+                };
+                validate_provenance(&provenance)?;
+                let input = args.next().ok_or(
+                    "chain-file-i32-provenance requires <repository> <run-id> <job> <case-id> <input.bin> <output.bin> <offset>..."
+                )?;
+                let output = args.next().ok_or(
+                    "chain-file-i32-provenance requires <repository> <run-id> <job> <case-id> <input.bin> <output.bin> <offset>..."
+                )?;
+                let offsets = args
+                    .map(|value| value.parse::<i64>().map_err(|error| format!("invalid offset {value}: {error}")))
+                    .collect::<Result<Vec<_>, _>>()?;
+                if offsets.is_empty() {
+                    return Err("chain-file-i32-provenance requires at least one offset".into());
+                }
+                client_chain_file_i32_provenance(
+                    &socket_path(),
+                    &provenance,
+                    &absolute_path(&input)?,
+                    &absolute_path(&output)?,
+                    &offsets,
+                )
+            }
             _ => Err(
-                "usage: cml-gpu-worker serve|ping|probe|add-i32 <offset> <value>...|chain-file-i32 <input.bin> <output.bin> <offset>..."
+                "usage: cml-gpu-worker serve|ping|probe|add-i32 <offset> <value>...|chain-file-i32 <input.bin> <output.bin> <offset>...|chain-file-i32-provenance <repository> <run-id> <job> <case-id> <input.bin> <output.bin> <offset>..."
                     .into(),
             ),
         }
@@ -151,30 +197,55 @@ mod enabled {
             }
             OP_CHAIN_FILE_I32 => {
                 let (input_path, output_path, offsets) = decode_chain_file_request(&payload)?;
-                let values = read_i32_file(&input_path)?;
-                let functions: Vec<Ir> = offsets.iter().copied().map(add_i32_function).collect();
-                let input = BufferLiteral::I32(values);
-                let cuda_started = Instant::now();
-                let execution =
-                    execute_map_chain_i32_selected(&functions, &input, &[functions.len() - 1], 0)
-                        .map_err(|error| format!("CUDA chain execution failed: {error:?}"))?;
-                let cuda_ns = cuda_started.elapsed().as_nanos();
-                let Some((_, BufferLiteral::I32(output))) = execution.outputs.into_iter().next()
-                else {
-                    return Err("CUDA chain returned no final i32 buffer".into());
-                };
-                write_i32_file(&output_path, &output)?;
+                let body = execute_chain_file_i32(&input_path, &output_path, &offsets)?;
+                write_response(stream, STATUS_OK, body.as_bytes()).map_err(io_error)
+            }
+            OP_CHAIN_FILE_I32_PROVENANCE => {
+                let (provenance, input_path, output_path, offsets) =
+                    decode_chain_file_provenance_request(&payload)?;
+                let evidence = execute_chain_file_i32(&input_path, &output_path, &offsets)?;
                 let body = format!(
-                    "count={} steps={} cuda_ns={} output={}",
-                    output.len(),
-                    offsets.len(),
-                    cuda_ns,
-                    output_path.display()
+                    "repository={} run_id={} job={} case_id={} {}",
+                    provenance.repository,
+                    provenance.run_id,
+                    provenance.job,
+                    provenance.case_id,
+                    evidence
                 );
                 write_response(stream, STATUS_OK, body.as_bytes()).map_err(io_error)
             }
             other => Err(format!("unknown opcode {other}")),
         }
+    }
+
+    fn execute_chain_file_i32(
+        input_path: &Path,
+        output_path: &Path,
+        offsets: &[i64],
+    ) -> Result<String, String> {
+        let values = read_i32_file(input_path)?;
+        let functions: Vec<Ir> = offsets.iter().copied().map(add_i32_function).collect();
+        let input = BufferLiteral::I32(values);
+        let cuda_started = Instant::now();
+        let execution = execute_map_chain_i32_selected(
+            &functions,
+            &input,
+            &[functions.len() - 1],
+            0,
+        )
+        .map_err(|error| format!("CUDA chain execution failed: {error:?}"))?;
+        let cuda_ns = cuda_started.elapsed().as_nanos();
+        let Some((_, BufferLiteral::I32(output))) = execution.outputs.into_iter().next() else {
+            return Err("CUDA chain returned no final i32 buffer".into());
+        };
+        write_i32_file(output_path, &output)?;
+        Ok(format!(
+            "count={} steps={} cuda_ns={} output={}",
+            output.len(),
+            offsets.len(),
+            cuda_ns,
+            output_path.display()
+        ))
     }
 
     fn add_i32_function(offset: i64) -> Ir {
@@ -268,16 +339,41 @@ mod enabled {
         output: &Path,
         offsets: &[i64],
     ) -> Result<(), String> {
-        let mut payload = Vec::new();
-        encode_path(&mut payload, input)?;
-        encode_path(&mut payload, output)?;
-        payload.extend_from_slice(&(offsets.len() as u32).to_le_bytes());
-        for offset in offsets {
-            payload.extend_from_slice(&offset.to_le_bytes());
-        }
+        let payload = encode_chain_file_payload(input, output, offsets)?;
         let body = transact(socket, OP_CHAIN_FILE_I32, &payload)?;
         println!("{}", String::from_utf8_lossy(&body));
         Ok(())
+    }
+
+    fn client_chain_file_i32_provenance(
+        socket: &Path,
+        provenance: &ClientProvenance,
+        input: &Path,
+        output: &Path,
+        offsets: &[i64],
+    ) -> Result<(), String> {
+        let mut payload = Vec::new();
+        encode_provenance(&mut payload, provenance)?;
+        payload.extend_from_slice(&encode_chain_file_payload(input, output, offsets)?);
+        let body = transact(socket, OP_CHAIN_FILE_I32_PROVENANCE, &payload)?;
+        println!("{}", String::from_utf8_lossy(&body));
+        Ok(())
+    }
+
+    fn encode_chain_file_payload(
+        input: &Path,
+        output: &Path,
+        offsets: &[i64],
+    ) -> Result<Vec<u8>, String> {
+        let mut payload = Vec::new();
+        encode_path(&mut payload, input)?;
+        encode_path(&mut payload, output)?;
+        let count = u32::try_from(offsets.len()).map_err(|_| "too many chain offsets")?;
+        payload.extend_from_slice(&count.to_le_bytes());
+        for offset in offsets {
+            payload.extend_from_slice(&offset.to_le_bytes());
+        }
+        Ok(payload)
     }
 
     fn transact(path: &Path, opcode: u8, payload: &[u8]) -> Result<Vec<u8>, String> {
@@ -337,6 +433,93 @@ mod enabled {
         Ok((kind, body))
     }
 
+    fn validate_provenance(provenance: &ClientProvenance) -> Result<(), String> {
+        validate_provenance_field("repository", &provenance.repository)?;
+        validate_provenance_field("run_id", &provenance.run_id)?;
+        validate_provenance_field("job", &provenance.job)?;
+        validate_provenance_field("case_id", &provenance.case_id)
+    }
+
+    fn validate_provenance_field(name: &str, value: &str) -> Result<(), String> {
+        if value.is_empty() {
+            return Err(format!("provenance {name} must not be empty"));
+        }
+        if value.len() > MAX_PROVENANCE_FIELD_BYTES {
+            return Err(format!(
+                "provenance {name} exceeds {MAX_PROVENANCE_FIELD_BYTES} bytes"
+            ));
+        }
+        if !value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'/' | b'-')
+        }) {
+            return Err(format!(
+                "provenance {name} must use only ASCII alphanumeric or . _ : / -"
+            ));
+        }
+        Ok(())
+    }
+
+    fn encode_provenance(
+        payload: &mut Vec<u8>,
+        provenance: &ClientProvenance,
+    ) -> Result<(), String> {
+        validate_provenance(provenance)?;
+        for value in [
+            &provenance.repository,
+            &provenance.run_id,
+            &provenance.job,
+            &provenance.case_id,
+        ] {
+            let bytes = value.as_bytes();
+            let len = u16::try_from(bytes.len()).map_err(|_| "provenance field too long")?;
+            payload.extend_from_slice(&len.to_le_bytes());
+            payload.extend_from_slice(bytes);
+        }
+        Ok(())
+    }
+
+    fn decode_provenance(
+        payload: &[u8],
+        cursor: &mut usize,
+    ) -> Result<ClientProvenance, String> {
+        let provenance = ClientProvenance {
+            repository: decode_provenance_field(payload, cursor, "repository")?,
+            run_id: decode_provenance_field(payload, cursor, "run_id")?,
+            job: decode_provenance_field(payload, cursor, "job")?,
+            case_id: decode_provenance_field(payload, cursor, "case_id")?,
+        };
+        validate_provenance(&provenance)?;
+        Ok(provenance)
+    }
+
+    fn decode_provenance_field(
+        payload: &[u8],
+        cursor: &mut usize,
+        name: &str,
+    ) -> Result<String, String> {
+        if payload.len().saturating_sub(*cursor) < 2 {
+            return Err(format!("provenance {name} length missing"));
+        }
+        let len = u16::from_le_bytes(payload[*cursor..*cursor + 2].try_into().unwrap()) as usize;
+        *cursor += 2;
+        if len > MAX_PROVENANCE_FIELD_BYTES {
+            return Err(format!(
+                "provenance {name} exceeds {MAX_PROVENANCE_FIELD_BYTES} bytes"
+            ));
+        }
+        let end = cursor
+            .checked_add(len)
+            .ok_or_else(|| format!("provenance {name} length overflow"))?;
+        if end > payload.len() {
+            return Err(format!("provenance {name} payload truncated"));
+        }
+        let value = std::str::from_utf8(&payload[*cursor..end])
+            .map_err(|error| format!("provenance {name} is not UTF-8: {error}"))?
+            .to_string();
+        *cursor = end;
+        Ok(value)
+    }
+
     fn encode_path(payload: &mut Vec<u8>, path: &Path) -> Result<(), String> {
         let text = path
             .to_str()
@@ -366,13 +549,30 @@ mod enabled {
 
     fn decode_chain_file_request(payload: &[u8]) -> Result<(PathBuf, PathBuf, Vec<i64>), String> {
         let mut cursor = 0usize;
-        let input = decode_path(payload, &mut cursor)?;
-        let output = decode_path(payload, &mut cursor)?;
-        if payload.len().saturating_sub(cursor) < 4 {
+        decode_chain_file_request_from(payload, &mut cursor)
+    }
+
+    fn decode_chain_file_provenance_request(
+        payload: &[u8],
+    ) -> Result<(ClientProvenance, PathBuf, PathBuf, Vec<i64>), String> {
+        let mut cursor = 0usize;
+        let provenance = decode_provenance(payload, &mut cursor)?;
+        let (input, output, offsets) = decode_chain_file_request_from(payload, &mut cursor)?;
+        Ok((provenance, input, output, offsets))
+    }
+
+    fn decode_chain_file_request_from(
+        payload: &[u8],
+        cursor: &mut usize,
+    ) -> Result<(PathBuf, PathBuf, Vec<i64>), String> {
+        let input = decode_path(payload, cursor)?;
+        let output = decode_path(payload, cursor)?;
+        if payload.len().saturating_sub(*cursor) < 4 {
             return Err("chain offset count missing".into());
         }
-        let count = u32::from_le_bytes(payload[cursor..cursor + 4].try_into().unwrap()) as usize;
-        cursor += 4;
+        let count =
+            u32::from_le_bytes(payload[*cursor..*cursor + 4].try_into().unwrap()) as usize;
+        *cursor += 4;
         if count == 0 {
             return Err("chain requires at least one offset".into());
         }
@@ -384,10 +584,11 @@ mod enabled {
                 payload.len()
             ));
         }
-        let offsets = payload[cursor..]
+        let offsets = payload[*cursor..]
             .chunks_exact(8)
             .map(|chunk| i64::from_le_bytes(chunk.try_into().unwrap()))
             .collect();
+        *cursor = end;
         Ok((input, output, offsets))
     }
 
@@ -444,5 +645,86 @@ mod enabled {
 
     fn io_error(error: io::Error) -> String {
         error.to_string()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn sample_provenance() -> ClientProvenance {
+            ClientProvenance {
+                repository: "juv4uk/sens".into(),
+                run_id: "37307131226".into(),
+                job: "law-miner-gpu".into(),
+                case_id: "d6-selector-negative-001".into(),
+            }
+        }
+
+        #[test]
+        fn provenance_codec_round_trips() {
+            let expected = sample_provenance();
+            let mut payload = Vec::new();
+            encode_provenance(&mut payload, &expected).expect("encode provenance");
+            let mut cursor = 0;
+            let decoded = decode_provenance(&payload, &mut cursor).expect("decode provenance");
+            assert_eq!(decoded, expected);
+            assert_eq!(cursor, payload.len());
+        }
+
+        #[test]
+        fn provenance_rejects_empty_oversize_and_unsafe_characters() {
+            let mut provenance = sample_provenance();
+            provenance.job.clear();
+            assert!(validate_provenance(&provenance).is_err());
+
+            provenance = sample_provenance();
+            provenance.case_id = "x".repeat(MAX_PROVENANCE_FIELD_BYTES + 1);
+            assert!(validate_provenance(&provenance).is_err());
+
+            provenance = sample_provenance();
+            provenance.job = "job with spaces".into();
+            assert!(validate_provenance(&provenance).is_err());
+
+            provenance = sample_provenance();
+            provenance.case_id = "case\nnext".into();
+            assert!(validate_provenance(&provenance).is_err());
+        }
+
+        #[test]
+        fn provenance_decoder_rejects_truncated_and_invalid_utf8() {
+            let mut payload = Vec::new();
+            payload.extend_from_slice(&4u16.to_le_bytes());
+            payload.extend_from_slice(b"abc");
+            let mut cursor = 0;
+            assert!(decode_provenance_field(&payload, &mut cursor, "repository").is_err());
+
+            let payload = [1u8, 0, 0xff];
+            let mut cursor = 0;
+            assert!(decode_provenance_field(&payload, &mut cursor, "repository").is_err());
+        }
+
+        #[test]
+        fn provenance_chain_payload_round_trips_and_rejects_trailing_bytes() {
+            let expected = sample_provenance();
+            let input = Path::new("/tmp/input.i32");
+            let output = Path::new("/tmp/output.i32");
+            let offsets = [1, -2, 7];
+
+            let mut payload = Vec::new();
+            encode_provenance(&mut payload, &expected).expect("encode provenance");
+            payload.extend_from_slice(
+                &encode_chain_file_payload(input, output, &offsets).expect("encode chain"),
+            );
+
+            let (decoded, decoded_input, decoded_output, decoded_offsets) =
+                decode_chain_file_provenance_request(&payload).expect("decode request");
+            assert_eq!(decoded, expected);
+            assert_eq!(decoded_input, input);
+            assert_eq!(decoded_output, output);
+            assert_eq!(decoded_offsets, offsets);
+
+            payload.push(0);
+            assert!(decode_chain_file_provenance_request(&payload).is_err());
+        }
     }
 }
