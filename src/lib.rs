@@ -21,6 +21,7 @@ pub mod gpu_cuda_runtime;
 #[cfg(feature = "gpu-wgpu")]
 pub mod gpu_wgpu_runtime;
 pub mod gpu_wgsl;
+pub mod gpu_worker_client;
 pub mod ir;
 pub mod lisp_asm_vertical;
 pub mod lisp_encoder_bridge;
@@ -37,6 +38,7 @@ pub mod pratyahara;
 pub mod runtime_abi;
 pub mod semantic;
 pub mod semantic_export;
+pub mod substrate_dispatch;
 pub mod upstream_sid_bridge;
 pub mod witness_bridge;
 pub mod x86_avx2;
