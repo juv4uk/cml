@@ -86,7 +86,7 @@
       ((macro-atom? params)
        (cond
          ((macro-empty? params) ())
-         ((cml-macro-control-yes) (cons (cons params args) ())))
+         ((cml-macro-control-yes) (cons (cons params args) ()))))
       ((macro-atom? args) ())
       ((cml-macro-control-yes)
        (cons (cons (car params) (car args))
