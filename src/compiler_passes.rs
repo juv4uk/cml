@@ -62,7 +62,7 @@ pub const PASS_MANIFEST: &[PassDescriptor] = &[
         input: "admitted-ast",
         output: "cml-ir",
         obligation: "preserve the upstream observable on every supported mechanism",
-        current_evidence: EvidenceKind::BoundedCorpus,
+        current_evidence: EvidenceKind::Differential,
     },
     PassDescriptor {
         id: "ir.tail-self-call",
