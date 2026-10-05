@@ -367,6 +367,18 @@ fn simplify_branches(func: &mut LirFunction, cfg: &LocalOptConfig, report: &mut 
         }
     }
 
+    // As in the local instruction pass, destructive DIV invalidates any
+    // pre-DIV constant fact for its low/high temps. Branch simplification has
+    // its own independently-built map, so it needs the same kill barrier.
+    for block in &func.blocks {
+        for inst in &block.instructions {
+            if let LirInst::DivRem { low, high, .. } = inst {
+                const_map.remove(low);
+                const_map.remove(high);
+            }
+        }
+    }
+
     for block in &mut func.blocks {
         // Find if last instruction was a Cmp with known constants
         let mut last_cmp = None;
