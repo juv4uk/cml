@@ -76,6 +76,14 @@ int main(void) {{
     size_t rat_large_bytes = cml_bytes_allocated - before;
 
     before = cml_bytes_allocated;
+    Value *int_as_rational = to_rational(int_one);
+    size_t int_to_rat_bytes = cml_bytes_allocated - before;
+
+    before = cml_bytes_allocated;
+    Value *mixed_sum = v_add(int_one, rat_half);
+    size_t mixed_add_bytes = cml_bytes_allocated - before;
+
+    before = cml_bytes_allocated;
     Value *chain_a = mk_rational(1, 2);
     Value *chain_b = mk_rational(1, 3);
     Value *chain_sum = v_rat_add(chain_a, chain_b);
@@ -85,7 +93,8 @@ int main(void) {{
         "CML-EXACT-Q-C-BASELINE "
         "value_size=%zu pointer_size=%zu long_size=%zu stdc_version=%ld "
         "int_bytes=%zu rat_half_bytes=%zu "
-        "rat_one_bytes=%zu rat_large_bytes=%zu add_chain_bytes=%zu "
+        "rat_one_bytes=%zu rat_large_bytes=%zu "
+        "int_to_rat_bytes=%zu mixed_add_bytes=%zu add_chain_bytes=%zu "
         "int_tag=%d rat_one_tag=%d rat_one_den=%ld "
         "print_int=",
         value_size,
@@ -96,6 +105,8 @@ int main(void) {{
         rat_half_bytes,
         rat_one_bytes,
         rat_large_bytes,
+        int_to_rat_bytes,
+        mixed_add_bytes,
         add_chain_bytes,
         (int)int_one->tag,
         (int)rat_one->tag,
@@ -106,6 +117,10 @@ int main(void) {{
     print_value(rat_one);
     printf(" eq_int_rat=");
     print_value(v_eq(int_one, rat_one));
+    printf(" int_as_rat=");
+    print_value(int_as_rational);
+    printf(" mixed_sum=");
+    print_value(mixed_sum);
     printf(" chain_sum=");
     print_value(chain_sum);
     printf("\n");
@@ -130,6 +145,8 @@ struct BaselineRow {
     rat_half_bytes: usize,
     rat_one_bytes: usize,
     rat_large_bytes: usize,
+    int_to_rat_bytes: usize,
+    mixed_add_bytes: usize,
     add_chain_bytes: usize,
     int_tag: i32,
     rat_one_tag: i32,
@@ -137,6 +154,8 @@ struct BaselineRow {
     print_int: String,
     print_rat_one: String,
     eq_int_rat: String,
+    int_as_rat: String,
+    mixed_sum: String,
     chain_sum: String,
 }
 
@@ -154,6 +173,8 @@ fn parse_row(stdout: &str) -> BaselineRow {
     let mut rat_half_bytes = None;
     let mut rat_one_bytes = None;
     let mut rat_large_bytes = None;
+    let mut int_to_rat_bytes = None;
+    let mut mixed_add_bytes = None;
     let mut add_chain_bytes = None;
     let mut int_tag = None;
     let mut rat_one_tag = None;
@@ -161,6 +182,8 @@ fn parse_row(stdout: &str) -> BaselineRow {
     let mut print_int = None;
     let mut print_rat_one = None;
     let mut eq_int_rat = None;
+    let mut int_as_rat = None;
+    let mut mixed_sum = None;
     let mut chain_sum = None;
 
     for field in rest.split_whitespace() {
@@ -182,6 +205,12 @@ fn parse_row(stdout: &str) -> BaselineRow {
             "rat_large_bytes" => {
                 rat_large_bytes = Some(value.parse().expect("rat_large_bytes usize"))
             }
+            "int_to_rat_bytes" => {
+                int_to_rat_bytes = Some(value.parse().expect("int_to_rat_bytes usize"))
+            }
+            "mixed_add_bytes" => {
+                mixed_add_bytes = Some(value.parse().expect("mixed_add_bytes usize"))
+            }
             "add_chain_bytes" => {
                 add_chain_bytes = Some(value.parse().expect("add_chain_bytes usize"))
             }
@@ -191,6 +220,8 @@ fn parse_row(stdout: &str) -> BaselineRow {
             "print_int" => print_int = Some(value.to_string()),
             "print_rat_one" => print_rat_one = Some(value.to_string()),
             "eq_int_rat" => eq_int_rat = Some(value.to_string()),
+            "int_as_rat" => int_as_rat = Some(value.to_string()),
+            "mixed_sum" => mixed_sum = Some(value.to_string()),
             "chain_sum" => chain_sum = Some(value.to_string()),
             other => panic!("unknown measurement field {other:?}"),
         }
@@ -205,6 +236,8 @@ fn parse_row(stdout: &str) -> BaselineRow {
         rat_half_bytes: rat_half_bytes.expect("rat_half_bytes"),
         rat_one_bytes: rat_one_bytes.expect("rat_one_bytes"),
         rat_large_bytes: rat_large_bytes.expect("rat_large_bytes"),
+        int_to_rat_bytes: int_to_rat_bytes.expect("int_to_rat_bytes"),
+        mixed_add_bytes: mixed_add_bytes.expect("mixed_add_bytes"),
         add_chain_bytes: add_chain_bytes.expect("add_chain_bytes"),
         int_tag: int_tag.expect("int_tag"),
         rat_one_tag: rat_one_tag.expect("rat_one_tag"),
@@ -212,6 +245,8 @@ fn parse_row(stdout: &str) -> BaselineRow {
         print_int: print_int.expect("print_int"),
         print_rat_one: print_rat_one.expect("print_rat_one"),
         eq_int_rat: eq_int_rat.expect("eq_int_rat"),
+        int_as_rat: int_as_rat.expect("int_as_rat"),
+        mixed_sum: mixed_sum.expect("mixed_sum"),
         chain_sum: chain_sum.expect("chain_sum"),
     }
 }
@@ -268,6 +303,15 @@ fn current_c_exact_q_representation_has_measured_heap_and_observer_baseline() {
     assert_eq!(row.rat_one_bytes, row.value_size);
     assert_eq!(row.rat_large_bytes, row.value_size);
     assert_eq!(
+        row.int_to_rat_bytes, row.value_size,
+        "current INT -> exact-rational conversion allocates one Value"
+    );
+    assert_eq!(
+        row.mixed_add_bytes,
+        2 * row.value_size,
+        "current INT + RATIONAL path allocates one conversion Value plus one result Value"
+    );
+    assert_eq!(
         row.add_chain_bytes,
         3 * row.value_size,
         "two exact-Q inputs plus one exact-Q result are three current Value allocations"
@@ -288,6 +332,8 @@ fn current_c_exact_q_representation_has_measured_heap_and_observer_baseline() {
         row.eq_int_rat, "(0)",
         "current eq observer distinguishes TAG_INT from denominator-1 TAG_RATIONAL"
     );
+    assert_eq!(row.int_as_rat, "1");
+    assert_eq!(row.mixed_sum, "3/2");
     assert_eq!(row.chain_sum, "5/6");
 
     let compiler = gcc_command()
@@ -301,7 +347,7 @@ fn current_c_exact_q_representation_has_measured_heap_and_observer_baseline() {
         .replace(' ', "_");
     eprintln!("{}", stdout.trim());
     eprintln!(
-        "CML-EXACT-Q-C-BASELINE-PROVENANCE compiler={} rust_target_arch={} rust_target_os={}",
+        "CML-EXACT-Q-C-BASELINE-PROVENANCE compiler={} c_flags=-std=c11,-O2 rust_target_arch={} rust_target_os={}",
         compiler_line,
         std::env::consts::ARCH,
         std::env::consts::OS
