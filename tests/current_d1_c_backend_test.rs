@@ -34,8 +34,10 @@ fn compile_and_run(body: &str, stem: &str) -> Output {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let base =
-        std::env::temp_dir().join(format!("cml-current-d1-{stem}-{}-{nonce}", std::process::id()));
+    let base = std::env::temp_dir().join(format!(
+        "cml-current-d1-{stem}-{}-{nonce}",
+        std::process::id()
+    ));
     let source_path = base.with_extension("c");
     let binary_path = base.with_extension("bin");
 
