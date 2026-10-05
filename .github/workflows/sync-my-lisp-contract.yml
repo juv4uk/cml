@@ -15,7 +15,7 @@ on:
 jobs:
   sync:
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: write
     env:
@@ -99,7 +99,7 @@ jobs:
 
   verify:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: read
     env:
@@ -111,9 +111,10 @@ jobs:
       - name: Check out consumer repository
         uses: actions/checkout@v4
 
-      - name: Check out public sens authority
+      - name: Check out private sens authority
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.SENS_READ_TOKEN }}
           repository: juv4uk/sens
           ref: main
           fetch-depth: 0
