@@ -319,6 +319,23 @@ mod tests {
     }
 
     #[test]
+    fn recomputed_checksum_cannot_hide_a_stale_sens_revision() {
+        let authority = pinned_authority().unwrap();
+        let mut envelope = SlotArtifactEnvelope::new(program(), &authority, CML_REV_A).unwrap();
+        envelope.provenance.sens_revision =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into();
+
+        // Encoding is structurally valid and gets a fresh checksum, but decode
+        // still verifies semantic provenance against the SENS authority pinned
+        // into this CML build.
+        let encoded = envelope.encode_v1().unwrap();
+        assert_eq!(
+            SlotArtifactEnvelope::decode_verified_v1(&encoded).unwrap_err(),
+            ArtifactEnvelopeError::SensRevisionMismatch
+        );
+    }
+
+    #[test]
     fn program_digest_must_match_inner_slot_artifact() {
         let authority = pinned_authority().unwrap();
         let mut envelope = SlotArtifactEnvelope::new(program(), &authority, CML_REV_A).unwrap();
