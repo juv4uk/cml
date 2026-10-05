@@ -10,6 +10,7 @@ pub mod core_profile;
 pub mod coverage;
 pub mod cpu_profile;
 pub mod elf64;
+pub mod exact_q_rep;
 pub mod execution;
 mod execution_scheduler;
 mod execution_store;
