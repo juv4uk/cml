@@ -83,9 +83,18 @@ impl fmt::Display for CompileError {
 
 impl std::error::Error for CompileError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CConditionalMechanism {
+    /// Historical two-part COND compatibility: any non-NIL runtime value is true.
+    CompatibilityTruthiness,
+    /// Current exact D3 COND mechanism: tests must return exact D1 PredicateBit.
+    CurrentExactD1,
+}
+
 pub struct CBackend {
     functions: Vec<String>,
     fn_counter: usize,
+    conditional_mechanism: CConditionalMechanism,
 }
 
 const RUNTIME: &str = r##"
@@ -625,7 +634,26 @@ impl CBackend {
         CBackend {
             functions: Vec::new(),
             fn_counter: 0,
+            conditional_mechanism: CConditionalMechanism::CompatibilityTruthiness,
         }
+    }
+
+    /// Select the backend-private current exact-D1 conditional mechanism.
+    ///
+    /// This method does not admit any language identity or choose SENS meaning.
+    /// The verified compiler-role bridge (#605) is responsible for selecting
+    /// this mechanism only after SENS returns the Conditional role.
+    pub fn with_current_d1_conditional(mut self) -> Self {
+        self.conditional_mechanism = CConditionalMechanism::CurrentExactD1;
+        self
+    }
+
+    pub fn set_conditional_mechanism(&mut self, mechanism: CConditionalMechanism) {
+        self.conditional_mechanism = mechanism;
+    }
+
+    pub const fn conditional_mechanism(&self) -> CConditionalMechanism {
+        self.conditional_mechanism
     }
 
     fn next_fn_name(&mut self) -> String {
@@ -982,15 +1010,19 @@ impl CBackend {
         for (test, body) in branches {
             let test_expr = self.compile_expr(test, env)?;
             let body_expr = self.compile_expr(body, env)?;
+            let predicate = match self.conditional_mechanism {
+                CConditionalMechanism::CompatibilityTruthiness => {
+                    format!("truthy({test_expr})")
+                }
+                CConditionalMechanism::CurrentExactD1 => {
+                    format!("require_predicate_bit({test_expr}, \"current-cond\")")
+                }
+            };
             if first {
-                out.push_str(&format!(
-                    " if (truthy({test_expr})) {{ _c = {body_expr}; }}"
-                ));
+                out.push_str(&format!(" if ({predicate}) {{ _c = {body_expr}; }}"));
                 first = false;
             } else {
-                out.push_str(&format!(
-                    " else if (truthy({test_expr})) {{ _c = {body_expr}; }}"
-                ));
+                out.push_str(&format!(" else if ({predicate}) {{ _c = {body_expr}; }}"));
             }
         }
         out.push_str(" else { _c = &NIL_V; } _c; })");
