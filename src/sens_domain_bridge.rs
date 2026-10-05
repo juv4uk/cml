@@ -133,6 +133,7 @@ pub enum BridgeError {
     MechanismNotAdmitted,
     UnsupportedOrResearchIdentity,
     UnsupportedExecutionRole,
+    LanguageRoleDerivationFailed,
     ExecutionRoleMismatch,
     UpstreamBoundaryContractMissing,
 }
@@ -162,6 +163,9 @@ impl fmt::Display for BridgeError {
             }
             Self::UnsupportedExecutionRole => {
                 write!(formatter, "identity has no execution role in the first compiler slice")
+            }
+            Self::LanguageRoleDerivationFailed => {
+                write!(formatter, "SENS language-owned compiler role derivation failed")
             }
             Self::ExecutionRoleMismatch => {
                 write!(formatter, "carried execution role disagrees with pinned SENS authority")
@@ -249,8 +253,9 @@ fn verify_boundary_contract() -> Result<(), BridgeError> {
 
 /// Validate one SENS semantic request before any target/backend execution.
 ///
-/// The only identity -> role decision is delegated to
-/// `sens::compiler_execution_role`. CML never matches domain bits here.
+/// The only identity -> role decision is executed by the SENS-written compiler
+/// nucleus through `sens::compiler_execution_role_from_sens`. CML never matches
+/// domain bits here. The older Rust projection is differential evidence only.
 pub fn verify_request(
     request: SemanticRequest,
 ) -> Result<VerifiedDomainMechanism, BridgeError> {
@@ -300,8 +305,9 @@ pub fn verify_request(
         .identity
         .core_operation()
         .ok_or(BridgeError::UnsupportedOrResearchIdentity)?;
-    let authoritative_role =
-        sens::compiler_execution_role(core).ok_or(BridgeError::UnsupportedExecutionRole)?;
+    let authoritative_role = sens::compiler_execution_role_from_sens(core)
+        .map_err(|_| BridgeError::LanguageRoleDerivationFailed)?
+        .ok_or(BridgeError::UnsupportedExecutionRole)?;
 
     if authoritative_role != request.execution_role {
         return Err(BridgeError::ExecutionRoleMismatch);
