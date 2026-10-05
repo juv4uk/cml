@@ -19,6 +19,8 @@ pub mod fpga_transport;
 pub mod fs;
 pub mod gpu_cuda;
 #[cfg(feature = "gpu-cuda")]
+pub mod gpu_host;
+#[cfg(feature = "gpu-cuda")]
 pub mod gpu_cuda_runtime;
 #[cfg(feature = "gpu-wgpu")]
 pub mod gpu_wgpu_runtime;

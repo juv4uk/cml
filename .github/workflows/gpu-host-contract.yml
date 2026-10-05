@@ -1,0 +1,54 @@
+name: CUDA host adapter contract
+
+on:
+  pull_request:
+    paths:
+      - "src/gpu_host.rs"
+      - "src/gpu_cuda_runtime.rs"
+      - "src/bin/cml-gpu-worker.rs"
+      - "src/lib.rs"
+      - "tests/gpu_host_test.rs"
+      - ".github/workflows/gpu-host-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpu-host-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64, author]
+    timeout-minutes: 15
+    env:
+      RUSTC_WRAPPER: /usr/bin/sccache
+      SCCACHE_DIR: /home/agents/.cache/sccache
+      SCCACHE_CACHE_SIZE: 30G
+      CARGO_BUILD_JOBS: 1
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Isolate Cargo target by rustc build
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc_key="$(rustc -vV | sha256sum | cut -c1-16)"
+          test -n "$rustc_key"
+          echo "CARGO_TARGET_DIR=/home/agents/.cache/cargo-target/cml/rustc-$rustc_key" >> "$GITHUB_ENV"
+
+      - name: Resolve pinned external/sens from local clone
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
+
+      - name: Host adapter regressions
+        run: cargo test --features gpu-cuda --test gpu_host_test
+
+      - name: Compile persistent worker integration
+        run: cargo check --features gpu-cuda --bin cml-gpu-worker

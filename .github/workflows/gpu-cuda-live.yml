@@ -25,6 +25,7 @@ jobs:
     runs-on: [self-hosted, gpu, gtx-1050-ti]
     timeout-minutes: 30
     env:
+      CML_CUDA_HOST_PROBE: /home/agents/ecosystem/scripts/cuda-host-profile.sh
       # WSL: драйвер Windows має йти першим. NVRTC 12.6 також потребує
       # реальний target lib directory і вузький libstdc++/libgcc shim.
       LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/lib/wsm-gcc-runtime

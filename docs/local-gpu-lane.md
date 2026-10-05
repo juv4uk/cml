@@ -27,6 +27,8 @@ The runner and persistent CUDA worker are WSL **system services**, not per-login
 - runner unit: `actions.runner.juv4uk-cml.wsm-i5-6400.service`
 - worker unit: `cml-gpu-worker.service`
 - worker socket: `/run/cml-gpu-worker/worker.sock`
+- canonical host probe: `/home/agents/ecosystem/scripts/cuda-host-profile.sh`
+- worker env: `CML_CUDA_HOST_PROBE=/home/agents/ecosystem/scripts/cuda-host-profile.sh`
 - hardware witness: GTX 1050 Ti, compute capability 6.1, 4 GiB
 
 Windows keeps the Ubuntu WSL instance alive with a per-user Startup keepalive process. The keepalive has no semantic role; it only prevents WSL from shutting down while the GitHub listener is idle.
@@ -59,6 +61,24 @@ concurrency:
 ```
 
 GitHub concurrency retains at most one running and one pending run for a key. A newer pending run can replace an older pending run, so GPU workflows must be dispatched serially when exhaustive evidence is required.
+
+## Host capability contract
+
+The worker does not own CUDA path/device discovery. That authority lives in
+`juv4uk/ecosystem#58` / merged ecosystem PR #60 under schema
+`sens-cuda-host-v1`.
+
+At service startup the worker executes the configured canonical probe in its
+stable `env` mode, requires `status=ready` and an NVRTC library, then opens
+the CUDA device through cudarc and cross-checks device name + compute capability.
+Only after that strict bootstrap succeeds does it publish its Unix socket.
+
+The repository-owned `systemd/cml-gpu-worker.service` pins
+`CML_CUDA_HOST_PROBE=/home/agents/ecosystem/scripts/cuda-host-profile.sh`,
+so service restoration and CML runtime admission consume the same host authority.
+
+The JSON form emitted by ecosystem is the audit/provenance artifact. CML uses
+the same helper's key/value form as its dependency-free IPC contract.
 
 ## Authority boundary
 
