@@ -350,22 +350,22 @@ fn lower_cond(
     })
 }
 
-fn primitive_arity(
-    role: sens::CompilerLoweringRole,
+fn mechanism_arity(
+    mechanism: RichCompilerMechanismRef,
     arguments: &[Expr],
 ) -> Result<(), CurrentLowerError> {
-    let (name, expected) = match role {
-        sens::CompilerLoweringRole::AtomPredicate
-        | sens::CompilerLoweringRole::SelectorTail
-        | sens::CompilerLoweringRole::SelectorHead => ("unary compiler mechanism", 1),
-        sens::CompilerLoweringRole::AtomEquality | sens::CompilerLoweringRole::PairConstruct => {
-            ("binary compiler mechanism", 2)
-        }
-        sens::CompilerLoweringRole::QuoteForm => ("quote", 1),
-        sens::CompilerLoweringRole::CondForm => return Ok(()),
-        sens::CompilerLoweringRole::LambdaForm => ("lambda", 2),
-        sens::CompilerLoweringRole::DefineForm => ("define", 2),
+    let (name, expected) = match mechanism {
+        RichCompilerMechanismRef::AtomPredicateD1
+        | RichCompilerMechanismRef::SelectorTail
+        | RichCompilerMechanismRef::SelectorHead => ("unary compiler mechanism", 1),
+        RichCompilerMechanismRef::AtomEqualityD1
+        | RichCompilerMechanismRef::PairConstruct => ("binary compiler mechanism", 2),
+        RichCompilerMechanismRef::Quote => ("quote", 1),
+        RichCompilerMechanismRef::ConditionalD1 => return Ok(()),
+        RichCompilerMechanismRef::Lambda => ("lambda", 2),
+        RichCompilerMechanismRef::Define => ("define", 2),
     };
+
     if arguments.len() == expected {
         Ok(())
     } else {
@@ -383,21 +383,20 @@ fn lower_domain_call(
     registry: &VerifiedCurrentRegistry,
 ) -> Result<Ir, CurrentLowerError> {
     let verified = registry.lookup(identity)?;
-    let role = verified.lowering_role();
     let mechanism = verified.mechanism_ref();
 
-    primitive_arity(role, arguments)?;
+    mechanism_arity(mechanism, arguments)?;
 
-    match role {
-        sens::CompilerLoweringRole::QuoteForm => Ok(Ir::Quote(lower_quoted(&arguments[0])?)),
-        sens::CompilerLoweringRole::LambdaForm => lower_lambda(arguments, registry),
-        sens::CompilerLoweringRole::DefineForm => lower_define(arguments, registry),
-        sens::CompilerLoweringRole::CondForm => lower_cond(arguments, mechanism, registry),
-        sens::CompilerLoweringRole::AtomPredicate
-        | sens::CompilerLoweringRole::SelectorTail
-        | sens::CompilerLoweringRole::SelectorHead
-        | sens::CompilerLoweringRole::AtomEquality
-        | sens::CompilerLoweringRole::PairConstruct => Ok(Ir::Prim {
+    match mechanism {
+        RichCompilerMechanismRef::Quote => Ok(Ir::Quote(lower_quoted(&arguments[0])?)),
+        RichCompilerMechanismRef::Lambda => lower_lambda(arguments, registry),
+        RichCompilerMechanismRef::Define => lower_define(arguments, registry),
+        RichCompilerMechanismRef::ConditionalD1 => lower_cond(arguments, mechanism, registry),
+        RichCompilerMechanismRef::AtomPredicateD1
+        | RichCompilerMechanismRef::SelectorTail
+        | RichCompilerMechanismRef::SelectorHead
+        | RichCompilerMechanismRef::AtomEqualityD1
+        | RichCompilerMechanismRef::PairConstruct => Ok(Ir::Prim {
             op: PrimOp::CompilerMechanism(mechanism),
             args: arguments
                 .iter()
