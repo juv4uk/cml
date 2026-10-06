@@ -13,6 +13,7 @@ use std::fmt;
 
 const MAGIC: &[u8; 8] = b"CMLSENS1";
 const PINNED_NUCLEUS: &str = include_str!("../external/sens/lib/compiler-nucleus.lisp");
+const MAX_FIELD_LEN: usize = 16 * 1024 * 1024;
 
 pub const C1_BACKEND_ID: &str = "cml.c/current-domain";
 pub const C1_ARTIFACT_FORMAT: &str = "CMLSENS-C1-1";
@@ -24,6 +25,7 @@ pub struct CurrentSensC1Artifact {
     pub compiler_export: String,
     pub compiler_export_sha256: String,
     pub authority: AuthorityProvenance,
+    pub cml_revision: String,
     pub backend_id: String,
     pub artifact_format: String,
     pub c_source: String,
@@ -39,11 +41,13 @@ pub enum C1ArtifactError {
     InvalidCompilerExportSha,
     InvalidCSourceSha,
     InvalidAuthority,
+    InvalidCmlRevision,
     WrongBackend,
     WrongFormat,
     InvalidMagic,
     InvalidUtf8,
     Truncated,
+    FieldTooLarge,
 }
 
 impl fmt::Display for C1ArtifactError {
@@ -103,6 +107,30 @@ fn validate(artifact: &CurrentSensC1Artifact) -> Result<(), C1ArtifactError> {
     {
         return Err(C1ArtifactError::InvalidAuthority);
     }
+    if !valid_hex(&artifact.cml_revision, 40) {
+        return Err(C1ArtifactError::InvalidCmlRevision);
+    }
+    for field in [
+        &artifact.source,
+        &artifact.source_sha256,
+        &artifact.compiler_export,
+        &artifact.compiler_export_sha256,
+        &artifact.authority.repository,
+        &artifact.authority.revision,
+        &artifact.authority.authority_path,
+        &artifact.authority.authority_sha256,
+        &artifact.authority.language_contract_version,
+        &artifact.cml_revision,
+        &artifact.backend_id,
+        &artifact.artifact_format,
+        &artifact.c_source,
+        &artifact.c_source_sha256,
+    ] {
+        if field.len() > MAX_FIELD_LEN {
+            return Err(C1ArtifactError::FieldTooLarge);
+        }
+    }
+
     if artifact.backend_id != C1_BACKEND_ID {
         return Err(C1ArtifactError::WrongBackend);
     }
@@ -117,6 +145,7 @@ fn validate(artifact: &CurrentSensC1Artifact) -> Result<(), C1ArtifactError> {
 pub fn build_current_sens_c1(
     source: &str,
     compiler_export: &str,
+    cml_revision: &str,
 ) -> Result<CurrentSensC1Artifact, C1ArtifactError> {
     if source != PINNED_NUCLEUS {
         return Err(C1ArtifactError::WrongSourceBundle);
@@ -134,6 +163,7 @@ pub fn build_current_sens_c1(
         compiler_export: compiler_export.to_string(),
         compiler_export_sha256: sha256_hex(compiler_export.as_bytes()),
         authority: lowered.authority,
+        cml_revision: cml_revision.to_string(),
         backend_id: C1_BACKEND_ID.to_string(),
         artifact_format: C1_ARTIFACT_FORMAT.to_string(),
         c_source_sha256: sha256_hex(c_source.as_bytes()),
@@ -148,19 +178,20 @@ impl CurrentSensC1Artifact {
         validate(self)?;
         let mut out = Vec::new();
         out.extend_from_slice(MAGIC);
-        push(&mut out, &self.source);
-        push(&mut out, &self.source_sha256);
-        push(&mut out, &self.compiler_export);
-        push(&mut out, &self.compiler_export_sha256);
-        push(&mut out, &self.authority.repository);
-        push(&mut out, &self.authority.revision);
-        push(&mut out, &self.authority.authority_path);
-        push(&mut out, &self.authority.authority_sha256);
-        push(&mut out, &self.authority.language_contract_version);
-        push(&mut out, &self.backend_id);
-        push(&mut out, &self.artifact_format);
-        push(&mut out, &self.c_source);
-        push(&mut out, &self.c_source_sha256);
+        push(&mut out, &self.source)?;
+        push(&mut out, &self.source_sha256)?;
+        push(&mut out, &self.compiler_export)?;
+        push(&mut out, &self.compiler_export_sha256)?;
+        push(&mut out, &self.authority.repository)?;
+        push(&mut out, &self.authority.revision)?;
+        push(&mut out, &self.authority.authority_path)?;
+        push(&mut out, &self.authority.authority_sha256)?;
+        push(&mut out, &self.authority.language_contract_version)?;
+        push(&mut out, &self.cml_revision)?;
+        push(&mut out, &self.backend_id)?;
+        push(&mut out, &self.artifact_format)?;
+        push(&mut out, &self.c_source)?;
+        push(&mut out, &self.c_source_sha256)?;
         Ok(out)
     }
 
@@ -185,6 +216,7 @@ impl CurrentSensC1Artifact {
                 authority_sha256: decoder.take_string()?,
                 language_contract_version: decoder.take_string()?,
             },
+            cml_revision: decoder.take_string()?,
             backend_id: decoder.take_string()?,
             artifact_format: decoder.take_string()?,
             c_source: decoder.take_string()?,
@@ -198,9 +230,13 @@ impl CurrentSensC1Artifact {
     }
 }
 
-fn push(out: &mut Vec<u8>, value: &str) {
+fn push(out: &mut Vec<u8>, value: &str) -> Result<(), C1ArtifactError> {
+    if value.len() > MAX_FIELD_LEN || value.len() > u32::MAX as usize {
+        return Err(C1ArtifactError::FieldTooLarge);
+    }
     out.extend_from_slice(&(value.len() as u32).to_le_bytes());
     out.extend_from_slice(value.as_bytes());
+    Ok(())
 }
 
 struct Decoder<'a> {
@@ -224,6 +260,9 @@ impl<'a> Decoder<'a> {
 
     fn take_string(&mut self) -> Result<String, C1ArtifactError> {
         let len = self.take_u32()? as usize;
+        if len > MAX_FIELD_LEN {
+            return Err(C1ArtifactError::FieldTooLarge);
+        }
         let raw = self.take(len)?;
         std::str::from_utf8(raw)
             .map(str::to_string)
@@ -246,6 +285,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     const SOURCE: &str = include_str!("../external/sens/lib/compiler-nucleus.lisp");
+    const TEST_CML_REVISION: &str = "3fda3cdb087a24b3e124c811abff90803028518c";
 
     fn pinned_compiler_export() -> &'static str {
         static EXPORT: OnceLock<String> = OnceLock::new();
@@ -293,7 +333,7 @@ mod tests {
     fn c1_bundle_carries_source_export_proof_and_provenance() {
         let export = pinned_compiler_export();
         let artifact =
-            build_current_sens_c1(SOURCE, export).expect("current nucleus C1 artifact");
+            build_current_sens_c1(SOURCE, export, TEST_CML_REVISION).expect("current nucleus C1 artifact");
 
         assert_eq!(artifact.source, SOURCE);
         assert_eq!(artifact.backend_id, C1_BACKEND_ID);
@@ -302,6 +342,7 @@ mod tests {
             artifact.authority.revision,
             "f2e7797283c8dfc2aa67935a02b3735a8290041f"
         );
+        assert_eq!(artifact.cml_revision, TEST_CML_REVISION);
         assert!(artifact.compiler_export.contains("(proof-ref . "));
         assert!(
             artifact
@@ -380,7 +421,7 @@ mod tests {
         assert_ne!(tampered, export);
 
         assert!(
-            build_current_sens_c1(SOURCE, &tampered).is_err(),
+            build_current_sens_c1(SOURCE, &tampered, TEST_CML_REVISION).is_err(),
             "same payload under the wrong domain must fail before C1 artifact emission"
         );
     }
@@ -389,7 +430,7 @@ mod tests {
     fn modified_source_cannot_reuse_current_nucleus_proof_export() {
         let modified = format!("{SOURCE}\n; modified");
         assert_eq!(
-            build_current_sens_c1(&modified, pinned_compiler_export()).unwrap_err(),
+            build_current_sens_c1(&modified, pinned_compiler_export(), TEST_CML_REVISION).unwrap_err(),
             C1ArtifactError::WrongSourceBundle
         );
     }
