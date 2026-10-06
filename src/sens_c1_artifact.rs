@@ -368,12 +368,19 @@ mod tests {
         assert!(artifact.c_source.contains("v_atom_predicate("));
         assert!(artifact.c_source.contains("v_eq_predicate("));
         assert!(artifact.c_source.contains("require_predicate_bit("));
-        assert!(artifact.c_source.contains("require_tag(_v, TAG_CONS, \"car\")"));
-        assert!(artifact.c_source.contains("require_tag(_v, TAG_CONS, \"cdr\")"));
+        assert!(
+            artifact
+                .c_source
+                .contains("require_tag(_v, TAG_CONS, \"car\")")
+        );
+        assert!(
+            artifact
+                .c_source
+                .contains("require_tag(_v, TAG_CONS, \"cdr\")")
+        );
         assert!(!artifact.c_source.contains("mk_sid_callable(0b"));
 
-        let decoded =
-            CurrentSensC1Artifact::decode_v1(&artifact.encode_v1().unwrap()).unwrap();
+        let decoded = CurrentSensC1Artifact::decode_v1(&artifact.encode_v1().unwrap()).unwrap();
         assert_eq!(decoded, artifact);
     }
 
@@ -386,10 +393,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock after epoch")
             .as_nanos();
-        let base = std::env::temp_dir().join(format!(
-            "cml-sens-c1-{}-{nonce}",
-            std::process::id()
-        ));
+        let base = std::env::temp_dir().join(format!("cml-sens-c1-{}-{nonce}", std::process::id()));
         let source_path = base.with_extension("c");
         let binary_path = base.with_extension("bin");
         std::fs::write(&source_path, &artifact.c_source).unwrap();
@@ -406,7 +410,9 @@ mod tests {
             String::from_utf8_lossy(&compile.stderr)
         );
 
-        let run = Command::new(&binary_path).output().expect("C1 executable must run");
+        let run = Command::new(&binary_path)
+            .output()
+            .expect("C1 executable must run");
         assert!(
             run.status.success(),
             "generated C1 executable failed: {}",
