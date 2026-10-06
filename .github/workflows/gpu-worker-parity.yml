@@ -46,6 +46,8 @@ jobs:
       # Хост без запасу pagefile: компіляція на одному потоці.
       CARGO_BUILD_JOBS: 1
       CARGO_INCREMENTAL: 0
+      # Воркер після #535 стартує лише з host-probe (ecosystem#58), інакше ProbeNotConfigured.
+      CML_CUDA_HOST_PROBE: /home/agents/ecosystem/scripts/cuda-host-profile.sh
     steps:
       - uses: actions/checkout@v4
 

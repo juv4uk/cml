@@ -14,6 +14,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
     timeout-minutes: 20
     env:
+      CML_CUDA_HOST_PROBE: /home/agents/ecosystem/scripts/cuda-host-profile.sh
       LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/lib/wsm-gcc-runtime
       CUDA_PATH: /usr/local/cuda-12.6
       CUDA_HOME: /usr/local/cuda-12.6
@@ -36,6 +37,8 @@ jobs:
           git config submodule.external/sens.url /home/agents/GitHub/sens
           git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
 
+      - name: Host adapter and fail-closed socket regressions
+        run: cargo test --features gpu-cuda --test gpu_host_test -- --nocapture
       - name: Worker protocol/timing unit tests
         run: cargo test --release --features gpu-cuda --bin cml-gpu-worker
 

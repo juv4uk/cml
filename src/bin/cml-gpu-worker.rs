@@ -12,7 +12,10 @@ fn main() {
 #[cfg(feature = "gpu-cuda")]
 mod enabled {
     use cml::gpu_admission::{AdmissionProvenance, GpuAdmissionGuard, gpu_admission_lock_path, gpu_resource_key};
-    use cml::gpu_cuda_runtime::{discover_devices, execute_map, execute_map_chain_i32_selected};
+    use cml::gpu_cuda_runtime::{
+        execute_map, execute_map_chain_i32_selected, initialize_host_session_from_configured_probe,
+        initialized_host_session_evidence,
+    };
     use cml::gpu_worker_client::gpu_worker_socket_path;
     use cml::ir::{BufferLiteral, Ir, Params};
     use std::env;
@@ -173,22 +176,32 @@ mod enabled {
     }
 
     fn serve(path: PathBuf) -> Result<(), String> {
+        // Remove any path left by a previous worker before strict bootstrap.
+        // If host admission fails, no stale socket path may survive and look ready.
         if path.exists() {
             fs::remove_file(&path)
                 .map_err(|error| format!("remove stale socket {}: {error}", path.display()))?;
         }
+
+        // Strict bootstrap still completes before a new listening socket exists.
+        let evidence = initialize_host_session_from_configured_probe(0)
+            .map_err(|error| format!("CUDA host/session admission failed: {error:?}"))?;
+
         let listener = UnixListener::bind(&path)
             .map_err(|error| format!("bind {}: {error}", path.display()))?;
         let _guard = SocketGuard(path.clone());
-        eprintln!("cml-gpu-worker listening on {}", path.display());
-
-        // Force discovery once so a bad CUDA/WSL setup fails before the runner submits work.
-        let devices =
-            discover_devices().map_err(|error| format!("CUDA discovery failed: {error:?}"))?;
-        if devices.is_empty() {
-            return Err("CUDA runtime reported zero devices".into());
-        }
-        eprintln!("cml-gpu-worker ready: {:?}", devices[0]);
+        eprintln!(
+            "cml-gpu-worker ready socket={} {} live_device={} live_cc={}.{} cuda_driver_api={} nvrtc={}.{} reserve_bytes={}",
+            path.display(),
+            evidence.host.machine_evidence(),
+            evidence.device.descriptor.name,
+            evidence.device.compute_capability.0,
+            evidence.device.compute_capability.1,
+            evidence.toolchain.driver_version,
+            evidence.toolchain.nvrtc_version.major,
+            evidence.toolchain.nvrtc_version.minor,
+            env::var("CML_CUDA_MEMORY_RESERVE_BYTES").unwrap_or_else(|_| "0".into()),
+        );
 
         for connection in listener.incoming() {
             match connection {
@@ -208,9 +221,18 @@ mod enabled {
         match opcode {
             OP_PING => write_response(stream, STATUS_OK, b"pong").map_err(io_error),
             OP_PROBE => {
-                let devices =
-                    discover_devices().map_err(|error| format!("CUDA probe failed: {error:?}"))?;
-                let text = format!("{devices:?}");
+                let evidence = initialized_host_session_evidence(0)
+                    .map_err(|error| format!("CUDA probe failed: {error:?}"))?;
+                let text = format!(
+                    "{} live_device={} live_compute_capability={}.{} cuda_driver_api={} nvrtc_version={}.{}",
+                    evidence.host.machine_evidence(),
+                    evidence.device.descriptor.name,
+                    evidence.device.compute_capability.0,
+                    evidence.device.compute_capability.1,
+                    evidence.toolchain.driver_version,
+                    evidence.toolchain.nvrtc_version.major,
+                    evidence.toolchain.nvrtc_version.minor,
+                );
                 write_response(stream, STATUS_OK, text.as_bytes()).map_err(io_error)
             }
             OP_ADD_I32 => {

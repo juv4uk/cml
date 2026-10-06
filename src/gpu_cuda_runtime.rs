@@ -19,6 +19,7 @@ use crate::gpu_cuda::{
     CudaLatencyBreakdown, CudaMapKernel, CudaPtxArtifact, CudaPtxCacheKey, NvrtcVersion,
     emit_i32_compute_kernel, lower_map_kernel,
 };
+use crate::gpu_host::{CudaHostCapability, CudaHostCapabilityError};
 use crate::ir::{BufferLiteral, Ir};
 
 /// Exact toolchain provenance used to compile and load CUDA artifacts in one session.
@@ -46,6 +47,13 @@ pub struct CudaExecution {
 pub struct CudaChainExecution {
     pub outputs: Vec<BufferLiteral>,
     pub device: CudaDevice,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CudaSessionEvidence {
+    pub host: CudaHostCapability,
+    pub device: CudaDevice,
+    pub toolchain: CudaToolchainProvenance,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +100,7 @@ pub enum CudaRuntimeError {
         chain_len: usize,
     },
     Nvrtc(String),
+    HostCapability(CudaHostCapabilityError),
     Driver {
         stage: CudaDriverStage,
         message: String,
@@ -128,6 +137,9 @@ impl std::fmt::Display for CudaRuntimeError {
                 write!(f, "invalid step {step} for chain of length {chain_len}")
             }
             Self::Nvrtc(msg) => write!(f, "NVRTC error: {msg}"),
+            Self::HostCapability(err) => {
+                write!(f, "CUDA host capability error: {err:?}")
+            }
             Self::Driver { stage, message } => {
                 write!(f, "CUDA driver error at {stage:?}: {message}")
             }
@@ -234,6 +246,7 @@ pub struct CudaSession {
     context: Arc<CudaContext>,
     device: CudaDevice,
     toolchain: CudaToolchainProvenance,
+    host_capability: Option<CudaHostCapability>,
     artifact_cache: Mutex<CudaArtifactCache>,
     kernels: Mutex<HashMap<(CudaKernelMode, String), CudaFunction>>,
     i32_buffers: Mutex<Option<ReusableBuffers<i32>>>,
@@ -260,6 +273,20 @@ impl PreparedCudaMap<'_> {
 
 impl CudaSession {
     pub fn new(device_ordinal: usize) -> Result<Self, CudaRuntimeError> {
+        Self::new_inner(device_ordinal, None)
+    }
+
+    pub fn new_with_host_capability(
+        device_ordinal: usize,
+        host_capability: CudaHostCapability,
+    ) -> Result<Self, CudaRuntimeError> {
+        Self::new_inner(device_ordinal, Some(host_capability))
+    }
+
+    fn new_inner(
+        device_ordinal: usize,
+        host_capability: Option<CudaHostCapability>,
+    ) -> Result<Self, CudaRuntimeError> {
         let context = CudaContext::new(device_ordinal).map_err(|error| {
             CudaRuntimeError::driver(
                 CudaDriverStage::ContextCreate {
@@ -269,6 +296,11 @@ impl CudaSession {
             )
         })?;
         let device = device_evidence(&context)?;
+        if let Some(host) = host_capability.as_ref() {
+            host.validate_live_device(&device.descriptor.name, device.compute_capability)
+                .map_err(CudaRuntimeError::HostCapability)?;
+        }
+
         let (nvrtc_major, nvrtc_minor) = query_nvrtc_version()?;
         let toolchain = CudaToolchainProvenance {
             nvrtc_version: NvrtcVersion::new(nvrtc_major as i32, nvrtc_minor as i32),
@@ -279,6 +311,7 @@ impl CudaSession {
             context,
             device,
             toolchain,
+            host_capability,
             artifact_cache: Mutex::new(CudaArtifactCache::default()),
             kernels: Mutex::new(HashMap::new()),
             i32_buffers: Mutex::new(None),
@@ -296,6 +329,16 @@ impl CudaSession {
         Ok(session)
     }
 
+    pub fn with_host_capability_and_memory_reserve(
+        device_ordinal: usize,
+        host_capability: CudaHostCapability,
+        reserve_bytes: usize,
+    ) -> Result<Self, CudaRuntimeError> {
+        let session = Self::new_with_host_capability(device_ordinal, host_capability)?;
+        session.set_memory_reserve_bytes(reserve_bytes);
+        Ok(session)
+    }
+
     pub fn memory_reserve_bytes(&self) -> usize {
         self.memory_reserve_bytes.load(Ordering::Relaxed)
     }
@@ -307,6 +350,10 @@ impl CudaSession {
 
     pub fn device(&self) -> &CudaDevice {
         &self.device
+    }
+
+    pub fn host_capability(&self) -> Option<&CudaHostCapability> {
+        self.host_capability.as_ref()
     }
 
     /// Exact mechanism/toolchain provenance captured when this session was created.
@@ -1134,6 +1181,68 @@ pub fn query_nvrtc_version() -> Result<(usize, usize), CudaRuntimeError> {
 }
 
 static CUDA_SESSIONS: OnceLock<Mutex<HashMap<usize, Arc<CudaSession>>>> = OnceLock::new();
+
+/// Strict worker/NVRTC bootstrap: consume the ecosystem-owned host contract,
+/// cross-check it against the live cudarc device, then cache that exact session
+/// for all subsequent worker requests.
+pub fn initialize_host_session_from_configured_probe(
+    device_ordinal: usize,
+) -> Result<CudaSessionEvidence, CudaRuntimeError> {
+    let host = CudaHostCapability::probe_configured().map_err(CudaRuntimeError::HostCapability)?;
+    let session = Arc::new(CudaSession::new_with_host_capability(
+        device_ordinal,
+        host.clone(),
+    )?);
+    let evidence = CudaSessionEvidence {
+        host,
+        device: session.device().clone(),
+        toolchain: session.toolchain_provenance(),
+    };
+
+    let sessions = CUDA_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()));
+    sessions
+        .lock()
+        .map_err(|error| {
+            CudaRuntimeError::driver(
+                CudaDriverStage::InternalState,
+                format!("CUDA session cache mutex poisoned: {error}"),
+            )
+        })?
+        .insert(device_ordinal, session);
+
+    Ok(evidence)
+}
+
+/// Read provenance from the already initialized strict session. This never
+/// creates a compatibility session as a side effect.
+pub fn initialized_host_session_evidence(
+    device_ordinal: usize,
+) -> Result<CudaSessionEvidence, CudaRuntimeError> {
+    let sessions = CUDA_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()));
+    let sessions = sessions.lock().map_err(|error| {
+        CudaRuntimeError::driver(
+            CudaDriverStage::InternalState,
+            format!("CUDA session cache mutex poisoned: {error}"),
+        )
+    })?;
+    let session = sessions.get(&device_ordinal).ok_or_else(|| {
+        CudaRuntimeError::driver(
+            CudaDriverStage::InternalState,
+            "strict CUDA host session was not initialized",
+        )
+    })?;
+    let host = session.host_capability().cloned().ok_or_else(|| {
+        CudaRuntimeError::driver(
+            CudaDriverStage::InternalState,
+            "cached CUDA session has no canonical host capability",
+        )
+    })?;
+    Ok(CudaSessionEvidence {
+        host,
+        device: session.device().clone(),
+        toolchain: session.toolchain_provenance(),
+    })
+}
 
 pub fn discover_devices() -> Result<Vec<CudaDevice>, CudaRuntimeError> {
     let count = CudaContext::device_count()

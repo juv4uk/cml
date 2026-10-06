@@ -22,6 +22,7 @@ pub mod fs;
 pub mod gpu_cuda;
 #[cfg(feature = "gpu-cuda")]
 pub mod gpu_cuda_runtime;
+pub mod gpu_host;
 #[cfg(feature = "gpu-wgpu")]
 pub mod gpu_wgpu_runtime;
 pub mod gpu_wgsl;
