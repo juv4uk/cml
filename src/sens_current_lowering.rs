@@ -4,9 +4,10 @@
 //! exact DomainCall values. It never consults CML's legacy surface/Sid8
 //! lowering table for current source.
 
-use crate::compiler_mechanism::{RichCompilerMechanismRef, select_rich_compiler_mechanism};
+use crate::compiler_mechanism::RichCompilerMechanismRef;
 use crate::ir::{Ir, Params, PrimOp, Quoted};
 use crate::sens_domain_bridge::{AuthorityProvenance, BridgeError, pinned_authority};
+use crate::sens_rich_bridge::{RichBridgeError, verify_current_identity};
 use sens::syntax::{Exactness, Expr, ExprKind};
 use std::fmt;
 
@@ -30,6 +31,7 @@ pub enum CurrentLowerError {
     InvalidCondClause(usize),
     UnknownRole,
     Authority(BridgeError),
+    Admission(RichBridgeError),
 }
 
 impl fmt::Display for CurrentLowerError {
@@ -74,6 +76,7 @@ impl fmt::Display for CurrentLowerError {
                 write!(f, "current SENS compiler nucleus returned no admitted role")
             }
             Self::Authority(error) => write!(f, "SENS authority verification failed: {error}"),
+            Self::Admission(error) => write!(f, "SENS semantic request rejected before lowering: {error}"),
         }
     }
 }
@@ -83,6 +86,12 @@ impl std::error::Error for CurrentLowerError {}
 impl From<BridgeError> for CurrentLowerError {
     fn from(error: BridgeError) -> Self {
         Self::Authority(error)
+    }
+}
+
+impl From<RichBridgeError> for CurrentLowerError {
+    fn from(error: RichBridgeError) -> Self {
+        Self::Admission(error)
     }
 }
 
@@ -229,7 +238,10 @@ fn lower_define(arguments: &[Expr]) -> Result<Ir, CurrentLowerError> {
     })
 }
 
-fn lower_cond(arguments: &[Expr]) -> Result<Ir, CurrentLowerError> {
+fn lower_cond(
+    arguments: &[Expr],
+    mechanism: RichCompilerMechanismRef,
+) -> Result<Ir, CurrentLowerError> {
     let mut flattened = Vec::with_capacity(arguments.len() * 2);
     for (index, clause) in arguments.iter().enumerate() {
         let ExprKind::List(parts) = &clause.kind else {
@@ -243,7 +255,7 @@ fn lower_cond(arguments: &[Expr]) -> Result<Ir, CurrentLowerError> {
     }
 
     Ok(Ir::Prim {
-        op: PrimOp::CompilerConditionalExactD1(RichCompilerMechanismRef::ConditionalD1),
+        op: PrimOp::CompilerConditionalExactD1(mechanism),
         args: flattened,
     })
 }
@@ -279,21 +291,17 @@ fn lower_domain_call(
     identity: sens::DomainIdentity,
     arguments: &[Expr],
 ) -> Result<Ir, CurrentLowerError> {
-    let core = identity
-        .core_operation()
-        .ok_or(CurrentLowerError::UnknownRole)?;
-    let role = sens::compiler_lowering_role_from_sens(core)
-        .map_err(|error| CurrentLowerError::Parse(error.to_string()))?
-        .ok_or(CurrentLowerError::UnknownRole)?;
+    let verified = verify_current_identity(identity)?;
+    let role = verified.lowering_role();
+    let mechanism = verified.mechanism_ref();
 
     primitive_arity(role, arguments)?;
-    let mechanism = select_rich_compiler_mechanism(role);
 
     match role {
         sens::CompilerLoweringRole::QuoteForm => Ok(Ir::Quote(lower_quoted(&arguments[0])?)),
         sens::CompilerLoweringRole::LambdaForm => lower_lambda(arguments),
         sens::CompilerLoweringRole::DefineForm => lower_define(arguments),
-        sens::CompilerLoweringRole::CondForm => lower_cond(arguments),
+        sens::CompilerLoweringRole::CondForm => lower_cond(arguments, mechanism),
         sens::CompilerLoweringRole::AtomPredicate
         | sens::CompilerLoweringRole::SelectorTail
         | sens::CompilerLoweringRole::SelectorHead
@@ -395,6 +403,14 @@ mod tests {
             mechanism_count >= 20,
             "nucleus did not reach enough current mechanisms"
         );
+    }
+
+    #[test]
+    fn production_lowering_requires_verified_rich_admission() {
+        let source = include_str!("sens_current_lowering.rs");
+        assert!(source.contains("verify_current_identity(identity)?"));
+        assert!(!source.contains("select_rich_compiler_mechanism(role)"));
+        assert!(!source.contains("compiler_lowering_role_from_sens(core)"));
     }
 
     #[test]
