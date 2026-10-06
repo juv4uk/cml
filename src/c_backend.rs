@@ -97,6 +97,7 @@ pub struct CBackend {
     functions: Vec<String>,
     fn_counter: usize,
     conditional_mechanism: CConditionalMechanism,
+    preserve_quoted_symbol_spelling: bool,
 }
 
 const RUNTIME: &str = r##"
@@ -819,6 +820,7 @@ impl CBackend {
             functions: Vec::new(),
             fn_counter: 0,
             conditional_mechanism: CConditionalMechanism::CompatibilityTruthiness,
+            preserve_quoted_symbol_spelling: false,
         }
     }
 
@@ -854,6 +856,13 @@ impl CBackend {
         program: &[Ir],
         driver_body: &str,
     ) -> Result<String, CompileError> {
+        // The historical C backend canonicalizes quoted symbols to uppercase.
+        // Current SENS compiler evidence is case-sensitive data, so the C1
+        // selfhost lane must preserve the exact quoted spelling emitted by
+        // SENS. This flag is private backend mechanism policy; it does not
+        // select any SENS role or identity.
+        self.preserve_quoted_symbol_spelling = true;
+
         let mut main_body = String::new();
         for ir in program {
             match ir {
@@ -1083,10 +1092,19 @@ impl CBackend {
             Quoted::Int(n) => Ok(format!("mk_int({n})")),
             Quoted::Float(_) => Err(CompileError::UnsupportedVariant("Quoted::Float")),
             Quoted::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
-            // c_backend.rs keys its symbol representation on the uppercased
-            // form, exactly as before cml#13 -- unaffected by that fix,
-            // which is scoped to the x86 freestanding backend.
-            Quoted::Sym { uppercased, .. } => Ok(format!("mk_sym(\"{uppercased}\")")),
+            // Compatibility compilation keeps the historical uppercase
+            // spelling; the C1 selfhost driver preserves exact SENS data.
+            Quoted::Sym {
+                uppercased,
+                original,
+            } => {
+                let spelling = if self.preserve_quoted_symbol_spelling {
+                    original
+                } else {
+                    uppercased
+                };
+                Ok(format!("mk_sym(\"{spelling}\")"))
+            }
             Quoted::Str(s) => Ok(format!("mk_sym(\"{s}\")")),
             Quoted::Nil => Ok("(&NIL_V)".to_string()),
             Quoted::List(items) => {
