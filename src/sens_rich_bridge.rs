@@ -6,12 +6,9 @@
 //! the single #605 binding layer. No domain bits, surface names or legacy
 //! callable identity are interpreted here.
 
-use crate::compiler_mechanism::{
-    RichCompilerMechanismRef, select_rich_compiler_mechanism,
-};
+use crate::compiler_mechanism::{RichCompilerMechanismRef, select_rich_compiler_mechanism};
 use crate::sens_domain_bridge::{
-    AuthorityProvenance, BridgeError, MechanismStatus, SemanticStatus,
-    verify_authority_provenance,
+    AuthorityProvenance, BridgeError, MechanismStatus, SemanticStatus, verify_authority_provenance,
 };
 use std::fmt;
 
@@ -69,15 +66,24 @@ impl fmt::Display for RichBridgeError {
                 write!(formatter, "SENS lowering-role projection failed: {message}")
             }
             Self::UnsupportedOrResearchIdentity => {
-                write!(formatter, "identity is not an admitted current Core identity")
+                write!(
+                    formatter,
+                    "identity is not an admitted current Core identity"
+                )
             }
             Self::UnsupportedLoweringRole => {
-                write!(formatter, "identity is outside the current compiler-nucleus role closure")
+                write!(
+                    formatter,
+                    "identity is outside the current compiler-nucleus role closure"
+                )
             }
             Self::SemanticStatusNotCurrent => write!(formatter, "semantic status is not current"),
             Self::MechanismNotAdmitted => write!(formatter, "mechanism status is not admitted"),
             Self::LoweringRoleMismatch => {
-                write!(formatter, "carried lowering role disagrees with pinned SENS authority")
+                write!(
+                    formatter,
+                    "carried lowering role disagrees with pinned SENS authority"
+                )
             }
         }
     }
