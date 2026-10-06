@@ -1,0 +1,100 @@
+name: GPU worker parity
+
+# Збирає воркер з голови PR, піднімає його на приватному сокеті і доводить
+# справжнім скриптом (CPU-референс проти CUDA, іменовані відмови, без тихого
+# зеленого), що саме ЦЕЙ код виконує ядро на GTX 1050 Ti. Ловить і поломку
+# збірки gpu-cuda (на master вона лишалась непоміченою, див. #643).
+# Канонічний опис: juv4uk/sens docs/tooling/GPU-WORKER-PARITY.uk.md.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/bin/cml-gpu-worker.rs"
+      - "src/gpu_*.rs"
+      - "Cargo.toml"
+      - ".github/scripts/gpu-worker-parity.py"
+      - ".github/workflows/gpu-worker-parity.yml"
+  push:
+    branches: [master]
+    paths:
+      - "src/bin/cml-gpu-worker.rs"
+      - "src/gpu_*.rs"
+      - "Cargo.toml"
+      - ".github/scripts/gpu-worker-parity.py"
+      - ".github/workflows/gpu-worker-parity.yml"
+
+permissions:
+  contents: read
+
+# Та сама черга, що й ручні GPU-лінії cml (одна фізична карта).
+concurrency:
+  group: gpu-gtx-1050-ti
+  cancel-in-progress: false
+
+jobs:
+  parity:
+    # Лише GPU-runner: ніколи не падаємо назад на CPU-runner.
+    runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
+    timeout-minutes: 25
+    env:
+      LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/lib/wsm-gcc-runtime
+      CUDA_PATH: /usr/local/cuda-12.6
+      CUDA_HOME: /usr/local/cuda-12.6
+      RUSTC_WRAPPER: /usr/bin/sccache
+      SCCACHE_DIR: /home/agents/.cache/sccache
+      SCCACHE_CACHE_SIZE: 30G
+      # Хост без запасу pagefile: компіляція на одному потоці.
+      CARGO_BUILD_JOBS: 1
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Isolate Cargo target by rustc build
+        run: |
+          rustc_key="$(rustc -vV | sha256sum | cut -c1-16)"
+          echo "CARGO_TARGET_DIR=/home/agents/.cache/cargo-target/cml/rustc-$rustc_key" >> "$GITHUB_ENV"
+
+      - name: external/sens from the local clone
+        run: |
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
+
+      - name: Build exact-head worker
+        run: cargo build --release --features gpu-cuda --bin cml-gpu-worker
+
+      # Воркер бере спільний замок допуску (/run/cml-gpu-worker/gpu-admission.lock)
+      # сам, тому скрипт НЕ обгортається в flock.
+      - name: CUDA parity on the exact-head worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          sock="/tmp/cml-gpu-worker-parity-$GITHUB_RUN_ID.sock"
+          rm -f "$sock"
+          export CML_GPU_WORKER_SOCKET="$sock"
+          export CML_CUDA_MEMORY_RESERVE_BYTES=1073741824
+          export PATH="$CARGO_TARGET_DIR/release:$PATH"
+          cml-gpu-worker serve >worker.out 2>worker.err &
+          worker_pid=$!
+          cleanup() {
+            kill "$worker_pid" 2>/dev/null || true
+            wait "$worker_pid" 2>/dev/null || true
+            rm -f "$sock"
+          }
+          trap cleanup EXIT
+          for _ in $(seq 1 80); do
+            [[ -S "$sock" ]] && cml-gpu-worker ping >/dev/null 2>&1 && break
+            sleep 0.1
+          done
+          [[ -S "$sock" ]]
+          python3 .github/scripts/gpu-worker-parity.py --evidence gpu-worker-parity.json
+          {
+            echo '### GPU worker parity (exact-head worker)'
+            echo '```json'
+            cat gpu-worker-parity.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Worker log
+        if: always()
+        shell: bash
+        run: cat worker.err || true

@@ -1,0 +1,43 @@
+name: Issue 603 GPU admission lease
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "src/gpu_admission.rs"
+      - "src/bin/cml-gpu-worker.rs"
+      - "tests/gpu_admission_contention_test.rs"
+      - ".github/workflows/issue-603-focused.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, i5-6400]
+    timeout-minutes: 20
+    steps:
+      - name: Require private dependency read token
+        env:
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+        run: test -n "$SENS_READ_TOKEN"
+
+      - name: Checkout CML with pinned SENS
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+          submodules: true
+
+      - name: Rustfmt admission surfaces
+        run: |
+          guix shell --pure -m manifest.scm -- rustfmt --edition 2024 --check src/gpu_admission.rs tests/gpu_admission_contention_test.rs
+
+      - name: GPU admission unit tests
+        run: |
+          guix shell --pure -m manifest.scm -- cargo test -p cml --lib gpu_admission::tests -- --nocapture
+
+      - name: GPU admission process contention witness
+        run: |
+          timeout --signal=TERM 30s guix shell --pure -m manifest.scm -- cargo test -p cml --test gpu_admission_contention_test -- --nocapture

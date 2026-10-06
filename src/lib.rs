@@ -1,9 +1,11 @@
 pub mod accelerator;
 pub mod ast;
 pub mod build;
+mod c1_driver_runtime;
 pub mod c_backend;
 pub mod canon;
 pub mod compiler;
+pub mod compiler_artifact;
 pub mod compiler_mechanism;
 pub mod compiler_passes;
 pub mod compute;
@@ -23,6 +25,9 @@ pub mod gpu_cuda_runtime;
 #[cfg(feature = "gpu-wgpu")]
 pub mod gpu_wgpu_runtime;
 pub mod gpu_wgsl;
+#[cfg(unix)]
+pub mod gpu_admission;
+pub mod gpu_worker_client;
 pub mod ir;
 pub mod lisp_asm_vertical;
 pub mod lisp_encoder_bridge;
@@ -39,6 +44,13 @@ pub mod pratyahara;
 pub mod runtime_abi;
 pub mod semantic;
 pub mod semantic_export;
+pub mod substrate_dispatch;
+pub mod sens_c1_artifact;
+pub mod sens_compiler_export;
+pub mod sens_current_lowering;
+pub mod sens_domain_bridge;
+pub mod sens_rich_bridge;
+pub mod sens_slot_bridge;
 pub mod slot_vm;
 pub mod upstream_sid_bridge;
 pub mod witness_bridge;

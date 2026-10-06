@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   worker-live:
-    runs-on: [self-hosted, gpu, gtx-1050-ti]
+    runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
     timeout-minutes: 20
     env:
       LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/lib/wsm-gcc-runtime
