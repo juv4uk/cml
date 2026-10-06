@@ -45,10 +45,10 @@ jobs:
 
       - name: Verify full-export SENS pin
         run: |
-          test "$(git -C external/sens rev-parse HEAD)" = "f2e7797283c8dfc2aa67935a02b3735a8290041f"
-          grep -q '(build-source-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
-          grep -q '(supported-pin-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
-          grep -q '(observed-current-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
+          test "$(git -C external/sens rev-parse HEAD)" = "1869fd5e51f38565ca968abceaa4bc933ae7a114"
+          grep -q '(build-source-sha . "1869fd5e51f38565ca968abceaa4bc933ae7a114")' upstream-revisions.lisp
+          grep -q '(supported-pin-sha . "1869fd5e51f38565ca968abceaa4bc933ae7a114")' upstream-revisions.lisp
+          grep -q '(observed-current-sha . "1869fd5e51f38565ca968abceaa4bc933ae7a114")' upstream-revisions.lisp
 
       - name: Focused formatting
         run: >-
@@ -71,3 +71,12 @@ jobs:
         run: >-
           guix shell --pure -m manifest.scm --
           cargo test -p cml --test sens_compiler_export_consumer_test -- --nocapture
+
+      - name: Canonical compilation artifact smoke
+        run: |
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/sens-artifact-target"
+          artifact="$(cd external/sens && cargo run --quiet -p xtask -- compiler-export --artifact --fixture nucleus-d3-010)"
+          grep -q '(schema . compiler-compilation-artifact/1)' <<<"$artifact"
+          grep -q '(semantic-request-sha256 . "' <<<"$artifact"
+          grep -q '(schema . compiler-semantic-input/1)' <<<"$artifact"
+          grep -q '(artifact-status . canonical-backend-neutral)' <<<"$artifact"
