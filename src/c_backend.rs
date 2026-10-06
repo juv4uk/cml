@@ -493,6 +493,128 @@ static Value *builtin_div(Value *args, Value *env) {
     }
     return result;
 }
+/* Ratified SENS syntax wire SW\x01 decoder for C1 program-data.
+ *
+ * This is transport only. DomainCall is not a special runtime node on the
+ * wire: it is a list whose head is TAG_DOMAIN_IDENTITY. The decoder therefore
+ * cannot select a compiler role or backend mechanism. Unsupported/historical
+ * tags fail closed.
+ */
+static uint64_t sw_get_varint(const uint8_t *bytes, size_t len, size_t *pos) {
+    uint64_t value = 0;
+    for (unsigned shift = 0; shift < 64; shift += 7) {
+        if (*pos >= len) runtime_error("Wire", "truncated SW varint");
+        uint8_t byte = bytes[(*pos)++];
+        value |= ((uint64_t)(byte & 0x7fu)) << shift;
+        if (byte < 0x80u) return value;
+    }
+    runtime_error("Wire", "overlong SW varint");
+    return 0;
+}
+
+static Value *sw_decode_expr(const uint8_t *bytes, size_t len, size_t *pos, unsigned depth);
+
+static Value *sw_decode_list(
+    const uint8_t *bytes,
+    size_t len,
+    size_t *pos,
+    size_t count,
+    unsigned depth
+) {
+    if (count > len - *pos) runtime_error("Wire", "impossible SW list length");
+    Value **items = checked_malloc(count * sizeof(Value *));
+    for (size_t i = 0; i < count; ++i)
+        items[i] = sw_decode_expr(bytes, len, pos, depth + 1);
+
+    Value *list = &NIL_V;
+    for (size_t i = count; i > 0; --i)
+        list = mk_cons(items[i - 1], list);
+    free(items);
+    return list;
+}
+
+static char *sw_decode_text(const uint8_t *bytes, size_t len, size_t *pos) {
+    uint64_t raw_len = sw_get_varint(bytes, len, pos);
+    if (raw_len > SIZE_MAX - 1) runtime_error("Wire", "SW text length overflow");
+    size_t text_len = (size_t)raw_len;
+    if (text_len > len - *pos) runtime_error("Wire", "truncated SW text");
+    char *text = checked_malloc(text_len + 1);
+    memcpy(text, bytes + *pos, text_len);
+    text[text_len] = '\0';
+    *pos += text_len;
+    return text;
+}
+
+static Value *sw_decode_expr(const uint8_t *bytes, size_t len, size_t *pos, unsigned depth) {
+    if (depth > 768u) runtime_error("Wire", "SW structure nesting limit exceeded");
+    if (*pos >= len) runtime_error("Wire", "truncated SW expression");
+
+    uint8_t tag = bytes[(*pos)++];
+    if (tag < 0x40u) return mk_int((long)tag);
+    if (tag >= 0x40u && tag < 0x50u)
+        return sw_decode_list(bytes, len, pos, (size_t)(tag - 0x40u), depth);
+
+    switch (tag) {
+        case 0x50u: {
+            uint64_t raw_count = sw_get_varint(bytes, len, pos);
+            if (raw_count > SIZE_MAX) runtime_error("Wire", "SW list length overflow");
+            return sw_decode_list(bytes, len, pos, (size_t)raw_count, depth);
+        }
+        case 0x51u:
+            runtime_error("Wire", "legacy Sid8 is forbidden in current C1 program-data");
+            return &NIL_V;
+        case 0x52u: {
+            uint64_t zigzag = sw_get_varint(bytes, len, pos);
+            int64_t integer = (int64_t)(zigzag >> 1) ^ -(int64_t)(zigzag & 1u);
+            if (integer < LONG_MIN || integer > LONG_MAX)
+                runtime_error("Wire", "SW integer exceeds C runtime long");
+            return mk_int((long)integer);
+        }
+        case 0x53u:
+            runtime_error("Wire", "floating SW number unsupported in current C1 nucleus");
+            return &NIL_V;
+        case 0x54u:
+            runtime_error("Wire", "rational SW literal unsupported in current C1 nucleus");
+            return &NIL_V;
+        case 0x55u:
+            return mk_string(sw_decode_text(bytes, len, pos));
+        case 0x56u:
+            return mk_sym(sw_decode_text(bytes, len, pos));
+        case 0x57u: {
+            Value *head = sw_decode_expr(bytes, len, pos, depth + 1);
+            Value *tail = sw_decode_expr(bytes, len, pos, depth + 1);
+            return mk_cons(head, tail);
+        }
+        case 0x58u:
+            runtime_error("Wire", "resolved Local is forbidden in source-shaped C1 program-data");
+            return &NIL_V;
+        case 0x59u: {
+            if (*pos + 2 > len) runtime_error("Wire", "truncated DomainIdentity");
+            uint8_t width = bytes[(*pos)++];
+            uint8_t payload = bytes[(*pos)++];
+            return mk_domain_identity(width, payload);
+        }
+        case 0x5au:
+            runtime_error("Wire", "binary-number SW literal unsupported in current C1 nucleus");
+            return &NIL_V;
+        default:
+            runtime_error("Wire", "unknown SENS SW tag");
+            return &NIL_V;
+    }
+}
+
+static Value *decode_sens_program_wire(const uint8_t *bytes, size_t len) {
+    if (len < 4 || bytes[0] != 0x53u || bytes[1] != 0x57u || bytes[2] != 0x01u)
+        runtime_error("Wire", "invalid SENS SW\\x01 magic");
+
+    size_t pos = 3;
+    uint64_t raw_count = sw_get_varint(bytes, len, &pos);
+    if (raw_count > SIZE_MAX) runtime_error("Wire", "SW program length overflow");
+    Value *program = sw_decode_list(bytes, len, &pos, (size_t)raw_count, 0);
+    if (pos != len) runtime_error("Wire", "trailing bytes after SENS program");
+    return program;
+}
+
 static Value *builtin_domain_identity_shape(Value *args, Value *env) {
     (void)env;
     require_arity(args, 1, "domain-identity-shape");
