@@ -13,8 +13,7 @@ use std::fmt;
 
 pub const SCHEMA: &str = "compiler-semantic-input/1";
 
-const PINNED_COMPILER_NUCLEUS: &str =
-    include_str!("../external/sens/lib/compiler-nucleus.lisp");
+const PINNED_COMPILER_NUCLEUS: &str = include_str!("../external/sens/lib/compiler-nucleus.lisp");
 
 fn sha256_hex(bytes: &[u8]) -> String {
     sens::sha256_source(bytes)
@@ -168,7 +167,9 @@ fn parse_one(text: &str) -> Result<ExportedCompilerRequest, CompilerExportError>
     })
 }
 
-pub fn parse_compiler_export(text: &str) -> Result<Vec<ExportedCompilerRequest>, CompilerExportError> {
+pub fn parse_compiler_export(
+    text: &str,
+) -> Result<Vec<ExportedCompilerRequest>, CompilerExportError> {
     let starts: Vec<_> = text
         .match_indices("(compiler-semantic-request")
         .map(|(index, _)| index)
