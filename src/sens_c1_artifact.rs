@@ -5,6 +5,9 @@
 //! and the generated C source. No language meaning is reconstructed here.
 
 use crate::c_backend::CBackend;
+use crate::sens_compilation_artifact::{
+    CompilationArtifactError, VerifiedCompilationExport, validate_artifact,
+};
 use crate::sens_current_lowering::{
     CurrentLowerError, VerifiedCurrentRegistry, lower_current_sens_source,
 };
@@ -32,8 +35,18 @@ pub struct CurrentSensC1Artifact {
     pub c_source_sha256: String,
 }
 
+/// Evidence retained when the C1 path originates from the canonical SENS
+/// compiler-compilation-artifact/1 envelope rather than the legacy raw export.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CurrentSensC1Admission {
+    pub compilation_artifact_export_sha256: String,
+    pub semantic_export_sha256: String,
+    pub artifact: CurrentSensC1Artifact,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum C1ArtifactError {
+    CompilationArtifact(CompilationArtifactError),
     Lower(CurrentLowerError),
     Backend(String),
     WrongSourceBundle,
@@ -57,6 +70,12 @@ impl fmt::Display for C1ArtifactError {
 }
 
 impl std::error::Error for C1ArtifactError {}
+
+impl From<CompilationArtifactError> for C1ArtifactError {
+    fn from(error: CompilationArtifactError) -> Self {
+        Self::CompilationArtifact(error)
+    }
+}
 
 impl From<CurrentLowerError> for C1ArtifactError {
     fn from(error: CurrentLowerError) -> Self {
@@ -171,6 +190,25 @@ pub fn build_current_sens_c1(
     };
     validate(&artifact)?;
     Ok(artifact)
+}
+
+/// Enter the current C1 pipeline from the canonical SENS
+/// compiler-compilation-artifact/1 transport. The envelope/digest verification
+/// happens first; only the verified embedded semantic export is delegated to
+/// the pre-existing lowering path.
+pub fn build_current_sens_c1_from_compilation_artifact(
+    source: &str,
+    compilation_artifact_export: &str,
+    cml_revision: &str,
+) -> Result<CurrentSensC1Admission, C1ArtifactError> {
+    let verified: VerifiedCompilationExport = validate_artifact(compilation_artifact_export)?;
+    let artifact = build_current_sens_c1(source, &verified.semantic_export, cml_revision)?;
+
+    Ok(CurrentSensC1Admission {
+        compilation_artifact_export_sha256: verified.artifact_export_sha256,
+        semantic_export_sha256: verified.semantic_export_sha256,
+        artifact,
+    })
 }
 
 impl CurrentSensC1Artifact {
@@ -336,6 +374,75 @@ mod tests {
             .as_str()
     }
 
+    fn pinned_compilation_artifact_export() -> &'static str {
+        static EXPORT: OnceLock<String> = OnceLock::new();
+        EXPORT
+            .get_or_init(|| {
+                let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+                let manifest = root.join("external/sens/Cargo.toml");
+                let nonce = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("clock after epoch")
+                    .as_nanos();
+                let target = std::env::temp_dir().join(format!(
+                    "cml-623-sens-artifact-{}-{nonce}",
+                    std::process::id()
+                ));
+
+                let output = Command::new("cargo")
+                    .current_dir(root.join("external/sens"))
+                    .env("CARGO_TARGET_DIR", &target)
+                    .args([
+                        "run",
+                        "--quiet",
+                        "--manifest-path",
+                        manifest.to_str().expect("UTF-8 SENS manifest path"),
+                        "-p",
+                        "xtask",
+                        "--",
+                        "compiler-export",
+                        "--artifact",
+                    ])
+                    .output()
+                    .expect("pinned SENS compilation-artifact producer must execute");
+
+                let _ = std::fs::remove_dir_all(&target);
+                assert!(
+                    output.status.success(),
+                    "pinned SENS compilation-artifact export failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                String::from_utf8(output.stdout).expect("compilation artifact export is UTF-8")
+            })
+            .as_str()
+    }
+
+    #[test]
+    fn canonical_compilation_artifact_enters_existing_c1_path() {
+        let cml_revision = producer_cml_revision();
+        let admitted = build_current_sens_c1_from_compilation_artifact(
+            SOURCE,
+            pinned_compilation_artifact_export(),
+            &cml_revision,
+        )
+        .expect("canonical SENS compilation artifact must enter current C1");
+
+        assert_eq!(admitted.compilation_artifact_export_sha256.len(), 64);
+        assert_eq!(admitted.semantic_export_sha256.len(), 64);
+        assert_eq!(
+            admitted.artifact.authority.revision,
+            "1869fd5e51f38565ca968abceaa4bc933ae7a114"
+        );
+        assert!(admitted.artifact.c_source.contains("v_atom_predicate("));
+        assert!(
+            admitted
+                .artifact
+                .c_source
+                .contains("require_predicate_bit(")
+        );
+        assert!(!admitted.artifact.c_source.contains("mk_sid_callable(0b"));
+    }
+
     #[test]
     fn c1_bundle_carries_source_export_proof_and_provenance() {
         let export = pinned_compiler_export();
@@ -348,7 +455,7 @@ mod tests {
         assert_eq!(artifact.artifact_format, C1_ARTIFACT_FORMAT);
         assert_eq!(
             artifact.authority.revision,
-            "f2e7797283c8dfc2aa67935a02b3735a8290041f"
+            "1869fd5e51f38565ca968abceaa4bc933ae7a114"
         );
         assert_eq!(artifact.cml_revision, cml_revision);
         assert!(artifact.compiler_export.contains("(proof-ref . "));

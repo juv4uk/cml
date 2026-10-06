@@ -1,4 +1,4 @@
-name: Issue 604 current SENS C1 artifact
+name: Issue 623 canonical executable-artifact boundary
 
 on:
   pull_request:
@@ -7,20 +7,20 @@ on:
       - "external/sens"
       - "upstream-revisions.lisp"
       - "src/lib.rs"
-      - "src/sens_c1_artifact.rs"
+      - "src/sens_compilation_artifact.rs"
       - "src/sens_compiler_export.rs"
       - "src/sens_current_lowering.rs"
-      - "src/c_backend.rs"
-      - ".github/workflows/issue-604-current-c1.yml"
+      - "src/sens_c1_artifact.rs"
+      - ".github/workflows/issue-623-executable-artifact.yml"
   push:
     branches: [master]
     paths:
       - "external/sens"
       - "upstream-revisions.lisp"
-      - "src/sens_c1_artifact.rs"
+      - "src/sens_compilation_artifact.rs"
       - "src/sens_compiler_export.rs"
       - "src/sens_current_lowering.rs"
-      - "src/c_backend.rs"
+      - "src/sens_c1_artifact.rs"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -37,13 +37,13 @@ jobs:
           SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
         run: test -n "$SENS_READ_TOKEN"
 
-      - name: Checkout CML with pinned SENS
+      - name: Checkout CML with canonical SENS artifact producer
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: true
 
-      - name: Verify canonical SENS pin
+      - name: Verify canonical SENS artifact pin
         run: |
           test "$(git -C external/sens rev-parse HEAD)" = "1869fd5e51f38565ca968abceaa4bc933ae7a114"
           grep -q '(build-source-sha . "1869fd5e51f38565ca968abceaa4bc933ae7a114")' upstream-revisions.lisp
@@ -53,21 +53,30 @@ jobs:
         run: >-
           guix shell --pure -m manifest.scm --
           rustfmt --edition 2024 --check
+          src/sens_compilation_artifact.rs
           src/sens_c1_artifact.rs
+          src/lib.rs
 
-      - name: Canonical verified lowering regression
+      - name: Canonical CompilationArtifact verification
         run: >-
           guix shell --pure -m manifest.scm --
-          cargo test -p cml --lib sens_current_lowering::tests -- --nocapture
+          cargo test -p cml --lib sens_compilation_artifact::tests -- --nocapture
 
-      - name: C1 artifact proof and executable witness
+      - name: CompilationArtifact enters existing C1 path
         env:
           CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: >-
           guix shell --pure -m manifest.scm --
-          cargo test -p cml --lib sens_c1_artifact::tests -- --nocapture
+          cargo test -p cml --lib
+          sens_c1_artifact::tests::canonical_compilation_artifact_enters_existing_c1_path
+          -- --exact --nocapture
 
-      - name: Existing real-export C0 lowering regression
+      - name: Existing semantic-request consumer regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --test sens_compiler_export_consumer_test -- --nocapture
+
+      - name: Existing verified current lowering regression
         run: >-
           guix shell --pure -m manifest.scm --
           cargo test -p cml --test current_sens_c0_lowering_test -- --nocapture
