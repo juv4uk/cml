@@ -785,53 +785,53 @@ impl CBackend {
     ) -> Result<String, CompileError> {
         match op {
             PrimOp::CompilerMechanism(mechanism) => match mechanism {
-                    RichCompilerMechanismRef::AtomPredicateD1 => {
-                        if args.len() != 1 {
-                            return Err(CompileError::UnsupportedVariant("current ATOM arity"));
-                        }
-                        let value = self.compile_expr(&args[0], env)?;
-                        Ok(format!("v_atom_predicate({value})"))
+                RichCompilerMechanismRef::AtomPredicateD1 => {
+                    if args.len() != 1 {
+                        return Err(CompileError::UnsupportedVariant("current ATOM arity"));
                     }
-                    RichCompilerMechanismRef::SelectorTail => {
-                        if args.len() != 1 {
-                            return Err(CompileError::UnsupportedVariant("current CDR arity"));
-                        }
-                        let value = self.compile_expr(&args[0], env)?;
-                        Ok(format!(
-                            "({{ Value *_v = {value}; require_tag(_v, TAG_CONS, \"cdr\"); v_cdr(_v); }})"
-                        ))
+                    let value = self.compile_expr(&args[0], env)?;
+                    Ok(format!("v_atom_predicate({value})"))
+                }
+                RichCompilerMechanismRef::SelectorTail => {
+                    if args.len() != 1 {
+                        return Err(CompileError::UnsupportedVariant("current CDR arity"));
                     }
-                    RichCompilerMechanismRef::SelectorHead => {
-                        if args.len() != 1 {
-                            return Err(CompileError::UnsupportedVariant("current CAR arity"));
-                        }
-                        let value = self.compile_expr(&args[0], env)?;
-                        Ok(format!(
-                            "({{ Value *_v = {value}; require_tag(_v, TAG_CONS, \"car\"); v_car(_v); }})"
-                        ))
+                    let value = self.compile_expr(&args[0], env)?;
+                    Ok(format!(
+                        "({{ Value *_v = {value}; require_tag(_v, TAG_CONS, \"cdr\"); v_cdr(_v); }})"
+                    ))
+                }
+                RichCompilerMechanismRef::SelectorHead => {
+                    if args.len() != 1 {
+                        return Err(CompileError::UnsupportedVariant("current CAR arity"));
                     }
-                    RichCompilerMechanismRef::AtomEqualityD1 => {
-                        if args.len() != 2 {
-                            return Err(CompileError::UnsupportedVariant("current EQ arity"));
-                        }
-                        let left = self.compile_expr(&args[0], env)?;
-                        let right = self.compile_expr(&args[1], env)?;
-                        Ok(format!("v_eq_predicate({left}, {right})"))
+                    let value = self.compile_expr(&args[0], env)?;
+                    Ok(format!(
+                        "({{ Value *_v = {value}; require_tag(_v, TAG_CONS, \"car\"); v_car(_v); }})"
+                    ))
+                }
+                RichCompilerMechanismRef::AtomEqualityD1 => {
+                    if args.len() != 2 {
+                        return Err(CompileError::UnsupportedVariant("current EQ arity"));
                     }
-                    RichCompilerMechanismRef::PairConstruct => {
-                        if args.len() != 2 {
-                            return Err(CompileError::UnsupportedVariant("current CONS arity"));
-                        }
-                        let head = self.compile_expr(&args[0], env)?;
-                        let tail = self.compile_expr(&args[1], env)?;
-                        Ok(format!("mk_cons({head}, {tail})"))
+                    let left = self.compile_expr(&args[0], env)?;
+                    let right = self.compile_expr(&args[1], env)?;
+                    Ok(format!("v_eq_predicate({left}, {right})"))
+                }
+                RichCompilerMechanismRef::PairConstruct => {
+                    if args.len() != 2 {
+                        return Err(CompileError::UnsupportedVariant("current CONS arity"));
                     }
-                    RichCompilerMechanismRef::Quote
+                    let head = self.compile_expr(&args[0], env)?;
+                    let tail = self.compile_expr(&args[1], env)?;
+                    Ok(format!("mk_cons({head}, {tail})"))
+                }
+                RichCompilerMechanismRef::Quote
                 | RichCompilerMechanismRef::ConditionalD1
                 | RichCompilerMechanismRef::Lambda
-                | RichCompilerMechanismRef::Define => {
-                    Err(CompileError::UnsupportedVariant("non-call compiler mechanism"))
-                }
+                | RichCompilerMechanismRef::Define => Err(CompileError::UnsupportedVariant(
+                    "non-call compiler mechanism",
+                )),
             },
             PrimOp::CompilerConditionalExactD1(mechanism) => {
                 if *mechanism != RichCompilerMechanismRef::ConditionalD1 {
