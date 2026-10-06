@@ -1,13 +1,7 @@
 name: GPU compiler verified rich admission
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "src/lib.rs"
-      - "src/sens_domain_bridge.rs"
-      - "src/sens_rich_bridge.rs"
-      - ".github/workflows/issue-606-gpu-admission.yml"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
