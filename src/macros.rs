@@ -184,6 +184,7 @@ fn bind_params(params: &Expr, args: &[Expr]) -> HashMap<String, Expr> {
 fn eval_macro_body(expr: &Expr, env: &HashMap<String, Expr>) -> Result<Expr, MacroError> {
     match expr {
         Expr::Sid(_)
+        | Expr::DomainIdentity(_)
         | Expr::Integer(_)
         | Expr::Rational(_, _)
         | Expr::String(_)

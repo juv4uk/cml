@@ -13,6 +13,12 @@ use sens::{Session, eval_program, load_core_library};
 fn render_expr(expr: &Expr) -> String {
     match expr {
         Expr::Sid(sid) => sid.to_string(),
+        Expr::DomainIdentity(identity) => format!(
+            "D{}:{:0width$b}",
+            identity.width(),
+            identity.packed_bits(),
+            width = identity.width()
+        ),
         Expr::Integer(value) => value.to_string(),
         Expr::Rational(num, den) => format!("{num}/{den}"),
         Expr::Symbol(symbol) => symbol.clone(),

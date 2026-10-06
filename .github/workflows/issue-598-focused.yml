@@ -1,0 +1,39 @@
+name: Issue 598 compiler artifact provenance
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Manual-only provenance audit. It is intentionally excluded from automatic GPU-only CI.
+jobs:
+  focused:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, i5-6400]
+    timeout-minutes: 20
+    steps:
+      - name: Require private dependency read token
+        env:
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+        run: test -n "$SENS_READ_TOKEN"
+
+      - name: Checkout CML with pinned SENS
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+          submodules: true
+
+      - name: Rustfmt changed Rust surfaces
+        run: |
+          guix shell --pure -m manifest.scm -- \
+            rustfmt --edition 2024 --check --config skip_children=true \
+              src/compiler_artifact.rs \
+              tests/domain_bridge_slot_vertical_494_test.rs
+
+      - name: Artifact provenance envelope unit tests
+        run: guix shell --pure -m manifest.scm -- cargo test -p cml compiler_artifact::tests -- --nocapture
+
+      - name: Full D3 compiler artifact provenance differential
+        run: guix shell --pure -m manifest.scm -- cargo test -p cml --test domain_bridge_slot_vertical_494_test -- --nocapture

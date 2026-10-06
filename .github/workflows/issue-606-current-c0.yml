@@ -1,0 +1,75 @@
+name: Issue 606 verified current C0 lowering
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, guix]
+    timeout-minutes: 30
+    steps:
+      - name: Require private dependency read token
+        env:
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+        run: test -n "$SENS_READ_TOKEN"
+
+      - name: Checkout CML with pinned SENS
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+          submodules: true
+
+      - name: Verify canonical producer-owned SENS pin
+        run: |
+          test "$(git -C external/sens rev-parse HEAD)" = "f2e7797283c8dfc2aa67935a02b3735a8290041f"
+          grep -q '(build-source-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
+          grep -q '(supported-pin-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
+
+      - name: Focused formatting
+        run: >-
+          guix shell --pure -m manifest.scm --
+          rustfmt --edition 2024 --check
+          src/ir.rs
+          src/c_backend.rs
+          src/sens_current_lowering.rs
+          tests/current_sens_c0_lowering_test.rs
+
+      - name: Canonical export consumer regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --lib sens_compiler_export::tests -- --nocapture --test-threads=1
+
+      - name: Verified current lowering unit tests
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --lib sens_current_lowering::tests -- --nocapture --test-threads=1
+
+      - name: Real-export current C0 executable lowering witness
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --test current_sens_c0_lowering_test -- --nocapture --test-threads=1
+
+      - name: Current exact D1 carrier regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --test current_d1_c_backend_test -- --nocapture --test-threads=1
+
+      - name: Current exact D1 COND codegen regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --test current_d1_cond_codegen_test -- --nocapture --test-threads=1
+
+      - name: Current exact D1 COND executable regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --test current_d1_cond_backend_test -- --nocapture --test-threads=1
+
+      - name: Existing C backend regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --test c_backend_test -- --nocapture --test-threads=1

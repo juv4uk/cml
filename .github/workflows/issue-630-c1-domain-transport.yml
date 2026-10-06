@@ -1,0 +1,42 @@
+name: Issue 630 C1 program transport runtime
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, guix]
+    timeout-minutes: 20
+    steps:
+      - name: Require private dependency read token
+        env:
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+        run: test -n "$SENS_READ_TOKEN"
+
+      - name: Checkout CML with pinned SENS
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+          submodules: true
+
+      - name: Focused formatting
+        run: >-
+          guix shell --pure -m manifest.scm --
+          rustfmt --edition 2024 --check
+          src/c_backend.rs
+          tests/c1_domain_transport_runtime_test.rs
+
+      - name: Exact DomainIdentity runtime transport witness
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --test c1_domain_transport_runtime_test -- --nocapture --test-threads=1
+
+      - name: C backend regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --test c_backend_test -- --nocapture --test-threads=1

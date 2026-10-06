@@ -25,7 +25,9 @@
 //! walking it), just implemented directly as C structs instead of tagged
 //! 32-bit words on a heap array.
 
-use crate::ir::{BufferLiteral, Ir, Params, Quoted};
+use crate::c1_driver_runtime::C1_DRIVER_RUNTIME;
+use crate::compiler_mechanism::RichCompilerMechanismRef;
+use crate::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
 use std::fmt;
 
 /// Sanitizes a my-lisp def name into a valid C identifier for use as a raw
@@ -83,9 +85,19 @@ impl fmt::Display for CompileError {
 
 impl std::error::Error for CompileError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CConditionalMechanism {
+    /// Historical two-part COND compatibility: any non-NIL runtime value is true.
+    CompatibilityTruthiness,
+    /// Current exact D3 COND mechanism: tests must return exact D1 PredicateBit.
+    CurrentExactD1,
+}
+
 pub struct CBackend {
     functions: Vec<String>,
     fn_counter: usize,
+    conditional_mechanism: CConditionalMechanism,
+    preserve_quoted_symbol_spelling: bool,
 }
 
 const RUNTIME: &str = r##"
@@ -96,7 +108,7 @@ const RUNTIME: &str = r##"
 #include <stdint.h>
 
 typedef struct Value Value;
-typedef enum { TAG_NIL, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_SID_CALLABLE, TAG_RATIONAL, TAG_STRING } Tag;
+typedef enum { TAG_NIL, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_SID_CALLABLE, TAG_RATIONAL, TAG_STRING, TAG_PREDICATE_BIT, TAG_DOMAIN_IDENTITY } Tag;
 struct Value {
     Tag tag;
     union {
@@ -107,6 +119,8 @@ struct Value {
         struct { Value *(*fn)(Value *args, Value *env); Value *env; } closure;
         struct { const char *name; Value *(*fn)(Value *args, Value *env); } builtin;
         uint8_t sid;
+        uint8_t predicate_bit;
+        struct { uint8_t width; uint8_t packed_bits; } domain_identity;
         struct { long num; long den; } rat;
         const char *str;
     } u;
@@ -150,7 +164,47 @@ static Value *mk_i32_buffer(const int *data, size_t len) { Value *v = checked_ma
 static Value *mk_closure(Value *(*fn)(Value*, Value*), Value *env) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_CLOSURE; v->u.closure.fn = fn; v->u.closure.env = env; return v; }
 static Value *mk_builtin(const char *name, Value *(*fn)(Value*, Value*)) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_BUILTIN; v->u.builtin.name = name; v->u.builtin.fn = fn; return v; }
 static Value *mk_sid_callable(uint8_t sid) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_SID_CALLABLE; v->u.sid = sid; return v; }
+/* Current SENS D1 is an exact one-bit domain value, not NIL, integer 0/1,
+ * a one-element list, a symbol, or host/C truth. This is a backend-private
+ * carrier only; SENS still owns when a computation has D1 semantics. */
+static Value *mk_predicate_bit(int bit) {
+    if (bit != 0 && bit != 1) runtime_error("Type", "PredicateBit must be exactly 0 or 1");
+    Value *v = checked_malloc(sizeof(Value));
+    v->tag = TAG_PREDICATE_BIT;
+    v->u.predicate_bit = (uint8_t)bit;
+    return v;
+}
 static Value *mk_string(const char *s) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_STRING; v->u.str = s; return v; }
+
+/* Exact-domain program-data carrier for the C1 driver. This is representation
+ * only: width/payload are preserved exactly; no compiler role or mechanism is
+ * selected here. */
+static Value *mk_domain_identity(uint8_t width, uint8_t packed_bits) {
+    if (width < 1 || width > 8) runtime_error("Type", "DomainIdentity width must be 1..8");
+    uint16_t limit = (uint16_t)1u << width;
+    if ((uint16_t)packed_bits >= limit)
+        runtime_error("Type", "DomainIdentity payload exceeds declared width");
+    Value *v = checked_malloc(sizeof(Value));
+    v->tag = TAG_DOMAIN_IDENTITY;
+    v->u.domain_identity.width = width;
+    v->u.domain_identity.packed_bits = packed_bits;
+    return v;
+}
+
+static Value *domain_identity_shape(Value *identity) {
+    if (identity->tag != TAG_DOMAIN_IDENTITY)
+        runtime_error("Type", "domain identity shape expects exact DomainIdentity");
+    uint8_t width = identity->u.domain_identity.width;
+    uint8_t bits = identity->u.domain_identity.packed_bits;
+    Value *bit_list = &NIL_V;
+    /* cons prepends, so consume packed bits LSB->MSB to materialize the
+     * source-order list MSB-first, matching SENS domain_identity_shape_mechanism. */
+    for (uint8_t index = 0; index < width; ++index) {
+        bit_list = mk_cons(mk_predicate_bit((bits >> index) & 1u), bit_list);
+    }
+    return mk_cons(mk_int(width), mk_cons(bit_list, &NIL_V));
+}
+
 
 static long rational_gcd(long a, long b) {
     if (a < 0) a = -a;
@@ -245,21 +299,38 @@ static Value *structural_relation(int same) {
     return truthy_val(same);
 }
 
-static Value *v_eq(Value *a, Value *b) {
-    if (a->tag != b->tag) return truthy_val(0);
-    int same = 0;
+static int v_eq_same(Value *a, Value *b) {
+    if (a->tag != b->tag) return 0;
     switch (a->tag) {
-        case TAG_NIL: same = 1; break;
-        case TAG_INT: same = a->u.i == b->u.i; break;
+        case TAG_NIL: return 1;
+        case TAG_INT: return a->u.i == b->u.i;
         case TAG_RATIONAL:
-            same = rational_checked_mul(a->u.rat.num, b->u.rat.den)
+            return rational_checked_mul(a->u.rat.num, b->u.rat.den)
                 == rational_checked_mul(b->u.rat.num, a->u.rat.den);
-            break;
-        case TAG_SYM: same = strcmp(a->u.sym, b->u.sym) == 0; break;
-        case TAG_STRING: same = strcmp(a->u.str, b->u.str) == 0; break;
-        default: same = a == b; break;
+        case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0;
+        case TAG_STRING: return strcmp(a->u.str, b->u.str) == 0;
+        case TAG_PREDICATE_BIT: return a->u.predicate_bit == b->u.predicate_bit;
+        case TAG_DOMAIN_IDENTITY:
+            return a->u.domain_identity.width == b->u.domain_identity.width
+                && a->u.domain_identity.packed_bits == b->u.domain_identity.packed_bits;
+        default: return a == b;
     }
-    return truthy_val(same);
+}
+
+static Value *v_eq(Value *a, Value *b) {
+    return truthy_val(v_eq_same(a, b));
+}
+
+/* Current exact-domain predicate mechanisms. They are deliberately separate
+ * from the historical builtin/Sid8 mechanisms below, whose observable result
+ * carrier remains the compatibility (1)/(0) list representation. */
+static Value *v_atom_predicate(Value *v) {
+    return mk_predicate_bit(is_atom(v));
+}
+
+static Value *v_eq_predicate(Value *a, Value *b) {
+    if (a->tag == TAG_CONS || b->tag == TAG_CONS) runtime_error("Type", "eq");
+    return mk_predicate_bit(v_eq_same(a, b));
 }
 
 static int v_equal_p(Value *a, Value *b) {
@@ -269,6 +340,10 @@ static int v_equal_p(Value *a, Value *b) {
         case TAG_INT: return a->u.i == b->u.i;
         case TAG_RATIONAL: return rational_checked_mul(a->u.rat.num, b->u.rat.den) == rational_checked_mul(b->u.rat.num, a->u.rat.den);
         case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0;
+        case TAG_DOMAIN_IDENTITY:
+            return a->u.domain_identity.width == b->u.domain_identity.width
+                && a->u.domain_identity.packed_bits == b->u.domain_identity.packed_bits;
+        case TAG_PREDICATE_BIT: return a->u.predicate_bit == b->u.predicate_bit;
         case TAG_CONS: return v_equal_p(a->u.cons.car, b->u.cons.car) && v_equal_p(a->u.cons.cdr, b->u.cons.cdr);
         case TAG_I32_BUFFER:
             if (a->u.i32_buffer.len != b->u.i32_buffer.len) return 0;
@@ -357,6 +432,13 @@ static void require_tag(Value *value, Tag expected, const char *name) {
     if (value->tag != expected) runtime_error("Type", name);
 }
 
+/* Mechanism seam for current exact COND (#609): consume D1 by tag/payload,
+ * never via generic truthiness or numeric/list coercion. */
+static int require_predicate_bit(Value *value, const char *name) {
+    if (value->tag != TAG_PREDICATE_BIT) runtime_error("Type", name);
+    return value->u.predicate_bit == 1;
+}
+
 static Value *arg_at(Value *args, int index) {
     while (index-- > 0) args = v_cdr(args);
     return v_car(args);
@@ -414,6 +496,142 @@ static Value *builtin_div(Value *args, Value *env) {
         args = v_cdr(args);
     }
     return result;
+}
+/* Ratified SENS syntax wire SW\x01 decoder for C1 program-data.
+ *
+ * This is transport only. DomainCall is not a special runtime node on the
+ * wire: it is a list whose head is TAG_DOMAIN_IDENTITY. The decoder therefore
+ * cannot select a compiler role or backend mechanism. Unsupported/historical
+ * tags fail closed.
+ */
+static uint64_t sw_get_varint(const uint8_t *bytes, size_t len, size_t *pos) {
+    uint64_t value = 0;
+    for (unsigned shift = 0; shift < 64; shift += 7) {
+        if (*pos >= len) runtime_error("Wire", "truncated SW varint");
+        uint8_t byte = bytes[(*pos)++];
+        value |= ((uint64_t)(byte & 0x7fu)) << shift;
+        if (byte < 0x80u) return value;
+    }
+    runtime_error("Wire", "overlong SW varint");
+    return 0;
+}
+
+static Value *sw_decode_expr(const uint8_t *bytes, size_t len, size_t *pos, unsigned depth);
+
+static Value *sw_decode_list(
+    const uint8_t *bytes,
+    size_t len,
+    size_t *pos,
+    size_t count,
+    unsigned depth
+) {
+    if (count > len - *pos) runtime_error("Wire", "impossible SW list length");
+    if (count > SIZE_MAX / sizeof(Value *))
+        runtime_error("Wire", "SW list allocation overflow");
+    Value **items = checked_malloc(count * sizeof(Value *));
+    for (size_t i = 0; i < count; ++i)
+        items[i] = sw_decode_expr(bytes, len, pos, depth + 1);
+
+    Value *list = &NIL_V;
+    for (size_t i = count; i > 0; --i)
+        list = mk_cons(items[i - 1], list);
+    free(items);
+    return list;
+}
+
+static char *sw_decode_text(const uint8_t *bytes, size_t len, size_t *pos) {
+    uint64_t raw_len = sw_get_varint(bytes, len, pos);
+    if (raw_len > SIZE_MAX - 1) runtime_error("Wire", "SW text length overflow");
+    size_t text_len = (size_t)raw_len;
+    if (text_len > len - *pos) runtime_error("Wire", "truncated SW text");
+    char *text = checked_malloc(text_len + 1);
+    memcpy(text, bytes + *pos, text_len);
+    text[text_len] = '\0';
+    *pos += text_len;
+    return text;
+}
+
+static Value *sw_decode_expr(const uint8_t *bytes, size_t len, size_t *pos, unsigned depth) {
+    if (depth > 768u) runtime_error("Wire", "SW structure nesting limit exceeded");
+    if (*pos >= len) runtime_error("Wire", "truncated SW expression");
+
+    uint8_t tag = bytes[(*pos)++];
+    if (tag < 0x40u) return mk_int((long)tag);
+    if (tag >= 0x40u && tag < 0x50u)
+        return sw_decode_list(bytes, len, pos, (size_t)(tag - 0x40u), depth);
+
+    switch (tag) {
+        case 0x50u: {
+            uint64_t raw_count = sw_get_varint(bytes, len, pos);
+            if (raw_count > SIZE_MAX) runtime_error("Wire", "SW list length overflow");
+            return sw_decode_list(bytes, len, pos, (size_t)raw_count, depth);
+        }
+        case 0x51u:
+            runtime_error("Wire", "legacy Sid8 is forbidden in current C1 program-data");
+            return &NIL_V;
+        case 0x52u: {
+            uint64_t zigzag = sw_get_varint(bytes, len, pos);
+            int64_t integer = (int64_t)(zigzag >> 1) ^ -(int64_t)(zigzag & 1u);
+            if (integer < LONG_MIN || integer > LONG_MAX)
+                runtime_error("Wire", "SW integer exceeds C runtime long");
+            return mk_int((long)integer);
+        }
+        case 0x53u:
+            runtime_error("Wire", "floating SW number unsupported in current C1 nucleus");
+            return &NIL_V;
+        case 0x54u:
+            runtime_error("Wire", "rational SW literal unsupported in current C1 nucleus");
+            return &NIL_V;
+        case 0x55u:
+            return mk_string(sw_decode_text(bytes, len, pos));
+        case 0x56u:
+            return mk_sym(sw_decode_text(bytes, len, pos));
+        case 0x57u: {
+            Value *head = sw_decode_expr(bytes, len, pos, depth + 1);
+            Value *tail = sw_decode_expr(bytes, len, pos, depth + 1);
+            return mk_cons(head, tail);
+        }
+        case 0x58u:
+            runtime_error("Wire", "resolved Local is forbidden in source-shaped C1 program-data");
+            return &NIL_V;
+        case 0x59u: {
+            if (*pos + 2 > len) runtime_error("Wire", "truncated DomainIdentity");
+            uint8_t width = bytes[(*pos)++];
+            uint8_t payload = bytes[(*pos)++];
+            return mk_domain_identity(width, payload);
+        }
+        case 0x5au:
+            runtime_error("Wire", "binary-number SW literal unsupported in current C1 nucleus");
+            return &NIL_V;
+        default:
+            runtime_error("Wire", "unknown SENS SW tag");
+            return &NIL_V;
+    }
+}
+
+static Value *decode_sens_program_wire(const uint8_t *bytes, size_t len) {
+    if (len < 4 || bytes[0] != 0x53u || bytes[1] != 0x57u || bytes[2] != 0x01u)
+        runtime_error("Wire", "invalid SENS SW\\x01 magic");
+
+    size_t pos = 3;
+    uint64_t raw_count = sw_get_varint(bytes, len, &pos);
+    if (raw_count > SIZE_MAX) runtime_error("Wire", "SW program length overflow");
+    Value *program = sw_decode_list(bytes, len, &pos, (size_t)raw_count, 0);
+    if (pos != len) runtime_error("Wire", "trailing bytes after SENS program");
+    return program;
+}
+
+static Value *builtin_domain_identity_shape(Value *args, Value *env) {
+    (void)env;
+    require_arity(args, 1, "domain-identity-shape");
+    return domain_identity_shape(arg_at(args, 0));
+}
+static Value *builtin_domain_identity_shape_or_empty(Value *args, Value *env) {
+    (void)env;
+    require_arity(args, 1, "domain-identity-shape-or-empty");
+    Value *value = arg_at(args, 0);
+    if (value->tag != TAG_DOMAIN_IDENTITY) return &NIL_V;
+    return domain_identity_shape(value);
 }
 static Value *builtin_cons(Value *args, Value *env) { (void)env; require_arity(args, 2, "cons"); return mk_cons(arg_at(args, 0), arg_at(args, 1)); }
 static Value *builtin_car(Value *args, Value *env) { (void)env; require_arity(args, 1, "car"); require_tag(arg_at(args, 0), TAG_CONS, "car"); return v_car(arg_at(args, 0)); }
@@ -534,6 +752,14 @@ static void print_value(Value *v) {
             break;
         case TAG_SYM: printf("%s", v->u.sym); break;
         case TAG_STRING: printf("%s", v->u.str); break;
+        case TAG_PREDICATE_BIT: printf("#<d1 %u>", (unsigned)v->u.predicate_bit); break;
+        case TAG_DOMAIN_IDENTITY: {
+            printf("#<domain D%u:", (unsigned)v->u.domain_identity.width);
+            for (int bit = (int)v->u.domain_identity.width - 1; bit >= 0; --bit)
+                putchar((v->u.domain_identity.packed_bits & (1u << bit)) ? '1' : '0');
+            printf(">");
+            break;
+        }
         case TAG_CLOSURE: printf("<closure>"); break;
         case TAG_BUILTIN: printf("#<builtin %s>", v->u.builtin.name); break;
         case TAG_SID_CALLABLE: {
@@ -593,12 +819,73 @@ impl CBackend {
         CBackend {
             functions: Vec::new(),
             fn_counter: 0,
+            conditional_mechanism: CConditionalMechanism::CompatibilityTruthiness,
+            preserve_quoted_symbol_spelling: false,
         }
+    }
+
+    /// Select the backend-private current exact-D1 conditional mechanism.
+    ///
+    /// This method does not admit any language identity or choose SENS meaning.
+    /// The verified compiler-role bridge (#605) is responsible for selecting
+    /// this mechanism only after SENS returns the Conditional role.
+    pub fn with_current_d1_conditional(mut self) -> Self {
+        self.conditional_mechanism = CConditionalMechanism::CurrentExactD1;
+        self
+    }
+
+    pub fn set_conditional_mechanism(&mut self, mechanism: CConditionalMechanism) {
+        self.conditional_mechanism = mechanism;
+    }
+
+    pub const fn conditional_mechanism(&self) -> CConditionalMechanism {
+        self.conditional_mechanism
     }
 
     fn next_fn_name(&mut self) -> String {
         self.fn_counter += 1;
         format!("cml_lambda_{}", self.fn_counter)
+    }
+
+    /// Compile a definitions-only SENS nucleus with the C1 process driver.
+    ///
+    /// The supplied body may orchestrate bytes/runtime values and invoke
+    /// already-compiled closures only. Semantic traversal remains in SENS.
+    pub(crate) fn compile_program_with_c1_driver(
+        &mut self,
+        program: &[Ir],
+        driver_body: &str,
+    ) -> Result<String, CompileError> {
+        // The historical C backend canonicalizes quoted symbols to uppercase.
+        // Current SENS compiler evidence is case-sensitive data, so the C1
+        // selfhost lane must preserve the exact quoted spelling emitted by
+        // SENS. This flag is private backend mechanism policy; it does not
+        // select any SENS role or identity.
+        self.preserve_quoted_symbol_spelling = true;
+
+        let mut main_body = String::new();
+        for ir in program {
+            match ir {
+                Ir::Def { name, .. } => main_body.push_str(&self.compile_def_placeholder(name)),
+                _ => {
+                    return Err(CompileError::UnsupportedVariant(
+                        "C1 driver requires a definitions-only compiler nucleus",
+                    ));
+                }
+            }
+        }
+        for ir in program {
+            if let Ir::Def { name, value } = ir {
+                main_body.push_str(&self.compile_def_backpatch(name, value)?);
+            }
+        }
+        main_body.push_str(driver_body);
+
+        Ok(format!(
+            "{RUNTIME}\n{C1_DRIVER_RUNTIME}\n{}\n\nint main(void) {{\n    bootstrap_builtins();\n{}    return 0;\n}}\n",
+            self.functions.join("\n"),
+            main_body,
+        ))
     }
 
     /// Compiles a whole program into a self-contained C source file. Every
@@ -712,7 +999,91 @@ impl CBackend {
             Ir::Def { .. } => Err(CompileError::NestedDef),
             Ir::MachinePrim { .. } => Err(CompileError::UnsupportedVariant("MachinePrim")),
             Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
-            Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
+            Ir::Prim { op, args } => self.compile_compiler_prim(op, args, env),
+        }
+    }
+
+    fn compile_compiler_prim(
+        &mut self,
+        op: &PrimOp,
+        args: &[Ir],
+        env: &str,
+    ) -> Result<String, CompileError> {
+        match op {
+            PrimOp::CompilerMechanism(mechanism) => match mechanism {
+                RichCompilerMechanismRef::AtomPredicateD1 => {
+                    if args.len() != 1 {
+                        return Err(CompileError::UnsupportedVariant("current ATOM arity"));
+                    }
+                    let value = self.compile_expr(&args[0], env)?;
+                    Ok(format!("v_atom_predicate({value})"))
+                }
+                RichCompilerMechanismRef::SelectorTail => {
+                    if args.len() != 1 {
+                        return Err(CompileError::UnsupportedVariant("current CDR arity"));
+                    }
+                    let value = self.compile_expr(&args[0], env)?;
+                    Ok(format!(
+                        "({{ Value *_v = {value}; require_tag(_v, TAG_CONS, \"cdr\"); v_cdr(_v); }})"
+                    ))
+                }
+                RichCompilerMechanismRef::SelectorHead => {
+                    if args.len() != 1 {
+                        return Err(CompileError::UnsupportedVariant("current CAR arity"));
+                    }
+                    let value = self.compile_expr(&args[0], env)?;
+                    Ok(format!(
+                        "({{ Value *_v = {value}; require_tag(_v, TAG_CONS, \"car\"); v_car(_v); }})"
+                    ))
+                }
+                RichCompilerMechanismRef::AtomEqualityD1 => {
+                    if args.len() != 2 {
+                        return Err(CompileError::UnsupportedVariant("current EQ arity"));
+                    }
+                    let left = self.compile_expr(&args[0], env)?;
+                    let right = self.compile_expr(&args[1], env)?;
+                    Ok(format!("v_eq_predicate({left}, {right})"))
+                }
+                RichCompilerMechanismRef::PairConstruct => {
+                    if args.len() != 2 {
+                        return Err(CompileError::UnsupportedVariant("current CONS arity"));
+                    }
+                    let head = self.compile_expr(&args[0], env)?;
+                    let tail = self.compile_expr(&args[1], env)?;
+                    Ok(format!("mk_cons({head}, {tail})"))
+                }
+                RichCompilerMechanismRef::Quote
+                | RichCompilerMechanismRef::ConditionalD1
+                | RichCompilerMechanismRef::Lambda
+                | RichCompilerMechanismRef::Define => Err(CompileError::UnsupportedVariant(
+                    "non-call compiler mechanism",
+                )),
+            },
+            PrimOp::CompilerConditionalExactD1(mechanism) => {
+                if *mechanism != RichCompilerMechanismRef::ConditionalD1 {
+                    return Err(CompileError::UnsupportedVariant(
+                        "compiler conditional mechanism",
+                    ));
+                }
+                if args.len() % 2 != 0 {
+                    return Err(CompileError::UnsupportedVariant(
+                        "current COND branch arity",
+                    ));
+                }
+
+                let mut out = String::from("({ Value *_c;");
+                for (index, pair) in args.chunks_exact(2).enumerate() {
+                    let test_expr = self.compile_expr(&pair[0], env)?;
+                    let body_expr = self.compile_expr(&pair[1], env)?;
+                    let keyword = if index == 0 { " if " } else { " else if " };
+                    out.push_str(&format!(
+                        "{keyword}(require_predicate_bit({test_expr}, \"current-cond\")) {{ _c = {body_expr}; }}"
+                    ));
+                }
+                out.push_str(" else { _c = &NIL_V; } _c; })");
+                Ok(out)
+            }
+            _ => Err(CompileError::UnsupportedVariant("Prim")),
         }
     }
 
@@ -721,10 +1092,19 @@ impl CBackend {
             Quoted::Int(n) => Ok(format!("mk_int({n})")),
             Quoted::Float(_) => Err(CompileError::UnsupportedVariant("Quoted::Float")),
             Quoted::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
-            // c_backend.rs keys its symbol representation on the uppercased
-            // form, exactly as before cml#13 -- unaffected by that fix,
-            // which is scoped to the x86 freestanding backend.
-            Quoted::Sym { uppercased, .. } => Ok(format!("mk_sym(\"{uppercased}\")")),
+            // Compatibility compilation keeps the historical uppercase
+            // spelling; the C1 selfhost driver preserves exact SENS data.
+            Quoted::Sym {
+                uppercased,
+                original,
+            } => {
+                let spelling = if self.preserve_quoted_symbol_spelling {
+                    original
+                } else {
+                    uppercased
+                };
+                Ok(format!("mk_sym(\"{spelling}\")"))
+            }
             Quoted::Str(s) => Ok(format!("mk_sym(\"{s}\")")),
             Quoted::Nil => Ok("(&NIL_V)".to_string()),
             Quoted::List(items) => {
@@ -950,15 +1330,19 @@ impl CBackend {
         for (test, body) in branches {
             let test_expr = self.compile_expr(test, env)?;
             let body_expr = self.compile_expr(body, env)?;
+            let predicate = match self.conditional_mechanism {
+                CConditionalMechanism::CompatibilityTruthiness => {
+                    format!("truthy({test_expr})")
+                }
+                CConditionalMechanism::CurrentExactD1 => {
+                    format!("require_predicate_bit({test_expr}, \"current-cond\")")
+                }
+            };
             if first {
-                out.push_str(&format!(
-                    " if (truthy({test_expr})) {{ _c = {body_expr}; }}"
-                ));
+                out.push_str(&format!(" if ({predicate}) {{ _c = {body_expr}; }}"));
                 first = false;
             } else {
-                out.push_str(&format!(
-                    " else if (truthy({test_expr})) {{ _c = {body_expr}; }}"
-                ));
+                out.push_str(&format!(" else if ({predicate}) {{ _c = {body_expr}; }}"));
             }
         }
         out.push_str(" else { _c = &NIL_V; } _c; })");

@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   worker-live:
-    runs-on: [self-hosted, gpu, gtx-1050-ti]
+    runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
     timeout-minutes: 20
     env:
       CML_CUDA_HOST_PROBE: /home/agents/ecosystem/scripts/cuda-host-profile.sh
@@ -39,6 +39,8 @@ jobs:
 
       - name: Host adapter and fail-closed socket regressions
         run: cargo test --features gpu-cuda --test gpu_host_test -- --nocapture
+      - name: Worker protocol/timing unit tests
+        run: cargo test --release --features gpu-cuda --bin cml-gpu-worker
 
       - name: Build exact-head worker
         run: cargo build --release --features gpu-cuda --bin cml-gpu-worker
@@ -103,6 +105,17 @@ jobs:
           for iteration in 1 2 3; do
             evidence="$("$CARGO_TARGET_DIR/release/cml-gpu-worker" chain-file-i32 worker-input.i32 worker-output.i32 "${offsets[@]}")"
             echo "heavy iteration $iteration: $evidence"
+          done
+
+          timing_evidence="$("$CARGO_TARGET_DIR/release/cml-gpu-worker" \
+            chain-file-i32-provenance \
+            juv4uk/cml "$GITHUB_RUN_ID" gpu-worker-live timing-requal \
+            worker-input.i32 worker-output.i32 1)"
+          echo "timing evidence: $timing_evidence"
+          grep -Eq '(^| )repository=juv4uk/cml($| )' <<<"$timing_evidence"
+          grep -Eq '(^| )run_id=[0-9]+($| )' <<<"$timing_evidence"
+          for field in cuda_ns server_service_ns client_round_trip_ns wait_protocol_ns; do
+            grep -Eq "(^| )${field}=[0-9]+($| )" <<<"$timing_evidence"
           done
 
           test "$(stat -c %s worker-output.i32)" = "33554432"

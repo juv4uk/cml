@@ -11,10 +11,12 @@ fn main() {
 
 #[cfg(feature = "gpu-cuda")]
 mod enabled {
+    use cml::gpu_admission::{AdmissionProvenance, GpuAdmissionGuard, gpu_admission_lock_path, gpu_resource_key};
     use cml::gpu_cuda_runtime::{
         execute_map, execute_map_chain_i32_selected, initialize_host_session_from_configured_probe,
         initialized_host_session_evidence,
     };
+    use cml::gpu_worker_client::gpu_worker_socket_path;
     use cml::ir::{BufferLiteral, Ir, Params};
     use std::env;
     use std::fs;
@@ -42,10 +44,25 @@ mod enabled {
         case_id: String,
     }
 
+    #[derive(Debug)]
+    struct TimedTransaction {
+        body: Vec<u8>,
+        client_round_trip_ns: u128,
+    }
+
+    impl ClientProvenance {
+        fn to_admission(&self) -> AdmissionProvenance {
+            AdmissionProvenance {
+                repository: self.repository.clone(),
+                run_id: self.run_id.clone(),
+                job: self.job.clone(),
+                case_id: self.case_id.clone(),
+            }
+        }
+    }
+
     fn socket_path() -> PathBuf {
-        env::var_os("CML_GPU_WORKER_SOCKET")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("/tmp/cml-gpu-worker.sock"))
+        gpu_worker_socket_path()
     }
 
     struct SocketGuard(PathBuf);
@@ -219,6 +236,7 @@ mod enabled {
                 write_response(stream, STATUS_OK, text.as_bytes()).map_err(io_error)
             }
             OP_ADD_I32 => {
+                let admission = acquire_gpu_admission(internal_provenance(OP_ADD_I32))?;
                 let (offset, values) = decode_add_request(&payload)?;
                 let ir = add_i32_ir(values, offset);
                 let execution = execute_map(&ir, 0)
@@ -230,26 +248,48 @@ mod enabled {
                 write_response(stream, STATUS_OK, &body).map_err(io_error)
             }
             OP_CHAIN_FILE_I32 => {
+                let service_started = Instant::now();
+                let admission = acquire_gpu_admission(internal_provenance(OP_CHAIN_FILE_I32))?;
                 let (input_path, output_path, offsets) = decode_chain_file_request(&payload)?;
-                let body = execute_chain_file_i32(&input_path, &output_path, &offsets)?;
+                let evidence = execute_chain_file_i32(&input_path, &output_path, &offsets)?;
+                let server_service_ns = service_started.elapsed().as_nanos();
+                let body = format!("{evidence} server_service_ns={server_service_ns}");
                 write_response(stream, STATUS_OK, body.as_bytes()).map_err(io_error)
             }
             OP_CHAIN_FILE_I32_PROVENANCE => {
+                let service_started = Instant::now();
                 let (provenance, input_path, output_path, offsets) =
                     decode_chain_file_provenance_request(&payload)?;
+                let admission = acquire_gpu_admission(provenance.to_admission())?;
                 let evidence = execute_chain_file_i32(&input_path, &output_path, &offsets)?;
+                let server_service_ns = service_started.elapsed().as_nanos();
                 let body = format!(
-                    "repository={} run_id={} job={} case_id={} {}",
+                    "repository={} run_id={} job={} case_id={} admission_wait_ns={} {} server_service_ns={}",
                     provenance.repository,
                     provenance.run_id,
                     provenance.job,
                     provenance.case_id,
-                    evidence
+                    admission.lease().wait_ns,
+                    evidence,
+                    server_service_ns
                 );
                 write_response(stream, STATUS_OK, body.as_bytes()).map_err(io_error)
             }
             other => Err(format!("unknown opcode {other}")),
         }
+    }
+
+    fn internal_provenance(opcode: u8) -> AdmissionProvenance {
+        AdmissionProvenance {
+            repository: "juv4uk/cml".into(),
+            run_id: format!("worker-{}", std::process::id()),
+            job: format!("opcode-{opcode}"),
+            case_id: "internal".into(),
+        }
+    }
+
+    fn acquire_gpu_admission(provenance: AdmissionProvenance) -> Result<GpuAdmissionGuard, String> {
+        GpuAdmissionGuard::acquire(gpu_admission_lock_path(), gpu_resource_key(), &provenance)
     }
 
     fn execute_chain_file_i32(
@@ -370,9 +410,8 @@ mod enabled {
         offsets: &[i64],
     ) -> Result<(), String> {
         let payload = encode_chain_file_payload(input, output, offsets)?;
-        let body = transact(socket, OP_CHAIN_FILE_I32, &payload)?;
-        println!("{}", String::from_utf8_lossy(&body));
-        Ok(())
+        let transaction = transact_timed(socket, OP_CHAIN_FILE_I32, &payload)?;
+        print_timed_chain_evidence(transaction)
     }
 
     fn client_chain_file_i32_provenance(
@@ -385,9 +424,41 @@ mod enabled {
         let mut payload = Vec::new();
         encode_provenance(&mut payload, provenance)?;
         payload.extend_from_slice(&encode_chain_file_payload(input, output, offsets)?);
-        let body = transact(socket, OP_CHAIN_FILE_I32_PROVENANCE, &payload)?;
-        println!("{}", String::from_utf8_lossy(&body));
+        let transaction = transact_timed(socket, OP_CHAIN_FILE_I32_PROVENANCE, &payload)?;
+        print_timed_chain_evidence(transaction)
+    }
+
+    fn print_timed_chain_evidence(transaction: TimedTransaction) -> Result<(), String> {
+        let body = String::from_utf8(transaction.body)
+            .map_err(|error| format!("GPU worker timing response is not UTF-8: {error}"))?;
+        let server_service_ns = metric_u128(&body, "server_service_ns")?;
+        let wait_protocol_ns =
+            wait_protocol_residual_ns(transaction.client_round_trip_ns, server_service_ns);
+        println!(
+            "{body} client_round_trip_ns={} wait_protocol_ns={}",
+            transaction.client_round_trip_ns, wait_protocol_ns
+        );
         Ok(())
+    }
+
+    /// Residual between client-observed round-trip and server service time.
+    ///
+    /// This is deliberately named wait/protocol overhead, not pure queue wait:
+    /// it includes socket connect/framing/copy costs plus any time waiting for
+    /// the synchronous worker to accept and handle this request.
+    fn wait_protocol_residual_ns(client_round_trip_ns: u128, server_service_ns: u128) -> u128 {
+        client_round_trip_ns.saturating_sub(server_service_ns)
+    }
+
+    fn metric_u128(text: &str, name: &str) -> Result<u128, String> {
+        let prefix = format!("{name}=");
+        let value = text
+            .split_whitespace()
+            .find_map(|field| field.strip_prefix(&prefix))
+            .ok_or_else(|| format!("GPU worker response missing {name}"))?;
+        value
+            .parse::<u128>()
+            .map_err(|error| format!("invalid {name} value {value}: {error}"))
     }
 
     fn encode_chain_file_payload(
@@ -407,12 +478,25 @@ mod enabled {
     }
 
     fn transact(path: &Path, opcode: u8, payload: &[u8]) -> Result<Vec<u8>, String> {
+        Ok(transact_timed(path, opcode, payload)?.body)
+    }
+
+    fn transact_timed(
+        path: &Path,
+        opcode: u8,
+        payload: &[u8],
+    ) -> Result<TimedTransaction, String> {
+        let round_trip_started = Instant::now();
         let mut stream = UnixStream::connect(path)
             .map_err(|error| format!("connect {}: {error}", path.display()))?;
         write_request(&mut stream, opcode, payload).map_err(io_error)?;
         let (status, body) = read_response(&mut stream)?;
+        let client_round_trip_ns = round_trip_started.elapsed().as_nanos();
         if status == STATUS_OK {
-            Ok(body)
+            Ok(TimedTransaction {
+                body,
+                client_round_trip_ns,
+            })
         } else {
             Err(String::from_utf8_lossy(&body).into_owned())
         }
@@ -751,6 +835,50 @@ mod enabled {
 
             payload.push(0);
             assert!(decode_chain_file_provenance_request(&payload).is_err());
+        }
+
+        #[test]
+        fn wait_protocol_residual_is_explicit_and_saturating() {
+            assert_eq!(wait_protocol_residual_ns(1_000, 600), 400);
+            assert_eq!(wait_protocol_residual_ns(600, 1_000), 0);
+        }
+
+        #[test]
+        fn timing_metric_parser_reads_named_field() {
+            let evidence =
+                "count=4 steps=2 cuda_ns=17 output=/tmp/out server_service_ns=9001";
+            assert_eq!(metric_u128(evidence, "server_service_ns").unwrap(), 9001);
+            assert!(metric_u128(evidence, "missing").is_err());
+        }
+
+        #[test]
+        fn transact_timed_uses_monotonic_round_trip_measurement() {
+            let socket = std::env::temp_dir().join(format!(
+                "cml-gpu-worker-timing-{}.sock",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_file(&socket);
+            let listener = UnixListener::bind(&socket).expect("bind timing socket");
+            let server_socket = socket.clone();
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().expect("accept timing client");
+                let (opcode, payload) = read_request(&mut stream).expect("read timing request");
+                assert_eq!(opcode, OP_PING);
+                assert!(payload.is_empty());
+                std::thread::sleep(std::time::Duration::from_millis(5));
+                write_response(&mut stream, STATUS_OK, b"pong").expect("write timing response");
+                drop(stream);
+                let _ = std::fs::remove_file(server_socket);
+            });
+
+            let transaction =
+                transact_timed(&socket, OP_PING, &[]).expect("timed local transaction");
+            server.join().expect("timing server");
+            assert_eq!(transaction.body, b"pong");
+            assert!(
+                transaction.client_round_trip_ns >= 1_000_000,
+                "5ms artificial server delay must be observable in client round-trip"
+            );
         }
     }
 }

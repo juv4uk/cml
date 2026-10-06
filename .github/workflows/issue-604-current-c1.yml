@@ -1,0 +1,54 @@
+name: Issue 604 current SENS C1 artifact
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, guix]
+    timeout-minutes: 30
+    steps:
+      - name: Require private dependency read token
+        env:
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+        run: test -n "$SENS_READ_TOKEN"
+
+      - name: Checkout CML with pinned SENS
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+          submodules: true
+
+      - name: Verify canonical SENS pin
+        run: |
+          test "$(git -C external/sens rev-parse HEAD)" = "f2e7797283c8dfc2aa67935a02b3735a8290041f"
+          grep -q '(build-source-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
+          grep -q '(supported-pin-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
+
+      - name: Focused formatting
+        run: >-
+          guix shell --pure -m manifest.scm --
+          rustfmt --edition 2024 --check
+          src/sens_c1_artifact.rs
+
+      - name: Canonical verified lowering regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --lib sens_current_lowering::tests -- --nocapture --test-threads=1
+
+      - name: C1 artifact proof and executable witness
+        env:
+          CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --lib sens_c1_artifact::tests -- --nocapture --test-threads=1
+
+      - name: Existing real-export C0 lowering regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -j 1 -p cml --test current_sens_c0_lowering_test -- --nocapture --test-threads=1
