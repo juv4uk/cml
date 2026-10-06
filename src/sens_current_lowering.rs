@@ -64,10 +64,7 @@ impl VerifiedCurrentRegistry {
             .expect("nine-role compiler export is non-empty")
             .provenance()
             .clone();
-        if entries
-            .iter()
-            .any(|entry| entry.provenance() != &authority)
-        {
+        if entries.iter().any(|entry| entry.provenance() != &authority) {
             return Err(CurrentLowerError::MixedVerifiedAuthority);
         }
 
@@ -152,7 +149,10 @@ impl fmt::Display for CurrentLowerError {
                 )
             }
             Self::DuplicateVerifiedIdentity => {
-                write!(f, "verified compiler export contains a duplicate exact identity")
+                write!(
+                    f,
+                    "verified compiler export contains a duplicate exact identity"
+                )
             }
             Self::MixedVerifiedAuthority => {
                 write!(f, "verified compiler export mixes authority provenance")
@@ -223,10 +223,7 @@ fn lower_quoted(expr: &Expr) -> Result<Quoted, CurrentLowerError> {
     }
 }
 
-fn lower_expr(
-    expr: &Expr,
-    registry: &VerifiedCurrentRegistry,
-) -> Result<Ir, CurrentLowerError> {
+fn lower_expr(expr: &Expr, registry: &VerifiedCurrentRegistry) -> Result<Ir, CurrentLowerError> {
     match &expr.kind {
         ExprKind::Number(value, _) => {
             if let Some(value) = exact_int(*value) {
@@ -358,8 +355,9 @@ fn mechanism_arity(
         RichCompilerMechanismRef::AtomPredicateD1
         | RichCompilerMechanismRef::SelectorTail
         | RichCompilerMechanismRef::SelectorHead => ("unary compiler mechanism", 1),
-        RichCompilerMechanismRef::AtomEqualityD1
-        | RichCompilerMechanismRef::PairConstruct => ("binary compiler mechanism", 2),
+        RichCompilerMechanismRef::AtomEqualityD1 | RichCompilerMechanismRef::PairConstruct => {
+            ("binary compiler mechanism", 2)
+        }
         RichCompilerMechanismRef::Quote => ("quote", 1),
         RichCompilerMechanismRef::ConditionalD1 => return Ok(()),
         RichCompilerMechanismRef::Lambda => ("lambda", 2),
@@ -462,9 +460,8 @@ mod tests {
             entries: Vec::new(),
             authority: crate::sens_domain_bridge::pinned_authority().unwrap(),
         };
-        let identity = sens::DomainIdentity::D3(sens::Bija3::from_word(
-            sens::Bit3::new(0b010).unwrap(),
-        ));
+        let identity =
+            sens::DomainIdentity::D3(sens::Bija3::from_word(sens::Bit3::new(0b010).unwrap()));
         assert_eq!(
             lower_domain_call(identity, &[], &registry).unwrap_err(),
             CurrentLowerError::MissingVerifiedIdentity
