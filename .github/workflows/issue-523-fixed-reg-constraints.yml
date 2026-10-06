@@ -1,0 +1,39 @@
+name: Issue 523 fixed-register constraints
+
+on:
+  pull_request:
+    paths:
+      - src/x86_regalloc.rs
+      - tests/x86_regalloc_constraints_test.rs
+      - .github/workflows/issue-523-fixed-reg-constraints.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, guix]
+    timeout-minutes: 20
+    steps:
+      - name: Require private dependency read token
+        env:
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+        run: test -n "$SENS_READ_TOKEN"
+
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Focused formatting
+        run: rustfmt --edition 2024 --check src/x86_regalloc.rs tests/x86_regalloc_constraints_test.rs
+
+      - name: Fixed-register allocator laws
+        run: cargo test --test x86_regalloc_constraints_test -- --nocapture

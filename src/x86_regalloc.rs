@@ -67,12 +67,47 @@ pub struct LiveInterval {
     pub end: usize,
 }
 
+/// Backend-local requirement that a virtual register occupy one exact
+/// allocatable physical register for its whole live interval.
+///
+/// This is target mechanism data only. It must never be copied into shared
+/// CML IR or used as language-semantic identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FixedRegConstraint {
+    pub vreg: VReg,
+    pub reg: X86Reg,
+}
+
+impl FixedRegConstraint {
+    pub const fn new(vreg: VReg, reg: X86Reg) -> Self {
+        Self { vreg, reg }
+    }
+}
+
+/// Backend-local x86-64 unsigned-DIV input constraint recipe.
+///
+/// The ISA consumes the 128-bit dividend from RDX:RAX. This helper carries
+/// only that physical fact: callers remain responsible for creating
+/// short-lived backend temporaries and for selecting DIV only after semantic
+/// admission.
+pub const fn unsigned_dividend_constraints(
+    low: VReg,
+    high: VReg,
+) -> [FixedRegConstraint; 2] {
+    [
+        FixedRegConstraint::new(low, X86Reg::Rax),
+        FixedRegConstraint::new(high, X86Reg::Rdx),
+    ]
+}
+
 /// Results and provenance of the register allocation pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegAllocPlan {
     pub assignments: HashMap<VReg, AllocLocation>,
     pub spill_count: usize,
     pub intervals: HashMap<VReg, LiveInterval>,
+    /// Exact backend-local fixed-register requirements admitted for this plan.
+    pub fixed_constraints: HashMap<VReg, X86Reg>,
 }
 
 impl RegAllocPlan {
@@ -80,8 +115,9 @@ impl RegAllocPlan {
     pub fn dump(&self) -> String {
         let mut out = String::new();
         out.push_str(&format!(
-            "RegAllocPlan (spill_count: {})\n",
-            self.spill_count
+            "RegAllocPlan (spill_count: {}, fixed_constraints: {})\n",
+            self.spill_count,
+            self.fixed_constraints.len()
         ));
         let mut sorted_vregs: Vec<_> = self.assignments.keys().cloned().collect();
         sorted_vregs.sort_by_key(|v| v.0);
@@ -89,10 +125,21 @@ impl RegAllocPlan {
             let loc = &self.assignments[&vreg];
             let interval = self.intervals.get(&vreg);
             if let Some(inv) = interval {
-                out.push_str(&format!(
-                    "  {}: {} (live: {}..={})\n",
-                    vreg, loc, inv.start, inv.end
-                ));
+                if let Some(required) = self.fixed_constraints.get(&vreg) {
+                    out.push_str(&format!(
+                        "  {}: {} (live: {}..={}, must={})\n",
+                        vreg,
+                        loc,
+                        inv.start,
+                        inv.end,
+                        required.name()
+                    ));
+                } else {
+                    out.push_str(&format!(
+                        "  {}: {} (live: {}..={})\n",
+                        vreg, loc, inv.start, inv.end
+                    ));
+                }
             } else {
                 out.push_str(&format!("  {}: {}\n", vreg, loc));
             }
@@ -105,12 +152,52 @@ impl RegAllocPlan {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegAllocError {
     Internal(String),
+    UnknownConstrainedVReg {
+        vreg: VReg,
+    },
+    UnavailableFixedRegister {
+        vreg: VReg,
+        reg: X86Reg,
+    },
+    ConflictingConstraint {
+        vreg: VReg,
+        first: X86Reg,
+        second: X86Reg,
+    },
+    OverlappingFixedRegister {
+        reg: X86Reg,
+        first: VReg,
+        second: VReg,
+    },
 }
 
 impl fmt::Display for RegAllocError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Internal(msg) => write!(f, "regalloc internal error: {msg}"),
+            Self::UnknownConstrainedVReg { vreg } => {
+                write!(f, "fixed-register constraint references unknown {vreg}")
+            }
+            Self::UnavailableFixedRegister { vreg, reg } => write!(
+                f,
+                "fixed-register constraint for {vreg} requires unavailable {}",
+                reg.name()
+            ),
+            Self::ConflictingConstraint {
+                vreg,
+                first,
+                second,
+            } => write!(
+                f,
+                "conflicting fixed-register constraints for {vreg}: {} vs {}",
+                first.name(),
+                second.name()
+            ),
+            Self::OverlappingFixedRegister { reg, first, second } => write!(
+                f,
+                "overlapping live fixed-register constraints require {} for both {first} and {second}",
+                reg.name()
+            ),
         }
     }
 }
@@ -287,23 +374,59 @@ pub fn build_live_intervals(func: &LirFunction) -> HashMap<VReg, LiveInterval> {
         .collect()
 }
 
-/// Allocates physical registers or stack spill slots using deterministic Linear Scan.
+/// Allocates physical registers or stack spill slots using deterministic
+/// linear scan with no fixed-register requirements.
 pub fn allocate_registers(func: &LirFunction) -> Result<RegAllocPlan, RegAllocError> {
+    allocate_registers_with_constraints(func, &[])
+}
+
+/// Deterministic linear-scan allocation with explicit backend-local physical
+/// register requirements.
+///
+/// A fixed interval may evict an ordinary interval from its required register,
+/// in which case the ordinary interval is spilled. Two overlapping fixed
+/// intervals may never claim the same register: that is a named allocation
+/// error rather than an implicit clobber.
+pub fn allocate_registers_with_constraints(
+    func: &LirFunction,
+    constraints: &[FixedRegConstraint],
+) -> Result<RegAllocPlan, RegAllocError> {
     let intervals = build_live_intervals(func);
 
+    let mut fixed_constraints: HashMap<VReg, X86Reg> = HashMap::new();
+    for constraint in constraints {
+        if !intervals.contains_key(&constraint.vreg) {
+            return Err(RegAllocError::UnknownConstrainedVReg {
+                vreg: constraint.vreg,
+            });
+        }
+        if !ALLOCATABLE_GPRS.contains(&constraint.reg) {
+            return Err(RegAllocError::UnavailableFixedRegister {
+                vreg: constraint.vreg,
+                reg: constraint.reg,
+            });
+        }
+        if let Some(previous) = fixed_constraints.insert(constraint.vreg, constraint.reg) {
+            if previous != constraint.reg {
+                return Err(RegAllocError::ConflictingConstraint {
+                    vreg: constraint.vreg,
+                    first: previous,
+                    second: constraint.reg,
+                });
+            }
+        }
+    }
+
     let mut sorted_intervals: Vec<LiveInterval> = intervals.values().cloned().collect();
-    // Deterministic sort: start position ascending, then vreg ID ascending
     sorted_intervals.sort_by(|a, b| a.start.cmp(&b.start).then_with(|| a.vreg.0.cmp(&b.vreg.0)));
 
     let mut assignments: HashMap<VReg, AllocLocation> = HashMap::new();
-    // Active intervals sorted by end position ascending
     let mut active: Vec<(LiveInterval, X86Reg)> = Vec::new();
     let mut free_pool: Vec<X86Reg> = ALLOCATABLE_GPRS.to_vec();
-
     let mut next_spill_slot = 0u32;
 
     for interval in sorted_intervals {
-        // 1. Expire old intervals
+        // 1. Expire old intervals.
         let mut i = 0;
         while i < active.len() {
             if active[i].0.end < interval.start {
@@ -311,7 +434,6 @@ pub fn allocate_registers(func: &LirFunction) -> Result<RegAllocPlan, RegAllocEr
                 active.remove(i);
                 if !free_pool.contains(&freed_reg) {
                     free_pool.push(freed_reg);
-                    // Keep free pool in canonical order for determinism
                     free_pool.sort_by_key(|r| ALLOCATABLE_GPRS.iter().position(|x| x == r));
                 }
             } else {
@@ -319,18 +441,63 @@ pub fn allocate_registers(func: &LirFunction) -> Result<RegAllocPlan, RegAllocEr
             }
         }
 
-        // 2. Allocate or spill
+        // 2. Fixed-register interval: reserve exactly the requested register.
+        if let Some(&required_reg) = fixed_constraints.get(&interval.vreg) {
+            if let Some(owner_idx) = active.iter().position(|(_, reg)| *reg == required_reg) {
+                let owner_vreg = active[owner_idx].0.vreg;
+                if fixed_constraints.get(&owner_vreg) == Some(&required_reg) {
+                    return Err(RegAllocError::OverlappingFixedRegister {
+                        reg: required_reg,
+                        first: owner_vreg,
+                        second: interval.vreg,
+                    });
+                }
+
+                let (spilled_inv, _) = active.remove(owner_idx);
+                let slot = next_spill_slot;
+                next_spill_slot += 1;
+                assignments.insert(spilled_inv.vreg, AllocLocation::SpillSlot(slot));
+            } else if let Some(free_idx) = free_pool.iter().position(|reg| *reg == required_reg) {
+                free_pool.remove(free_idx);
+            } else {
+                return Err(RegAllocError::Internal(format!(
+                    "required register {} is neither active nor free",
+                    required_reg.name()
+                )));
+            }
+
+            assignments.insert(interval.vreg, AllocLocation::Reg(required_reg));
+            active.push((interval, required_reg));
+            active.sort_by_key(|(inv, _)| inv.end);
+            continue;
+        }
+
+        // 3. Ordinary interval: allocate a free register when possible.
         if !free_pool.is_empty() {
             let reg = free_pool.remove(0);
             assignments.insert(interval.vreg, AllocLocation::Reg(reg));
             active.push((interval, reg));
             active.sort_by_key(|(inv, _)| inv.end);
-        } else {
-            // Register pressure exceeded: spill interval with furthest end
-            let last_idx = active.len() - 1;
-            if active[last_idx].0.end > interval.end {
-                // Spill candidate from active
-                let (spilled_inv, stolen_reg) = active.remove(last_idx);
+            continue;
+        }
+
+        // 4. Register pressure exceeded. Only ordinary active intervals are
+        // eligible to be evicted; fixed intervals are unspillable for their
+        // live range.
+        // Preserve the legacy linear-scan tie-break exactly: `active` is
+        // already sorted by end position, and the old allocator considered
+        // its last interval first. Skip fixed intervals while walking that
+        // same order backwards rather than introducing a new comparator.
+        let spill_candidate = active
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, (inv, _))| !fixed_constraints.contains_key(&inv.vreg))
+            .map(|(idx, _)| idx);
+
+        if let Some(candidate_idx) = spill_candidate {
+            if active[candidate_idx].0.end > interval.end {
+                let (spilled_inv, stolen_reg) = active.remove(candidate_idx);
                 let slot = next_spill_slot;
                 next_spill_slot += 1;
                 assignments.insert(spilled_inv.vreg, AllocLocation::SpillSlot(slot));
@@ -338,19 +505,20 @@ pub fn allocate_registers(func: &LirFunction) -> Result<RegAllocPlan, RegAllocEr
                 assignments.insert(interval.vreg, AllocLocation::Reg(stolen_reg));
                 active.push((interval, stolen_reg));
                 active.sort_by_key(|(inv, _)| inv.end);
-            } else {
-                // Spill current interval
-                let slot = next_spill_slot;
-                next_spill_slot += 1;
-                assignments.insert(interval.vreg, AllocLocation::SpillSlot(slot));
+                continue;
             }
         }
+
+        let slot = next_spill_slot;
+        next_spill_slot += 1;
+        assignments.insert(interval.vreg, AllocLocation::SpillSlot(slot));
     }
 
     Ok(RegAllocPlan {
         assignments,
         spill_count: next_spill_slot as usize,
         intervals,
+        fixed_constraints,
     })
 }
 
