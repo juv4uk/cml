@@ -69,6 +69,44 @@ def ascii_field(value, fallback):
     return cleaned or fallback
 
 
+def probe_value(text, key):
+    match = re.search(rf"(?:^|\s){key}=(.*?)(?=\s+\w+=|$)", text, re.S)
+    return match.group(1).strip() if match else None
+
+
+def parse_probe(out):
+    """Розбір `cml-gpu-worker probe`: новий host-контракт key=value (#535) або старий Debug."""
+    if "schema=" in out:
+        if probe_value(out, "status") != "ready":
+            raise Failure(f"CUDA_DEVICE_ABSENT: host-контракт не ready: {out!r}")
+        name = probe_value(out, "device_name")
+        capability = probe_value(out, "compute_capability")
+        live = probe_value(out, "live_device")
+        if not name or not capability:
+            raise Failure(f"CUDA_DEVICE_ABSENT: probe не описує пристрій повністю: {out!r}")
+        if live and live != name:
+            raise Failure(f"CUDA_DEVICE_MISMATCH: device_name={name!r} live_device={live!r}")
+        if "NVIDIA" not in name.upper():
+            raise Failure(f"CUDA_DEVICE_ABSENT: пристрій не NVIDIA: {name!r}")
+        return {
+            "name": name,
+            "compute_capability": capability,
+            "total_memory_bytes": None,
+            "driver_version": probe_value(out, "driver_version"),
+            "toolkit_version": probe_value(out, "toolkit_version"),
+        }
+    name = re.search(r'name: "([^"]+)"', out)
+    capability = re.search(r"compute_capability: \((\d+), (\d+)\)", out)
+    memory = re.search(r"total_memory_bytes: (\d+)", out)
+    if "Nvidia" not in out or "Cuda" not in out or not (name and capability and memory):
+        raise Failure(f"CUDA_DEVICE_ABSENT: probe не описує пристрій повністю: {out!r}")
+    return {
+        "name": name.group(1),
+        "compute_capability": f"{capability.group(1)}.{capability.group(2)}",
+        "total_memory_bytes": int(memory.group(1)),
+    }
+
+
 def reference_input():
     # Детермінований LCG; значення обмежені, щоб сума не виходила за i32.
     state = 0x2545F491
@@ -91,18 +129,9 @@ def main():
         raise Failure(f"WORKER_UNREACHABLE: ping -> code={code} out={out!r} err={err!r}")
 
     code, out, err = call(worker, "probe")
-    if code != 0 or "Nvidia" not in out or "Cuda" not in out:
+    if code != 0:
         raise Failure(f"CUDA_DEVICE_ABSENT: probe -> code={code} out={out!r} err={err!r}")
-    name = re.search(r'name: "([^"]+)"', out)
-    capability = re.search(r"compute_capability: \((\d+), (\d+)\)", out)
-    memory = re.search(r"total_memory_bytes: (\d+)", out)
-    if not (name and capability and memory):
-        raise Failure(f"CUDA_DEVICE_ABSENT: probe не описує пристрій повністю: {out!r}")
-    evidence["device"] = {
-        "name": name.group(1),
-        "compute_capability": f"{capability.group(1)}.{capability.group(2)}",
-        "total_memory_bytes": int(memory.group(1)),
-    }
+    evidence["device"] = parse_probe(out)
 
     code, out, err = call(worker, "add-i32", "7", "1", "2", "3", "4")
     if code != 0 or out != "8 9 10 11":
