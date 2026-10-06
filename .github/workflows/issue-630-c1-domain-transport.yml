@@ -10,7 +10,7 @@ concurrency:
 jobs:
   focused:
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
+    runs-on: [self-hosted, guix]
     timeout-minutes: 20
     steps:
       - name: Require private dependency read token
@@ -34,9 +34,9 @@ jobs:
       - name: Exact DomainIdentity runtime transport witness
         run: >-
           guix shell --pure -m manifest.scm --
-          cargo test -p cml --test c1_domain_transport_runtime_test -- --nocapture
+          cargo test -j 1 -p cml --test c1_domain_transport_runtime_test -- --nocapture --test-threads=1
 
       - name: C backend regression
         run: >-
           guix shell --pure -m manifest.scm --
-          cargo test -p cml --test c_backend_test -- --nocapture
+          cargo test -j 1 -p cml --test c_backend_test -- --nocapture --test-threads=1
