@@ -797,14 +797,18 @@ impl CBackend {
                             return Err(CompileError::UnsupportedVariant("current CDR arity"));
                         }
                         let value = self.compile_expr(&args[0], env)?;
-                        Ok(format!("v_cdr({value})"))
+                        Ok(format!(
+                            "({{ Value *_v = {value}; require_tag(_v, TAG_CONS, \"cdr\"); v_cdr(_v); }})"
+                        ))
                     }
                     RichCompilerMechanismRef::SelectorHead => {
                         if args.len() != 1 {
                             return Err(CompileError::UnsupportedVariant("current CAR arity"));
                         }
                         let value = self.compile_expr(&args[0], env)?;
-                        Ok(format!("v_car({value})"))
+                        Ok(format!(
+                            "({{ Value *_v = {value}; require_tag(_v, TAG_CONS, \"car\"); v_car(_v); }})"
+                        ))
                     }
                     RichCompilerMechanismRef::AtomEqualityD1 => {
                         if args.len() != 2 {
