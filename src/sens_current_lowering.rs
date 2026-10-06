@@ -73,7 +73,9 @@ impl fmt::Display for CurrentLowerError {
                 write!(f, "current SENS compiler nucleus returned no admitted role")
             }
             Self::Authority(error) => write!(f, "SENS authority verification failed: {error}"),
-            Self::Admission(error) => write!(f, "SENS semantic request rejected before lowering: {error}"),
+            Self::Admission(error) => {
+                write!(f, "SENS semantic request rejected before lowering: {error}")
+            }
         }
     }
 }
