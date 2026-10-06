@@ -1,0 +1,54 @@
+name: Issue 606 verified rich admission
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "src/sens_rich_bridge.rs"
+      - "src/sens_domain_bridge.rs"
+      - "src/compiler_mechanism.rs"
+      - "src/lib.rs"
+      - ".github/workflows/issue-606-focused.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
+    timeout-minutes: 20
+    env:
+      RUSTC_WRAPPER: /usr/bin/sccache
+      SCCACHE_DIR: /home/agents/.cache/sccache
+      SCCACHE_CACHE_SIZE: 30G
+      CARGO_BUILD_JOBS: 1
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Isolate Cargo target by rustc build
+        run: |
+          rustc_key="$(rustc -vV | sha256sum | cut -c1-16)"
+          test -n "$rustc_key"
+          echo "CARGO_TARGET_DIR=/home/agents/.cache/cargo-target/cml/rustc-$rustc_key" >> "$GITHUB_ENV"
+      - name: Checkout pinned SENS from local clone
+        run: |
+          git config submodule.external/sens.url /home/agents/GitHub/sens
+          git -C /home/agents/GitHub/sens fetch origin main
+          git -c protocol.file.allow=always -c safe.directory='*' submodule update --init external/sens
+          test "$(git -C external/sens rev-parse HEAD)" = "08db33ced8643aedaa7de35cb61407900c0b0c05"
+      - name: Focused formatting
+        run: |
+          guix shell --pure -m manifest.scm --             rustfmt --edition 2024 --check --config skip_children=true               src/sens_domain_bridge.rs src/sens_rich_bridge.rs
+      - name: Verified rich admission tests
+        run: |
+          guix shell --pure -m manifest.scm --             cargo test -p cml sens_rich_bridge::tests -- --nocapture
+      - name: Canonical rich mechanism map tests
+        run: |
+          guix shell --pure -m manifest.scm --             cargo test -p cml compiler_mechanism::tests -- --nocapture
+      - name: No local semantic reconstruction
+        run: |
+          ! grep -Eq 'packed_bits|domain_identity_for_surface|compiler_execution_role\(' src/sens_rich_bridge.rs
+          grep -q 'compiler_lowering_role_from_sens' src/sens_rich_bridge.rs
+          grep -q 'select_rich_compiler_mechanism' src/sens_rich_bridge.rs
