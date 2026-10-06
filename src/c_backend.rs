@@ -25,6 +25,7 @@
 //! walking it), just implemented directly as C structs instead of tagged
 //! 32-bit words on a heap array.
 
+use crate::c1_driver_runtime::C1_DRIVER_RUNTIME;
 use crate::compiler_mechanism::RichCompilerMechanismRef;
 use crate::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
 use std::fmt;
@@ -840,6 +841,40 @@ impl CBackend {
     fn next_fn_name(&mut self) -> String {
         self.fn_counter += 1;
         format!("cml_lambda_{}", self.fn_counter)
+    }
+
+    /// Compile a definitions-only SENS nucleus with the C1 process driver.
+    ///
+    /// The supplied body may orchestrate bytes/runtime values and invoke
+    /// already-compiled closures only. Semantic traversal remains in SENS.
+    pub(crate) fn compile_program_with_c1_driver(
+        &mut self,
+        program: &[Ir],
+        driver_body: &str,
+    ) -> Result<String, CompileError> {
+        let mut main_body = String::new();
+        for ir in program {
+            match ir {
+                Ir::Def { name, .. } => main_body.push_str(&self.compile_def_placeholder(name)),
+                _ => {
+                    return Err(CompileError::UnsupportedVariant(
+                        "C1 driver requires a definitions-only compiler nucleus",
+                    ));
+                }
+            }
+        }
+        for ir in program {
+            if let Ir::Def { name, value } = ir {
+                main_body.push_str(&self.compile_def_backpatch(name, value)?);
+            }
+        }
+        main_body.push_str(driver_body);
+
+        Ok(format!(
+            "{RUNTIME}\n{C1_DRIVER_RUNTIME}\n{}\n\nint main(void) {{\n    bootstrap_builtins();\n{}    return 0;\n}}\n",
+            self.functions.join("\n"),
+            main_body,
+        ))
     }
 
     /// Compiles a whole program into a self-contained C source file. Every
