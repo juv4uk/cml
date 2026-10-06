@@ -25,6 +25,7 @@
 //! walking it), just implemented directly as C structs instead of tagged
 //! 32-bit words on a heap array.
 
+use crate::compiler_mechanism::RichCompilerMechanismRef;
 use crate::ir::{BufferLiteral, Ir, Params, Quoted};
 use std::fmt;
 
@@ -773,6 +774,60 @@ impl CBackend {
             Ir::MachinePrim { .. } => Err(CompileError::UnsupportedVariant("MachinePrim")),
             Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
             Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
+            Ir::RichPrim { mechanism, args } => self.compile_rich_prim(*mechanism, args, env),
+        }
+    }
+
+    fn compile_rich_prim(
+        &mut self,
+        mechanism: RichCompilerMechanismRef,
+        args: &[Ir],
+        env: &str,
+    ) -> Result<String, CompileError> {
+        let arity = |expected: usize| {
+            if args.len() == expected {
+                Ok(())
+            } else {
+                Err(CompileError::UnsupportedVariant(
+                    "verified rich primitive arity mismatch",
+                ))
+            }
+        };
+
+        match mechanism {
+            RichCompilerMechanismRef::AtomPredicateD1 => {
+                arity(1)?;
+                let value = self.compile_expr(&args[0], env)?;
+                Ok(format!("v_atom_predicate({value})"))
+            }
+            RichCompilerMechanismRef::AtomEqualityD1 => {
+                arity(2)?;
+                let left = self.compile_expr(&args[0], env)?;
+                let right = self.compile_expr(&args[1], env)?;
+                Ok(format!("v_eq_predicate({left}, {right})"))
+            }
+            RichCompilerMechanismRef::SelectorHead => {
+                arity(1)?;
+                let pair = self.compile_expr(&args[0], env)?;
+                Ok(format!("v_car({pair})"))
+            }
+            RichCompilerMechanismRef::SelectorTail => {
+                arity(1)?;
+                let pair = self.compile_expr(&args[0], env)?;
+                Ok(format!("v_cdr({pair})"))
+            }
+            RichCompilerMechanismRef::PairConstruct => {
+                arity(2)?;
+                let head = self.compile_expr(&args[0], env)?;
+                let tail = self.compile_expr(&args[1], env)?;
+                Ok(format!("mk_cons({head}, {tail})"))
+            }
+            RichCompilerMechanismRef::Quote
+            | RichCompilerMechanismRef::ConditionalD1
+            | RichCompilerMechanismRef::Lambda
+            | RichCompilerMechanismRef::Define => Err(CompileError::UnsupportedVariant(
+                "syntax mechanism cannot inhabit Ir::RichPrim",
+            )),
         }
     }
 
