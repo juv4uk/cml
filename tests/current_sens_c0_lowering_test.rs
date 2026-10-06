@@ -3,8 +3,7 @@ use cml::compiler_mechanism::RichCompilerMechanismRef;
 use cml::ir::{Ir, PrimOp};
 use cml::sens_current_lowering::lower_current_sens_source;
 
-const NUCLEUS: &str =
-    include_str!("../external/sens/lib/compiler-nucleus.lisp");
+const NUCLEUS: &str = include_str!("../external/sens/lib/compiler-nucleus.lisp");
 
 fn collect_mechanisms(ir: &Ir, out: &mut Vec<RichCompilerMechanismRef>) {
     match ir {
@@ -61,7 +60,9 @@ fn collect_mechanisms(ir: &Ir, out: &mut Vec<RichCompilerMechanismRef>) {
 
 fn assert_no_legacy(ir: &Ir) {
     match ir {
-        Ir::Sid(_) | Ir::Builtin(_) => panic!("current SENS source leaked legacy callable IR: {ir:?}"),
+        Ir::Sid(_) | Ir::Builtin(_) => {
+            panic!("current SENS source leaked legacy callable IR: {ir:?}")
+        }
         Ir::Prim { args, .. } => {
             for arg in args {
                 assert_no_legacy(arg);
@@ -147,8 +148,8 @@ fn current_sens_nucleus_reaches_all_nine_roles_without_sid8() {
 
 #[test]
 fn current_sens_nucleus_compiles_as_executable_c0_c_source() {
-    let lowered = lower_current_sens_source(NUCLEUS)
-        .expect("current SENS compiler nucleus must lower");
+    let lowered =
+        lower_current_sens_source(NUCLEUS).expect("current SENS compiler nucleus must lower");
     let mut backend = CBackend::new();
     let c = backend
         .compile_program(&lowered.ir)
