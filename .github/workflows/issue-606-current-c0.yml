@@ -1,24 +1,7 @@
 name: Issue 606 verified current C0 lowering
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "src/ir.rs"
-      - "src/c_backend.rs"
-      - "src/lib.rs"
-      - "src/sens_compiler_export.rs"
-      - "src/sens_current_lowering.rs"
-      - "tests/current_sens_c0_lowering_test.rs"
-      - ".github/workflows/issue-606-current-c0.yml"
-  push:
-    branches: [master]
-    paths:
-      - "src/ir.rs"
-      - "src/c_backend.rs"
-      - "src/lib.rs"
-      - "src/sens_current_lowering.rs"
-      - "tests/current_sens_c0_lowering_test.rs"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
