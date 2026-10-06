@@ -4,9 +4,7 @@
 //! exact DomainCall values. It never consults CML's legacy surface/Sid8
 //! lowering table for current source.
 
-use crate::compiler_mechanism::{
-    RichCompilerMechanismRef, select_rich_compiler_mechanism,
-};
+use crate::compiler_mechanism::{RichCompilerMechanismRef, select_rich_compiler_mechanism};
 use crate::ir::{Ir, Params, PrimOp, Quoted};
 use crate::sens_domain_bridge::{AuthorityProvenance, BridgeError, pinned_authority};
 use sens::syntax::{Exactness, Expr, ExprKind};
@@ -37,23 +35,44 @@ pub enum CurrentLowerError {
 impl fmt::Display for CurrentLowerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Parse(message) => write!(f, "SENS current-source parse/lower failure: {message}"),
+            Self::Parse(message) => write!(
+                f,
+                "SENS current-source parse/lower failure: {message}"
+            ),
             Self::UnsupportedLegacyIdentity => {
-                write!(f, "legacy Sid8/Call identity is forbidden in current SENS lowering")
+                write!(
+                    f,
+                    "legacy Sid8/Call identity is forbidden in current SENS lowering"
+                )
             }
             Self::UnsupportedDomainIdentity => {
-                write!(f, "bare DomainIdentity cannot execute outside a verified DomainCall")
+                write!(
+                    f,
+                    "bare DomainIdentity cannot execute outside a verified DomainCall"
+                )
             }
             Self::UnsupportedLiteral(kind) => {
-                write!(f, "current SENS nucleus literal is unsupported in CML IR: {kind}")
+                write!(
+                    f,
+                    "current SENS nucleus literal is unsupported in CML IR: {kind}"
+                )
             }
-            Self::Arity { role, expected, actual } => {
+            Self::Arity {
+                role,
+                expected,
+                actual,
+            } => {
                 write!(f, "{role} expects {expected} argument(s), got {actual}")
             }
             Self::InvalidCondClause(index) => {
-                write!(f, "current D3 COND clause {index} must contain exactly (test expression)")
+                write!(
+                    f,
+                    "current D3 COND clause {index} must contain exactly (test expression)"
+                )
             }
-            Self::UnknownRole => write!(f, "current SENS compiler nucleus returned no admitted role"),
+            Self::UnknownRole => {
+                write!(f, "current SENS compiler nucleus returned no admitted role")
+            }
             Self::Authority(error) => write!(f, "SENS authority verification failed: {error}"),
         }
     }
@@ -102,20 +121,16 @@ fn lower_quoted(expr: &Expr) -> Result<Quoted, CurrentLowerError> {
             vec![lower_quoted(head)?],
             Box::new(lower_quoted(tail)?),
         )),
-        ExprKind::BinaryNumber(_) => {
-            Err(CurrentLowerError::UnsupportedLiteral("binary number"))
+        ExprKind::BinaryNumber(_) => Err(CurrentLowerError::UnsupportedLiteral("binary number")),
+        ExprKind::NumericBuffer(_) => Err(CurrentLowerError::UnsupportedLiteral("numeric buffer")),
+        ExprKind::Sid(_) | ExprKind::Call(_, _) => {
+            Err(CurrentLowerError::UnsupportedLegacyIdentity)
         }
-        ExprKind::NumericBuffer(_) => {
-            Err(CurrentLowerError::UnsupportedLiteral("numeric buffer"))
-        }
-        ExprKind::Sid(_) | ExprKind::Call(_, _) => Err(CurrentLowerError::UnsupportedLegacyIdentity),
         ExprKind::DomainIdentity(_) => Err(CurrentLowerError::UnsupportedDomainIdentity),
-        ExprKind::DomainCall(_, _) => {
-            Err(CurrentLowerError::UnsupportedLiteral("call in quote"))
-        }
-        ExprKind::Local { .. } => {
-            Err(CurrentLowerError::UnsupportedLiteral("resolved local in quote"))
-        }
+        ExprKind::DomainCall(_, _) => Err(CurrentLowerError::UnsupportedLiteral("call in quote")),
+        ExprKind::Local { .. } => Err(CurrentLowerError::UnsupportedLiteral(
+            "resolved local in quote",
+        )),
     }
 }
 
@@ -152,11 +167,13 @@ fn lower_expr(expr: &Expr) -> Result<Ir, CurrentLowerError> {
         )),
         ExprKind::BinaryNumber(_) => Err(CurrentLowerError::UnsupportedLiteral("binary number")),
         ExprKind::NumericBuffer(_) => Err(CurrentLowerError::UnsupportedLiteral("numeric buffer")),
-        ExprKind::Sid(_) | ExprKind::Call(_, _) => Err(CurrentLowerError::UnsupportedLegacyIdentity),
+        ExprKind::Sid(_) | ExprKind::Call(_, _) => {
+            Err(CurrentLowerError::UnsupportedLegacyIdentity)
+        }
         ExprKind::DomainIdentity(_) => Err(CurrentLowerError::UnsupportedDomainIdentity),
         ExprKind::DomainCall(identity, arguments) => {
             lower_domain_call((*identity).into(), arguments)
-        },
+        }
         ExprKind::Local { .. } => Err(CurrentLowerError::UnsupportedLiteral("resolved local")),
     }
 }
@@ -180,7 +197,11 @@ fn lower_lambda(arguments: &[Expr]) -> Result<Ir, CurrentLowerError> {
                 })
                 .collect::<Result<Vec<_>, _>>()?,
         ),
-        _ => return Err(CurrentLowerError::UnsupportedLiteral("lambda parameter list")),
+        _ => {
+            return Err(CurrentLowerError::UnsupportedLiteral(
+                "lambda parameter list",
+            ));
+        }
     };
 
     let body = lower_expr(&arguments[1])?;
@@ -235,8 +256,9 @@ fn primitive_arity(
         sens::CompilerLoweringRole::AtomPredicate
         | sens::CompilerLoweringRole::SelectorTail
         | sens::CompilerLoweringRole::SelectorHead => ("unary compiler mechanism", 1),
-        sens::CompilerLoweringRole::AtomEquality
-        | sens::CompilerLoweringRole::PairConstruct => ("binary compiler mechanism", 2),
+sens::CompilerLoweringRole::AtomEquality | sens::CompilerLoweringRole::PairConstruct => {
+            ("binary compiler mechanism", 2)
+        }
         sens::CompilerLoweringRole::QuoteForm => ("quote", 1),
         sens::CompilerLoweringRole::CondForm => return Ok(()),
         sens::CompilerLoweringRole::LambdaForm => ("lambda", 2),
@@ -287,10 +309,12 @@ fn lower_domain_call(
 }
 
 /// Lower the complete current SENS source to CML IR without legacy semantic routing.
-pub fn lower_current_sens_source(source: &str) -> Result<CurrentSensProgram, CurrentLowerError> {
+pub fn lower_current_sens_source(
+    source: &str,
+) -> Result<CurrentSensProgram, CurrentLowerError> {
     let authority = pinned_authority()?;
-    let parsed = sens::parse(source)
-        .map_err(|error| CurrentLowerError::Parse(error.to_string()))?;
+    let parsed =
+        sens::parse(source).map_err(|error| CurrentLowerError::Parse(error.to_string()))?;
     let lowered = sens::lower_program(&parsed);
 
     Ok(CurrentSensProgram {
@@ -310,8 +334,7 @@ mod tests {
 
     #[test]
     fn current_nucleus_lowers_without_legacy_identity() {
-        let program = lower_current_sens_source(NUCLEUS)
-            .expect("current nucleus must lower");
+        let program = lower_current_sens_source(NUCLEUS).expect("current nucleus must lower");
         assert!(!program.ir.is_empty());
 
         fn walk(ir: &Ir, count: &mut usize) {
@@ -319,8 +342,7 @@ mod tests {
                 Ir::Prim { op, args } => {
                     if matches!(
                         op,
-                        PrimOp::CompilerMechanism(_)
-                            | PrimOp::CompilerConditionalExactD1(_)
+                        PrimOp::CompilerMechanism(_) | PrimOp::CompilerConditionalExactD1(_)
                     ) {
                         *count += 1;
                     }
