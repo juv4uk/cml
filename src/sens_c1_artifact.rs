@@ -119,9 +119,7 @@ fn c_value_expr(value: &sens::Value) -> Result<String, C1ArtifactError> {
         )),
         sens::Value::String(text) => Ok(c_string(text)),
         sens::Value::Symbol(symbol) => {
-            let escaped = symbol
-                .replace('\\', "\\\\")
-                .replace('"', "\\\"");
+            let escaped = symbol.replace('\\', "\\\\").replace('"', "\\"");
             Ok(format!("mk_sym(\"{escaped}\")"))
         }
         sens::Value::Pair(head, tail) => Ok(format!(
