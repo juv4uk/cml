@@ -1,20 +1,13 @@
 name: Issue 598 compiler artifact provenance
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "src/compiler_artifact.rs"
-      - "src/lib.rs"
-      - "tests/domain_bridge_slot_vertical_494_test.rs"
-      - ".github/workflows/issue-598-focused.yml"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Targets the known CML CPU host label directly; Guix availability is verified
-# by the guix-shell commands themselves rather than by scheduler metadata.
+# Manual-only provenance audit. It is intentionally excluded from automatic GPU-only CI.
 jobs:
   focused:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
