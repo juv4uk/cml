@@ -480,6 +480,99 @@ mod tests {
         sens::wire_encode_program(&lowered)
     }
 
+    fn test_symbol(name: &str) -> sens::Expr {
+        sens::Expr {
+            kind: sens::ExprKind::Symbol(Rc::from(name)),
+            span: sens::Span::default(),
+        }
+    }
+
+    fn test_list(items: Vec<sens::Expr>) -> sens::Expr {
+        sens::Expr {
+            kind: sens::ExprKind::List(Rc::from(items.into_boxed_slice())),
+            span: sens::Span::default(),
+        }
+    }
+
+    fn d3(bits: u8) -> sens::CoreDomainIdentity {
+        sens::CoreDomainIdentity::D3(sens::Bija3::from_word(
+            sens::Bit3::new(bits).expect("D3 test identity"),
+        ))
+    }
+
+    fn d4(bits: u8) -> sens::CoreDomainIdentity {
+        sens::CoreDomainIdentity::D4(sens::CoreD4::from_word(
+            sens::Bit4::new(bits).expect("D4 test identity"),
+        ))
+    }
+
+    fn test_call(identity: sens::CoreDomainIdentity, args: Vec<sens::Expr>) -> sens::Expr {
+        sens::Expr {
+            kind: sens::ExprKind::DomainCall(identity, Rc::from(args.into_boxed_slice())),
+            span: sens::Span::default(),
+        }
+    }
+
+    fn minimal_current_programs() -> Vec<(&'static str, Vec<sens::Expr>)> {
+        vec![
+            ("quote", vec![test_call(d3(0b001), vec![test_symbol("x")])]),
+            ("atom", vec![test_call(d3(0b010), vec![test_symbol("x")])]),
+            ("cdr", vec![test_call(d3(0b011), vec![test_symbol("x")])]),
+            ("car", vec![test_call(d3(0b100), vec![test_symbol("x")])]),
+            (
+                "eq",
+                vec![test_call(
+                    d3(0b101),
+                    vec![test_symbol("x"), test_symbol("y")],
+                )],
+            ),
+            (
+                "cond",
+                vec![test_call(
+                    d3(0b110),
+                    vec![test_list(vec![test_symbol("x"), test_symbol("y")])],
+                )],
+            ),
+            (
+                "cons",
+                vec![test_call(
+                    d3(0b111),
+                    vec![test_symbol("x"), test_symbol("y")],
+                )],
+            ),
+            (
+                "lambda",
+                vec![test_call(
+                    d4(0b0010),
+                    vec![test_list(vec![test_symbol("x")]), test_symbol("x")],
+                )],
+            ),
+            (
+                "define",
+                vec![test_call(
+                    d4(0b0011),
+                    vec![test_symbol("f"), test_symbol("x")],
+                )],
+            ),
+        ]
+    }
+
+    fn run_c1(binary_path: &std::path::Path, wire: &[u8]) -> std::process::Output {
+        let mut child = Command::new(binary_path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("C1 executable must start");
+        child
+            .stdin
+            .take()
+            .expect("C1 stdin pipe")
+            .write_all(wire)
+            .expect("program wire reaches C1");
+        child.wait_with_output().expect("C1 executable must finish")
+    }
+
     fn expected_sens_artifact(wire: &[u8], sens_revision: &str) -> Vec<u8> {
         let decoded = sens::wire_decode_program(wire).expect("canonical SW1 program wire");
         let program = sens::Value::list(decoded.iter().map(expr_program_data));
@@ -580,19 +673,22 @@ mod tests {
             String::from_utf8_lossy(&compile.stderr)
         );
 
-        let mut child = Command::new(&binary_path)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("C1 executable must start");
-        child
-            .stdin
-            .take()
-            .expect("C1 stdin pipe")
-            .write_all(&wire)
-            .expect("identical compiler program wire reaches C1");
-        let run = child.wait_with_output().expect("C1 executable must finish");
+        for (label, program) in minimal_current_programs() {
+            let role_wire = sens::wire_encode_program(&program);
+            let role_expected = expected_sens_artifact(&role_wire, &artifact.authority.revision);
+            let role_run = run_c1(&binary_path, &role_wire);
+            assert!(
+                role_run.status.success(),
+                "generated C1 failed minimal {label} program: {}",
+                String::from_utf8_lossy(&role_run.stderr)
+            );
+            assert_eq!(
+                role_run.stdout, role_expected,
+                "compiled C1 diverged from SENS oracle on minimal {label} program"
+            );
+        }
+
+        let run = run_c1(&binary_path, &wire);
         assert!(
             run.status.success(),
             "generated C1 executable failed: {}",
