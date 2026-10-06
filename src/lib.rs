@@ -1,6 +1,7 @@
 pub mod accelerator;
 pub mod ast;
 pub mod build;
+mod c1_driver_runtime;
 pub mod c_backend;
 pub mod canon;
 pub mod compiler;
