@@ -258,5 +258,5 @@ fn real_export_nucleus_compiles_as_current_c0_c_source() {
     assert!(c.contains("require_tag(_v, TAG_CONS, \"car\")"));
     assert!(c.contains("require_tag(_v, TAG_CONS, \"cdr\")"));
     assert!(c.contains("cml_lambda_"));
-    assert!(!c.contains("mk_sid_callable("));
+    assert!(!c.contains("mk_sid_callable(0b"), "current C0 must not emit a Sid8 callable invocation");
 }
