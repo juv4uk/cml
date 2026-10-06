@@ -15,8 +15,14 @@ fn runtime_prefix() -> String {
 fn exact_domain_transport_preserves_width_payload_and_shape_without_semantic_dispatch() {
     let source = format!(
         r#"{}
-int main(void) {{
+int main(int argc, char **argv) {{
     bootstrap_builtins();
+
+    if (argc > 1 && strcmp(argv[1], "forbidden-sid") == 0) {{
+        const uint8_t legacy_sid_wire[] = {{0x53u, 0x57u, 0x01u, 0x01u, 0x51u}};
+        (void)decode_sens_program_wire(legacy_sid_wire, sizeof(legacy_sid_wire));
+        return 90;
+    }}
 
     Value *d3 = mk_domain_identity(3, 2);
     Value *d3_same = mk_domain_identity(3, 2);
