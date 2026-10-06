@@ -11,6 +11,8 @@
 //! and `main.rs` for the live `parse -> macro-expand -> lower -> backend`
 //! pipeline.
 
+use crate::compiler_mechanism::RichCompilerMechanismRef;
+
 /// A fully self-contained literal produced by `quote` -- data, never
 /// executed. Kept separate from `Ir` itself because quoted data has no
 /// binding structure (no `Var`, no `App`) to normalize.
@@ -68,6 +70,12 @@ pub enum PrimOp {
     /// Integer quotient (truncate toward zero). Distinct from `/` which may
     /// return rationals; quotient always returns an exact integer.
     Quotient,
+    /// CML-private current-SENS mechanism marker. The semantic role has already
+    /// been admitted by SENS; this IR value contains only target mechanism data.
+    CompilerMechanism(RichCompilerMechanismRef),
+    /// CML-private exact-D1 conditional mechanism. Its arguments encode
+    /// consecutive (test, body) pairs after SENS has validated D3 COND.
+    CompilerConditionalExactD1(RichCompilerMechanismRef),
 }
 
 /// Bounded machine-level primitives for direct physical machine access.
