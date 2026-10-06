@@ -576,6 +576,17 @@ mod tests {
     }
 
     #[test]
+    fn role_law_reference_matches_sens_native_definition() {
+        assert!(COMPILER_NUCLEUS.contains(
+            "(визначити compiler-lowering-role-from-laws"
+        ));
+        assert!(COMPILER_NUCLEUS.contains(
+            COMPILER_ROLE_LAW_REF
+                .trim_start_matches("lib/compiler-nucleus.lisp:")
+        ));
+    }
+
+    #[test]
     fn all_current_nucleus_roles_are_verified_by_sens_before_rich_binding() {
         let cases = [
             (d3(0b001), sens::CompilerLoweringRole::QuoteForm),
