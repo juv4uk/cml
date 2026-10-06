@@ -1,3 +1,5 @@
+use crate::compiler_mechanism::RichCompilerMechanismRef;
+
 //! Backend-neutral intermediate representation.
 //!
 //! Step 1 of docs/heterogeneous-backends.md: "draw the backend boundary
@@ -68,6 +70,12 @@ pub enum PrimOp {
     /// Integer quotient (truncate toward zero). Distinct from `/` which may
     /// return rationals; quotient always returns an exact integer.
     Quotient,
+    /// CML-private current-SENS mechanism marker. The semantic role has already
+    /// been admitted by SENS; this IR value contains only target mechanism data.
+    CompilerMechanism(RichCompilerMechanismRef),
+    /// CML-private exact-D1 conditional mechanism. Its arguments encode
+    /// consecutive (test, body) pairs after SENS has validated D3 COND.
+    CompilerConditionalExactD1(RichCompilerMechanismRef),
 }
 
 /// Bounded machine-level primitives for direct physical machine access.
