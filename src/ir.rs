@@ -1,3 +1,5 @@
+use crate::compiler_mechanism::RichCompilerMechanismRef;
+
 //! Backend-neutral intermediate representation.
 //!
 //! Step 1 of docs/heterogeneous-backends.md: "draw the backend boundary
@@ -168,6 +170,13 @@ pub enum Ir {
     },
     Prim {
         op: PrimOp,
+        args: Vec<Ir>,
+    },
+    /// CML-private current-domain mechanism admitted only after the
+    /// proof-carrying SENS rich-role bridge. This carries no SENS identity,
+    /// bits, surface spelling, or legacy Sid8 value.
+    RichPrim {
+        mechanism: RichCompilerMechanismRef,
         args: Vec<Ir>,
     },
     /// A bounded machine primitive instruction that lowers directly to native CPU instructions.
