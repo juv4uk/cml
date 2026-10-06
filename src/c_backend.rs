@@ -201,19 +201,6 @@ static Value *domain_identity_shape(Value *identity) {
     return mk_cons(mk_int(width), mk_cons(bit_list, &NIL_V));
 }
 
-static Value *builtin_domain_identity_shape(Value *args, Value *env) {
-    (void)env;
-    require_arity(args, 1, "domain-identity-shape");
-    return domain_identity_shape(arg_at(args, 0));
-}
-
-static Value *builtin_domain_identity_shape_or_empty(Value *args, Value *env) {
-    (void)env;
-    require_arity(args, 1, "domain-identity-shape-or-empty");
-    Value *value = arg_at(args, 0);
-    if (value->tag != TAG_DOMAIN_IDENTITY) return &NIL_V;
-    return domain_identity_shape(value);
-}
 
 static long rational_gcd(long a, long b) {
     if (a < 0) a = -a;
@@ -505,6 +492,18 @@ static Value *builtin_div(Value *args, Value *env) {
         args = v_cdr(args);
     }
     return result;
+}
+static Value *builtin_domain_identity_shape(Value *args, Value *env) {
+    (void)env;
+    require_arity(args, 1, "domain-identity-shape");
+    return domain_identity_shape(arg_at(args, 0));
+}
+static Value *builtin_domain_identity_shape_or_empty(Value *args, Value *env) {
+    (void)env;
+    require_arity(args, 1, "domain-identity-shape-or-empty");
+    Value *value = arg_at(args, 0);
+    if (value->tag != TAG_DOMAIN_IDENTITY) return &NIL_V;
+    return domain_identity_shape(value);
 }
 static Value *builtin_cons(Value *args, Value *env) { (void)env; require_arity(args, 2, "cons"); return mk_cons(arg_at(args, 0), arg_at(args, 1)); }
 static Value *builtin_car(Value *args, Value *env) { (void)env; require_arity(args, 1, "car"); require_tag(arg_at(args, 0), TAG_CONS, "car"); return v_car(arg_at(args, 0)); }
