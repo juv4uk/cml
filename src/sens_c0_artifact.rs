@@ -287,14 +287,25 @@ mod tests {
         assert_eq!(artifact.backend_id, C0_BACKEND_ID);
         assert_eq!(artifact.artifact_format, C0_ARTIFACT_FORMAT);
         assert_eq!(artifact.cml_revision, TEST_CML_REVISION);
-        assert_eq!(artifact.authority.revision, "f2e7797283c8dfc2aa67935a02b3735a8290041f");
+        assert_eq!(
+            artifact.authority.revision,
+            "f2e7797283c8dfc2aa67935a02b3735a8290041f"
+        );
         assert_eq!(artifact.authority.language_contract_version, "11.6");
         assert!(artifact.c_source.contains("v_atom_predicate("));
         assert!(artifact.c_source.contains("v_eq_predicate("));
         assert!(artifact.c_source.contains("require_predicate_bit("));
         assert!(artifact.c_source.contains("mk_cons("));
-        assert!(artifact.c_source.contains("require_tag(_v, TAG_CONS, \"car\")"));
-        assert!(artifact.c_source.contains("require_tag(_v, TAG_CONS, \"cdr\")"));
+        assert!(
+            artifact
+                .c_source
+                .contains("require_tag(_v, TAG_CONS, \"car\")")
+        );
+        assert!(
+            artifact
+                .c_source
+                .contains("require_tag(_v, TAG_CONS, \"cdr\")")
+        );
         assert!(!artifact.c_source.contains("mk_sid_callable(0b"));
 
         let encoded = artifact.encode_v1().expect("C0 artifact encoding");
@@ -309,10 +320,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock after epoch")
             .as_nanos();
-        let base = std::env::temp_dir().join(format!(
-            "cml-sens-c0-{}-{nonce}",
-            std::process::id()
-        ));
+        let base = std::env::temp_dir().join(format!("cml-sens-c0-{}-{nonce}", std::process::id()));
         let source_path = base.with_extension("c");
         let binary_path = base.with_extension("bin");
         std::fs::write(&source_path, &artifact.c_source).expect("write generated C0 source");
