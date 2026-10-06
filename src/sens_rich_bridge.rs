@@ -16,8 +16,7 @@ const COMPILER_NUCLEUS: &str = include_str!("../external/sens/lib/compiler-nucle
 const D3_PROOF: &str = include_str!("../external/sens/contracts/bija3-l1-l5-ratification.lisp");
 const D4_PROOF: &str = include_str!("../external/sens/contracts/d4-bootstrap-ratification.lisp");
 
-const COMPILER_ROLE_LAW_REF: &str =
-    "lib/compiler-nucleus.lisp:compiler-lowering-role-from-laws";
+const COMPILER_ROLE_LAW_REF: &str = "lib/compiler-nucleus.lisp:compiler-lowering-role-from-laws";
 const D3_PROOF_REF: &str = "contracts/bija3-l1-l5-ratification.lisp";
 const D4_PROOF_REF: &str = "contracts/d4-bootstrap-ratification.lisp";
 
