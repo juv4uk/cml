@@ -26,9 +26,9 @@ jobs:
 
       - name: Verify canonical producer-owned SENS pin
         run: |
-          test "$(git -C external/sens rev-parse HEAD)" = "f2e7797283c8dfc2aa67935a02b3735a8290041f"
-          grep -q '(build-source-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
-          grep -q '(supported-pin-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
+          test "$(git -C external/sens rev-parse HEAD)" = "c66d4743bb70882c75376dbcec27d393e5a9649d"
+          grep -q '(build-source-sha . "c66d4743bb70882c75376dbcec27d393e5a9649d")' upstream-revisions.lisp
+          grep -q '(supported-pin-sha . "c66d4743bb70882c75376dbcec27d393e5a9649d")' upstream-revisions.lisp
 
       - name: Focused formatting
         run: >-
