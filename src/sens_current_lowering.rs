@@ -37,10 +37,7 @@ pub enum CurrentLowerError {
 impl fmt::Display for CurrentLowerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Parse(message) => write!(
-                f,
-                "SENS current-source parse/lower failure: {message}"
-            ),
+            Self::Parse(message) => write!(f, "SENS current-source parse/lower failure: {message}"),
             Self::UnsupportedLegacyIdentity => {
                 write!(
                     f,
@@ -268,7 +265,7 @@ fn primitive_arity(
         sens::CompilerLoweringRole::AtomPredicate
         | sens::CompilerLoweringRole::SelectorTail
         | sens::CompilerLoweringRole::SelectorHead => ("unary compiler mechanism", 1),
-sens::CompilerLoweringRole::AtomEquality | sens::CompilerLoweringRole::PairConstruct => {
+        sens::CompilerLoweringRole::AtomEquality | sens::CompilerLoweringRole::PairConstruct => {
             ("binary compiler mechanism", 2)
         }
         sens::CompilerLoweringRole::QuoteForm => ("quote", 1),
@@ -317,9 +314,7 @@ fn lower_domain_call(
 }
 
 /// Lower the complete current SENS source to CML IR without legacy semantic routing.
-pub fn lower_current_sens_source(
-    source: &str,
-) -> Result<CurrentSensProgram, CurrentLowerError> {
+pub fn lower_current_sens_source(source: &str) -> Result<CurrentSensProgram, CurrentLowerError> {
     let authority = pinned_authority()?;
     let parsed =
         sens::parse(source).map_err(|error| CurrentLowerError::Parse(error.to_string()))?;
