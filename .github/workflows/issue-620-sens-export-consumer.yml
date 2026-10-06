@@ -45,9 +45,9 @@ jobs:
 
       - name: Verify full-export SENS pin
         run: |
-          test "$(git -C external/sens rev-parse HEAD)" = "a42b5da66fbd4aa09dbe92234e2c11aef048a255"
-          grep -q '(build-source-sha . "a42b5da66fbd4aa09dbe92234e2c11aef048a255")' upstream-revisions.lisp
-          grep -q '(supported-pin-sha . "a42b5da66fbd4aa09dbe92234e2c11aef048a255")' upstream-revisions.lisp
+          test "$(git -C external/sens rev-parse HEAD)" = "f2e7797283c8dfc2aa67935a02b3735a8290041f"
+          grep -q '(build-source-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
+          grep -q '(supported-pin-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
 
       - name: Focused formatting
         run: >-
