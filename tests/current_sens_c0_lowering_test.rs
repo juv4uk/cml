@@ -158,6 +158,8 @@ fn current_sens_nucleus_compiles_as_executable_c0_c_source() {
     assert!(c.contains("v_eq_predicate("));
     assert!(c.contains("require_predicate_bit("));
     assert!(c.contains("mk_cons("));
+    assert!(c.contains("require_tag(_v, TAG_CONS, \"car\")"));
+    assert!(c.contains("require_tag(_v, TAG_CONS, \"cdr\")"));
     assert!(c.contains("cml_lambda_"));
     assert!(!c.contains("mk_sid_callable("));
 }
