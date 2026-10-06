@@ -61,6 +61,8 @@ jobs:
           cargo test -p cml --lib sens_current_lowering::tests -- --nocapture
 
       - name: C1 artifact proof and executable witness
+        env:
+          CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: >-
           guix shell --pure -m manifest.scm --
           cargo test -p cml --lib sens_c1_artifact::tests -- --nocapture

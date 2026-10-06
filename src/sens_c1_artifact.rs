@@ -285,7 +285,14 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     const SOURCE: &str = include_str!("../external/sens/lib/compiler-nucleus.lisp");
-    const TEST_CML_REVISION: &str = "3fda3cdb087a24b3e124c811abff90803028518c";
+    const FALLBACK_CML_REVISION: &str = "3fda3cdb087a24b3e124c811abff90803028518c";
+
+    fn producer_cml_revision() -> String {
+        std::env::var("CML_PRODUCER_SHA")
+            .ok()
+            .filter(|sha| valid_hex(sha, 40))
+            .unwrap_or_else(|| FALLBACK_CML_REVISION.to_string())
+    }
 
     fn pinned_compiler_export() -> &'static str {
         static EXPORT: OnceLock<String> = OnceLock::new();
@@ -332,8 +339,9 @@ mod tests {
     #[test]
     fn c1_bundle_carries_source_export_proof_and_provenance() {
         let export = pinned_compiler_export();
-        let artifact =
-            build_current_sens_c1(SOURCE, export, TEST_CML_REVISION).expect("current nucleus C1 artifact");
+        let cml_revision = producer_cml_revision();
+        let artifact = build_current_sens_c1(SOURCE, export, &cml_revision)
+            .expect("current nucleus C1 artifact");
 
         assert_eq!(artifact.source, SOURCE);
         assert_eq!(artifact.backend_id, C1_BACKEND_ID);
@@ -342,7 +350,7 @@ mod tests {
             artifact.authority.revision,
             "f2e7797283c8dfc2aa67935a02b3735a8290041f"
         );
-        assert_eq!(artifact.cml_revision, TEST_CML_REVISION);
+        assert_eq!(artifact.cml_revision, cml_revision);
         assert!(artifact.compiler_export.contains("(proof-ref . "));
         assert!(
             artifact
@@ -371,9 +379,9 @@ mod tests {
 
     #[test]
     fn c1_source_compiles_and_executes() {
-        let artifact =
-            build_current_sens_c1(SOURCE, pinned_compiler_export(), TEST_CML_REVISION)
-                .expect("current nucleus C1 artifact");
+        let cml_revision = producer_cml_revision();
+        let artifact = build_current_sens_c1(SOURCE, pinned_compiler_export(), &cml_revision)
+            .expect("current nucleus C1 artifact");
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock after epoch")
@@ -422,7 +430,7 @@ mod tests {
         assert_ne!(tampered, export);
 
         assert!(
-            build_current_sens_c1(SOURCE, &tampered, TEST_CML_REVISION).is_err(),
+            build_current_sens_c1(SOURCE, &tampered, &producer_cml_revision()).is_err(),
             "same payload under the wrong domain must fail before C1 artifact emission"
         );
     }
@@ -431,7 +439,12 @@ mod tests {
     fn modified_source_cannot_reuse_current_nucleus_proof_export() {
         let modified = format!("{SOURCE}\n; modified");
         assert_eq!(
-            build_current_sens_c1(&modified, pinned_compiler_export(), TEST_CML_REVISION).unwrap_err(),
+            build_current_sens_c1(
+                &modified,
+                pinned_compiler_export(),
+                &producer_cml_revision(),
+            )
+            .unwrap_err(),
             C1ArtifactError::WrongSourceBundle
         );
     }
