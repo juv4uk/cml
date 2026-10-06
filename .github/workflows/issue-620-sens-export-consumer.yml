@@ -45,10 +45,10 @@ jobs:
 
       - name: Verify full-export SENS pin
         run: |
-          test "$(git -C external/sens rev-parse HEAD)" = "ce33bd30ca48e297a3e4666ed6dd6e33e8725f6f"
-          grep -q '(build-source-sha . "ce33bd30ca48e297a3e4666ed6dd6e33e8725f6f")' upstream-revisions.lisp
-          grep -q '(supported-pin-sha . "ce33bd30ca48e297a3e4666ed6dd6e33e8725f6f")' upstream-revisions.lisp
-          grep -q '(observed-current-sha . "ce33bd30ca48e297a3e4666ed6dd6e33e8725f6f")' upstream-revisions.lisp
+          test "$(git -C external/sens rev-parse HEAD)" = "bb71142a27ce6e62e7aa2a5c0868e605456beadf"
+          grep -q '(build-source-sha . "bb71142a27ce6e62e7aa2a5c0868e605456beadf")' upstream-revisions.lisp
+          grep -q '(supported-pin-sha . "bb71142a27ce6e62e7aa2a5c0868e605456beadf")' upstream-revisions.lisp
+          grep -q '(observed-current-sha . "bb71142a27ce6e62e7aa2a5c0868e605456beadf")' upstream-revisions.lisp
 
       - name: Focused formatting
         run: >-
