@@ -26,7 +26,7 @@ concurrency:
 jobs:
   focused:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, guix]
+    runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
     timeout-minutes: 30
     steps:
       - name: Require private dependency read token
@@ -63,6 +63,21 @@ jobs:
         run: >-
           guix shell --pure -m manifest.scm --
           cargo test -p cml --test current_sens_c0_lowering_test -- --nocapture
+
+      - name: Current exact D1 carrier regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --test current_d1_c_backend_test -- --nocapture
+
+      - name: Current exact D1 COND codegen regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --test current_d1_cond_codegen_test -- --nocapture
+
+      - name: Current exact D1 COND executable regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --test current_d1_cond_backend_test -- --nocapture
 
       - name: Existing C backend regression
         run: >-
