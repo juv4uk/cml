@@ -784,8 +784,7 @@ impl CBackend {
         env: &str,
     ) -> Result<String, CompileError> {
         match op {
-            PrimOp::CompilerMechanism(mechanism) => {
-                match mechanism {
+            PrimOp::CompilerMechanism(mechanism) => match mechanism {
                     RichCompilerMechanismRef::AtomPredicateD1 => {
                         if args.len() != 1 {
                             return Err(CompileError::UnsupportedVariant("current ATOM arity"));
@@ -823,20 +822,23 @@ impl CBackend {
                         let tail = self.compile_expr(&args[1], env)?;
                         Ok(format!("mk_cons({head}, {tail})"))
                     }
-                    RichCompilerMechanismRef::Quote
-                    | RichCompilerMechanismRef::ConditionalD1
-                    | RichCompilerMechanismRef::Lambda
-                    | RichCompilerMechanismRef::Define => {
-                        Err(CompileError::UnsupportedVariant("non-call compiler mechanism"))
-                    }
-                }
-            }
+                RichCompilerMechanismRef::Quote
+                | RichCompilerMechanismRef::ConditionalD1
+                | RichCompilerMechanismRef::Lambda
+                | RichCompilerMechanismRef::Define => Err(CompileError::UnsupportedVariant(
+                    "non-call compiler mechanism",
+                )),
+            },
             PrimOp::CompilerConditionalExactD1(mechanism) => {
                 if *mechanism != RichCompilerMechanismRef::ConditionalD1 {
-                    return Err(CompileError::UnsupportedVariant("compiler conditional mechanism"));
+                    return Err(CompileError::UnsupportedVariant(
+                        "compiler conditional mechanism",
+                    ));
                 }
                 if args.len() % 2 != 0 {
-                    return Err(CompileError::UnsupportedVariant("current COND branch arity"));
+                    return Err(CompileError::UnsupportedVariant(
+                        "current COND branch arity",
+                    ));
                 }
 
                 let mut out = String::from("({ Value *_c;");
