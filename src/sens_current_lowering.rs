@@ -474,7 +474,7 @@ mod tests {
         assert!(matches!(
             lower_domain_call(
                 match wrong.kind {
-                    ExprKind::DomainCall(identity, _) => identity,
+                    ExprKind::DomainCall(identity, _) => identity.into(),
                     _ => unreachable!(),
                 },
                 &[],
