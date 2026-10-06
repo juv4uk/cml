@@ -1,26 +1,7 @@
 name: GPU SENS compiler export consumer
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "external/sens"
-      - "upstream-revisions.lisp"
-      - "src/lib.rs"
-      - "src/sens_compiler_export.rs"
-      - "src/sens_domain_bridge.rs"
-      - "src/sens_rich_bridge.rs"
-      - "tests/sens_compiler_export_consumer_test.rs"
-      - ".github/workflows/issue-620-sens-export-consumer.yml"
-  push:
-    branches: [master]
-    paths:
-      - "external/sens"
-      - "upstream-revisions.lisp"
-      - "src/sens_compiler_export.rs"
-      - "src/sens_domain_bridge.rs"
-      - "src/sens_rich_bridge.rs"
-      - "tests/sens_compiler_export_consumer_test.rs"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
