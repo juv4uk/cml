@@ -50,12 +50,13 @@ jobs:
           grep -q '(supported-pin-sha . "1869fd5e51f38565ca968abceaa4bc933ae7a114")' upstream-revisions.lisp
 
       - name: Focused formatting
-        run: >-
-          guix shell --pure -m manifest.scm --
-          rustfmt --edition 2024 --check
-          src/sens_compilation_artifact.rs
-          src/sens_c1_artifact.rs
-          src/lib.rs
+        run: |
+          set -euo pipefail
+          guix shell --pure -m manifest.scm -- \
+            rustfmt --edition 2024 --check \
+            src/sens_compilation_artifact.rs \
+            src/sens_c1_artifact.rs
+          grep -qx 'pub mod sens_compilation_artifact;' src/lib.rs
 
       - name: Canonical CompilationArtifact verification
         run: >-
