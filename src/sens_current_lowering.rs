@@ -196,8 +196,13 @@ fn lower_quoted(expr: &Expr) -> Result<Quoted, CurrentLowerError> {
             .ok_or(CurrentLowerError::UnsupportedLiteral("non-integer number")),
         ExprKind::Rational(_) => Err(CurrentLowerError::UnsupportedLiteral("rational")),
         ExprKind::String(value) => Ok(Quoted::Str(value.to_string())),
+        // In the current SENS path a quoted symbol is semantic data, not
+        // a CML target identifier. Preserve its exact source bytes so the
+        // compiled self-host artifact has the same canonical evidence as the
+        // SENS oracle. Generic CML lowering may keep its legacy identifier
+        // normalization; this authority path must not.
         ExprKind::Symbol(symbol) => Ok(Quoted::Sym {
-            uppercased: symbol.to_uppercase(),
+            uppercased: symbol.to_string(),
             original: symbol.to_string(),
         }),
         ExprKind::List(items) => Ok(Quoted::List(
@@ -452,6 +457,21 @@ mod tests {
         }
         assert!(source.contains("verify_exported_request(request)?"));
         assert!(source.contains("registry.lookup(identity)?"));
+    }
+
+    #[test]
+    fn current_quoted_symbol_preserves_exact_source_identity() {
+        let expr = Expr {
+            kind: ExprKind::Symbol(std::rc::Rc::from("quote-form")),
+            span: sens::Span::default(),
+        };
+        assert_eq!(
+            lower_quoted(&expr).unwrap(),
+            Quoted::Sym {
+                uppercased: "quote-form".to_string(),
+                original: "quote-form".to_string(),
+            }
+        );
     }
 
     #[test]

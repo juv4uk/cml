@@ -25,6 +25,7 @@
 //! walking it), just implemented directly as C structs instead of tagged
 //! 32-bit words on a heap array.
 
+use crate::c1_driver_runtime::C1_DRIVER_RUNTIME;
 use crate::compiler_mechanism::RichCompilerMechanismRef;
 use crate::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
 use std::fmt;
@@ -96,6 +97,7 @@ pub struct CBackend {
     functions: Vec<String>,
     fn_counter: usize,
     conditional_mechanism: CConditionalMechanism,
+    preserve_quoted_symbol_spelling: bool,
 }
 
 const RUNTIME: &str = r##"
@@ -195,7 +197,9 @@ static Value *domain_identity_shape(Value *identity) {
     uint8_t width = identity->u.domain_identity.width;
     uint8_t bits = identity->u.domain_identity.packed_bits;
     Value *bit_list = &NIL_V;
-    for (int index = (int)width - 1; index >= 0; --index) {
+    /* cons prepends, so consume packed bits LSB->MSB to materialize the
+     * source-order list MSB-first, matching SENS domain_identity_shape_mechanism. */
+    for (uint8_t index = 0; index < width; ++index) {
         bit_list = mk_cons(mk_predicate_bit((bits >> index) & 1u), bit_list);
     }
     return mk_cons(mk_int(width), mk_cons(bit_list, &NIL_V));
@@ -816,6 +820,7 @@ impl CBackend {
             functions: Vec::new(),
             fn_counter: 0,
             conditional_mechanism: CConditionalMechanism::CompatibilityTruthiness,
+            preserve_quoted_symbol_spelling: false,
         }
     }
 
@@ -840,6 +845,47 @@ impl CBackend {
     fn next_fn_name(&mut self) -> String {
         self.fn_counter += 1;
         format!("cml_lambda_{}", self.fn_counter)
+    }
+
+    /// Compile a definitions-only SENS nucleus with the C1 process driver.
+    ///
+    /// The supplied body may orchestrate bytes/runtime values and invoke
+    /// already-compiled closures only. Semantic traversal remains in SENS.
+    pub(crate) fn compile_program_with_c1_driver(
+        &mut self,
+        program: &[Ir],
+        driver_body: &str,
+    ) -> Result<String, CompileError> {
+        // The historical C backend canonicalizes quoted symbols to uppercase.
+        // Current SENS compiler evidence is case-sensitive data, so the C1
+        // selfhost lane must preserve the exact quoted spelling emitted by
+        // SENS. This flag is private backend mechanism policy; it does not
+        // select any SENS role or identity.
+        self.preserve_quoted_symbol_spelling = true;
+
+        let mut main_body = String::new();
+        for ir in program {
+            match ir {
+                Ir::Def { name, .. } => main_body.push_str(&self.compile_def_placeholder(name)),
+                _ => {
+                    return Err(CompileError::UnsupportedVariant(
+                        "C1 driver requires a definitions-only compiler nucleus",
+                    ));
+                }
+            }
+        }
+        for ir in program {
+            if let Ir::Def { name, value } = ir {
+                main_body.push_str(&self.compile_def_backpatch(name, value)?);
+            }
+        }
+        main_body.push_str(driver_body);
+
+        Ok(format!(
+            "{RUNTIME}\n{C1_DRIVER_RUNTIME}\n{}\n\nint main(void) {{\n    bootstrap_builtins();\n{}    return 0;\n}}\n",
+            self.functions.join("\n"),
+            main_body,
+        ))
     }
 
     /// Compiles a whole program into a self-contained C source file. Every
@@ -1046,10 +1092,19 @@ impl CBackend {
             Quoted::Int(n) => Ok(format!("mk_int({n})")),
             Quoted::Float(_) => Err(CompileError::UnsupportedVariant("Quoted::Float")),
             Quoted::Rational(num, den) => Ok(format!("mk_rational({num}, {den})")),
-            // c_backend.rs keys its symbol representation on the uppercased
-            // form, exactly as before cml#13 -- unaffected by that fix,
-            // which is scoped to the x86 freestanding backend.
-            Quoted::Sym { uppercased, .. } => Ok(format!("mk_sym(\"{uppercased}\")")),
+            // Compatibility compilation keeps the historical uppercase
+            // spelling; the C1 selfhost driver preserves exact SENS data.
+            Quoted::Sym {
+                uppercased,
+                original,
+            } => {
+                let spelling = if self.preserve_quoted_symbol_spelling {
+                    original
+                } else {
+                    uppercased
+                };
+                Ok(format!("mk_sym(\"{spelling}\")"))
+            }
             Quoted::Str(s) => Ok(format!("mk_sym(\"{s}\")")),
             Quoted::Nil => Ok("(&NIL_V)".to_string()),
             Quoted::List(items) => {

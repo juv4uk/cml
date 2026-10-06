@@ -36,6 +36,7 @@ pub struct CurrentSensC1Artifact {
 pub enum C1ArtifactError {
     Lower(CurrentLowerError),
     Backend(String),
+    Bootstrap(String),
     WrongSourceBundle,
     InvalidSourceSha,
     InvalidCompilerExportSha,
@@ -76,6 +77,107 @@ fn valid_hex(value: &str, len: usize) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+}
+
+fn c_string(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t");
+    format!("mk_string(\"{escaped}\")")
+}
+
+fn c_list(items: &[String]) -> String {
+    items
+        .iter()
+        .rev()
+        .fold("(&NIL_V)".to_string(), |tail, head| {
+            format!("mk_cons({head}, {tail})")
+        })
+}
+
+fn c_value_expr(value: &sens::Value) -> Result<String, C1ArtifactError> {
+    match value {
+        sens::Value::Nil => Ok("(&NIL_V)".to_string()),
+        sens::Value::Number(number, sens::Exactness::Exact)
+            if number.is_finite()
+                && number.fract() == 0.0
+                && *number >= i64::MIN as f64
+                && *number <= i64::MAX as f64 =>
+        {
+            Ok(format!("mk_int({})", *number as i64))
+        }
+        sens::Value::DomainIdentity(identity) if identity.width() == 1 => {
+            Ok(format!("mk_predicate_bit({})", identity.packed_bits()))
+        }
+        sens::Value::DomainIdentity(identity) => Ok(format!(
+            "mk_domain_identity({}, {})",
+            identity.width(),
+            identity.packed_bits()
+        )),
+        sens::Value::String(text) => Ok(c_string(text)),
+        sens::Value::Symbol(symbol) => {
+            let escaped = symbol.replace('\\', "\\\\").replace('"', "\\\"");
+            Ok(format!("mk_sym(\"{escaped}\")"))
+        }
+        sens::Value::Pair(head, tail) => Ok(format!(
+            "mk_cons({}, {})",
+            c_value_expr(head)?,
+            c_value_expr(tail)?
+        )),
+        other => Err(C1ArtifactError::Bootstrap(format!(
+            "unsupported verified SENS bootstrap value for C initializer: {other}"
+        ))),
+    }
+}
+
+fn c1_driver_body(
+    authority: &AuthorityProvenance,
+    bundle: &sens::CompilerProgramBootstrapBundle,
+) -> Result<String, C1ArtifactError> {
+    if bundle.authority_path != authority.authority_path
+        || bundle.authority_sha256 != authority.authority_sha256
+        || bundle.language_contract_version != authority.language_contract_version
+    {
+        return Err(C1ArtifactError::InvalidAuthority);
+    }
+
+    let d3_law = c_value_expr(&bundle.d3_law)?;
+    let d4_law = c_value_expr(&bundle.d4_law)?;
+    let request_provenance = c_value_expr(&bundle.request_provenance)?;
+    let artifact_provenance = c_list(&[
+        c_string(&authority.revision),
+        c_string(bundle.authority_path),
+        c_string(&bundle.authority_sha256),
+        c_string(bundle.language_contract_version),
+        c_string(&bundle.compiler_nucleus_sha256),
+    ]);
+    let args = c_list(&[
+        "mk_builtin(\"domain-identity-shape-or-empty\", builtin_domain_identity_shape_or_empty)"
+            .to_string(),
+        "mk_builtin(\"domain-identity-shape\", builtin_domain_identity_shape)".to_string(),
+        "mk_builtin(\"canonical-value-sha256\", builtin_canonical_value_sha256)".to_string(),
+        "program".to_string(),
+        d3_law,
+        d4_law,
+        c_string(bundle.d3_proof_ref),
+        c_string(bundle.d4_proof_ref),
+        request_provenance,
+        artifact_provenance,
+        "mk_string(program_wire_sha256)".to_string(),
+    ]);
+
+    Ok(format!(
+        "    size_t c1_input_len = 0;\n\
+         \x20   uint8_t *c1_input = c1_read_stdin_all(&c1_input_len);\n\
+         \x20   char *program_wire_sha256 = c1_sha256_hex_bytes(c1_input, c1_input_len);\n\
+         \x20   Value *program = decode_sens_program_wire(c1_input, c1_input_len);\n\
+         \x20   Value *entry = env_lookup(global_env, \"COMPILER-COMPILE-PROGRAM-ARTIFACT\");\n\
+         \x20   Value *artifact = v_apply(entry, {args});\n\
+         \x20   c1_write_compiler_evidence(artifact);\n"
+    ))
 }
 
 fn validate(artifact: &CurrentSensC1Artifact) -> Result<(), C1ArtifactError> {
@@ -152,14 +254,18 @@ pub fn build_current_sens_c1(
     }
 
     let lowered = lower_current_sens_source(source, compiler_export)?;
+    let bundle = sens::compiler_program_bootstrap_bundle()
+        .map_err(|error| C1ArtifactError::Bootstrap(error.to_string()))?;
+    let driver_body = c1_driver_body(&lowered.authority, &bundle)?;
+    let source_sha256 = sha256_hex(source.as_bytes());
     let mut backend = CBackend::new();
     let c_source = backend
-        .compile_program(&lowered.ir)
+        .compile_program_with_c1_driver(&lowered.ir, &driver_body)
         .map_err(|error| C1ArtifactError::Backend(error.to_string()))?;
 
     let artifact = CurrentSensC1Artifact {
         source: source.to_string(),
-        source_sha256: sha256_hex(source.as_bytes()),
+        source_sha256,
         compiler_export: compiler_export.to_string(),
         compiler_export_sha256: sha256_hex(compiler_export.as_bytes()),
         authority: lowered.authority,
@@ -280,7 +386,9 @@ impl<'a> Decoder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::Command;
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    use std::rc::Rc;
     use std::sync::OnceLock;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -336,6 +444,145 @@ mod tests {
             .as_str()
     }
 
+    fn expr_program_data(expr: &sens::Expr) -> sens::Value {
+        use sens::ExprKind;
+        match &expr.kind {
+            ExprKind::Number(value, exactness) => sens::Value::Number(*value, *exactness),
+            ExprKind::Rational(value) => sens::Value::Rational(value.clone()),
+            ExprKind::BinaryNumber(value) => sens::Value::BinaryNumber(value.clone()),
+            ExprKind::NumericBuffer(value) => sens::Value::NumericBuffer(value.clone()),
+            ExprKind::DomainIdentity(identity) => sens::Value::DomainIdentity(*identity),
+            ExprKind::String(value) => sens::Value::String(value.clone()),
+            ExprKind::Symbol(value) => sens::Value::Symbol(value.clone()),
+            ExprKind::List(items) => sens::Value::list(items.iter().map(expr_program_data)),
+            ExprKind::Pair(head, tail) => sens::Value::Pair(
+                Rc::new(expr_program_data(head)),
+                Rc::new(expr_program_data(tail)),
+            ),
+            ExprKind::DomainCall(identity, arguments) => {
+                let mut items = Vec::with_capacity(arguments.len() + 1);
+                items.push(sens::Value::DomainIdentity((*identity).into()));
+                items.extend(arguments.iter().map(expr_program_data));
+                sens::Value::list(items)
+            }
+            ExprKind::Sid(_) | ExprKind::Call(_, _) => {
+                panic!("current C1 program-data must not contain historical Sid/Call")
+            }
+            ExprKind::Local { .. } => {
+                panic!("source-shaped C1 program-data must not contain resolved Local")
+            }
+        }
+    }
+
+    fn current_nucleus_program_wire() -> Vec<u8> {
+        let parsed = sens::parse(SOURCE).expect("current compiler nucleus parses");
+        let lowered = sens::lower_program(&parsed);
+        sens::wire_encode_program(&lowered)
+    }
+
+    fn test_symbol(name: &str) -> sens::Expr {
+        sens::Expr {
+            kind: sens::ExprKind::Symbol(Rc::from(name)),
+            span: sens::Span::default(),
+        }
+    }
+
+    fn test_list(items: Vec<sens::Expr>) -> sens::Expr {
+        sens::Expr {
+            kind: sens::ExprKind::List(Rc::from(items.into_boxed_slice())),
+            span: sens::Span::default(),
+        }
+    }
+
+    fn d3(bits: u8) -> sens::CoreDomainIdentity {
+        sens::CoreDomainIdentity::D3(sens::Bija3::from_word(
+            sens::Bit3::new(bits).expect("D3 test identity"),
+        ))
+    }
+
+    fn d4(bits: u8) -> sens::CoreDomainIdentity {
+        sens::CoreDomainIdentity::D4(sens::CoreD4::from_word(
+            sens::Bit4::new(bits).expect("D4 test identity"),
+        ))
+    }
+
+    fn test_call(identity: sens::CoreDomainIdentity, args: Vec<sens::Expr>) -> sens::Expr {
+        sens::Expr {
+            kind: sens::ExprKind::DomainCall(identity, Rc::from(args.into_boxed_slice())),
+            span: sens::Span::default(),
+        }
+    }
+
+    fn minimal_current_programs() -> Vec<(&'static str, Vec<sens::Expr>)> {
+        vec![
+            ("quote", vec![test_call(d3(0b001), vec![test_symbol("x")])]),
+            ("atom", vec![test_call(d3(0b010), vec![test_symbol("x")])]),
+            ("cdr", vec![test_call(d3(0b011), vec![test_symbol("x")])]),
+            ("car", vec![test_call(d3(0b100), vec![test_symbol("x")])]),
+            (
+                "eq",
+                vec![test_call(
+                    d3(0b101),
+                    vec![test_symbol("x"), test_symbol("y")],
+                )],
+            ),
+            (
+                "cond",
+                vec![test_call(
+                    d3(0b110),
+                    vec![test_list(vec![test_symbol("x"), test_symbol("y")])],
+                )],
+            ),
+            (
+                "cons",
+                vec![test_call(
+                    d3(0b111),
+                    vec![test_symbol("x"), test_symbol("y")],
+                )],
+            ),
+            (
+                "lambda",
+                vec![test_call(
+                    d4(0b0010),
+                    vec![test_list(vec![test_symbol("x")]), test_symbol("x")],
+                )],
+            ),
+            (
+                "define",
+                vec![test_call(
+                    d4(0b0011),
+                    vec![test_symbol("f"), test_symbol("x")],
+                )],
+            ),
+        ]
+    }
+
+    fn run_c1(binary_path: &std::path::Path, wire: &[u8]) -> std::process::Output {
+        let mut child = Command::new(binary_path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("C1 executable must start");
+        child
+            .stdin
+            .take()
+            .expect("C1 stdin pipe")
+            .write_all(wire)
+            .expect("program wire reaches C1");
+        child.wait_with_output().expect("C1 executable must finish")
+    }
+
+    fn expected_sens_artifact(wire: &[u8], sens_revision: &str) -> Vec<u8> {
+        let decoded = sens::wire_decode_program(wire).expect("canonical SW1 program wire");
+        let program = sens::Value::list(decoded.iter().map(expr_program_data));
+        let digest = sha256_hex(wire);
+        let artifact = sens::compiler_program_artifact_from_sens(program, &digest, sens_revision)
+            .expect("SENS whole-program artifact oracle");
+        sens::compiler_evidence_canonical_bytes(&artifact)
+            .expect("canonical compiler-evidence bytes")
+    }
+
     #[test]
     fn c1_bundle_carries_source_export_proof_and_provenance() {
         let export = pinned_compiler_export();
@@ -346,10 +593,8 @@ mod tests {
         assert_eq!(artifact.source, SOURCE);
         assert_eq!(artifact.backend_id, C1_BACKEND_ID);
         assert_eq!(artifact.artifact_format, C1_ARTIFACT_FORMAT);
-        assert_eq!(
-            artifact.authority.revision,
-            "f2e7797283c8dfc2aa67935a02b3735a8290041f"
-        );
+        assert!(valid_hex(&artifact.authority.revision, 40));
+        assert_eq!(artifact.authority.repository, "juv4uk/sens");
         assert_eq!(artifact.cml_revision, cml_revision);
         assert!(artifact.compiler_export.contains("(proof-ref . "));
         assert!(
@@ -379,16 +624,34 @@ mod tests {
                 .contains("require_tag(_v, TAG_CONS, \"cdr\")")
         );
         assert!(!artifact.c_source.contains("mk_sid_callable(0b"));
+        assert!(artifact.c_source.contains("decode_sens_program_wire("));
+        assert!(artifact.c_source.contains("builtin_canonical_value_sha256"));
+        assert!(artifact.c_source.contains("c1_write_compiler_evidence"));
+        assert!(!artifact.c_source.contains("D3_PROJECTION"));
+        assert!(!artifact.c_source.contains("compiler_role_table"));
+        assert!(
+            artifact
+                .c_source
+                .contains("COMPILER-COMPILE-PROGRAM-ARTIFACT")
+        );
+        assert!(
+            !artifact
+                .c_source
+                .contains("compiler_semantic_input_from_sens")
+        );
 
         let decoded = CurrentSensC1Artifact::decode_v1(&artifact.encode_v1().unwrap()).unwrap();
         assert_eq!(decoded, artifact);
     }
 
     #[test]
-    fn c1_source_compiles_and_executes() {
+    fn c1_source_compiles_and_emits_exact_sens_whole_program_artifact() {
         let cml_revision = producer_cml_revision();
         let artifact = build_current_sens_c1(SOURCE, pinned_compiler_export(), &cml_revision)
             .expect("current nucleus C1 artifact");
+        let wire = current_nucleus_program_wire();
+        let expected = expected_sens_artifact(&wire, &artifact.authority.revision);
+
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock after epoch")
@@ -410,14 +673,32 @@ mod tests {
             String::from_utf8_lossy(&compile.stderr)
         );
 
-        let run = Command::new(&binary_path)
-            .output()
-            .expect("C1 executable must run");
+        for (label, program) in minimal_current_programs() {
+            let role_wire = sens::wire_encode_program(&program);
+            let role_expected = expected_sens_artifact(&role_wire, &artifact.authority.revision);
+            let role_run = run_c1(&binary_path, &role_wire);
+            assert!(
+                role_run.status.success(),
+                "generated C1 failed minimal {label} program: {}",
+                String::from_utf8_lossy(&role_run.stderr)
+            );
+            assert_eq!(
+                role_run.stdout, role_expected,
+                "compiled C1 diverged from SENS oracle on minimal {label} program"
+            );
+        }
+
+        let run = run_c1(&binary_path, &wire);
         assert!(
             run.status.success(),
             "generated C1 executable failed: {}",
             String::from_utf8_lossy(&run.stderr)
         );
+        assert_eq!(
+            run.stdout, expected,
+            "compiled C1 must emit byte-for-byte the SENS-owned canonical compiler evidence"
+        );
+
         let _ = std::fs::remove_file(source_path);
         let _ = std::fs::remove_file(binary_path);
     }

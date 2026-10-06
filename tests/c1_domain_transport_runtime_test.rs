@@ -95,13 +95,14 @@ int main(int argc, char **argv) {{
         return 90;
     }}
 
-    Value *d3 = mk_domain_identity(3, 2);
-    Value *d3_same = mk_domain_identity(3, 2);
-    Value *d4_same_payload = mk_domain_identity(4, 2);
+    /* Non-palindromic payload is intentional: it detects accidental bit reversal. */
+    Value *d3 = mk_domain_identity(3, 4);
+    Value *d3_same = mk_domain_identity(3, 4);
+    Value *d4_same_payload = mk_domain_identity(4, 4);
 
     if (d3->tag != TAG_DOMAIN_IDENTITY) return 10;
     if (d3->u.domain_identity.width != 3) return 11;
-    if (d3->u.domain_identity.packed_bits != 2) return 12;
+    if (d3->u.domain_identity.packed_bits != 4) return 12;
 
     if (!v_eq_same(d3, d3_same)) return 13;
     if (v_eq_same(d3, d4_same_payload)) return 14;
@@ -115,7 +116,7 @@ int main(int argc, char **argv) {{
     if (bits_cell->tag != TAG_CONS) return 18;
     Value *bits = v_car(bits_cell);
 
-    int expected[3] = {{0, 1, 0}};
+    int expected[3] = {{1, 0, 0}};
     for (int i = 0; i < 3; ++i) {{
         if (bits->tag != TAG_CONS) return 20 + i;
         Value *bit = v_car(bits);
