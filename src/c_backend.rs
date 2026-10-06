@@ -106,7 +106,7 @@ const RUNTIME: &str = r##"
 #include <stdint.h>
 
 typedef struct Value Value;
-typedef enum { TAG_NIL, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_SID_CALLABLE, TAG_RATIONAL, TAG_STRING, TAG_PREDICATE_BIT } Tag;
+typedef enum { TAG_NIL, TAG_INT, TAG_SYM, TAG_CONS, TAG_I32_BUFFER, TAG_CLOSURE, TAG_BUILTIN, TAG_SID_CALLABLE, TAG_RATIONAL, TAG_STRING, TAG_PREDICATE_BIT, TAG_DOMAIN_IDENTITY } Tag;
 struct Value {
     Tag tag;
     union {
@@ -118,6 +118,7 @@ struct Value {
         struct { const char *name; Value *(*fn)(Value *args, Value *env); } builtin;
         uint8_t sid;
         uint8_t predicate_bit;
+        struct { uint8_t width; uint8_t packed_bits; } domain_identity;
         struct { long num; long den; } rat;
         const char *str;
     } u;
@@ -172,6 +173,47 @@ static Value *mk_predicate_bit(int bit) {
     return v;
 }
 static Value *mk_string(const char *s) { Value *v = checked_malloc(sizeof(Value)); v->tag = TAG_STRING; v->u.str = s; return v; }
+
+/* Exact-domain program-data carrier for the C1 driver. This is representation
+ * only: width/payload are preserved exactly; no compiler role or mechanism is
+ * selected here. */
+static Value *mk_domain_identity(uint8_t width, uint8_t packed_bits) {
+    if (width < 1 || width > 8) runtime_error("Type", "DomainIdentity width must be 1..8");
+    uint16_t limit = (uint16_t)1u << width;
+    if ((uint16_t)packed_bits >= limit)
+        runtime_error("Type", "DomainIdentity payload exceeds declared width");
+    Value *v = checked_malloc(sizeof(Value));
+    v->tag = TAG_DOMAIN_IDENTITY;
+    v->u.domain_identity.width = width;
+    v->u.domain_identity.packed_bits = packed_bits;
+    return v;
+}
+
+static Value *domain_identity_shape(Value *identity) {
+    if (identity->tag != TAG_DOMAIN_IDENTITY)
+        runtime_error("Type", "domain identity shape expects exact DomainIdentity");
+    uint8_t width = identity->u.domain_identity.width;
+    uint8_t bits = identity->u.domain_identity.packed_bits;
+    Value *bit_list = &NIL_V;
+    for (int index = (int)width - 1; index >= 0; --index) {
+        bit_list = mk_cons(mk_predicate_bit((bits >> index) & 1u), bit_list);
+    }
+    return mk_cons(mk_int(width), mk_cons(bit_list, &NIL_V));
+}
+
+static Value *builtin_domain_identity_shape(Value *args, Value *env) {
+    (void)env;
+    require_arity(args, 1, "domain-identity-shape");
+    return domain_identity_shape(arg_at(args, 0));
+}
+
+static Value *builtin_domain_identity_shape_or_empty(Value *args, Value *env) {
+    (void)env;
+    require_arity(args, 1, "domain-identity-shape-or-empty");
+    Value *value = arg_at(args, 0);
+    if (value->tag != TAG_DOMAIN_IDENTITY) return &NIL_V;
+    return domain_identity_shape(value);
+}
 
 static long rational_gcd(long a, long b) {
     if (a < 0) a = -a;
@@ -277,6 +319,9 @@ static int v_eq_same(Value *a, Value *b) {
         case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0;
         case TAG_STRING: return strcmp(a->u.str, b->u.str) == 0;
         case TAG_PREDICATE_BIT: return a->u.predicate_bit == b->u.predicate_bit;
+        case TAG_DOMAIN_IDENTITY:
+            return a->u.domain_identity.width == b->u.domain_identity.width
+                && a->u.domain_identity.packed_bits == b->u.domain_identity.packed_bits;
         default: return a == b;
     }
 }
@@ -304,6 +349,10 @@ static int v_equal_p(Value *a, Value *b) {
         case TAG_INT: return a->u.i == b->u.i;
         case TAG_RATIONAL: return rational_checked_mul(a->u.rat.num, b->u.rat.den) == rational_checked_mul(b->u.rat.num, a->u.rat.den);
         case TAG_SYM: return strcmp(a->u.sym, b->u.sym) == 0;
+        case TAG_DOMAIN_IDENTITY:
+            return a->u.domain_identity.width == b->u.domain_identity.width
+                && a->u.domain_identity.packed_bits == b->u.domain_identity.packed_bits;
+        case TAG_PREDICATE_BIT: return a->u.predicate_bit == b->u.predicate_bit;
         case TAG_CONS: return v_equal_p(a->u.cons.car, b->u.cons.car) && v_equal_p(a->u.cons.cdr, b->u.cons.cdr);
         case TAG_I32_BUFFER:
             if (a->u.i32_buffer.len != b->u.i32_buffer.len) return 0;
@@ -576,6 +625,14 @@ static void print_value(Value *v) {
             break;
         case TAG_SYM: printf("%s", v->u.sym); break;
         case TAG_STRING: printf("%s", v->u.str); break;
+        case TAG_PREDICATE_BIT: printf("#<d1 %u>", (unsigned)v->u.predicate_bit); break;
+        case TAG_DOMAIN_IDENTITY: {
+            printf("#<domain D%u:", (unsigned)v->u.domain_identity.width);
+            for (int bit = (int)v->u.domain_identity.width - 1; bit >= 0; --bit)
+                putchar((v->u.domain_identity.packed_bits & (1u << bit)) ? '1' : '0');
+            printf(">");
+            break;
+        }
         case TAG_CLOSURE: printf("<closure>"); break;
         case TAG_BUILTIN: printf("#<builtin %s>", v->u.builtin.name); break;
         case TAG_SID_CALLABLE: {
