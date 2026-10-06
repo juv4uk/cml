@@ -196,7 +196,9 @@ static Value *domain_identity_shape(Value *identity) {
     uint8_t width = identity->u.domain_identity.width;
     uint8_t bits = identity->u.domain_identity.packed_bits;
     Value *bit_list = &NIL_V;
-    for (int index = (int)width - 1; index >= 0; --index) {
+    /* cons prepends, so consume packed bits LSB->MSB to materialize the
+     * source-order list MSB-first, matching SENS domain_identity_shape_mechanism. */
+    for (uint8_t index = 0; index < width; ++index) {
         bit_list = mk_cons(mk_predicate_bit((bits >> index) & 1u), bit_list);
     }
     return mk_cons(mk_int(width), mk_cons(bit_list, &NIL_V));
