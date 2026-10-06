@@ -348,7 +348,7 @@ mod tests {
         assert_eq!(artifact.artifact_format, C1_ARTIFACT_FORMAT);
         assert_eq!(
             artifact.authority.revision,
-            "f2e7797283c8dfc2aa67935a02b3735a8290041f"
+            "5964c4dd2378364a5307b143a65438f8609fecd6"
         );
         assert_eq!(artifact.cml_revision, cml_revision);
         assert!(artifact.compiler_export.contains("(proof-ref . "));
