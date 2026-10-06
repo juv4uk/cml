@@ -1,5 +1,3 @@
-use crate::compiler_mechanism::RichCompilerMechanismRef;
-
 //! Backend-neutral intermediate representation.
 //!
 //! Step 1 of docs/heterogeneous-backends.md: "draw the backend boundary
@@ -12,6 +10,8 @@ use crate::compiler_mechanism::RichCompilerMechanismRef;
 //! `Ir` -- see `lower.rs` for the `ast::Expr -> Ir` step that feeds both,
 //! and `main.rs` for the live `parse -> macro-expand -> lower -> backend`
 //! pipeline.
+
+use crate::compiler_mechanism::RichCompilerMechanismRef;
 
 /// A fully self-contained literal produced by `quote` -- data, never
 /// executed. Kept separate from `Ir` itself because quoted data has no
