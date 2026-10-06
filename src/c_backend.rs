@@ -784,7 +784,8 @@ impl CBackend {
         env: &str,
     ) -> Result<String, CompileError> {
         match op {
-            PrimOp::CompilerMechanism(mechanism) => match mechanism {
+            PrimOp::CompilerMechanism(mechanism) => {
+                match mechanism {
                     RichCompilerMechanismRef::AtomPredicateD1 => {
                         if args.len() != 1 {
                             return Err(CompileError::UnsupportedVariant("current ATOM arity"));
@@ -825,10 +826,11 @@ impl CBackend {
                 RichCompilerMechanismRef::Quote
                 | RichCompilerMechanismRef::ConditionalD1
                 | RichCompilerMechanismRef::Lambda
-                | RichCompilerMechanismRef::Define => Err(CompileError::UnsupportedVariant(
-                    "non-call compiler mechanism",
-                )),
-            },
+                    | RichCompilerMechanismRef::Define => {
+                        Err(CompileError::UnsupportedVariant("non-call compiler mechanism"))
+                    }
+                }
+            }
             PrimOp::CompilerConditionalExactD1(mechanism) => {
                 if *mechanism != RichCompilerMechanismRef::ConditionalD1 {
                     return Err(CompileError::UnsupportedVariant(
