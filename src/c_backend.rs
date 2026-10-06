@@ -522,6 +522,8 @@ static Value *sw_decode_list(
     unsigned depth
 ) {
     if (count > len - *pos) runtime_error("Wire", "impossible SW list length");
+    if (count > SIZE_MAX / sizeof(Value *))
+        runtime_error("Wire", "SW list allocation overflow");
     Value **items = checked_malloc(count * sizeof(Value *));
     for (size_t i = 0; i < count; ++i)
         items[i] = sw_decode_expr(bytes, len, pos, depth + 1);
