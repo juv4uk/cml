@@ -1,10 +1,8 @@
 use std::collections::HashSet;
 
-use cml::compiler_mechanism::{
-    RichCompilerMechanismRef, select_rich_compiler_mechanism,
-};
+use cml::compiler_mechanism::{RichCompilerMechanismRef, select_rich_compiler_mechanism};
 use sens::syntax::{Expr, ExprKind};
-use sens::{compiler_lowering_role_from_sens, lower_program, parse, CompilerLoweringRole};
+use sens::{CompilerLoweringRole, compiler_lowering_role_from_sens, lower_program, parse};
 
 const NUCLEUS: &str = include_str!("../external/sens/lib/compiler-nucleus.lisp");
 
