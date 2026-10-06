@@ -100,6 +100,20 @@ int main(void) {{
         String::from_utf8_lossy(&run.stderr)
     );
 
+    let forbidden = Command::new(&bin_path)
+        .arg("forbidden-sid")
+        .output()
+        .expect("negative legacy-Sid wire witness must execute");
+    assert!(
+        !forbidden.status.success(),
+        "legacy Sid wire unexpectedly entered current C1 program-data"
+    );
+    assert!(
+        String::from_utf8_lossy(&forbidden.stderr).contains("legacy Sid8 is forbidden"),
+        "negative wire failed for the wrong reason: {}",
+        String::from_utf8_lossy(&forbidden.stderr)
+    );
+
     let _ = std::fs::remove_file(c_path);
     let _ = std::fs::remove_file(bin_path);
 }
