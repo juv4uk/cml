@@ -44,6 +44,7 @@ pub mod runtime_abi;
 pub mod semantic;
 pub mod semantic_export;
 pub mod substrate_dispatch;
+pub mod sens_current_lowering;
 pub mod sens_compiler_export;
 pub mod sens_domain_bridge;
 pub mod sens_rich_bridge;
