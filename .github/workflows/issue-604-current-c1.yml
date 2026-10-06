@@ -1,26 +1,7 @@
 name: Issue 604 current SENS C1 artifact
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "external/sens"
-      - "upstream-revisions.lisp"
-      - "src/lib.rs"
-      - "src/sens_c1_artifact.rs"
-      - "src/sens_compiler_export.rs"
-      - "src/sens_current_lowering.rs"
-      - "src/c_backend.rs"
-      - ".github/workflows/issue-604-current-c1.yml"
-  push:
-    branches: [master]
-    paths:
-      - "external/sens"
-      - "upstream-revisions.lisp"
-      - "src/sens_c1_artifact.rs"
-      - "src/sens_compiler_export.rs"
-      - "src/sens_current_lowering.rs"
-      - "src/c_backend.rs"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
