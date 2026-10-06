@@ -1,0 +1,72 @@
+name: GPU SENS compiler export consumer
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "external/sens"
+      - "upstream-revisions.lisp"
+      - "src/lib.rs"
+      - "src/sens_compiler_export.rs"
+      - "src/sens_domain_bridge.rs"
+      - "src/sens_rich_bridge.rs"
+      - "tests/sens_compiler_export_consumer_test.rs"
+      - ".github/workflows/issue-620-sens-export-consumer.yml"
+  push:
+    branches: [master]
+    paths:
+      - "external/sens"
+      - "upstream-revisions.lisp"
+      - "src/sens_compiler_export.rs"
+      - "src/sens_domain_bridge.rs"
+      - "src/sens_rich_bridge.rs"
+      - "tests/sens_compiler_export_consumer_test.rs"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
+    timeout-minutes: 30
+    steps:
+      - name: Require private dependency read token
+        env:
+          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+        run: test -n "$SENS_READ_TOKEN"
+
+      - name: Checkout CML with pinned SENS
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
+          submodules: true
+
+      - name: Verify full-export SENS pin
+        run: |
+          test "$(git -C external/sens rev-parse HEAD)" = "a42b5da66fbd4aa09dbe92234e2c11aef048a255"
+          grep -q '(build-source-sha . "a42b5da66fbd4aa09dbe92234e2c11aef048a255")' upstream-revisions.lisp
+          grep -q '(supported-pin-sha . "a42b5da66fbd4aa09dbe92234e2c11aef048a255")' upstream-revisions.lisp
+
+      - name: Focused formatting
+        run: >-
+          guix shell --pure -m manifest.scm --
+          rustfmt --edition 2024 --check
+          src/sens_compiler_export.rs
+          tests/sens_compiler_export_consumer_test.rs
+
+      - name: Transport parser unit tests
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --lib sens_compiler_export::tests -- --nocapture
+
+      - name: Verified rich admission regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --lib sens_rich_bridge::tests -- --nocapture
+
+      - name: Real pinned exporter round-trip
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml --test sens_compiler_export_consumer_test -- --nocapture
