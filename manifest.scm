@@ -17,4 +17,5 @@
    "make"
    "gcc-toolchain"
    "iverilog"
-   "python"))
+   "python"
+   "nss-certs"))
