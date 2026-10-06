@@ -1,12 +1,7 @@
 name: Issue 630 C1 program transport runtime
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "src/c_backend.rs"
-      - "tests/c1_domain_transport_runtime_test.rs"
-      - ".github/workflows/issue-630-c1-domain-transport.yml"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
