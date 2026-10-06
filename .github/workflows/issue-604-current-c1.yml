@@ -45,9 +45,9 @@ jobs:
 
       - name: Verify canonical SENS pin
         run: |
-          test "$(git -C external/sens rev-parse HEAD)" = "f2e7797283c8dfc2aa67935a02b3735a8290041f"
-          grep -q '(build-source-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
-          grep -q '(supported-pin-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
+          test "$(git -C external/sens rev-parse HEAD)" = "5964c4dd2378364a5307b143a65438f8609fecd6"
+          grep -q '(build-source-sha . "5964c4dd2378364a5307b143a65438f8609fecd6")' upstream-revisions.lisp
+          grep -q '(supported-pin-sha . "5964c4dd2378364a5307b143a65438f8609fecd6")' upstream-revisions.lisp
 
       - name: Focused formatting
         run: >-
