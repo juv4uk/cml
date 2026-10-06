@@ -341,7 +341,7 @@ fn verify_lowering_law_and_proof(
     proof_ref: &str,
 ) -> Result<(), BridgeError> {
     if law_ref != COMPILER_ROLE_LAW_REF
-        || !COMPILER_NUCLEUS.contains("(compiler-lowering-role-from-laws")
+        || !COMPILER_NUCLEUS.contains("compiler-lowering-role-from-laws")
     {
         return Err(BridgeError::UnknownLawReference);
     }
