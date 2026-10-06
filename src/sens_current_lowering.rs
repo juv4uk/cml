@@ -355,8 +355,9 @@ fn mechanism_arity(
         RichCompilerMechanismRef::AtomPredicateD1
         | RichCompilerMechanismRef::SelectorTail
         | RichCompilerMechanismRef::SelectorHead => ("unary compiler mechanism", 1),
-        RichCompilerMechanismRef::AtomEqualityD1
-        | RichCompilerMechanismRef::PairConstruct => ("binary compiler mechanism", 2),
+        RichCompilerMechanismRef::AtomEqualityD1 | RichCompilerMechanismRef::PairConstruct => {
+            ("binary compiler mechanism", 2)
+        }
         RichCompilerMechanismRef::Quote => ("quote", 1),
         RichCompilerMechanismRef::ConditionalD1 => return Ok(()),
         RichCompilerMechanismRef::Lambda => ("lambda", 2),
