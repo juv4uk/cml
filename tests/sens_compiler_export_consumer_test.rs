@@ -68,7 +68,11 @@ fn real_pinned_sens_export_verifies_all_nine_roles() {
 
     assert_eq!(d3, 7);
     assert_eq!(d4, 2);
-    assert_eq!(mechanisms.len(), 9, "all nine private mechanisms must be reached");
+    assert_eq!(
+        mechanisms.len(),
+        9,
+        "all nine private mechanisms must be reached"
+    );
 
     for required in [
         RichCompilerMechanismRef::Quote,
