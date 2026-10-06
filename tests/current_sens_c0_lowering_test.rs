@@ -153,7 +153,7 @@ fn assert_no_legacy(ir: &Ir) {
 }
 
 #[test]
-fn real_export_drives_all_nine_current_mechanisms_without_sid8() {
+fn real_export_drives_full_current_closure_without_sid8() {
     let lowered = lower_current_sens_source(NUCLEUS, pinned_compiler_export())
         .expect("real verified SENS export must lower current compiler nucleus");
 
@@ -168,22 +168,72 @@ fn real_export_drives_all_nine_current_mechanisms_without_sid8() {
     }
 
     for expected in [
-        RichCompilerMechanismRef::Quote,
         RichCompilerMechanismRef::AtomPredicateD1,
         RichCompilerMechanismRef::SelectorTail,
         RichCompilerMechanismRef::SelectorHead,
         RichCompilerMechanismRef::AtomEqualityD1,
         RichCompilerMechanismRef::ConditionalD1,
         RichCompilerMechanismRef::PairConstruct,
-        RichCompilerMechanismRef::Lambda,
-        RichCompilerMechanismRef::Define,
     ] {
         assert!(
             mechanisms.contains(&expected),
-            "current compiler nucleus did not reach mechanism {}",
+            "current compiler nucleus did not reach mechanism-bearing IR {}",
             expected.as_str()
         );
     }
+
+    fn syntax_witness(ir: &Ir, quote: &mut bool, lambda: &mut bool, define: &mut bool) {
+        match ir {
+            Ir::Quote(_) => *quote = true,
+            Ir::Lambda { body, .. } => {
+                *lambda = true;
+                syntax_witness(body, quote, lambda, define);
+            }
+            Ir::Def { value, .. } => {
+                *define = true;
+                syntax_witness(value, quote, lambda, define);
+            }
+            Ir::Prim { args, .. } => {
+                for arg in args {
+                    syntax_witness(arg, quote, lambda, define);
+                }
+            }
+            Ir::App { func, args } => {
+                syntax_witness(func, quote, lambda, define);
+                for arg in args {
+                    syntax_witness(arg, quote, lambda, define);
+                }
+            }
+            Ir::Cond { branches } => {
+                for (a, b) in branches {
+                    syntax_witness(a, quote, lambda, define);
+                    syntax_witness(b, quote, lambda, define);
+                }
+            }
+            Ir::CondMatch { branches } => {
+                for (a, _, b) in branches {
+                    syntax_witness(a, quote, lambda, define);
+                    syntax_witness(b, quote, lambda, define);
+                }
+            }
+            Ir::Let { bindings, body } => {
+                for (_, value) in bindings {
+                    syntax_witness(value, quote, lambda, define);
+                }
+                syntax_witness(body, quote, lambda, define);
+            }
+            _ => {}
+        }
+    }
+
+    let (mut quote, mut lambda, mut define) = (false, false, false);
+    for ir in &lowered.ir {
+        syntax_witness(ir, &mut quote, &mut lambda, &mut define);
+    }
+    assert!(
+        quote && lambda && define,
+        "verified Quote/Lambda/Define mechanisms must materialize as existing syntax IR"
+    );
 
     assert_eq!(
         lowered.authority.revision,
