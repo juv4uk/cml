@@ -12,10 +12,21 @@ use crate::sens_domain_bridge::{
 };
 use std::fmt;
 
+const COMPILER_NUCLEUS: &str = include_str!("../external/sens/lib/compiler-nucleus.lisp");
+const D3_PROOF: &str = include_str!("../external/sens/contracts/bija3-l1-l5-ratification.lisp");
+const D4_PROOF: &str = include_str!("../external/sens/contracts/d4-bootstrap-ratification.lisp");
+
+const COMPILER_ROLE_LAW_REF: &str =
+    "lib/compiler-nucleus.lisp:compiler-lowering-role-from-laws";
+const D3_PROOF_REF: &str = "contracts/bija3-l1-l5-ratification.lisp";
+const D4_PROOF_REF: &str = "contracts/d4-bootstrap-ratification.lisp";
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RichSemanticRequest {
     pub identity: sens::DomainIdentity,
     pub lowering_role: sens::CompilerLoweringRole,
+    pub law_ref: String,
+    pub proof_ref: String,
     pub semantic_status: SemanticStatus,
     pub mechanism_status: MechanismStatus,
     pub provenance: AuthorityProvenance,
@@ -111,6 +122,48 @@ pub fn authoritative_lowering_role(
         .ok_or(RichBridgeError::UnsupportedLoweringRole)
 }
 
+fn verify_role_evidence(
+    role: sens::CompilerLoweringRole,
+    law_ref: &str,
+    proof_ref: &str,
+) -> Result<(), RichBridgeError> {
+    if law_ref.trim().is_empty() {
+        return Err(BridgeError::MissingLawReference.into());
+    }
+    if proof_ref.trim().is_empty() {
+        return Err(BridgeError::MissingProofReference.into());
+    }
+    if law_ref != COMPILER_ROLE_LAW_REF
+        || !COMPILER_NUCLEUS.contains("compiler-lowering-role-from-laws")
+    {
+        return Err(BridgeError::UnknownLawReference.into());
+    }
+
+    let proof_ok = match role {
+        sens::CompilerLoweringRole::LambdaForm | sens::CompilerLoweringRole::DefineForm => {
+            proof_ref == D4_PROOF_REF
+                && D4_PROOF.contains("(status . owner-ratified)")
+                && D4_PROOF.contains("(domain . D4)")
+        }
+        sens::CompilerLoweringRole::QuoteForm
+        | sens::CompilerLoweringRole::AtomPredicate
+        | sens::CompilerLoweringRole::SelectorTail
+        | sens::CompilerLoweringRole::SelectorHead
+        | sens::CompilerLoweringRole::AtomEquality
+        | sens::CompilerLoweringRole::CondForm
+        | sens::CompilerLoweringRole::PairConstruct => {
+            proof_ref == D3_PROOF_REF
+                && D3_PROOF.contains("(status . owner-ratified)")
+                && D3_PROOF.contains("(domain . D3)")
+        }
+    };
+
+    if !proof_ok {
+        return Err(BridgeError::UnknownProofReference.into());
+    }
+    Ok(())
+}
+
 /// Verify one carried current-domain lowering request before IR construction.
 pub fn verify_rich_request(
     request: RichSemanticRequest,
@@ -129,6 +182,7 @@ pub fn verify_rich_request(
         return Err(RichBridgeError::LoweringRoleMismatch);
     }
 
+    verify_role_evidence(authoritative_role, &request.law_ref, &request.proof_ref)?;
     let mechanism_ref = select_rich_compiler_mechanism(authoritative_role);
 
     Ok(VerifiedRichMechanism {
@@ -157,10 +211,19 @@ mod tests {
     }
 
     fn current(identity: sens::DomainIdentity) -> RichSemanticRequest {
+        let lowering_role = authoritative_lowering_role(identity)
+            .expect("test identity has SENS-derived selfhost role");
+        let proof_ref = match lowering_role {
+            sens::CompilerLoweringRole::LambdaForm | sens::CompilerLoweringRole::DefineForm => {
+                D4_PROOF_REF
+            }
+            _ => D3_PROOF_REF,
+        };
         RichSemanticRequest {
             identity,
-            lowering_role: authoritative_lowering_role(identity)
-                .expect("test identity has SENS-derived selfhost role"),
+            lowering_role,
+            law_ref: COMPILER_ROLE_LAW_REF.into(),
+            proof_ref: proof_ref.into(),
             semantic_status: SemanticStatus::Current,
             mechanism_status: MechanismStatus::Admitted,
             provenance: pinned_authority().expect("pinned authority parses"),
@@ -197,6 +260,23 @@ mod tests {
         assert_eq!(
             verify_rich_request(request).unwrap_err(),
             RichBridgeError::LoweringRoleMismatch
+        );
+    }
+
+    #[test]
+    fn law_and_proof_refs_are_required_and_role_scoped() {
+        let mut request = current(d3(0b010));
+        request.law_ref.clear();
+        assert_eq!(
+            verify_rich_request(request).unwrap_err(),
+            RichBridgeError::Authority(BridgeError::MissingLawReference)
+        );
+
+        let mut request = current(d4(0b0010));
+        request.proof_ref = D3_PROOF_REF.into();
+        assert_eq!(
+            verify_rich_request(request).unwrap_err(),
+            RichBridgeError::Authority(BridgeError::UnknownProofReference)
         );
     }
 
