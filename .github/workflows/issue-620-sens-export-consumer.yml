@@ -48,6 +48,7 @@ jobs:
           test "$(git -C external/sens rev-parse HEAD)" = "f2e7797283c8dfc2aa67935a02b3735a8290041f"
           grep -q '(build-source-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
           grep -q '(supported-pin-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
+          grep -q '(observed-current-sha . "f2e7797283c8dfc2aa67935a02b3735a8290041f")' upstream-revisions.lisp
 
       - name: Focused formatting
         run: >-
