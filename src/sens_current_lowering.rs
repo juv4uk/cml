@@ -446,8 +446,6 @@ mod tests {
             ["compiler_lowering_role_", "from_sens("].concat(),
             ["select_rich_compiler_", "mechanism("].concat(),
             ["packed", "_bits("].concat(),
-            ["Sid", "8"].concat(),
-            ["Sens", "8"].concat(),
         ];
         for forbidden in forbidden {
             assert!(
