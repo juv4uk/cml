@@ -41,6 +41,17 @@ mod enabled {
         case_id: String,
     }
 
+    impl ClientProvenance {
+        fn to_admission(&self) -> AdmissionProvenance {
+            AdmissionProvenance {
+                repository: self.repository.clone(),
+                run_id: self.run_id.clone(),
+                job: self.job.clone(),
+                case_id: self.case_id.clone(),
+            }
+        }
+    }
+
     fn socket_path() -> PathBuf {
         gpu_worker_socket_path()
     }
@@ -217,7 +228,7 @@ mod enabled {
             OP_CHAIN_FILE_I32_PROVENANCE => {
                 let (provenance, input_path, output_path, offsets) =
                     decode_chain_file_provenance_request(&payload)?;
-                let admission = acquire_gpu_admission(provenance.clone())?;
+                let admission = acquire_gpu_admission(provenance.to_admission())?;
                 let evidence = execute_chain_file_i32(&input_path, &output_path, &offsets)?;
                 let body = format!(
                     "repository={} run_id={} job={} case_id={} admission_wait_ns={} {}",
