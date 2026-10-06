@@ -823,9 +823,9 @@ impl CBackend {
                         let tail = self.compile_expr(&args[1], env)?;
                         Ok(format!("mk_cons({head}, {tail})"))
                     }
-                RichCompilerMechanismRef::Quote
-                | RichCompilerMechanismRef::ConditionalD1
-                | RichCompilerMechanismRef::Lambda
+                    RichCompilerMechanismRef::Quote
+                    | RichCompilerMechanismRef::ConditionalD1
+                    | RichCompilerMechanismRef::Lambda
                     | RichCompilerMechanismRef::Define => {
                         Err(CompileError::UnsupportedVariant("non-call compiler mechanism"))
                     }
