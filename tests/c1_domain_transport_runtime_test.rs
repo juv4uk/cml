@@ -34,9 +34,7 @@ fn canonical_domain_wire() -> Vec<u8> {
                 Rc::from(
                     vec![
                         Expr {
-                            kind: ExprKind::List(Rc::from(
-                                vec![symbol("x")].into_boxed_slice(),
-                            )),
+                            kind: ExprKind::List(Rc::from(vec![symbol("x")].into_boxed_slice())),
                             span: Span::default(),
                         },
                         symbol("x"),
