@@ -86,9 +86,7 @@ fn lower_quoted(expr: &Expr) -> Result<Quoted, CurrentLowerError> {
         ExprKind::Number(value, _) => exact_int(*value)
             .map(Quoted::Int)
             .ok_or(CurrentLowerError::UnsupportedLiteral("non-integer number")),
-        ExprKind::Rational(rational) => {
-            Ok(Quoted::Rational(rational.numerator, rational.denominator))
-        }
+        ExprKind::Rational(_) => Err(CurrentLowerError::UnsupportedLiteral("rational")),
         ExprKind::String(value) => Ok(Quoted::Str(value.to_string())),
         ExprKind::Symbol(symbol) => Ok(Quoted::Sym {
             uppercased: symbol.to_uppercase(),
@@ -132,9 +130,7 @@ fn lower_expr(expr: &Expr) -> Result<Ir, CurrentLowerError> {
                 Err(CurrentLowerError::UnsupportedLiteral("number"))
             }
         }
-        ExprKind::Rational(rational) => {
-            Ok(Ir::Rational(rational.numerator, rational.denominator))
-        }
+        ExprKind::Rational(_) => Err(CurrentLowerError::UnsupportedLiteral("rational")),
         ExprKind::String(value) => Ok(Ir::String(value.to_string())),
         ExprKind::Symbol(symbol) => Ok(symbol_name(symbol)),
         ExprKind::List(items) => {
@@ -158,7 +154,9 @@ fn lower_expr(expr: &Expr) -> Result<Ir, CurrentLowerError> {
         ExprKind::NumericBuffer(_) => Err(CurrentLowerError::UnsupportedLiteral("numeric buffer")),
         ExprKind::Sid(_) | ExprKind::Call(_, _) => Err(CurrentLowerError::UnsupportedLegacyIdentity),
         ExprKind::DomainIdentity(_) => Err(CurrentLowerError::UnsupportedDomainIdentity),
-        ExprKind::DomainCall(identity, arguments) => lower_domain_call(*identity, arguments),
+        ExprKind::DomainCall(identity, arguments) => {
+            lower_domain_call((*identity).into(), arguments)
+        },
         ExprKind::Local { .. } => Err(CurrentLowerError::UnsupportedLiteral("resolved local")),
     }
 }
@@ -381,7 +379,7 @@ mod tests {
     fn wrong_domain_fails_closed() {
         let wrong = sens::syntax::Expr {
             kind: ExprKind::DomainCall(
-                sens::DomainIdentity::D4(sens::CoreD4::from_word(
+                sens::CoreDomainIdentity::D4(sens::CoreD4::from_word(
                     sens::Bit4::new(0b0111).unwrap(),
                 )),
                 std::rc::Rc::from([]),
