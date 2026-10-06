@@ -1,20 +1,7 @@
 name: Issue 609 current D1 conditional mechanism
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "src/c_backend.rs"
-      - "tests/current_d1_c_backend_test.rs"
-      - "tests/current_d1_cond_codegen_test.rs"
-      - "tests/current_d1_cond_backend_test.rs"
-      - ".github/workflows/issue-609-focused.yml"
-  push:
-    branches: [master]
-    paths:
-      - "src/c_backend.rs"
-      - "tests/current_d1_c_backend_test.rs"
-      - "tests/current_d1_cond_codegen_test.rs"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

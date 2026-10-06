@@ -1,17 +1,7 @@
 name: Issue 608 current D1 backend carrier
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "src/c_backend.rs"
-      - "tests/current_d1_c_backend_test.rs"
-      - ".github/workflows/issue-608-focused.yml"
-  push:
-    branches: [master]
-    paths:
-      - "src/c_backend.rs"
-      - "tests/current_d1_c_backend_test.rs"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
