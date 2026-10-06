@@ -8,6 +8,8 @@ on:
       - "src/c_backend.rs"
       - "src/lib.rs"
       - "src/sens_current_lowering.rs"
+      - "src/sens_rich_bridge.rs"
+      - "src/sens_domain_bridge.rs"
       - "tests/current_sens_c0_lowering_test.rs"
       - ".github/workflows/issue-606-current-c0.yml"
   push:
@@ -52,7 +54,14 @@ jobs:
           src/ir.rs
           src/c_backend.rs
           src/sens_current_lowering.rs
+          src/sens_rich_bridge.rs
+          src/sens_domain_bridge.rs
           tests/current_sens_c0_lowering_test.rs
+
+      - name: Verified rich admission regression
+        run: >-
+          guix shell --pure -m manifest.scm --
+          cargo test -p cml sens_rich_bridge::tests -- --nocapture
 
       - name: Current SENS lowering unit tests
         run: >-
