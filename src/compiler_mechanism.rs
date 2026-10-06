@@ -93,12 +93,7 @@ impl CompilerMechanismRef {
     }
 
     /// Materialize an already-selected two-input pair-construction mechanism.
-    pub const fn pair_instruction(
-        self,
-        dst: Slot,
-        head: Slot,
-        tail: Slot,
-    ) -> Option<SlotInstr> {
+    pub const fn pair_instruction(self, dst: Slot, head: Slot, tail: Slot) -> Option<SlotInstr> {
         match self {
             Self::SlotVmCons => Some(SlotInstr::Cons { dst, head, tail }),
             Self::SlotVmCar | Self::SlotVmCdr => None,
@@ -109,9 +104,7 @@ impl CompilerMechanismRef {
 /// Bind one SENS-verified execution role to CML's first SLOT-VM target.
 ///
 /// This is deliberately role -> mechanism, never identity/bits -> mechanism.
-pub const fn select_slot_vm_mechanism(
-    role: CompilerExecutionRole,
-) -> CompilerMechanismRef {
+pub const fn select_slot_vm_mechanism(role: CompilerExecutionRole) -> CompilerMechanismRef {
     match role {
         CompilerExecutionRole::SelectorHead => CompilerMechanismRef::SlotVmCar,
         CompilerExecutionRole::SelectorTail => CompilerMechanismRef::SlotVmCdr,
