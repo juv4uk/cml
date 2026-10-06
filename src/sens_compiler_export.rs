@@ -13,6 +13,16 @@ use std::fmt;
 
 pub const SCHEMA: &str = "compiler-semantic-input/1";
 
+const PINNED_COMPILER_NUCLEUS: &str =
+    include_str!("../external/sens/lib/compiler-nucleus.lisp");
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    sens::sha256_source(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportedCompilerRequest {
     pub fixture_id: String,
@@ -34,6 +44,7 @@ pub enum CompilerExportError {
     WrongSemanticStatus(String),
     WrongMechanismStatus(String),
     TargetMechanismLeaked,
+    CompilerNucleusDigestMismatch,
     Malformed(String),
     Verification(RichBridgeError),
 }
@@ -192,6 +203,9 @@ pub fn verify_exported_request(
             "invalid compiler nucleus digest".into(),
         ));
     }
+    if exported.compiler_nucleus_sha256 != sha256_hex(PINNED_COMPILER_NUCLEUS.as_bytes()) {
+        return Err(CompilerExportError::CompilerNucleusDigestMismatch);
+    }
 
     Ok(verify_rich_request(RichSemanticRequest {
         identity: exported.identity,
@@ -207,6 +221,26 @@ pub fn verify_exported_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn substituted_compiler_nucleus_digest_fails_before_admission() {
+        let mut request = ExportedCompilerRequest {
+            fixture_id: "x".into(),
+            identity: sens::DomainIdentity::D3(sens::Bija3::from_word(
+                sens::Bit3::new(0b010).unwrap(),
+            )),
+            lowering_role: sens::CompilerLoweringRole::AtomPredicate,
+            law_ref: "lib/compiler-nucleus.lisp:compiler-lowering-role-from-laws".into(),
+            proof_ref: "contracts/bija3-l1-l5-ratification.lisp".into(),
+            provenance: crate::sens_domain_bridge::pinned_authority().unwrap(),
+            compiler_nucleus_sha256: sha256_hex(PINNED_COMPILER_NUCLEUS.as_bytes()),
+        };
+        request.compiler_nucleus_sha256 = "00".repeat(32);
+        assert_eq!(
+            verify_exported_request(request).unwrap_err(),
+            CompilerExportError::CompilerNucleusDigestMismatch
+        );
+    }
 
     #[test]
     fn unsupported_width_fails_closed_before_role_verification() {
