@@ -25,7 +25,8 @@
 //! walking it), just implemented directly as C structs instead of tagged
 //! 32-bit words on a heap array.
 
-use crate::ir::{BufferLiteral, Ir, Params, Quoted};
+use crate::compiler_mechanism::RichCompilerMechanismRef;
+use crate::ir::{BufferLiteral, Ir, Params, PrimOp, Quoted};
 use std::fmt;
 
 /// Sanitizes a my-lisp def name into a valid C identifier for use as a raw
@@ -772,7 +773,91 @@ impl CBackend {
             Ir::Def { .. } => Err(CompileError::NestedDef),
             Ir::MachinePrim { .. } => Err(CompileError::UnsupportedVariant("MachinePrim")),
             Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
-            Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
+            Ir::Prim { op, args } => self.compile_compiler_prim(op, args, env),
+        }
+    }
+
+    fn compile_compiler_prim(
+        &mut self,
+        op: &PrimOp,
+        args: &[Ir],
+        env: &str,
+    ) -> Result<String, CompileError> {
+        match op {
+            PrimOp::CompilerMechanism(mechanism) => match mechanism {
+                RichCompilerMechanismRef::AtomPredicateD1 => {
+                    if args.len() != 1 {
+                        return Err(CompileError::UnsupportedVariant("current ATOM arity"));
+                    }
+                    let value = self.compile_expr(&args[0], env)?;
+                    Ok(format!("v_atom_predicate({value})"))
+                }
+                RichCompilerMechanismRef::SelectorTail => {
+                    if args.len() != 1 {
+                        return Err(CompileError::UnsupportedVariant("current CDR arity"));
+                    }
+                    let value = self.compile_expr(&args[0], env)?;
+                    Ok(format!(
+                        "({{ Value *_v = {value}; require_tag(_v, TAG_CONS, \"cdr\"); v_cdr(_v); }})"
+                    ))
+                }
+                RichCompilerMechanismRef::SelectorHead => {
+                    if args.len() != 1 {
+                        return Err(CompileError::UnsupportedVariant("current CAR arity"));
+                    }
+                    let value = self.compile_expr(&args[0], env)?;
+                    Ok(format!(
+                        "({{ Value *_v = {value}; require_tag(_v, TAG_CONS, \"car\"); v_car(_v); }})"
+                    ))
+                }
+                RichCompilerMechanismRef::AtomEqualityD1 => {
+                    if args.len() != 2 {
+                        return Err(CompileError::UnsupportedVariant("current EQ arity"));
+                    }
+                    let left = self.compile_expr(&args[0], env)?;
+                    let right = self.compile_expr(&args[1], env)?;
+                    Ok(format!("v_eq_predicate({left}, {right})"))
+                }
+                RichCompilerMechanismRef::PairConstruct => {
+                    if args.len() != 2 {
+                        return Err(CompileError::UnsupportedVariant("current CONS arity"));
+                    }
+                    let head = self.compile_expr(&args[0], env)?;
+                    let tail = self.compile_expr(&args[1], env)?;
+                    Ok(format!("mk_cons({head}, {tail})"))
+                }
+                RichCompilerMechanismRef::Quote
+                | RichCompilerMechanismRef::ConditionalD1
+                | RichCompilerMechanismRef::Lambda
+                | RichCompilerMechanismRef::Define => Err(CompileError::UnsupportedVariant(
+                    "non-call compiler mechanism",
+                )),
+            },
+            PrimOp::CompilerConditionalExactD1(mechanism) => {
+                if *mechanism != RichCompilerMechanismRef::ConditionalD1 {
+                    return Err(CompileError::UnsupportedVariant(
+                        "compiler conditional mechanism",
+                    ));
+                }
+                if args.len() % 2 != 0 {
+                    return Err(CompileError::UnsupportedVariant(
+                        "current COND branch arity",
+                    ));
+                }
+
+                let mut out = String::from("({ Value *_c;");
+                for (index, pair) in args.chunks_exact(2).enumerate() {
+                    let test_expr = self.compile_expr(&pair[0], env)?;
+                    let body_expr = self.compile_expr(&pair[1], env)?;
+                    let keyword = if index == 0 { " if " } else { " else if " };
+                    out.push_str(&format!(
+                        "{keyword}(require_predicate_bit({test_expr}, \"current-cond\")) {{ _c = {body_expr}; }}"
+                    ));
+                }
+                out.push_str(" else { _c = &NIL_V; } _c; })");
+                Ok(out)
+            }
+            _ => Err(CompileError::UnsupportedVariant("Prim")),
         }
     }
 
