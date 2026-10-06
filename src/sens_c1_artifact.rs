@@ -371,8 +371,9 @@ mod tests {
 
     #[test]
     fn c1_source_compiles_and_executes() {
-        let artifact = build_current_sens_c1(SOURCE, pinned_compiler_export())
-            .expect("current nucleus C1 artifact");
+        let artifact =
+            build_current_sens_c1(SOURCE, pinned_compiler_export(), TEST_CML_REVISION)
+                .expect("current nucleus C1 artifact");
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock after epoch")
