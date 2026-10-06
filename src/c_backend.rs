@@ -845,7 +845,7 @@ impl CBackend {
                     let body_expr = self.compile_expr(&pair[1], env)?;
                     let keyword = if index == 0 { " if " } else { " else if " };
                     out.push_str(&format!(
-                        "{keyword}(require_predicate_bit({test_expr}, "current-cond")) {{ _c = {body_expr}; }}"
+                        "{keyword}(require_predicate_bit({test_expr}, \"current-cond\")) {{ _c = {body_expr}; }}"
                     ));
                 }
                 out.push_str(" else { _c = &NIL_V; } _c; })");
