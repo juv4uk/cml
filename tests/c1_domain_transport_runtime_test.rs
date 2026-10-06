@@ -1,6 +1,8 @@
 use cml::c_backend::CBackend;
 use cml::ir::Ir;
+use sens::{Bija3, Bit3, Bit4, CoreD4, CoreDomainIdentity, Expr, ExprKind, Span};
 use std::process::Command;
+use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn runtime_prefix() -> String {
@@ -11,12 +13,83 @@ fn runtime_prefix() -> String {
     source[..source.find(marker).expect("generated main marker")].to_string()
 }
 
+fn symbol(name: &str) -> Expr {
+    Expr {
+        kind: ExprKind::Symbol(Rc::from(name)),
+        span: Span::default(),
+    }
+}
+
+fn canonical_domain_wire() -> Vec<u8> {
+    let d3 = CoreDomainIdentity::D3(Bija3::from_word(Bit3::new(0b010).unwrap()));
+    let d4 = CoreDomainIdentity::D4(CoreD4::from_word(Bit4::new(0b0010).unwrap()));
+    let program = vec![
+        Expr {
+            kind: ExprKind::DomainCall(d3, Rc::from(vec![symbol("x")].into_boxed_slice())),
+            span: Span::default(),
+        },
+        Expr {
+            kind: ExprKind::DomainCall(
+                d4,
+                Rc::from(
+                    vec![
+                        Expr {
+                            kind: ExprKind::List(Rc::from(
+                                vec![symbol("x")].into_boxed_slice(),
+                            )),
+                            span: Span::default(),
+                        },
+                        symbol("x"),
+                    ]
+                    .into_boxed_slice(),
+                ),
+            ),
+            span: Span::default(),
+        },
+    ];
+    sens::wire_encode_program(&program)
+}
+
 #[test]
 fn exact_domain_transport_preserves_width_payload_and_shape_without_semantic_dispatch() {
+    let wire = canonical_domain_wire();
+    let c_wire = wire
+        .iter()
+        .map(|byte| format!("0x{byte:02x}u"))
+        .collect::<Vec<_>>()
+        .join(", ");
     let source = format!(
         r#"{}
 int main(int argc, char **argv) {{
     bootstrap_builtins();
+
+    const uint8_t canonical_wire[] = {{{c_wire}}};
+    Value *decoded_program =
+        decode_sens_program_wire(canonical_wire, sizeof(canonical_wire));
+    if (decoded_program->tag != TAG_CONS) return 1;
+
+    Value *first_call = v_car(decoded_program);
+    Value *program_tail = v_cdr(decoded_program);
+    if (first_call->tag != TAG_CONS || program_tail->tag != TAG_CONS) return 2;
+    Value *second_call = v_car(program_tail);
+    if (v_cdr(program_tail)->tag != TAG_NIL) return 3;
+    if (second_call->tag != TAG_CONS) return 4;
+
+    Value *wire_d3 = v_car(first_call);
+    Value *wire_d4 = v_car(second_call);
+    if (wire_d3->tag != TAG_DOMAIN_IDENTITY ||
+        wire_d3->u.domain_identity.width != 3 ||
+        wire_d3->u.domain_identity.packed_bits != 2) return 5;
+    if (wire_d4->tag != TAG_DOMAIN_IDENTITY ||
+        wire_d4->u.domain_identity.width != 4 ||
+        wire_d4->u.domain_identity.packed_bits != 2) return 6;
+    if (v_eq_same(wire_d3, wire_d4)) return 7;
+
+    Value *wire_d3_args = v_cdr(first_call);
+    if (wire_d3_args->tag != TAG_CONS ||
+        v_car(wire_d3_args)->tag != TAG_SYM ||
+        strcmp(v_car(wire_d3_args)->u.sym, "x") != 0 ||
+        v_cdr(wire_d3_args)->tag != TAG_NIL) return 8;
 
     if (argc > 1 && strcmp(argv[1], "forbidden-sid") == 0) {{
         const uint8_t legacy_sid_wire[] = {{0x53u, 0x57u, 0x01u, 0x01u, 0x51u}};
