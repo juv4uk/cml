@@ -295,6 +295,65 @@ pub fn build_current_sens_c1(
     Ok(artifact)
 }
 
+
+/// Build executable C2 source from the exact binary whole-program artifact
+/// emitted by generated C1.
+///
+/// CML does not parse or interpret the SENS artifact. Canonical bytes are
+/// decoded and semantically admitted by SENS first; CML receives only the
+/// verified typed requests and binds those already-verified abstract roles to
+/// private mechanisms.
+pub fn build_current_sens_c2_from_c1_evidence(
+    c1_evidence: &[u8],
+    cml_revision: &str,
+) -> Result<CurrentSensC2Artifact, C1ArtifactError> {
+    if !valid_hex(cml_revision, 40) {
+        return Err(C1ArtifactError::InvalidCmlRevision);
+    }
+
+    let pinned = crate::sens_domain_bridge::pinned_authority()
+        .map_err(|error| C1ArtifactError::EvidenceVerify(error.to_string()))?;
+    let parsed = sens::parse(PINNED_NUCLEUS)
+        .map_err(|error| C1ArtifactError::EvidenceVerify(error.to_string()))?;
+    let canonical_program = sens::lower_program(&parsed);
+    let wire = sens::wire_encode_program(&canonical_program);
+    let program_wire_sha256 = sha256_hex(&wire);
+
+    let decoded = sens::compiler_evidence_from_canonical_bytes(c1_evidence)
+        .map_err(C1ArtifactError::EvidenceDecode)?;
+    let verified = sens::verify_compiler_program_artifact_from_sens(
+        &decoded,
+        &program_wire_sha256,
+        &pinned.revision,
+    )
+    .map_err(|error| C1ArtifactError::EvidenceVerify(error.to_string()))?;
+
+    let registry = VerifiedCurrentRegistry::from_verified_program_artifact(&verified)?;
+    let lowered = lower_current_sens_source_with_registry(PINNED_NUCLEUS, &registry)?;
+    if lowered.authority != pinned {
+        return Err(C1ArtifactError::InvalidAuthority);
+    }
+
+    let bundle = sens::compiler_program_bootstrap_bundle()
+        .map_err(|error| C1ArtifactError::Bootstrap(error.to_string()))?;
+    let driver_body = c1_driver_body(&lowered.authority, &bundle)?;
+    let mut backend = CBackend::new();
+    let c_source = backend
+        .compile_program_with_c1_driver(&lowered.ir, &driver_body)
+        .map_err(|error| C1ArtifactError::Backend(error.to_string()))?;
+
+    Ok(CurrentSensC2Artifact {
+        source_sha256: sha256_hex(PINNED_NUCLEUS.as_bytes()),
+        c1_evidence_sha256: sha256_hex(c1_evidence),
+        semantic_requests_sha256: verified.semantic_requests_sha256,
+        authority: lowered.authority,
+        cml_revision: cml_revision.to_string(),
+        backend_id: C1_BACKEND_ID.to_string(),
+        c_source_sha256: sha256_hex(c_source.as_bytes()),
+        c_source,
+    })
+}
+
 impl CurrentSensC1Artifact {
     pub fn encode_v1(&self) -> Result<Vec<u8>, C1ArtifactError> {
         validate(self)?;
