@@ -925,9 +925,19 @@ fn preflight_env(
                 "TailSelfCall outside a tail-call program",
             ));
         }
-        _ => {
+        Ir::Sid(_) => {
             return Err(CompileError::UnsupportedVariant(
-                "unsupported IR node in x86 preflight",
+                "bare Sid value in x86 preflight",
+            ));
+        }
+        Ir::Builtin(_) => {
+            return Err(CompileError::UnsupportedVariant(
+                "Builtin value in x86 preflight",
+            ));
+        }
+        Ir::CondMatch { .. } => {
+            return Err(CompileError::UnsupportedVariant(
+                "CondMatch in x86 preflight",
             ));
         }
     }
@@ -1110,13 +1120,7 @@ fn preflight_tail_body(
                 preflight_def_body(val, bindings, symbols, def_arities, slots)?;
                 nested_bindings.insert(name.clone());
             }
-            preflight_tail_body(
-                body,
-                &nested_bindings,
-                symbols,
-                def_arities,
-                slots,
-            )?;
+            preflight_tail_body(body, &nested_bindings, symbols, def_arities, slots)?;
         }
         other => preflight_def_body(other, bindings, symbols, def_arities, slots)?,
     }

@@ -39,7 +39,9 @@
 ; atom/pair predicate. Keep that distinction explicit instead of coercing ().
 (def macro-empty?
   (lambda (value)
-    (порожнє? value)))
+    (cond
+      ((атом? value) (тотожне? value (quote ())))
+      ((атом? (quote cml-macro-control)) (атом? (сполучити (quote cml-macro-control) ()))))))
 
 ; Current SENS COND consumes exact D1/D3 control, while the historical CML
 ; macro meta-language still observes T/() as data. Keep that bridge local:
