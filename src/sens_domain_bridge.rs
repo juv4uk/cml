@@ -412,7 +412,7 @@ mod tests {
         assert_eq!(authority.revision.len(), 40);
         assert_eq!(authority.authority_path, "language-contract.lisp");
         assert_eq!(authority.authority_sha256.len(), 64);
-        assert_eq!(authority.language_contract_version, "11.6");
+        assert_eq!(authority.language_contract_version, "11.8");
     }
 
     #[test]
