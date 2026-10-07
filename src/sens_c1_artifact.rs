@@ -33,7 +33,6 @@ pub struct CurrentSensC1Artifact {
     pub c_source_sha256: String,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CurrentSensC2Artifact {
     pub source_sha256: String,
@@ -294,7 +293,6 @@ pub fn build_current_sens_c1(
     validate(&artifact)?;
     Ok(artifact)
 }
-
 
 /// Build executable C2 source from the exact binary whole-program artifact
 /// emitted by generated C1.
@@ -944,8 +942,8 @@ mod tests {
 
     #[test]
     fn c1_binary_artifact_materializes_and_runs_distinct_c2_executable() {
-        let cml_revision =
-            std::env::var("CML_PRODUCER_SHA").expect("C2 executable lineage requires exact CML_PRODUCER_SHA");
+        let cml_revision = std::env::var("CML_PRODUCER_SHA")
+            .expect("C2 executable lineage requires exact CML_PRODUCER_SHA");
         assert!(valid_hex(&cml_revision, 40));
 
         let c1 = build_current_sens_c1(SOURCE, pinned_compiler_export(), &cml_revision)
