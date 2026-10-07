@@ -1,0 +1,8 @@
+[package]
+name = "sens-selfhost-evidence-decoder"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+sens = { path = "../../external/sens-evidence-decoder/crates/sens" }
