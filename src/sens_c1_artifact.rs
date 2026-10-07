@@ -705,7 +705,7 @@ mod tests {
 
     #[test]
     fn c1_recompiles_identical_nucleus_to_byte_identical_c2_artifact() {
-        const SENS_DENOMINATOR: &str = "c66d4743bb70882c75376dbcec27d393e5a9649d";
+        const SENS_DENOMINATOR: &str = "69d4bb7f8390e431b479eb17ea68dcefb80d04f9";
 
         let cml_revision =
             std::env::var("CML_PRODUCER_SHA").expect("C2 lineage requires exact CML_PRODUCER_SHA");
