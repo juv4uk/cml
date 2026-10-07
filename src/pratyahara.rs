@@ -114,7 +114,6 @@ pub fn fold_constants(expr: &Expr) -> Expr {
                 }
 
                 if (op == "diff"
-                    || op == "difference"
                     || op == "pratyahara-diff"
                     || op == "pratyahara-difference")
                     && args.len() == 2
@@ -172,6 +171,23 @@ mod tests {
     fn quote_is_a_hard_barrier_even_for_pratyahara_named_symbols() {
         assert_eq!(fold_constants(&quote_symbol("car")), quote_symbol("car"));
         assert_eq!(fold_constants(&quote_symbol("ac")), quote_symbol("ac"));
+    }
+
+    #[test]
+    fn canonical_difference_surface_is_not_stolen_by_pratyahara_folding() {
+        let canonical = Expr::List(vec![
+            Expr::Symbol("difference".to_string()),
+            Expr::Integer(3),
+            Expr::Integer(1),
+        ]);
+        assert_eq!(fold_constants(&canonical), canonical);
+
+        let explicit = Expr::List(vec![
+            Expr::Symbol("pratyahara-difference".to_string()),
+            Expr::Integer(3),
+            Expr::Integer(1),
+        ]);
+        assert_eq!(fold_constants(&explicit), Expr::Integer(2));
     }
 
     #[test]
