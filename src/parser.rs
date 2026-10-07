@@ -619,6 +619,12 @@ mod sid8_identity_tests {
     }
 
     #[test]
+    fn explicit_plus_disambiguates_eight_binary_digits_as_decimal_integer() {
+        let exprs = parse("+10000000").expect("signed decimal integer must parse");
+        assert_eq!(exprs, vec![Expr::Integer(10_000_000)]);
+    }
+
+    #[test]
     fn wrong_width_binary_digit_token_is_not_sid8() {
         let exprs = parse("0000101").expect("seven-bit spelling remains ordinary numeric token");
         assert_eq!(exprs, vec![Expr::Integer(101)]);
