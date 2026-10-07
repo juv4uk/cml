@@ -1,0 +1,29 @@
+name: issue 668 current SENS to WSM x86 bridge
+
+on:
+  push:
+    paths:
+      - "src/x86_freestanding.rs"
+      - "tests/wsm_os_current_x86_bridge_test.rs"
+      - ".github/workflows/issue-668-wsm-os-current-x86.yml"
+  pull_request:
+    paths:
+      - "src/x86_freestanding.rs"
+      - "tests/wsm_os_current_x86_bridge_test.rs"
+      - ".github/workflows/issue-668-wsm-os-current-x86.yml"
+  workflow_dispatch:
+
+jobs:
+  structural-current-domain-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Verify pinned SENS submodule
+        run: |
+          test -f external/sens/Cargo.toml
+          git submodule status external/sens
+      - name: Run focused current-domain x86 bridge tests
+        run: cargo test -j 2 --test wsm_os_current_x86_bridge_test -- --nocapture
