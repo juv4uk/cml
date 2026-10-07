@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 SCHEMA = "sens-execution-conformance/v1"
-CURRENT_CONTRACT = "11.6"
+CURRENT_CONTRACT = "11.8"
 
 
 def upstream_validator(sens_dir: Path) -> Path:
