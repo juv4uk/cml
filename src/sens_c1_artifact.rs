@@ -728,21 +728,53 @@ mod tests {
             .expect("clock after epoch")
             .as_nanos();
         let base = std::env::temp_dir().join(format!("cml-sens-c2-{}-{nonce}", std::process::id()));
-        let source_path = base.with_extension("c");
         let binary_path = base.with_extension("bin");
-        std::fs::write(&source_path, &c1.c_source).expect("write generated C1 source");
+        let repeat_binary_path = base.with_extension("repeat.bin");
 
-        let compile = Command::new("gcc")
-            .arg(&source_path)
-            .arg("-Wl,--build-id=none")
-            .arg("-o")
-            .arg(&binary_path)
-            .output()
-            .expect("gcc must execute");
+        let compile_c1 = |path: &std::path::Path| {
+            let mut child = Command::new("gcc")
+                .args([
+                    "-x",
+                    "c",
+                    "-",
+                    "-frandom-seed=cml-sens-selfhost-c1",
+                    "-Wl,--build-id=none",
+                    "-s",
+                    "-o",
+                ])
+                .arg(path)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("gcc must execute");
+            child
+                .stdin
+                .take()
+                .expect("gcc stdin pipe")
+                .write_all(c1.c_source.as_bytes())
+                .expect("generated C1 source reaches gcc stdin");
+            child.wait_with_output().expect("gcc must finish")
+        };
+
+        let compile = compile_c1(&binary_path);
         assert!(
             compile.status.success(),
             "generated C1 source did not compile for C2 witness: {}",
             String::from_utf8_lossy(&compile.stderr)
+        );
+        let repeat_compile = compile_c1(&repeat_binary_path);
+        assert!(
+            repeat_compile.status.success(),
+            "repeat generated C1 source did not compile: {}",
+            String::from_utf8_lossy(&repeat_compile.stderr)
+        );
+        let c1_executable = std::fs::read(&binary_path).expect("read generated C1 executable");
+        let repeat_c1_executable =
+            std::fs::read(&repeat_binary_path).expect("read repeat generated C1 executable");
+        assert_eq!(
+            c1_executable, repeat_c1_executable,
+            "identical generated C1 source + toolchain must produce byte-identical executables"
         );
 
         // C2 is the whole-program compiler artifact emitted by the generated
@@ -769,9 +801,45 @@ mod tests {
             "strongest current fixed-point witness is byte-identical C0/C1 compiler artifact output"
         );
 
-        let c1_executable = std::fs::read(&binary_path).expect("read generated C1 executable");
+        let gcc_version = Command::new("gcc")
+            .args(["-dumpfullversion", "-dumpversion"])
+            .output()
+            .expect("gcc version query must execute");
+        assert!(
+            gcc_version.status.success(),
+            "gcc version query failed: {}",
+            String::from_utf8_lossy(&gcc_version.stderr)
+        );
+        let gcc_version = String::from_utf8(gcc_version.stdout)
+            .expect("gcc version is UTF-8")
+            .trim()
+            .to_string();
+        assert!(
+            !gcc_version.is_empty() && !gcc_version.chars().any(char::is_whitespace),
+            "gcc version must be one machine-readable token"
+        );
+
+        let gcc_target = Command::new("gcc")
+            .arg("-dumpmachine")
+            .output()
+            .expect("gcc target query must execute");
+        assert!(
+            gcc_target.status.success(),
+            "gcc target query failed: {}",
+            String::from_utf8_lossy(&gcc_target.stderr)
+        );
+        let gcc_target = String::from_utf8(gcc_target.stdout)
+            .expect("gcc target is UTF-8")
+            .trim()
+            .to_string();
+        assert!(
+            !gcc_target.is_empty() && !gcc_target.chars().any(char::is_whitespace),
+            "gcc target must be one machine-readable token"
+        );
+
         let nucleus_sha256 = sha256_hex(SOURCE.as_bytes());
         let c1_executable_sha256 = sha256_hex(&c1_executable);
+        let c1_executable_size = c1_executable.len();
         let c0_artifact_sha256 = sha256_hex(&c0_artifact);
         let c2_artifact_sha256 = sha256_hex(&first_c2.stdout);
 
@@ -781,18 +849,22 @@ mod tests {
         );
 
         println!(
-            "SELFHOST_C2_EVIDENCE sens_revision={} cml_revision={} nucleus_sha256={} c1_c_source_sha256={} c1_executable_sha256={} c0_artifact_sha256={} c2_artifact_sha256={} equivalence=byte-identical repeat=byte-identical",
+            "SELFHOST_C2_EVIDENCE sens_revision={} cml_revision={} nucleus_sha256={} backend_id={} gcc_version={} gcc_target={} c1_c_source_sha256={} c1_executable_sha256={} c1_executable_size={} c0_artifact_sha256={} c2_artifact_sha256={} equivalence=byte-identical repeat=byte-identical repeat_executable=byte-identical",
             c1.authority.revision,
             cml_revision,
             nucleus_sha256,
+            c1.backend_id,
+            gcc_version,
+            gcc_target,
             c1.c_source_sha256,
             c1_executable_sha256,
+            c1_executable_size,
             c0_artifact_sha256,
             c2_artifact_sha256,
         );
 
-        let _ = std::fs::remove_file(source_path);
         let _ = std::fs::remove_file(binary_path);
+        let _ = std::fs::remove_file(repeat_binary_path);
     }
 
     #[test]
