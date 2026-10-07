@@ -76,7 +76,8 @@ fn compatibility_cond_rejects_bare_t_instead_of_coercing_truthiness() {
     match compile_and_run("(cond (t 1))").expect("compile_and_run") {
         Observation::Error(error) => {
             assert!(
-                error.contains("Type") && error.contains("compatibility cond test must be (1) or (0)"),
+                error.contains("Type")
+                    && error.contains("compatibility cond test must be (1) or (0)"),
                 "compatibility COND must reject bare T instead of reviving generic truthiness: {error}"
             );
         }
