@@ -64,7 +64,7 @@ int main() {{
     let program = lower::lower_program_with_tail_calls(&expressions).expect("lower");
     let assembly = X86FreestandingBackend::new()
         .compile_program(&program)
-        .expect("compile");
+        .unwrap_or_else(|error| panic!("compile: {error:?}; lowered IR: {program:#?}"));
 
     fs::write("/tmp/lisp_count.s", &assembly).unwrap();
 
