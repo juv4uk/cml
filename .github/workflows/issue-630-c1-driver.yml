@@ -10,6 +10,8 @@ on:
       - "src/c1_driver_runtime.rs"
       - "src/c_backend.rs"
       - "src/sens_c1_artifact.rs"
+      - "src/sens_current_lowering.rs"
+      - "src/sens_rich_bridge.rs"
       - "tests/current_sens_c0_lowering_test.rs"
       - ".github/workflows/issue-630-c1-driver.yml"
 
