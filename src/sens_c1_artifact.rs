@@ -699,8 +699,8 @@ mod tests {
             "compiled C1 must emit byte-for-byte the SENS-owned canonical compiler evidence"
         );
 
+        let _ = std::fs::remove_file(source_path);
         let _ = std::fs::remove_file(binary_path);
-        let _ = std::fs::remove_file(repeat_binary_path);
     }
 
     #[test]
@@ -863,8 +863,8 @@ mod tests {
             c2_artifact_sha256,
         );
 
-        let _ = std::fs::remove_file(source_path);
         let _ = std::fs::remove_file(binary_path);
+        let _ = std::fs::remove_file(repeat_binary_path);
     }
 
     #[test]
