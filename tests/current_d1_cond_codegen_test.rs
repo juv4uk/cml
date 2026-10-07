@@ -7,6 +7,18 @@ fn one_branch_cond() -> Ir {
     }
 }
 
+fn compatibility_cond() -> Ir {
+    Ir::Cond {
+        branches: vec![(
+            Ir::App {
+                func: Box::new(Ir::Sid(sens::sid!(00000011))),
+                args: vec![Ir::Int(1), Ir::Int(1)],
+            },
+            Ir::Int(7),
+        )],
+    }
+}
+
 fn main_section(source: &str) -> &str {
     source
         .split_once("int main(void) {")
@@ -23,12 +35,12 @@ fn compatibility_mode_remains_the_default() {
     );
 
     let source = backend
-        .compile_program(&[one_branch_cond()])
+        .compile_program(&[compatibility_cond()])
         .expect("compatibility conditional codegen");
     let main = main_section(&source);
 
-    assert!(main.contains("if (truthy(mk_int(1)))"));
-    assert!(!main.contains("require_predicate_bit(mk_int(1), \"current-cond\")"));
+    assert!(main.contains("compatibility_cond_selects("));
+    assert!(!main.contains("require_predicate_bit("));
 }
 
 #[test]
