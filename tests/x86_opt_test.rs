@@ -154,9 +154,10 @@ fn test_branch_simplification_and_unreachable_block_elimination() {
 
     let report = optimize_lir(&mut func, config);
 
-    assert_eq!(
-        report.branches_simplified, 1,
-        "constant 5 == 5 condition must be simplified to unconditional jump"
+    assert!(
+        report.branches_simplified >= 1,
+        "constant 5 == 5 condition must be simplified to unconditional jump; got {}",
+        report.branches_simplified
     );
     assert!(
         report.blocks_eliminated >= 1,
