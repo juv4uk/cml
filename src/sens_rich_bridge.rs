@@ -164,6 +164,52 @@ fn verify_role_evidence(
 }
 
 /// Verify one carried current-domain lowering request before IR construction.
+/// Verify one proof-carried request emitted by the executable SENS compiler.
+///
+/// Unlike `verify_rich_request`, this handoff does not re-ask the bootstrap
+/// SENS implementation for identity -> role meaning. The role is already part
+/// of the C1 artifact. CML verifies only immutable authority/proof scope and
+/// then selects its private mechanism from that carried role.
+pub fn verify_proof_carried_rich_request(
+    request: RichSemanticRequest,
+) -> Result<VerifiedRichMechanism, RichBridgeError> {
+    if request.semantic_status != SemanticStatus::Current {
+        return Err(RichBridgeError::SemanticStatusNotCurrent);
+    }
+    if request.mechanism_status != MechanismStatus::Admitted {
+        return Err(RichBridgeError::MechanismNotAdmitted);
+    }
+
+    let pinned = verify_authority_provenance(&request.provenance)?;
+    verify_role_evidence(request.lowering_role, &request.law_ref, &request.proof_ref)?;
+
+    let proof_domain_matches = match request.lowering_role {
+        sens::CompilerLoweringRole::LambdaForm | sens::CompilerLoweringRole::DefineForm => {
+            matches!(request.identity, sens::DomainIdentity::D4(_))
+        }
+        sens::CompilerLoweringRole::QuoteForm
+        | sens::CompilerLoweringRole::AtomPredicate
+        | sens::CompilerLoweringRole::SelectorTail
+        | sens::CompilerLoweringRole::SelectorHead
+        | sens::CompilerLoweringRole::AtomEquality
+        | sens::CompilerLoweringRole::CondForm
+        | sens::CompilerLoweringRole::PairConstruct => {
+            matches!(request.identity, sens::DomainIdentity::D3(_))
+        }
+    };
+    if !proof_domain_matches {
+        return Err(RichBridgeError::UnsupportedOrResearchIdentity);
+    }
+
+    let mechanism_ref = select_rich_compiler_mechanism(request.lowering_role);
+    Ok(VerifiedRichMechanism {
+        identity: request.identity,
+        lowering_role: request.lowering_role,
+        mechanism_ref,
+        provenance: pinned,
+    })
+}
+
 pub fn verify_rich_request(
     request: RichSemanticRequest,
 ) -> Result<VerifiedRichMechanism, RichBridgeError> {
@@ -250,6 +296,43 @@ mod tests {
             sens::CompilerLoweringRole::LambdaForm
         );
         assert_eq!(verified.mechanism_ref(), RichCompilerMechanismRef::Lambda);
+    }
+
+    #[test]
+    fn proof_carried_request_binds_role_without_bootstrap_role_query() {
+        let request = current(d3(0b010));
+        let verified = verify_proof_carried_rich_request(request).unwrap();
+        assert_eq!(
+            verified.lowering_role(),
+            sens::CompilerLoweringRole::AtomPredicate
+        );
+        assert_eq!(
+            verified.mechanism_ref(),
+            RichCompilerMechanismRef::AtomPredicateD1
+        );
+
+        let source = include_str!("sens_rich_bridge.rs");
+        let start = source
+            .find("pub fn verify_proof_carried_rich_request")
+            .expect("carried verifier source");
+        let end = source[start..]
+            .find("\npub fn verify_rich_request")
+            .map(|offset| start + offset)
+            .expect("legacy verifier follows carried verifier");
+        let carried_source = &source[start..end];
+        assert!(!carried_source.contains("authoritative_lowering_role("));
+        assert!(!carried_source.contains("compiler_lowering_role_from_sens"));
+    }
+
+    #[test]
+    fn proof_carried_role_must_match_its_ratified_domain_scope() {
+        let mut request = current(d3(0b010));
+        request.lowering_role = sens::CompilerLoweringRole::LambdaForm;
+        request.proof_ref = D4_PROOF_REF.into();
+        assert_eq!(
+            verify_proof_carried_rich_request(request).unwrap_err(),
+            RichBridgeError::UnsupportedOrResearchIdentity
+        );
     }
 
     #[test]
