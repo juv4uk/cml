@@ -1,0 +1,49 @@
+name: Issue 655 C1 artifact to C2 executable
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "external/sens"
+      - "upstream-revisions.lisp"
+      - "src/sens_rich_bridge.rs"
+      - "src/sens_current_lowering.rs"
+      - "src/sens_c1_artifact.rs"
+      - "src/c_backend.rs"
+      - ".github/workflows/issue-655-c2-executable.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  c2-executable:
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: "2"
+      RUST_TEST_THREADS: "1"
+    steps:
+      - name: Checkout exact C1/C2 lineage
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Freeze exact SENS verifier denominator
+        run: |
+          test "$(git -C external/sens rev-parse HEAD)" = "69d4bb7f8390e431b479eb17ea68dcefb80d04f9"
+          grep -q '(build-source-sha . "69d4bb7f8390e431b479eb17ea68dcefb80d04f9")' upstream-revisions.lisp
+          grep -q '(supported-pin-sha . "69d4bb7f8390e431b479eb17ea68dcefb80d04f9")' upstream-revisions.lisp
+
+      - name: Focused format
+        run: rustfmt --edition 2024 --check src/sens_rich_bridge.rs src/sens_current_lowering.rs src/sens_c1_artifact.rs
+
+      - name: C1 binary artifact materializes and runs C2 executable
+        env:
+          CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          cargo test -j 2 -p cml --lib
+          sens_c1_artifact::tests::c1_binary_artifact_materializes_and_runs_distinct_c2_executable
+          -- --nocapture --test-threads=1
