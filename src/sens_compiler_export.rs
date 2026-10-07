@@ -1,4 +1,4 @@
-//! Consumer for the SENS-owned compiler-semantic-input/1 transport.
+//! Consumer for the SENS-owned compiler-semantic-input/1 and /2 transports.
 //!
 //! This layer parses transport only. It never derives a compiler role from an
 //! identity. The exported exact identity and already-derived role are decoded
@@ -11,7 +11,9 @@ use crate::sens_rich_bridge::{
 };
 use std::fmt;
 
-pub const SCHEMA: &str = "compiler-semantic-input/1";
+pub const SCHEMA_V1: &str = "compiler-semantic-input/1";
+pub const SCHEMA_V2: &str = "compiler-semantic-input/2";
+pub const SCHEMA: &str = SCHEMA_V2;
 
 const PINNED_COMPILER_NUCLEUS: &str = include_str!("../external/sens/lib/compiler-nucleus.lisp");
 
@@ -128,8 +130,22 @@ fn parse_role(tag: &str) -> Result<sens::CompilerLoweringRole, CompilerExportErr
 
 fn parse_one(text: &str) -> Result<ExportedCompilerRequest, CompilerExportError> {
     let schema = dotted_symbol(text, "schema")?;
-    if schema != SCHEMA {
-        return Err(CompilerExportError::WrongSchema(schema));
+    match schema.as_str() {
+        SCHEMA_V1 => {
+            if !text.contains("(identity . ((") || !text.contains("(provenance . ((") {
+                return Err(CompilerExportError::Malformed(
+                    "v1 compiler request lost identity/provenance containers".into(),
+                ));
+            }
+        }
+        SCHEMA_V2 => {
+            if !text.contains("(domain-coordinate . ((") || !text.contains("(authority-chain . ((") {
+                return Err(CompilerExportError::Malformed(
+                    "v2 compiler request lost domain-coordinate/authority-chain containers".into(),
+                ));
+            }
+        }
+        _ => return Err(CompilerExportError::WrongSchema(schema)),
     }
 
     let semantic_status = dotted_symbol(text, "semantic-status")?;
@@ -241,6 +257,21 @@ mod tests {
             verify_exported_request(request).unwrap_err(),
             CompilerExportError::CompilerNucleusDigestMismatch
         );
+    }
+
+    #[test]
+    fn v2_transport_uses_nonsemantic_outer_keys_and_preserves_exact_domain_validation() {
+        let text = "(compiler-semantic-request
+          (schema . compiler-semantic-input/2)
+          (fixture-id . \"x\")
+          (domain-coordinate . ((domain . D8) (bits . 00000010)))
+          (law . ((authority-ref . \"x\") (proof-ref . \"x\") (semantic-status . current)))
+          (mechanism . ((execution-role . lambda-form) (mechanism-status . unknown) (mechanism-ref . ())))
+          (authority-chain . ((repository . \"juv4uk/sens\") (revision . \"0000000000000000000000000000000000000000\") (authority-path . \"language-contract.lisp\") (authority-sha256 . \"0000000000000000000000000000000000000000000000000000000000000000\") (compiler-nucleus-sha256 . \"0000000000000000000000000000000000000000000000000000000000000000\") (contract . 11.8))))";
+        assert!(matches!(
+            parse_compiler_export(text),
+            Err(CompilerExportError::UnsupportedDomain(domain)) if domain == "D8"
+        ));
     }
 
     #[test]
