@@ -770,8 +770,45 @@ mod tests {
         );
 
         let c1_executable = std::fs::read(&binary_path).expect("read generated C1 executable");
+        let gcc_version = Command::new("gcc")
+            .args(["-dumpfullversion", "-dumpversion"])
+            .output()
+            .expect("gcc version query must execute");
+        assert!(
+            gcc_version.status.success(),
+            "gcc version query failed: {}",
+            String::from_utf8_lossy(&gcc_version.stderr)
+        );
+        let gcc_version = String::from_utf8(gcc_version.stdout)
+            .expect("gcc version is UTF-8")
+            .trim()
+            .to_string();
+        assert!(
+            !gcc_version.is_empty() && !gcc_version.chars().any(char::is_whitespace),
+            "gcc version must be one machine-readable token"
+        );
+
+        let gcc_target = Command::new("gcc")
+            .arg("-dumpmachine")
+            .output()
+            .expect("gcc target query must execute");
+        assert!(
+            gcc_target.status.success(),
+            "gcc target query failed: {}",
+            String::from_utf8_lossy(&gcc_target.stderr)
+        );
+        let gcc_target = String::from_utf8(gcc_target.stdout)
+            .expect("gcc target is UTF-8")
+            .trim()
+            .to_string();
+        assert!(
+            !gcc_target.is_empty() && !gcc_target.chars().any(char::is_whitespace),
+            "gcc target must be one machine-readable token"
+        );
+
         let nucleus_sha256 = sha256_hex(SOURCE.as_bytes());
         let c1_executable_sha256 = sha256_hex(&c1_executable);
+        let c1_executable_size = c1_executable.len();
         let c0_artifact_sha256 = sha256_hex(&c0_artifact);
         let c2_artifact_sha256 = sha256_hex(&first_c2.stdout);
 
@@ -781,12 +818,16 @@ mod tests {
         );
 
         println!(
-            "SELFHOST_C2_EVIDENCE sens_revision={} cml_revision={} nucleus_sha256={} c1_c_source_sha256={} c1_executable_sha256={} c0_artifact_sha256={} c2_artifact_sha256={} equivalence=byte-identical repeat=byte-identical",
+            "SELFHOST_C2_EVIDENCE sens_revision={} cml_revision={} nucleus_sha256={} backend_id={} gcc_version={} gcc_target={} c1_c_source_sha256={} c1_executable_sha256={} c1_executable_size={} c0_artifact_sha256={} c2_artifact_sha256={} equivalence=byte-identical repeat=byte-identical",
             c1.authority.revision,
             cml_revision,
             nucleus_sha256,
+            c1.backend_id,
+            gcc_version,
+            gcc_target,
             c1.c_source_sha256,
             c1_executable_sha256,
+            c1_executable_size,
             c0_artifact_sha256,
             c2_artifact_sha256,
         );
