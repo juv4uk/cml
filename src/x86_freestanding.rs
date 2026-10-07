@@ -1110,13 +1110,7 @@ fn preflight_tail_body(
                 preflight_def_body(val, bindings, symbols, def_arities, slots)?;
                 nested_bindings.insert(name.clone());
             }
-            preflight_tail_body(
-                body,
-                &nested_bindings,
-                symbols,
-                def_arities,
-                slots,
-            )?;
+            preflight_tail_body(body, &nested_bindings, symbols, def_arities, slots)?;
         }
         other => preflight_def_body(other, bindings, symbols, def_arities, slots)?,
     }
