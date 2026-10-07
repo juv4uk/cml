@@ -448,9 +448,11 @@ static void require_tag(Value *value, Tag expected, const char *name) {
     if (value->tag != expected) runtime_error("Type", name);
 }
 
-/* Mechanism seam for current exact COND (#609): consume D1 by tag/payload,
- * never via generic truthiness or numeric/list coercion. */
+/* Mechanism seam for current exact COND (#609/#1663): D1:1 selects,
+ * D1:0 skips, and structural EMPTY is the distinct no-witness non-selection.
+ * Never use generic truthiness or numeric/list coercion here. */
 static int require_predicate_bit(Value *value, const char *name) {
+    if (value->tag == TAG_NIL) return 0;
     if (value->tag != TAG_PREDICATE_BIT) runtime_error("Type", name);
     return value->u.predicate_bit == 1;
 }
