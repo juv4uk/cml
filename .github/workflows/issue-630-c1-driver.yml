@@ -52,7 +52,7 @@ jobs:
         env:
           CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha }}
         run: >-
-          guix shell --pure -m manifest.scm --
+          guix shell --pure --preserve=^CML_PRODUCER_SHA$ -m manifest.scm --
           cargo test -p cml --lib sens_c1_artifact::tests -- --nocapture
 
       - name: SW1 runtime transport regression
