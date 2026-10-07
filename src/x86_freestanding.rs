@@ -466,7 +466,14 @@ impl X86FreestandingBackend {
         let mut symbol_names = BTreeSet::new();
         let mut def_arities = BTreeMap::new();
         let mut slots = 0_usize;
-        preflight_tail_body(body, &mut symbol_names, &mut def_arities, &mut slots)?;
+        let bindings: BTreeSet<String> = params.iter().cloned().collect();
+        preflight_tail_body(
+            body,
+            &bindings,
+            &mut symbol_names,
+            &mut def_arities,
+            &mut slots,
+        )?;
         for arg in initial_args {
             preflight(arg, &mut symbol_names, &mut def_arities, &mut slots)?;
         }
@@ -1076,6 +1083,7 @@ fn preflight_lambda_body(
 /// admitted `Def`). `App`, `Lambda`, `Def` and `Var` remain rejected.
 fn preflight_tail_body(
     ir: &Ir,
+    bindings: &BTreeSet<String>,
     symbols: &mut BTreeSet<String>,
     def_arities: &mut BTreeMap<String, DefArity>,
     slots: &mut usize,
@@ -1084,22 +1092,33 @@ fn preflight_tail_body(
     match ir {
         Ir::TailSelfCall { args } => {
             for arg in args {
-                preflight(arg, symbols, def_arities, slots)?;
+                preflight_def_body(arg, bindings, symbols, def_arities, slots)?;
             }
         }
         Ir::Cond { branches } => {
             for (test, expr) in branches {
-                preflight(test, symbols, def_arities, slots)?;
-                preflight_tail_body(expr, symbols, def_arities, slots)?;
+                preflight_def_body(test, bindings, symbols, def_arities, slots)?;
+                preflight_tail_body(expr, bindings, symbols, def_arities, slots)?;
             }
         }
-        Ir::Let { bindings, body } => {
-            for (_, val) in bindings {
-                preflight(val, symbols, def_arities, slots)?;
+        Ir::Let {
+            bindings: let_bindings,
+            body,
+        } => {
+            let mut nested_bindings = bindings.clone();
+            for (name, val) in let_bindings {
+                preflight_def_body(val, bindings, symbols, def_arities, slots)?;
+                nested_bindings.insert(name.clone());
             }
-            preflight_tail_body(body, symbols, def_arities, slots)?;
+            preflight_tail_body(
+                body,
+                &nested_bindings,
+                symbols,
+                def_arities,
+                slots,
+            )?;
         }
-        other => preflight(other, symbols, def_arities, slots)?,
+        other => preflight_def_body(other, bindings, symbols, def_arities, slots)?,
     }
     Ok(())
 }
