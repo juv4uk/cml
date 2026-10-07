@@ -18,6 +18,7 @@ permissions:
 jobs:
   test:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Hosted by GitHub after public-repo cutover.
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
