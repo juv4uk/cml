@@ -18,7 +18,9 @@ use crate::sens_compiler_export::{
     CompilerExportError, parse_compiler_export, verify_exported_request,
 };
 use crate::sens_domain_bridge::AuthorityProvenance;
-use crate::sens_rich_bridge::VerifiedRichMechanism;
+use crate::sens_rich_bridge::{
+    RichBridgeError, VerifiedRichMechanism, bind_verified_program_request,
+};
 use sens::syntax::{Exactness, Expr, ExprKind};
 use std::fmt;
 
@@ -37,6 +39,50 @@ pub struct VerifiedCurrentRegistry {
 }
 
 impl VerifiedCurrentRegistry {
+    /// Build the mechanism registry from a whole-program artifact that SENS
+    /// has already decoded and semantically verified. Repeated request
+    /// occurrences collapse only after exact identity/role/mechanism agreement.
+    pub fn from_program_artifact(
+        artifact: &sens::VerifiedCompilerProgramArtifact,
+    ) -> Result<Self, CurrentLowerError> {
+        let mut entries: Vec<VerifiedRichMechanism> =
+            Vec::with_capacity(CURRENT_COMPILER_CLOSURE_SIZE);
+
+        for request in &artifact.requests {
+            let verified = bind_verified_program_request(request, artifact)?;
+            if let Some(existing) = entries
+                .iter()
+                .find(|entry| entry.identity() == verified.identity())
+            {
+                if existing.lowering_role() != verified.lowering_role()
+                    || existing.mechanism_ref() != verified.mechanism_ref()
+                    || existing.provenance() != verified.provenance()
+                {
+                    return Err(CurrentLowerError::ConflictingVerifiedIdentity);
+                }
+                continue;
+            }
+            entries.push(verified);
+        }
+
+        if entries.len() != CURRENT_COMPILER_CLOSURE_SIZE {
+            return Err(CurrentLowerError::UnexpectedVerifiedClosureSize {
+                expected: CURRENT_COMPILER_CLOSURE_SIZE,
+                actual: entries.len(),
+            });
+        }
+        let authority = entries
+            .first()
+            .expect("nine-role verified program artifact is non-empty")
+            .provenance()
+            .clone();
+        if entries.iter().any(|entry| entry.provenance() != &authority) {
+            return Err(CurrentLowerError::MixedVerifiedAuthority);
+        }
+
+        Ok(Self { entries, authority })
+    }
+
     /// Build the only production mechanism registry from the real SENS export.
     pub fn from_export(text: &str) -> Result<Self, CurrentLowerError> {
         let exported = parse_compiler_export(text)?;
@@ -90,6 +136,7 @@ impl VerifiedCurrentRegistry {
 pub enum CurrentLowerError {
     Parse(String),
     Export(CompilerExportError),
+    Rich(RichBridgeError),
     UnsupportedLegacyIdentity,
     UnsupportedDomainIdentity,
     UnsupportedLiteral(&'static str),
@@ -104,6 +151,7 @@ pub enum CurrentLowerError {
         actual: usize,
     },
     DuplicateVerifiedIdentity,
+    ConflictingVerifiedIdentity,
     MixedVerifiedAuthority,
     MissingVerifiedIdentity,
 }
@@ -113,6 +161,7 @@ impl fmt::Display for CurrentLowerError {
         match self {
             Self::Parse(message) => write!(f, "SENS current-source parse/lower failure: {message}"),
             Self::Export(error) => write!(f, "SENS compiler export rejected: {error}"),
+            Self::Rich(error) => write!(f, "SENS verified program request rejected: {error}"),
             Self::UnsupportedLegacyIdentity => {
                 write!(
                     f,
@@ -154,6 +203,12 @@ impl fmt::Display for CurrentLowerError {
                     "verified compiler export contains a duplicate exact identity"
                 )
             }
+            Self::ConflictingVerifiedIdentity => {
+                write!(
+                    f,
+                    "verified whole-program artifact repeats an identity with conflicting mechanism evidence"
+                )
+            }
             Self::MixedVerifiedAuthority => {
                 write!(f, "verified compiler export mixes authority provenance")
             }
@@ -172,6 +227,12 @@ impl std::error::Error for CurrentLowerError {}
 impl From<CompilerExportError> for CurrentLowerError {
     fn from(error: CompilerExportError) -> Self {
         Self::Export(error)
+    }
+}
+
+impl From<RichBridgeError> for CurrentLowerError {
+    fn from(error: RichBridgeError) -> Self {
+        Self::Rich(error)
     }
 }
 
