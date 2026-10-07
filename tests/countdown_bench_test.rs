@@ -56,7 +56,9 @@ int main() {{
           (cond
             ((тотожне? n 0) 0)
             ((тотожне? n n) (countdown (- n 1))))))
-      (countdown {n})
+      ; Bare 10000000 is an exact eight-bit SID by language rule.
+      ; Leading + makes the decimal benchmark argument explicit.
+      (countdown +{n})
     "#
     );
 
