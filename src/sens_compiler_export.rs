@@ -131,6 +131,15 @@ fn parse_one(text: &str) -> Result<ExportedCompilerRequest, CompilerExportError>
     if schema != SCHEMA {
         return Err(CompilerExportError::WrongSchema(schema));
     }
+    let canonical_containers =
+        text.contains("(ідентичність . ((") && text.contains("(походження . ((");
+    let legacy_containers =
+        text.contains("(identity . ((") && text.contains("(provenance . ((");
+    if !canonical_containers && !legacy_containers {
+        return Err(CompilerExportError::Malformed(
+            "v1 compiler request lost canonical or legacy container pair".into(),
+        ));
+    }
 
     let semantic_status = dotted_symbol(text, "semantic-status")?;
     if semantic_status != "current" {
@@ -241,6 +250,21 @@ mod tests {
             verify_exported_request(request).unwrap_err(),
             CompilerExportError::CompilerNucleusDigestMismatch
         );
+    }
+
+    #[test]
+    fn canonical_v1_container_keys_preserve_exact_domain_validation() {
+        let text = "(compiler-semantic-request
+          (schema . compiler-semantic-input/1)
+          (fixture-id . \"x\")
+          (ідентичність . ((domain . D8) (bits . 00000010)))
+          (law . ((authority-ref . \"x\") (proof-ref . \"x\") (semantic-status . current)))
+          (mechanism . ((execution-role . lambda-form) (mechanism-status . unknown) (mechanism-ref . ())))
+          (походження . ((repository . \"juv4uk/sens\") (revision . \"0000000000000000000000000000000000000000\") (authority-path . \"language-contract.lisp\") (authority-sha256 . \"0000000000000000000000000000000000000000000000000000000000000000\") (compiler-nucleus-sha256 . \"0000000000000000000000000000000000000000000000000000000000000000\") (contract . 11.8))))";
+        assert!(matches!(
+            parse_compiler_export(text),
+            Err(CompilerExportError::UnsupportedDomain(domain)) if domain == "D8"
+        ));
     }
 
     #[test]
