@@ -39,18 +39,20 @@
 ; atom/pair predicate. Keep that distinction explicit instead of coercing ().
 (def macro-empty?
   (lambda (value)
-    (equal? value (quote ()))))
+    (порожнє? value)))
 
 ; Current SENS COND consumes exact D1/D3 control, while the historical CML
 ; macro meta-language still observes T/() as data. Keep that bridge local:
-; these helpers manufacture only internal control values, never macro output.
+; source-routable current D3/D4 Ukrainian surfaces produce the exact control
+; carrier; these helpers manufacture only internal control values, never
+; macro output.
 (def cml-macro-control-yes
   (lambda ()
-    (eq? (quote cml-macro-control) (quote cml-macro-control))))
+    (атом? (quote cml-macro-control))))
 
 (def cml-macro-control-no
   (lambda ()
-    (eq? (quote cml-macro-left) (quote cml-macro-right))))
+    (атом? (сполучити (quote cml-macro-control) ()))))
 
 (def cml-macro-value-truthy?
   (lambda (value)
@@ -62,7 +64,7 @@
   (lambda (value)
     (cond
       ((macro-empty? value) (cml-macro-control-yes))
-      ((atom? value) (cml-macro-control-yes))
+      ((атом? value) (cml-macro-control-yes))
       ((cml-macro-control-yes) (cml-macro-control-no)))))
 
 ; --- alist lookup, shared shape for both the macro table and bindings ---
@@ -71,7 +73,7 @@
   (lambda (alist key)
     (cond
       ((macro-atom? alist) ())
-      ((eq? (car (car alist)) key) (cdr (car alist)))
+      ((тотожне? (car (car alist)) key) (cdr (car alist)))
       ((cml-macro-control-yes) (alist-get (cdr alist) key)))))
 
 ; --- bind-params: params is a bare symbol, a proper list, or a dotted
@@ -102,25 +104,25 @@
       ((macro-atom? expr)
        (cond
          ((macro-empty? expr) ())
-         ((eq? expr (quote nil)) ())
-         ((eq? expr (quote t)) (quote t))
+         ((тотожне? expr (quote nil)) ())
+         ((тотожне? expr (quote t)) (quote t))
          ((cml-macro-control-yes) (alist-get cml-macro-bindings expr))))
       ((cml-macro-control-yes) (eval-macro-form expr cml-macro-bindings)))))
 
 (def eval-macro-form
   (lambda (expr cml-macro-bindings)
     (cond
-      ((eq? (car expr) (quote quote)) (car (cdr expr)))
-      ((eq? (car expr) (quote cons))
+      ((тотожне? (car expr) (quote quote)) (car (cdr expr)))
+      ((тотожне? (car expr) (quote cons))
        (cons (eval-macro-body (car (cdr expr)) cml-macro-bindings)
              (eval-macro-body (car (cdr (cdr expr))) cml-macro-bindings)))
-      ((eq? (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) cml-macro-bindings)))
-      ((eq? (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) cml-macro-bindings)))
-      ((eq? (car expr) (quote atom)) (truthy (macro-atom? (eval-macro-body (car (cdr expr)) cml-macro-bindings))))
-      ((eq? (car expr) (quote eq))
-       (truthy (equal? (eval-macro-body (car (cdr expr)) cml-macro-bindings)
+      ((тотожне? (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) cml-macro-bindings)))
+      ((тотожне? (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) cml-macro-bindings)))
+      ((тотожне? (car expr) (quote atom)) (truthy (macro-atom? (eval-macro-body (car (cdr expr)) cml-macro-bindings))))
+      ((тотожне? (car expr) (quote eq))
+       (truthy (тотожне? (eval-macro-body (car (cdr expr)) cml-macro-bindings)
                         (eval-macro-body (car (cdr (cdr expr))) cml-macro-bindings))))
-      ((eq? (car expr) (quote cond)) (eval-macro-cond (cdr expr) cml-macro-bindings))
+      ((тотожне? (car expr) (quote cond)) (eval-macro-cond (cdr expr) cml-macro-bindings))
       ((cml-macro-control-yes) ()))))
 
 (def truthy
@@ -147,7 +149,7 @@
   (lambda (expr)
     (cond
       ((macro-atom? expr) (cml-macro-control-no))
-      ((eq? (car expr) (quote defmacro)) (cml-macro-control-yes))
+      ((тотожне? (car expr) (quote defmacro)) (cml-macro-control-yes))
       ((cml-macro-control-yes) (cml-macro-control-no)))))
 
 (def defmacro-name (lambda (expr) (car (cdr expr))))
@@ -161,7 +163,7 @@
       ((macro-atom? (car expr))
        (cond
          ((macro-empty? (car expr)) (expand-list expr table))
-         ((eq? (car expr) (quote quote)) expr)
+         ((тотожне? (car expr) (quote quote)) expr)
          ((cml-macro-control-yes) (expand-call expr table))))
       ((cml-macro-control-yes) (expand-list expr table)))))
 
