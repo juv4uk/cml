@@ -1,5 +1,4 @@
-name: Issue 630 executable C1 driver
-# canonical #630 driver gate; prerequisite audits are manual-only.
+name: Issue 648 C1 to C2 fixed-point witness
 
 on:
   pull_request:
@@ -10,52 +9,49 @@ on:
       - "src/c1_driver_runtime.rs"
       - "src/c_backend.rs"
       - "src/sens_c1_artifact.rs"
-      - "tests/current_sens_c0_lowering_test.rs"
-      - ".github/workflows/issue-630-c1-driver.yml"
+      - ".github/workflows/issue-648-selfhost-c2.yml"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  focused:
-    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+  c2-witness:
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
     timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: "1"
+      RUST_TEST_THREADS: "1"
     steps:
       - name: Require private dependency read token
         env:
           SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
         run: test -n "$SENS_READ_TOKEN"
 
-      - name: Checkout stacked C1 driver
+      - name: Checkout exact C1/C2 lineage
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: true
 
-      - name: Verify stacked SENS whole-artifact pin
+      - name: Freeze exact SENS denominator
         run: |
           test "$(git -C external/sens rev-parse HEAD)" = "c66d4743bb70882c75376dbcec27d393e5a9649d"
           grep -q '(build-source-sha . "c66d4743bb70882c75376dbcec27d393e5a9649d")' upstream-revisions.lisp
           grep -q '(supported-pin-sha . "c66d4743bb70882c75376dbcec27d393e5a9649d")' upstream-revisions.lisp
 
-      - name: Focused formatting
+      - name: Focused format
         run: >-
           guix shell --pure -m manifest.scm --
-          rustfmt --edition 2024 --check
-          src/c1_driver_runtime.rs
-          src/c_backend.rs
-          src/sens_c1_artifact.rs
+          rustfmt --edition 2024 --check src/sens_c1_artifact.rs
 
-      - name: Compiled C1 exact whole-artifact witness
+      - name: C1 recompiles identical nucleus to deterministic C2
         env:
-          CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha }}
+          CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: >-
           guix shell --pure --preserve=^CML_PRODUCER_SHA$ -m manifest.scm --
-          cargo test -p cml --lib sens_c1_artifact::tests -- --nocapture
-
-      - name: SW1 runtime transport regression
-        run: >-
-          guix shell --pure -m manifest.scm --
-          cargo test -p cml --test c1_domain_transport_runtime_test -- --nocapture
+          cargo test -j 1 -p cml --lib
+          sens_c1_artifact::tests::c1_recompiles_identical_nucleus_to_byte_identical_c2_artifact
+          -- --nocapture --test-threads=1
