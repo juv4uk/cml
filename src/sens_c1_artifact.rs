@@ -33,7 +33,6 @@ pub struct CurrentSensC1Artifact {
     pub c_source_sha256: String,
 }
 
-
 pub const C2_BACKEND_ID: &str = "cml.c/current-domain/verified-program-artifact";
 pub const C2_ARTIFACT_FORMAT: &str = "CMLSENS-C2-1";
 
@@ -935,8 +934,8 @@ mod tests {
     fn c1_binary_artifact_materializes_and_runs_distinct_c2_executable() {
         const SENS_DENOMINATOR: &str = "69d4bb7f8390e431b479eb17ea68dcefb80d04f9";
 
-        let cml_revision =
-            std::env::var("CML_PRODUCER_SHA").expect("C2 executable lineage requires exact CML SHA");
+        let cml_revision = std::env::var("CML_PRODUCER_SHA")
+            .expect("C2 executable lineage requires exact CML SHA");
         assert!(valid_hex(&cml_revision, 40));
 
         let c1 = build_current_sens_c1(SOURCE, pinned_compiler_export(), &cml_revision)
@@ -951,10 +950,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock after epoch")
             .as_nanos();
-        let base = std::env::temp_dir().join(format!(
-            "cml-sens-c2-exec-{}-{nonce}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("cml-sens-c2-exec-{}-{nonce}", std::process::id()));
         let c1_path = base.with_extension("c1.bin");
         let c2_path = base.with_extension("c2.bin");
         let c2_repeat_path = base.with_extension("c2.repeat.bin");
@@ -986,11 +983,7 @@ mod tests {
             child.wait_with_output().expect("gcc finishes")
         };
 
-        let c1_compile = compile_source(
-            &c1.c_source,
-            "cml-sens-selfhost-fixed-point",
-            &c1_path,
-        );
+        let c1_compile = compile_source(&c1.c_source, "cml-sens-selfhost-fixed-point", &c1_path);
         assert!(
             c1_compile.status.success(),
             "C1 compile failed: {}",
@@ -1014,23 +1007,15 @@ mod tests {
         )
         .expect("C1 output must pass SENS whole-program artifact authority");
 
-        let c2 = build_current_sens_c2_from_verified_artifact(
-            SOURCE,
-            &verified,
-            &cml_revision,
-        )
-        .expect("SENS-verified C1 artifact must materialize C2");
+        let c2 = build_current_sens_c2_from_verified_artifact(SOURCE, &verified, &cml_revision)
+            .expect("SENS-verified C1 artifact must materialize C2");
 
         assert_eq!(
             c1.c_source_sha256, c2.c_source_sha256,
             "strongest source fixed point is byte-identical generated C"
         );
 
-        let c2_compile = compile_source(
-            &c2.c_source,
-            "cml-sens-selfhost-fixed-point",
-            &c2_path,
-        );
+        let c2_compile = compile_source(&c2.c_source, "cml-sens-selfhost-fixed-point", &c2_path);
         let c2_repeat_compile = compile_source(
             &c2.c_source,
             "cml-sens-selfhost-fixed-point",
