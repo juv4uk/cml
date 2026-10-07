@@ -1,8 +1,6 @@
 #![cfg(feature = "gpu-cuda")]
 
-use cml::gpu_host::{
-    CudaHostCapability, CudaHostCapabilityError, CUDA_HOST_SCHEMA,
-};
+use cml::gpu_host::{CUDA_HOST_SCHEMA, CudaHostCapability, CudaHostCapabilityError};
 
 fn ready_record() -> String {
     [
@@ -47,7 +45,10 @@ fn canonical_env_record_parses_without_cuda_hardware() {
 fn nvcc_provenance_is_optional_when_nvrtc_is_present() {
     let record = ready_record()
         .replace("CUDA_TOOLKIT_VERSION=12.6\n", "")
-        .replace("CUDA_NVCC_VERSION=Cuda compilation tools, release 12.6, V12.6.85", "");
+        .replace(
+            "CUDA_NVCC_VERSION=Cuda compilation tools, release 12.6, V12.6.85",
+            "",
+        );
     let capability = CudaHostCapability::parse_env_record(&record).unwrap();
 
     assert!(capability.nvrtc_library_present);
@@ -57,7 +58,10 @@ fn nvcc_provenance_is_optional_when_nvrtc_is_present() {
 
 #[test]
 fn unavailable_host_fails_closed_before_cuda_session() {
-    let record = ready_record().replace("CUDA_HOST_STATUS=ready", "CUDA_HOST_STATUS=unavailable:libcuda");
+    let record = ready_record().replace(
+        "CUDA_HOST_STATUS=ready",
+        "CUDA_HOST_STATUS=unavailable:libcuda",
+    );
     let error = CudaHostCapability::parse_env_record(&record).unwrap_err();
 
     assert_eq!(
@@ -132,9 +136,8 @@ fn canonical_host_and_live_driver_must_have_same_compute_capability() {
 fn host_capability_error_has_runtime_display_text() {
     use cml::gpu_cuda_runtime::CudaRuntimeError;
 
-    let error = CudaRuntimeError::HostCapability(
-        CudaHostCapabilityError::WrongSchema("old-schema".into()),
-    );
+    let error =
+        CudaRuntimeError::HostCapability(CudaHostCapabilityError::WrongSchema("old-schema".into()));
     let text = error.to_string();
     assert!(text.contains("CUDA host capability error"));
     assert!(text.contains("old-schema"));

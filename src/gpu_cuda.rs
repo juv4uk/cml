@@ -691,7 +691,9 @@ mod tests {
 
     #[test]
     fn lower_compute_kernel_accepts_map_and_reduce_through_one_boundary() {
-        let map_exprs = crate::parser::parse("(numeric-buffer-map (lambda (x) (+ x 1)) #i32(10 20 30))").unwrap();
+        let map_exprs =
+            crate::parser::parse("(numeric-buffer-map (lambda (x) (+ x 1)) #i32(10 20 30))")
+                .unwrap();
         let map_ir = crate::lower::lower_program(&map_exprs).unwrap().remove(0);
         assert!(matches!(
             lower_compute_kernel(&map_ir),

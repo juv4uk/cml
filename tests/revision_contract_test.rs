@@ -53,12 +53,14 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
         "FPGA_LISP_SHA constant does not match the compatibility contract"
     );
     assert!(compatibility.contains("(isa . (1 4))"));
-    assert!(compatibility.contains(
-        "evidence/FPGA-SHARED-ORACLE-PARITY-1/hardware-readback-2026-09-11.md"
-    ));
-    assert!(compatibility.contains(
-        "evidence/FPGA-SHARED-ORACLE-PARITY-1/flash-cold-boot-2026-09-11.md"
-    ));
+    assert!(
+        compatibility
+            .contains("evidence/FPGA-SHARED-ORACLE-PARITY-1/hardware-readback-2026-09-11.md")
+    );
+    assert!(
+        compatibility
+            .contains("evidence/FPGA-SHARED-ORACLE-PARITY-1/flash-cold-boot-2026-09-11.md")
+    );
 
     let fpga_lisp = sibling("fpga-lisp");
     let fpga_lisp_head = head(&fpga_lisp);
@@ -93,9 +95,7 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
     );
 
     let physical = fs::read_to_string(
-        fpga_lisp.join(
-            "evidence/FPGA-SHARED-ORACLE-PARITY-1/hardware-readback-2026-09-11.md",
-        ),
+        fpga_lisp.join("evidence/FPGA-SHARED-ORACLE-PARITY-1/hardware-readback-2026-09-11.md"),
     )
     .expect("reviewed physical ATOM/EQ evidence should be readable");
     assert!(
@@ -106,9 +106,7 @@ fn checked_out_dependencies_match_the_compatibility_contract() {
     );
 
     let cold_boot = fs::read_to_string(
-        fpga_lisp.join(
-            "evidence/FPGA-SHARED-ORACLE-PARITY-1/flash-cold-boot-2026-09-11.md",
-        ),
+        fpga_lisp.join("evidence/FPGA-SHARED-ORACLE-PARITY-1/flash-cold-boot-2026-09-11.md"),
     )
     .expect("reviewed FPGA cold-boot evidence should be readable");
     assert!(

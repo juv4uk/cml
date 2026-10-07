@@ -19,6 +19,8 @@ mod execution_scheduler;
 mod execution_store;
 pub mod fpga_transport;
 pub mod fs;
+#[cfg(unix)]
+pub mod gpu_admission;
 pub mod gpu_cuda;
 #[cfg(feature = "gpu-cuda")]
 pub mod gpu_cuda_runtime;
@@ -26,8 +28,6 @@ pub mod gpu_host;
 #[cfg(feature = "gpu-wgpu")]
 pub mod gpu_wgpu_runtime;
 pub mod gpu_wgsl;
-#[cfg(unix)]
-pub mod gpu_admission;
 pub mod gpu_worker_client;
 pub mod ir;
 pub mod lisp_asm_vertical;
@@ -45,7 +45,6 @@ pub mod pratyahara;
 pub mod runtime_abi;
 pub mod semantic;
 pub mod semantic_export;
-pub mod substrate_dispatch;
 pub mod sens_c1_artifact;
 pub mod sens_compiler_export;
 pub mod sens_current_lowering;
@@ -53,6 +52,7 @@ pub mod sens_domain_bridge;
 pub mod sens_rich_bridge;
 pub mod sens_slot_bridge;
 pub mod slot_vm;
+pub mod substrate_dispatch;
 pub mod upstream_sid_bridge;
 pub mod witness_bridge;
 pub mod x86_avx2;

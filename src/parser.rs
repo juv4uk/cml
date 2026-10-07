@@ -580,8 +580,7 @@ mod exact_domain_identity_tests {
 
     #[test]
     fn equal_payloads_across_widths_do_not_collapse() {
-        let exprs = parse_canonical_binary("001 0001")
-            .expect("D3/D4 exact identities must parse");
+        let exprs = parse_canonical_binary("001 0001").expect("D3/D4 exact identities must parse");
         let [Expr::DomainIdentity(d3), Expr::DomainIdentity(d4)] = exprs.as_slice() else {
             panic!("expected two exact domain identities");
         };

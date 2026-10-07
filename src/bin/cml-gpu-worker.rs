@@ -11,7 +11,9 @@ fn main() {
 
 #[cfg(feature = "gpu-cuda")]
 mod enabled {
-    use cml::gpu_admission::{AdmissionProvenance, GpuAdmissionGuard, gpu_admission_lock_path, gpu_resource_key};
+    use cml::gpu_admission::{
+        AdmissionProvenance, GpuAdmissionGuard, gpu_admission_lock_path, gpu_resource_key,
+    };
     use cml::gpu_cuda_runtime::{
         execute_map, execute_map_chain_i32_selected, initialize_host_session_from_configured_probe,
         initialized_host_session_evidence,
@@ -481,11 +483,7 @@ mod enabled {
         Ok(transact_timed(path, opcode, payload)?.body)
     }
 
-    fn transact_timed(
-        path: &Path,
-        opcode: u8,
-        payload: &[u8],
-    ) -> Result<TimedTransaction, String> {
+    fn transact_timed(path: &Path, opcode: u8, payload: &[u8]) -> Result<TimedTransaction, String> {
         let round_trip_started = Instant::now();
         let mut stream = UnixStream::connect(path)
             .map_err(|error| format!("connect {}: {error}", path.display()))?;
@@ -845,18 +843,15 @@ mod enabled {
 
         #[test]
         fn timing_metric_parser_reads_named_field() {
-            let evidence =
-                "count=4 steps=2 cuda_ns=17 output=/tmp/out server_service_ns=9001";
+            let evidence = "count=4 steps=2 cuda_ns=17 output=/tmp/out server_service_ns=9001";
             assert_eq!(metric_u128(evidence, "server_service_ns").unwrap(), 9001);
             assert!(metric_u128(evidence, "missing").is_err());
         }
 
         #[test]
         fn transact_timed_uses_monotonic_round_trip_measurement() {
-            let socket = std::env::temp_dir().join(format!(
-                "cml-gpu-worker-timing-{}.sock",
-                std::process::id()
-            ));
+            let socket = std::env::temp_dir()
+                .join(format!("cml-gpu-worker-timing-{}.sock", std::process::id()));
             let _ = std::fs::remove_file(&socket);
             let listener = UnixListener::bind(&socket).expect("bind timing socket");
             let server_socket = socket.clone();

@@ -38,18 +38,34 @@ pub struct CudaHostCapability {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CudaHostCapabilityError {
     ProbeNotConfigured,
-    ProbeSpawn { path: PathBuf, message: String },
-    ProbeFailed { path: PathBuf, code: Option<i32>, stderr: String },
+    ProbeSpawn {
+        path: PathBuf,
+        message: String,
+    },
+    ProbeFailed {
+        path: PathBuf,
+        code: Option<i32>,
+        stderr: String,
+    },
     InvalidLine(String),
     DuplicateKey(String),
     MissingField(&'static str),
-    InvalidBoolean { field: &'static str, value: String },
+    InvalidBoolean {
+        field: &'static str,
+        value: String,
+    },
     InvalidComputeCapability(String),
     WrongSchema(String),
     HostUnavailable(String),
     NvrtcLibraryUnavailable,
-    DeviceNameMismatch { host: String, live: String },
-    ComputeCapabilityMismatch { host: (i32, i32), live: (i32, i32) },
+    DeviceNameMismatch {
+        host: String,
+        live: String,
+    },
+    ComputeCapabilityMismatch {
+        host: (i32, i32),
+        live: (i32, i32),
+    },
 }
 
 impl CudaHostCapability {
@@ -167,12 +183,12 @@ impl CudaHostCapability {
             ));
         };
         let compute_capability = (
-            major
-                .parse::<i32>()
-                .map_err(|_| CudaHostCapabilityError::InvalidComputeCapability(compute_text.clone()))?,
-            minor
-                .parse::<i32>()
-                .map_err(|_| CudaHostCapabilityError::InvalidComputeCapability(compute_text.clone()))?,
+            major.parse::<i32>().map_err(|_| {
+                CudaHostCapabilityError::InvalidComputeCapability(compute_text.clone())
+            })?,
+            minor.parse::<i32>().map_err(|_| {
+                CudaHostCapabilityError::InvalidComputeCapability(compute_text.clone())
+            })?,
         );
 
         let capability = Self {

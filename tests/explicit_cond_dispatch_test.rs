@@ -15,8 +15,9 @@ fn migration_three_part_cond_clause_reaches_ir_without_truthiness_rewrite() {
     "#;
 
     let expressions = parser::parse(source).expect("migration three-part cond source must parse");
-    let lowered = lower::lower_program(&expressions)
-        .expect("CML must preserve the migration three-part CondMatch shape without truthiness rewrite");
+    let lowered = lower::lower_program(&expressions).expect(
+        "CML must preserve the migration three-part CondMatch shape without truthiness rewrite",
+    );
 
     let [Ir::CondMatch { branches }] = lowered.as_slice() else {
         panic!("migration three-part cond must have an explicit-match IR shape");

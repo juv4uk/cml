@@ -5,13 +5,37 @@ use cml::canon::find_operation_by_id;
 use cml::coverage::{BackendEvidenceState, CoverageLedger};
 
 const EXPECTED: &[(sens::Sid8, &str, BackendEvidenceState)] = &[
-    (sens::sid!(00000001), "quote", BackendEvidenceState::Executable),
-    (sens::sid!(00000010), "atom", BackendEvidenceState::AssemblyWitness),
+    (
+        sens::sid!(00000001),
+        "quote",
+        BackendEvidenceState::Executable,
+    ),
+    (
+        sens::sid!(00000010),
+        "atom",
+        BackendEvidenceState::AssemblyWitness,
+    ),
     (sens::sid!(00000011), "eq", BackendEvidenceState::Executable),
-    (sens::sid!(00000100), "cons", BackendEvidenceState::Executable),
-    (sens::sid!(00000101), "car", BackendEvidenceState::AssemblyWitness),
-    (sens::sid!(00000110), "cdr", BackendEvidenceState::AssemblyWitness),
-    (sens::sid!(00000111), "cond", BackendEvidenceState::Executable),
+    (
+        sens::sid!(00000100),
+        "cons",
+        BackendEvidenceState::Executable,
+    ),
+    (
+        sens::sid!(00000101),
+        "car",
+        BackendEvidenceState::AssemblyWitness,
+    ),
+    (
+        sens::sid!(00000110),
+        "cdr",
+        BackendEvidenceState::AssemblyWitness,
+    ),
+    (
+        sens::sid!(00000111),
+        "cond",
+        BackendEvidenceState::Executable,
+    ),
 ];
 
 fn read_repo(path: &str) -> String {
@@ -66,10 +90,7 @@ fn x86_canon_evidence_reconciles_matrix_ledger_and_pushed_witnesses() {
             "{semantic_id} x86 evidence class must not be upgraded implicitly"
         );
         assert!(
-            x86.contains(&format!(
-                "({capability_key} . {:?})",
-                evidence.evidence
-            )),
+            x86.contains(&format!("({capability_key} . {:?})", evidence.evidence)),
             "capability matrix must own the same named evidence as the ledger for capability {capability_key} / Canon {}",
             operation.canonical_name
         );
