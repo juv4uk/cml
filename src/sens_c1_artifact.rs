@@ -704,6 +704,95 @@ mod tests {
     }
 
     #[test]
+    fn c1_recompiles_identical_nucleus_to_byte_identical_c2_artifact() {
+        const SENS_DENOMINATOR: &str =
+            "c66d4743bb70882c75376dbcec27d393e5a9649d";
+
+        let cml_revision = producer_cml_revision();
+        let c1 = build_current_sens_c1(SOURCE, pinned_compiler_export(), &cml_revision)
+            .expect("merged current SENS nucleus must build as C1");
+        assert_eq!(
+            c1.authority.revision, SENS_DENOMINATOR,
+            "C2 witness must run against the exact merged SENS denominator"
+        );
+
+        let wire = current_nucleus_program_wire();
+        let c0_artifact = expected_sens_artifact(&wire, &c1.authority.revision);
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let base =
+            std::env::temp_dir().join(format!("cml-sens-c2-{}-{nonce}", std::process::id()));
+        let source_path = base.with_extension("c");
+        let binary_path = base.with_extension("bin");
+        std::fs::write(&source_path, &c1.c_source).expect("write generated C1 source");
+
+        let compile = Command::new("gcc")
+            .arg(&source_path)
+            .arg("-Wl,--build-id=none")
+            .arg("-o")
+            .arg(&binary_path)
+            .output()
+            .expect("gcc must execute");
+        assert!(
+            compile.status.success(),
+            "generated C1 source did not compile for C2 witness: {}",
+            String::from_utf8_lossy(&compile.stderr)
+        );
+
+        // C2 is the whole-program compiler artifact emitted by the generated
+        // C1 process when that process compiles the identical compiler nucleus.
+        // Run it twice so determinism is observed from C1, not inferred from C0.
+        let first_c2 = run_c1(&binary_path, &wire);
+        let second_c2 = run_c1(&binary_path, &wire);
+        assert!(
+            first_c2.status.success(),
+            "C1 failed to produce C2: {}",
+            String::from_utf8_lossy(&first_c2.stderr)
+        );
+        assert!(
+            second_c2.status.success(),
+            "C1 failed deterministic C2 repeat: {}",
+            String::from_utf8_lossy(&second_c2.stderr)
+        );
+        assert_eq!(
+            first_c2.stdout, second_c2.stdout,
+            "identical C1 + nucleus + authority bundle must emit identical C2 bytes"
+        );
+        assert_eq!(
+            first_c2.stdout, c0_artifact,
+            "strongest current fixed-point witness is byte-identical C0/C1 compiler artifact output"
+        );
+
+        let c1_executable = std::fs::read(&binary_path).expect("read generated C1 executable");
+        let nucleus_sha256 = sha256_hex(SOURCE.as_bytes());
+        let c1_executable_sha256 = sha256_hex(&c1_executable);
+        let c0_artifact_sha256 = sha256_hex(&c0_artifact);
+        let c2_artifact_sha256 = sha256_hex(&first_c2.stdout);
+
+        assert_eq!(
+            c0_artifact_sha256, c2_artifact_sha256,
+            "byte-identical criterion must not be silently downgraded"
+        );
+
+        println!(
+            "SELFHOST_C2_EVIDENCE sens_revision={} cml_revision={} nucleus_sha256={} c1_c_source_sha256={} c1_executable_sha256={} c0_artifact_sha256={} c2_artifact_sha256={} equivalence=byte-identical repeat=byte-identical",
+            c1.authority.revision,
+            cml_revision,
+            nucleus_sha256,
+            c1.c_source_sha256,
+            c1_executable_sha256,
+            c0_artifact_sha256,
+            c2_artifact_sha256,
+        );
+
+        let _ = std::fs::remove_file(source_path);
+        let _ = std::fs::remove_file(binary_path);
+    }
+
+    #[test]
     fn same_payload_wrong_domain_cannot_inherit_mechanism() {
         let export = pinned_compiler_export();
         assert!(export.contains("(domain . D3) (bits . 010)"));
