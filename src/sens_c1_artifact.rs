@@ -7,6 +7,7 @@
 use crate::c_backend::CBackend;
 use crate::sens_current_lowering::{
     CurrentLowerError, VerifiedCurrentRegistry, lower_current_sens_source,
+    lower_current_sens_source_with_registry,
 };
 use crate::sens_domain_bridge::AuthorityProvenance;
 use std::fmt;
@@ -33,10 +34,24 @@ pub struct CurrentSensC1Artifact {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CurrentSensC2Artifact {
+    pub source_sha256: String,
+    pub c1_evidence_sha256: String,
+    pub semantic_requests_sha256: String,
+    pub authority: AuthorityProvenance,
+    pub cml_revision: String,
+    pub backend_id: String,
+    pub c_source: String,
+    pub c_source_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum C1ArtifactError {
     Lower(CurrentLowerError),
     Backend(String),
     Bootstrap(String),
+    EvidenceDecode(String),
+    EvidenceVerify(String),
     WrongSourceBundle,
     InvalidSourceSha,
     InvalidCompilerExportSha,
@@ -277,6 +292,64 @@ pub fn build_current_sens_c1(
     };
     validate(&artifact)?;
     Ok(artifact)
+}
+
+/// Build executable C2 source from the exact binary whole-program artifact
+/// emitted by generated C1.
+///
+/// CML does not parse or interpret the SENS artifact. Canonical bytes are
+/// decoded and semantically admitted by SENS first; CML receives only the
+/// verified typed requests and binds those already-verified abstract roles to
+/// private mechanisms.
+pub fn build_current_sens_c2_from_c1_evidence(
+    c1_evidence: &[u8],
+    cml_revision: &str,
+) -> Result<CurrentSensC2Artifact, C1ArtifactError> {
+    if !valid_hex(cml_revision, 40) {
+        return Err(C1ArtifactError::InvalidCmlRevision);
+    }
+
+    let pinned = crate::sens_domain_bridge::pinned_authority()
+        .map_err(|error| C1ArtifactError::EvidenceVerify(error.to_string()))?;
+    let parsed = sens::parse(PINNED_NUCLEUS)
+        .map_err(|error| C1ArtifactError::EvidenceVerify(error.to_string()))?;
+    let canonical_program = sens::lower_program(&parsed);
+    let wire = sens::wire_encode_program(&canonical_program);
+    let program_wire_sha256 = sha256_hex(&wire);
+
+    let decoded = sens::compiler_evidence_from_canonical_bytes(c1_evidence)
+        .map_err(C1ArtifactError::EvidenceDecode)?;
+    let verified = sens::verify_compiler_program_artifact_from_sens(
+        &decoded,
+        &program_wire_sha256,
+        &pinned.revision,
+    )
+    .map_err(|error| C1ArtifactError::EvidenceVerify(error.to_string()))?;
+
+    let registry = VerifiedCurrentRegistry::from_verified_program_artifact(&verified)?;
+    let lowered = lower_current_sens_source_with_registry(PINNED_NUCLEUS, &registry)?;
+    if lowered.authority != pinned {
+        return Err(C1ArtifactError::InvalidAuthority);
+    }
+
+    let bundle = sens::compiler_program_bootstrap_bundle()
+        .map_err(|error| C1ArtifactError::Bootstrap(error.to_string()))?;
+    let driver_body = c1_driver_body(&lowered.authority, &bundle)?;
+    let mut backend = CBackend::new();
+    let c_source = backend
+        .compile_program_with_c1_driver(&lowered.ir, &driver_body)
+        .map_err(|error| C1ArtifactError::Backend(error.to_string()))?;
+
+    Ok(CurrentSensC2Artifact {
+        source_sha256: sha256_hex(PINNED_NUCLEUS.as_bytes()),
+        c1_evidence_sha256: sha256_hex(c1_evidence),
+        semantic_requests_sha256: verified.semantic_requests_sha256,
+        authority: lowered.authority,
+        cml_revision: cml_revision.to_string(),
+        backend_id: C1_BACKEND_ID.to_string(),
+        c_source_sha256: sha256_hex(c_source.as_bytes()),
+        c_source,
+    })
 }
 
 impl CurrentSensC1Artifact {
@@ -705,7 +778,7 @@ mod tests {
 
     #[test]
     fn c1_recompiles_identical_nucleus_to_byte_identical_c2_artifact() {
-        const SENS_DENOMINATOR: &str = "c66d4743bb70882c75376dbcec27d393e5a9649d";
+        const SENS_DENOMINATOR: &str = "69d4bb7f8390e431b479eb17ea68dcefb80d04f9";
 
         let cml_revision =
             std::env::var("CML_PRODUCER_SHA").expect("C2 lineage requires exact CML_PRODUCER_SHA");
@@ -865,6 +938,125 @@ mod tests {
 
         let _ = std::fs::remove_file(binary_path);
         let _ = std::fs::remove_file(repeat_binary_path);
+    }
+
+    #[test]
+    fn c1_binary_artifact_materializes_and_runs_distinct_c2_executable() {
+        let cml_revision = std::env::var("CML_PRODUCER_SHA")
+            .expect("C2 executable lineage requires exact CML_PRODUCER_SHA");
+        assert!(valid_hex(&cml_revision, 40));
+
+        let c1 = build_current_sens_c1(SOURCE, pinned_compiler_export(), &cml_revision)
+            .expect("current nucleus must build as C1");
+        let wire = current_nucleus_program_wire();
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!(
+            "cml-sens-c2-executable-{}-{nonce}",
+            std::process::id()
+        ));
+        let c1_path = base.with_extension("c1.bin");
+        let c2_path = base.with_extension("c2.bin");
+        let c2_repeat_path = base.with_extension("c2.repeat.bin");
+
+        let compile_source = |source: &str, path: &std::path::Path, seed: &str| {
+            let mut child = Command::new("gcc")
+                .args(["-x", "c", "-"])
+                .arg(format!("-frandom-seed={seed}"))
+                .args(["-Wl,--build-id=none", "-s", "-o"])
+                .arg(path)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("gcc must execute");
+            child
+                .stdin
+                .take()
+                .expect("gcc stdin pipe")
+                .write_all(source.as_bytes())
+                .expect("generated compiler source reaches gcc stdin");
+            child.wait_with_output().expect("gcc must finish")
+        };
+
+        let c1_compile = compile_source(&c1.c_source, &c1_path, "cml-sens-selfhost-fixed");
+        assert!(
+            c1_compile.status.success(),
+            "C1 source did not compile: {}",
+            String::from_utf8_lossy(&c1_compile.stderr)
+        );
+        let c1_run = run_c1(&c1_path, &wire);
+        assert!(
+            c1_run.status.success(),
+            "C1 executable failed to emit whole-program artifact: {}",
+            String::from_utf8_lossy(&c1_run.stderr)
+        );
+
+        let c2 = build_current_sens_c2_from_c1_evidence(&c1_run.stdout, &cml_revision)
+            .expect("C1-produced binary artifact must materialize C2 source");
+        assert_eq!(c2.authority, c1.authority);
+        assert_eq!(
+            c2.c_source, c1.c_source,
+            "strongest source-level fixed point is byte-identical C1/C2 generated C"
+        );
+
+        let c2_compile = compile_source(&c2.c_source, &c2_path, "cml-sens-selfhost-fixed");
+        assert!(
+            c2_compile.status.success(),
+            "C2 source did not compile: {}",
+            String::from_utf8_lossy(&c2_compile.stderr)
+        );
+        let c2_repeat_compile =
+            compile_source(&c2.c_source, &c2_repeat_path, "cml-sens-selfhost-fixed");
+        assert!(
+            c2_repeat_compile.status.success(),
+            "repeat C2 source did not compile: {}",
+            String::from_utf8_lossy(&c2_repeat_compile.stderr)
+        );
+
+        let c1_executable = std::fs::read(&c1_path).expect("read C1 executable");
+        let c2_executable = std::fs::read(&c2_path).expect("read C2 executable");
+        let c2_repeat_executable =
+            std::fs::read(&c2_repeat_path).expect("read repeated C2 executable");
+        assert_eq!(
+            c2_executable, c2_repeat_executable,
+            "identical C2 source/toolchain must produce byte-identical executables"
+        );
+        assert_eq!(
+            c1_executable, c2_executable,
+            "byte-identical C1/C2 source under one deterministic toolchain must reach executable fixed point"
+        );
+
+        let c2_run = run_c1(&c2_path, &wire);
+        assert!(
+            c2_run.status.success(),
+            "materialized C2 executable failed: {}",
+            String::from_utf8_lossy(&c2_run.stderr)
+        );
+        assert_eq!(
+            c2_run.stdout, c1_run.stdout,
+            "distinct C2 process must reproduce C1 whole-program artifact bytes"
+        );
+
+        println!(
+            "SELFHOST_C2_EXEC_EVIDENCE sens_revision={} cml_revision={} c1_evidence_sha256={} semantic_requests_sha256={} c1_c_source_sha256={} c2_c_source_sha256={} c1_executable_sha256={} c2_executable_sha256={} output_sha256={} source_equivalence=byte-identical executable_equivalence=byte-identical output_equivalence=byte-identical",
+            c2.authority.revision,
+            cml_revision,
+            c2.c1_evidence_sha256,
+            c2.semantic_requests_sha256,
+            c1.c_source_sha256,
+            c2.c_source_sha256,
+            sha256_hex(&c1_executable),
+            sha256_hex(&c2_executable),
+            sha256_hex(&c2_run.stdout),
+        );
+
+        let _ = std::fs::remove_file(c1_path);
+        let _ = std::fs::remove_file(c2_path);
+        let _ = std::fs::remove_file(c2_repeat_path);
     }
 
     #[test]

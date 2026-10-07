@@ -164,6 +164,27 @@ fn verify_role_evidence(
 }
 
 /// Verify one carried current-domain lowering request before IR construction.
+/// Bind one request that has already passed the SENS-owned whole-program
+/// artifact verifier to a CML-private mechanism.
+///
+/// Semantic admission is complete before this boundary. CML verifies only that
+/// the carried root provenance matches its exact pinned SENS denominator, then
+/// selects the private mechanism for the already-verified abstract role.
+pub(crate) fn bind_sens_verified_program_request(
+    request: &sens::VerifiedCompilerProgramRequest,
+    provenance: &AuthorityProvenance,
+) -> Result<VerifiedRichMechanism, RichBridgeError> {
+    let pinned = verify_authority_provenance(provenance)?;
+    let mechanism_ref = select_rich_compiler_mechanism(request.lowering_role);
+
+    Ok(VerifiedRichMechanism {
+        identity: request.identity.into(),
+        lowering_role: request.lowering_role,
+        mechanism_ref,
+        provenance: pinned,
+    })
+}
+
 pub fn verify_rich_request(
     request: RichSemanticRequest,
 ) -> Result<VerifiedRichMechanism, RichBridgeError> {

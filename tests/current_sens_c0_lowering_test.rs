@@ -237,7 +237,7 @@ fn real_export_drives_full_current_closure_without_sid8() {
 
     assert_eq!(
         lowered.authority.revision,
-        "c66d4743bb70882c75376dbcec27d393e5a9649d"
+        "69d4bb7f8390e431b479eb17ea68dcefb80d04f9"
     );
     assert_eq!(lowered.authority.authority_sha256.len(), 64);
 }
