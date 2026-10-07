@@ -9,6 +9,8 @@ on:
       - "src/c1_driver_runtime.rs"
       - "src/c_backend.rs"
       - "src/sens_c1_artifact.rs"
+      - "src/sens_current_lowering.rs"
+      - "src/sens_rich_bridge.rs"
       - ".github/workflows/issue-648-selfhost-c2.yml"
   workflow_dispatch:
 
@@ -19,21 +21,16 @@ concurrency:
 jobs:
   c2-witness:
     if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
+    # CPU-only fixed-point proof; do not queue on the disabled local GPU runner.
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CARGO_BUILD_JOBS: "1"
+      CARGO_BUILD_JOBS: "2"
       RUST_TEST_THREADS: "1"
     steps:
-      - name: Require private dependency read token
-        env:
-          SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
-        run: test -n "$SENS_READ_TOKEN"
-
       - name: Checkout exact C1/C2 lineage
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
-          token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: true
 
       - name: Freeze exact SENS denominator
@@ -44,14 +41,15 @@ jobs:
 
       - name: Focused format
         run: >-
-          guix shell --pure -m manifest.scm --
-          rustfmt --edition 2024 --check src/sens_c1_artifact.rs
+          rustfmt --edition 2024 --check
+          src/sens_c1_artifact.rs
+          src/sens_current_lowering.rs
+          src/sens_rich_bridge.rs
 
       - name: C1 recompiles identical nucleus to deterministic C2
         env:
           CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: >-
-          guix shell --pure --preserve=^CML_PRODUCER_SHA$ -m manifest.scm --
-          cargo test -j 1 -p cml --lib
+          cargo test -j 2 -p cml --lib
           sens_c1_artifact::tests::c1_recompiles_identical_nucleus_to_byte_identical_c2_artifact
           -- --nocapture --test-threads=1
