@@ -19,6 +19,8 @@ jobs:
     name: portable CML gates
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout CML with pinned SENS build-source
         uses: actions/checkout@v5
