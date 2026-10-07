@@ -185,7 +185,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Import real SENS Contract 11.8 oracle rows
+      - name: Import real SENS Contract 11.6 oracle rows
         working-directory: cml
         shell: bash
         run: |
