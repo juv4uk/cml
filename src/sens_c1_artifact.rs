@@ -707,7 +707,12 @@ mod tests {
     fn c1_recompiles_identical_nucleus_to_byte_identical_c2_artifact() {
         const SENS_DENOMINATOR: &str = "c66d4743bb70882c75376dbcec27d393e5a9649d";
 
-        let cml_revision = producer_cml_revision();
+        let cml_revision =
+            std::env::var("CML_PRODUCER_SHA").expect("C2 lineage requires exact CML_PRODUCER_SHA");
+        assert!(
+            valid_hex(&cml_revision, 40),
+            "C2 lineage CML_PRODUCER_SHA must be exact lowercase 40-hex"
+        );
         let c1 = build_current_sens_c1(SOURCE, pinned_compiler_export(), &cml_revision)
             .expect("merged current SENS nucleus must build as C1");
         assert_eq!(
