@@ -5,7 +5,8 @@
 //! Unsupported IR is rejected during preflight, before any assembly text is
 //! produced. There is no libc, host syscall, filesystem, or C-backend fallback.
 
-use crate::ir::{Ir, MachineOp, Params, Quoted};
+use crate::compiler_mechanism::RichCompilerMechanismRef;
+use crate::ir::{Ir, MachineOp, Params, PrimOp, Quoted};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -30,6 +31,7 @@ pub enum CompileError {
     EmptyProgram,
     UnsupportedVariant(&'static str),
     UnimplementedSid8(sens::Sid8),
+    UnsupportedCompilerMechanism(RichCompilerMechanismRef),
     InvalidArity {
         operation: &'static str,
         expected: usize,
@@ -68,6 +70,11 @@ impl fmt::Display for CompileError {
                     "unimplemented SID8 call in x86_64-freestanding backend: {sid}"
                 )
             }
+            Self::UnsupportedCompilerMechanism(mechanism) => write!(
+                formatter,
+                "verified current SENS mechanism has no admitted x86_64-freestanding projection: {}",
+                mechanism.as_str()
+            ),
             Self::InvalidArity {
                 operation,
                 expected,
@@ -105,6 +112,41 @@ fn check_symbol_capacity(count: u64) -> Result<(), CompileError> {
         return Err(CompileError::TooManySymbols);
     }
     Ok(())
+}
+
+fn current_compiler_runtime_contract(
+    mechanism: RichCompilerMechanismRef,
+) -> Option<(usize, &'static str)> {
+    match mechanism {
+        RichCompilerMechanismRef::SelectorTail => Some((1, "wsm_cdr")),
+        RichCompilerMechanismRef::SelectorHead => Some((1, "wsm_car")),
+        RichCompilerMechanismRef::PairConstruct => Some((2, "wsm_cons")),
+        // Current exact predicates and COND require a target-level D1 carrier.
+        // They remain fail-closed until wsm-target-contract#32 lands.
+        RichCompilerMechanismRef::AtomPredicateD1
+        | RichCompilerMechanismRef::AtomEqualityD1
+        | RichCompilerMechanismRef::ConditionalD1
+        | RichCompilerMechanismRef::Quote
+        | RichCompilerMechanismRef::Lambda
+        | RichCompilerMechanismRef::Define => None,
+    }
+}
+
+fn checked_current_compiler_runtime(
+    mechanism: RichCompilerMechanismRef,
+    actual: usize,
+) -> Result<&'static str, CompileError> {
+    let Some((expected, runtime)) = current_compiler_runtime_contract(mechanism) else {
+        return Err(CompileError::UnsupportedCompilerMechanism(mechanism));
+    };
+    if actual != expected {
+        return Err(CompileError::InvalidArity {
+            operation: mechanism.as_str(),
+            expected,
+            actual,
+        });
+    }
+    Ok(runtime)
 }
 
 #[derive(Debug, Default)]
@@ -684,6 +726,20 @@ fn preflight_env(
         Ir::String(_) => return Err(CompileError::UnsupportedVariant("String")),
         Ir::Nil | Ir::True => {}
         Ir::Quote(value) => preflight_quoted(value, symbols, slots)?,
+        Ir::Prim {
+            op: PrimOp::CompilerMechanism(mechanism),
+            args,
+        } => {
+            checked_current_compiler_runtime(*mechanism, args.len())?;
+            for argument in args {
+                preflight_env(argument, bindings, symbols, def_arities, slots)?;
+            }
+            return Ok(());
+        }
+        Ir::Prim {
+            op: PrimOp::CompilerConditionalExactD1(mechanism),
+            ..
+        } => return Err(CompileError::UnsupportedCompilerMechanism(*mechanism)),
         Ir::Prim { .. } => return Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
@@ -960,6 +1016,20 @@ fn preflight_lambda_body(
         }
         Ir::Nil | Ir::True => Ok(()),
         Ir::Quote(value) => preflight_quoted(value, symbols, slots),
+        Ir::Prim {
+            op: PrimOp::CompilerMechanism(mechanism),
+            args,
+        } => {
+            checked_current_compiler_runtime(*mechanism, args.len())?;
+            for argument in args {
+                preflight_lambda_body(argument, bindings, symbols, slots)?;
+            }
+            Ok(())
+        }
+        Ir::Prim {
+            op: PrimOp::CompilerConditionalExactD1(mechanism),
+            ..
+        } => Err(CompileError::UnsupportedCompilerMechanism(*mechanism)),
         Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
@@ -1165,6 +1235,20 @@ fn preflight_def_body(
         }
         Ir::Nil | Ir::True => Ok(()),
         Ir::Quote(value) => preflight_quoted(value, symbols, slots),
+        Ir::Prim {
+            op: PrimOp::CompilerMechanism(mechanism),
+            args,
+        } => {
+            checked_current_compiler_runtime(*mechanism, args.len())?;
+            for argument in args {
+                preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+            }
+            Ok(())
+        }
+        Ir::Prim {
+            op: PrimOp::CompilerConditionalExactD1(mechanism),
+            ..
+        } => Err(CompileError::UnsupportedCompilerMechanism(*mechanism)),
         Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
@@ -1912,6 +1996,17 @@ impl Emitter {
                     _ => Ok(()),
                 }
             }
+            Ir::Prim {
+                op: PrimOp::CompilerMechanism(mechanism),
+                args,
+            } => {
+                let runtime = checked_current_compiler_runtime(*mechanism, args.len())?;
+                self.emit_runtime_call_with_structured_args(args, runtime)
+            }
+            Ir::Prim {
+                op: PrimOp::CompilerConditionalExactD1(mechanism),
+                ..
+            } => Err(CompileError::UnsupportedCompilerMechanism(*mechanism)),
             Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
             Ir::MachinePrim { op, args } => self.emit_machine_primitive(*op, args),
             Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
