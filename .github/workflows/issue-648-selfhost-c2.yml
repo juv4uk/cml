@@ -51,8 +51,10 @@ jobs:
         env:
           CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: >-
-          guix shell --pure -m manifest.scm --
-          env CML_PRODUCER_SHA="$CML_PRODUCER_SHA"
+          guix shell --pure --preserve='^CML_PRODUCER_SHA
+          sens_c1_artifact::tests::c1_recompiles_identical_nucleus_to_byte_identical_c2_artifact
+          -- --nocapture --test-threads=1
+ -m manifest.scm --
           cargo test -j 1 -p cml --lib
           sens_c1_artifact::tests::c1_recompiles_identical_nucleus_to_byte_identical_c2_artifact
           -- --nocapture --test-threads=1
