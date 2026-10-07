@@ -1,0 +1,60 @@
+name: Issue 655 executable C2 from verified C1 artifact
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "external/sens"
+      - "upstream-revisions.lisp"
+      - "src/c1_driver_runtime.rs"
+      - "src/c_backend.rs"
+      - "src/sens_c1_artifact.rs"
+      - "src/sens_current_lowering.rs"
+      - "src/sens_rich_bridge.rs"
+      - ".github/workflows/issue-655-c2-executable.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  c2-executable:
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: "1"
+      RUST_TEST_THREADS: "1"
+    steps:
+      - name: Checkout exact compiler lineage
+        uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Freeze verified SENS denominator
+        run: |
+          test "$(git -C external/sens rev-parse HEAD)" = "69d4bb7f8390e431b479eb17ea68dcefb80d04f9"
+          grep -q '(build-source-sha . "69d4bb7f8390e431b479eb17ea68dcefb80d04f9")' upstream-revisions.lisp
+          grep -q '(supported-pin-sha . "69d4bb7f8390e431b479eb17ea68dcefb80d04f9")' upstream-revisions.lisp
+
+      - name: Focused format
+        run: >-
+          rustfmt --edition 2024 --check
+          src/sens_rich_bridge.rs
+          src/sens_current_lowering.rs
+          src/sens_c1_artifact.rs
+
+      - name: SENS verified artifact bridge
+        run: >-
+          cargo test -j 1 -p cml --lib
+          sens_rich_bridge::tests::sens_verified_program_request_reaches_only_private_mechanism_binding
+          -- --nocapture --test-threads=1
+
+      - name: Materialize and run distinct C2 executable
+        env:
+          CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          cargo test -j 1 -p cml --lib
+          sens_c1_artifact::tests::c1_binary_artifact_materializes_and_runs_distinct_c2_executable
+          -- --nocapture --test-threads=1
