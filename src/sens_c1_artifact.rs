@@ -7,6 +7,7 @@
 use crate::c_backend::CBackend;
 use crate::sens_current_lowering::{
     CurrentLowerError, VerifiedCurrentRegistry, lower_current_sens_source,
+    lower_current_sens_source_with_registry,
 };
 use crate::sens_domain_bridge::AuthorityProvenance;
 use std::fmt;
@@ -32,11 +33,26 @@ pub struct CurrentSensC1Artifact {
     pub c_source_sha256: String,
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CurrentSensC2Artifact {
+    pub source_sha256: String,
+    pub c1_evidence_sha256: String,
+    pub semantic_requests_sha256: String,
+    pub authority: AuthorityProvenance,
+    pub cml_revision: String,
+    pub backend_id: String,
+    pub c_source: String,
+    pub c_source_sha256: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum C1ArtifactError {
     Lower(CurrentLowerError),
     Backend(String),
     Bootstrap(String),
+    EvidenceDecode(String),
+    EvidenceVerify(String),
     WrongSourceBundle,
     InvalidSourceSha,
     InvalidCompilerExportSha,
