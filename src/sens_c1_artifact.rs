@@ -964,8 +964,8 @@ mod tests {
 
         let compile_source = |source: &str, path: &std::path::Path, seed: &str| {
             let mut child = Command::new("gcc")
-                .args(["-x", "c", "-", "-frandom-seed"])
-                .arg(seed)
+                .args(["-x", "c", "-"])
+                .arg(format!("-frandom-seed={seed}"))
                 .args(["-Wl,--build-id=none", "-s", "-o"])
                 .arg(path)
                 .stdin(Stdio::piped())
