@@ -272,6 +272,22 @@ static Value *v_cdr(Value *v) { return v->u.cons.cdr; }
 static int is_atom(Value *v) { return v->tag != TAG_CONS; }
 static int truthy(Value *v) { return v->tag != TAG_NIL; }
 
+/* Compatibility Ir::Cond is narrower than historical Lisp truthiness.
+ * It consumes only the already-existing one-element (1)/(0) compatibility
+ * predicate record. Current exact D1 uses require_predicate_bit instead. */
+static int compatibility_cond_selects(Value *value) {
+    if (value->tag != TAG_CONS) {
+        runtime_error("Type", "compatibility cond test must be (1) or (0)");
+    }
+    Value *head = value->u.cons.car;
+    Value *tail = value->u.cons.cdr;
+    if (tail->tag != TAG_NIL || head->tag != TAG_INT ||
+        (head->u.i != 0 && head->u.i != 1)) {
+        runtime_error("Type", "compatibility cond test must be (1) or (0)");
+    }
+    return head->u.i == 1;
+}
+
 static Value *relation_record(const char *kind, const char *value) {
     return mk_cons(mk_sym(kind), mk_cons(mk_sym(value), &NIL_V));
 }
@@ -1332,7 +1348,7 @@ impl CBackend {
             let body_expr = self.compile_expr(body, env)?;
             let predicate = match self.conditional_mechanism {
                 CConditionalMechanism::CompatibilityTruthiness => {
-                    format!("truthy({test_expr})")
+                    format!("compatibility_cond_selects({test_expr})")
                 }
                 CConditionalMechanism::CurrentExactD1 => {
                     format!("require_predicate_bit({test_expr}, \"current-cond\")")
