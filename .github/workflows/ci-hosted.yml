@@ -1,0 +1,45 @@
+name: Hosted CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: hosted-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: portable CML gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: SENS conformance adapter self-test
+        run: python3 scripts/test-sens-execution-conformance-adapter.py
+
+      - name: SENS CUDA-L3 adapter structural self-test
+        run: python3 scripts/test-cml-cuda-l3-conformance.py
+
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+
+      - name: Cargo format
+        run: cargo fmt -p cml -- --check
+
+      - name: Cargo tests
+        run: cargo test --verbose --no-fail-fast
