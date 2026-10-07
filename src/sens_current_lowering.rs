@@ -59,8 +59,7 @@ impl VerifiedCurrentRegistry {
 
         let mut entries = Vec::new();
         for request in &artifact.requests {
-            let verified =
-                bind_sens_verified_program_request(request, &carried_authority)?;
+            let verified = bind_sens_verified_program_request(request, &carried_authority)?;
             if let Some(existing) = entries
                 .iter()
                 .find(|entry: &&VerifiedRichMechanism| entry.identity() == verified.identity())
