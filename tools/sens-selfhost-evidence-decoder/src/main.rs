@@ -108,7 +108,22 @@ fn run() -> Result<(), String> {
     let contract = string(authority[3], "contract version")?;
     let nucleus_sha256 = string(authority[4], "compiler nucleus sha256")?;
 
-    let requests = list_values(field(&artifact, "semantic-requests")?)?;
+    let requests_value = field(&artifact, "semantic-requests")?;
+    let requests = list_values(requests_value)?;
+    let requests_bytes = sens::compiler_evidence_canonical_bytes(requests_value)?;
+    let observed_requests_sha256 = sens::sha256_source(&requests_bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let carried_requests_sha256 = string(
+        field(&artifact, "semantic-requests-sha256")?,
+        "semantic requests sha256",
+    )?;
+    if observed_requests_sha256 != carried_requests_sha256 {
+        return Err(format!(
+            "semantic request digest mismatch: carried {carried_requests_sha256}, observed {observed_requests_sha256}"
+        ));
+    }
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
@@ -121,10 +136,7 @@ fn run() -> Result<(), String> {
     meta(
         &mut out,
         "semantic-requests-sha256",
-        &string(
-            field(&artifact, "semantic-requests-sha256")?,
-            "semantic requests sha256",
-        )?,
+        &carried_requests_sha256,
     )?;
     meta(&mut out, "sens-revision", &revision)?;
     meta(&mut out, "authority-path", &authority_path)?;
