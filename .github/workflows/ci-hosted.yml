@@ -18,19 +18,61 @@ jobs:
   test:
     name: portable CML gates
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout CML with pinned SENS build-source
+        uses: actions/checkout@v5
         with:
+          path: cml
           submodules: recursive
           fetch-depth: 0
+
+      - name: Resolve SENS revision channels
+        id: revisions
+        working-directory: cml
+        shell: bash
+        run: |
+          set -euo pipefail
+          field() {
+            grep -F "($1 . \"" upstream-revisions.lisp | head -n 1 | cut -d'"' -f2
+          }
+          observed_current_sha="$(field observed-current-sha)"
+          test "${#observed_current_sha}" -eq 40
+          echo "observed_current_sha=$observed_current_sha" >> "$GITHUB_OUTPUT"
+          test "$(git -C external/sens rev-parse HEAD)" = "$(field build-source-sha)"
+
+      - name: Checkout observed-current SENS sibling
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/sens
+          ref: ${{ steps.revisions.outputs.observed_current_sha }}
+          path: sens
+          fetch-depth: 1
+
+      - name: Checkout reviewed FPGA sibling
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/fpga-lisp
+          ref: d1cb7eb79f675e8f2cc128c3b12918d6b08b9413
+          path: fpga-lisp
+          fetch-depth: 1
+
+      - name: Checkout reviewed x86 nucleus sibling
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: 1fe661664479c92da1968d60914b512320678ac2
+          path: wsm-my-lisp
+          fetch-depth: 1
 
       - uses: dtolnay/rust-toolchain@stable
 
       - name: SENS conformance adapter self-test
+        working-directory: cml
         run: python3 scripts/test-sens-execution-conformance-adapter.py
 
       - name: SENS CUDA-L3 adapter structural self-test
+        working-directory: cml
         run: python3 scripts/test-cml-cuda-l3-conformance.py
 
       - name: Install Icarus Verilog
@@ -39,7 +81,9 @@ jobs:
           sudo apt-get install -y iverilog
 
       - name: Cargo format
+        working-directory: cml
         run: cargo fmt -p cml -- --check
 
       - name: Cargo tests
+        working-directory: cml
         run: cargo test --verbose --no-fail-fast
