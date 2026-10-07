@@ -9,6 +9,8 @@ on:
       - "src/c1_driver_runtime.rs"
       - "src/c_backend.rs"
       - "src/sens_c1_artifact.rs"
+      - "src/sens_current_lowering.rs"
+      - "src/sens_rich_bridge.rs"
       - ".github/workflows/issue-648-selfhost-c2.yml"
   workflow_dispatch:
 
