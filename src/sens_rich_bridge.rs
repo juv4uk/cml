@@ -164,6 +164,32 @@ fn verify_role_evidence(
 }
 
 /// Verify one carried current-domain lowering request before IR construction.
+/// Bind one already SENS-verified whole-program request to CML's private
+/// mechanism layer. SENS owns identity, role and proof admission; CML only
+/// rechecks pinned authority and chooses the backend-private mechanism.
+pub fn bind_verified_program_request(
+    request: &sens::VerifiedCompilerProgramRequest,
+    artifact: &sens::VerifiedCompilerProgramArtifact,
+) -> Result<VerifiedRichMechanism, RichBridgeError> {
+    let provenance = AuthorityProvenance {
+        repository: "juv4uk/sens".to_string(),
+        revision: artifact.sens_revision.clone(),
+        authority_path: artifact.authority_path.clone(),
+        authority_sha256: artifact.authority_sha256.clone(),
+        language_contract_version: artifact.language_contract_version.clone(),
+    };
+
+    verify_rich_request(RichSemanticRequest {
+        identity: request.identity.into(),
+        lowering_role: request.lowering_role,
+        law_ref: COMPILER_ROLE_LAW_REF.to_string(),
+        proof_ref: request.proof_ref.clone(),
+        semantic_status: SemanticStatus::Current,
+        mechanism_status: MechanismStatus::Admitted,
+        provenance,
+    })
+}
+
 pub fn verify_rich_request(
     request: RichSemanticRequest,
 ) -> Result<VerifiedRichMechanism, RichBridgeError> {
@@ -227,6 +253,59 @@ mod tests {
             mechanism_status: MechanismStatus::Admitted,
             provenance: pinned_authority().expect("pinned authority parses"),
         }
+    }
+
+    #[test]
+    fn sens_verified_program_request_reaches_only_private_mechanism_binding() {
+        let wire = sens::wire_encode_program(&[
+            sens::Expr {
+                kind: sens::ExprKind::DomainCall(
+                    sens::CoreDomainIdentity::D3(sens::Bija3::from_word(
+                        sens::Bit3::new(0b010).unwrap(),
+                    )),
+                    std::rc::Rc::from(
+                        vec![sens::Expr {
+                            kind: sens::ExprKind::Symbol(std::rc::Rc::from("x")),
+                            span: sens::Span::default(),
+                        }]
+                        .into_boxed_slice(),
+                    ),
+                ),
+                span: sens::Span::default(),
+            },
+        ]);
+        let decoded = sens::wire_decode_program(&wire).unwrap();
+        let program = sens::Value::list(decoded.iter().map(|expr| match &expr.kind {
+            sens::ExprKind::DomainCall(identity, arguments) => {
+                let mut items = Vec::with_capacity(arguments.len() + 1);
+                items.push(sens::Value::DomainIdentity((*identity).into()));
+                items.extend(arguments.iter().map(|arg| match &arg.kind {
+                    sens::ExprKind::Symbol(value) => sens::Value::Symbol(value.clone()),
+                    other => panic!("unexpected test argument: {other:?}"),
+                }));
+                sens::Value::list(items)
+            }
+            other => panic!("unexpected test expression: {other:?}"),
+        }));
+        let digest = sens::sha256_source(&wire)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let revision = pinned_authority().unwrap().revision;
+        let value =
+            sens::compiler_program_artifact_from_sens(program, &digest, &revision).unwrap();
+        let verified =
+            sens::verify_compiler_program_artifact_from_sens(&value, &digest, &revision).unwrap();
+        let bound = bind_verified_program_request(&verified.requests[0], &verified).unwrap();
+
+        assert_eq!(
+            bound.lowering_role(),
+            sens::CompilerLoweringRole::AtomPredicate
+        );
+        assert_eq!(
+            bound.mechanism_ref(),
+            RichCompilerMechanismRef::AtomPredicateD1
+        );
     }
 
     #[test]
