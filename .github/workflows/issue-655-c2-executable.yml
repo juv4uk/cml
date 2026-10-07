@@ -10,6 +10,8 @@ on:
       - "src/sens_current_lowering.rs"
       - "src/sens_c1_artifact.rs"
       - "src/c_backend.rs"
+      - ".github/workflows/issue-630-c1-driver.yml"
+      - ".github/workflows/issue-648-selfhost-c2.yml"
       - ".github/workflows/issue-655-c2-executable.yml"
   workflow_dispatch:
 
@@ -27,7 +29,7 @@ jobs:
       RUST_TEST_THREADS: "1"
     steps:
       - name: Checkout exact C1/C2 lineage
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: true
 
