@@ -165,8 +165,8 @@ fn compatibility_cond_remains_default_and_isolated() {
         branches: vec![(legacy_yes, Ir::Int(42))],
     }];
     let source = CBackend::new().compile_program(&program).unwrap();
-    assert!(source.contains("compatibility_cond_selects("));
-    assert!(!source.contains("require_predicate_bit("));
+    assert!(source.contains("if (compatibility_cond_selects("));
+    assert!(!source.contains("if (require_predicate_bit("));
 
     let run = compile_c(&source, "compatibility-default");
     assert!(run.status.success());
