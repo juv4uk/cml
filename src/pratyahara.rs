@@ -113,9 +113,7 @@ pub fn fold_constants(expr: &Expr) -> Expr {
                     }
                 }
 
-                if (op == "diff"
-                    || op == "pratyahara-diff"
-                    || op == "pratyahara-difference")
+                if (op == "diff" || op == "pratyahara-diff" || op == "pratyahara-difference")
                     && args.len() == 2
                 {
                     if let (Some(m1), Some(m2)) =
