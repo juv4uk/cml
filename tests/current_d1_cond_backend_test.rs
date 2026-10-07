@@ -101,6 +101,9 @@ fn current_cond_selects_only_exact_d1_and_exhausts_to_structural_empty() {
     Value *no_no = v_apply(closure, mk_cons(no, mk_cons(no, &NIL_V)));
     if (no_no->tag != TAG_NIL) return 12;
 
+    Value *empty_yes = v_apply(closure, mk_cons(&NIL_V, mk_cons(yes, &NIL_V)));
+    if (empty_yes->tag != TAG_INT || empty_yes->u.i != 22) return 13;
+
     return 0;
 "#,
     );
@@ -125,7 +128,6 @@ fn current_cond_rejects_every_legacy_or_host_truth_carrier() {
         ("mk_int(1)", "number-one"),
         ("(&TRUE_V)", "symbol-t"),
         ("mk_cons(mk_int(1), &NIL_V)", "legacy-list-one"),
-        ("(&NIL_V)", "nil"),
     ] {
         let source = runtime_and_functions_with_main(
             &program,
@@ -155,12 +157,16 @@ fn compatibility_cond_remains_default_and_isolated() {
         CConditionalMechanism::CompatibilityTruthiness
     );
 
+    let legacy_yes = Ir::App {
+        func: Box::new(Ir::Sid(sens::sid!(00000011))),
+        args: vec![Ir::Int(1), Ir::Int(1)],
+    };
     let program = [Ir::Cond {
-        branches: vec![(Ir::Int(1), Ir::Int(42))],
+        branches: vec![(legacy_yes, Ir::Int(42))],
     }];
     let source = CBackend::new().compile_program(&program).unwrap();
-    assert!(source.contains("if (truthy(mk_int(1)))"));
-    assert!(!source.contains("if (require_predicate_bit(mk_int(1)"));
+    assert!(source.contains("compatibility_cond_selects("));
+    assert!(!source.contains("require_predicate_bit("));
 
     let run = compile_c(&source, "compatibility-default");
     assert!(run.status.success());
