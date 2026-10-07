@@ -1,10 +1,8 @@
 //! End-to-end: my-lisp semantic export slice-1 program shape through CML C path.
 //!
-//! Fixture #69 shape (named def + recursion):
-//!   (def count-down (lambda (n) (cond ((eq n 0) (quote done)) (t (count-down (- n 1))))))
-//!   (count-down N)
-//!
-//! Forms covered by export: quote, cond, lambda, define, eq, subtraction.
+//! Fixture #69 mechanism shape (named def + recursion), replayed through
+//! the current predicate surface with an explicit YES fallback.
+//! Forms covered by export: quote, cond, lambda, define, equality, subtraction.
 
 use cml::build::{Observation, compile_and_run};
 use cml::semantic_export::{check_digest, parse_export, validate_slice1};
@@ -46,8 +44,8 @@ fn count_down_compiles_and_returns_done() {
     let src = r#"
 (def count-down
   (lambda (n)
-    (cond ((eq n 0) (quote done))
-          (t (count-down (- n 1))))))
+    (cond ((тотожне? n 0) (quote done))
+          ((тотожне? n n) (count-down (- n 1))))))
 (count-down 5)
 "#;
     match compile_and_run(src).expect("compile_and_run") {
@@ -63,8 +61,8 @@ fn count_down_zero_is_done() {
     let src = r#"
 (def count-down
   (lambda (n)
-    (cond ((eq n 0) (quote done))
-          (t (count-down (- n 1))))))
+    (cond ((тотожне? n 0) (quote done))
+          ((тотожне? n n) (count-down (- n 1))))))
 (count-down 0)
 "#;
     match compile_and_run(src).expect("compile_and_run") {
