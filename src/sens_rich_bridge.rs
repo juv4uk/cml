@@ -257,23 +257,21 @@ mod tests {
 
     #[test]
     fn sens_verified_program_request_reaches_only_private_mechanism_binding() {
-        let wire = sens::wire_encode_program(&[
-            sens::Expr {
-                kind: sens::ExprKind::DomainCall(
-                    sens::CoreDomainIdentity::D3(sens::Bija3::from_word(
-                        sens::Bit3::new(0b010).unwrap(),
-                    )),
-                    std::rc::Rc::from(
-                        vec![sens::Expr {
-                            kind: sens::ExprKind::Symbol(std::rc::Rc::from("x")),
-                            span: sens::Span::default(),
-                        }]
-                        .into_boxed_slice(),
-                    ),
+        let wire = sens::wire_encode_program(&[sens::Expr {
+            kind: sens::ExprKind::DomainCall(
+                sens::CoreDomainIdentity::D3(sens::Bija3::from_word(
+                    sens::Bit3::new(0b010).unwrap(),
+                )),
+                std::rc::Rc::from(
+                    vec![sens::Expr {
+                        kind: sens::ExprKind::Symbol(std::rc::Rc::from("x")),
+                        span: sens::Span::default(),
+                    }]
+                    .into_boxed_slice(),
                 ),
-                span: sens::Span::default(),
-            },
-        ]);
+            ),
+            span: sens::Span::default(),
+        }]);
         let decoded = sens::wire_decode_program(&wire).unwrap();
         let program = sens::Value::list(decoded.iter().map(|expr| match &expr.kind {
             sens::ExprKind::DomainCall(identity, arguments) => {
@@ -292,8 +290,7 @@ mod tests {
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>();
         let revision = pinned_authority().unwrap().revision;
-        let value =
-            sens::compiler_program_artifact_from_sens(program, &digest, &revision).unwrap();
+        let value = sens::compiler_program_artifact_from_sens(program, &digest, &revision).unwrap();
         let verified =
             sens::verify_compiler_program_artifact_from_sens(&value, &digest, &revision).unwrap();
         let bound = bind_verified_program_request(&verified.requests[0], &verified).unwrap();
