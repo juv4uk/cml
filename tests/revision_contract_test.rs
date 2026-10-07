@@ -158,5 +158,10 @@ fn extract_field(text: &str, name: &str) -> Option<i64> {
     let marker = format!("({name} . ");
     let start = text.find(&marker)? + marker.len();
     let end = text[start..].find(')')? + start;
-    text[start..end].trim().parse().ok()
+    text[start..end]
+        .trim()
+        .strip_prefix("#d")
+        .unwrap_or(text[start..end].trim())
+        .parse()
+        .ok()
 }
