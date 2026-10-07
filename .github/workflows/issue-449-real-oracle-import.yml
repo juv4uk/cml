@@ -66,6 +66,6 @@ jobs:
           grep -F "CML-FPGA-HANDOFF-GREEN cases=2" /tmp/cml-sens-oracle-import.txt
           grep -F "CML-CONFORMANCE-IMPORT-GREEN cases=2" /tmp/cml-sens-oracle-import.txt
           test "$(grep -c '^(fpga-conformance-handoff/v1 ' /tmp/cml-fpga-handoff.lisp)" -eq 2
-          grep -F '(contract . "11.6")' /tmp/cml-fpga-handoff.lisp
+          grep -F '(contract . "11.8")' /tmp/cml-fpga-handoff.lisp
           grep -F '(oracle-digest . "' /tmp/cml-fpga-handoff.lisp
           grep -F '(identity-trace-digest . "' /tmp/cml-fpga-handoff.lisp
