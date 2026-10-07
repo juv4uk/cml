@@ -62,29 +62,29 @@ def main() -> int:
         current = root / "current.jsonl"
         old = root / "old.jsonl"
 
-        write_row(current, "11.6")
+        write_row(current, "11.8")
         rows = adapter.read_oracle_rows(current)
         assert len(rows) == 1
-        assert rows[0]["contract"] == "11.6"
+        assert rows[0]["contract"] == "11.8"
 
         handoff = root / "fpga-handoff.lisp"
         adapter.write_fpga_handoff(rows, handoff)
         rendered = handoff.read_text(encoding="utf-8")
         assert rendered.startswith("(fpga-conformance-handoff/v1 ")
-        assert '(contract . "11.6")' in rendered
+        assert '(contract . "11.8")' in rendered
         assert '(case-id . "case-' + "a" * 64 + '")' in rendered
         assert '(oracle-digest . "' + "d" * 64 + '")' in rendered
         assert '(identity-trace-digest . "' + "e" * 64 + '")' in rendered
         assert '(grammar-profile . "d1-d3-structural-predicate-v1")' in rendered
         assert '(identity-trace . (((domain . 3) (bits . "001"))))' in rendered
 
-        write_row(old, "11.5")
+        write_row(old, "11.6")
         try:
             adapter.read_oracle_rows(old)
         except ValueError as exc:
-            assert "contract=11.6" in str(exc)
+            assert "contract=11.8" in str(exc)
         else:
-            raise AssertionError("Contract 11.5 row must fail closed")
+            raise AssertionError("Contract 11.6 row must fail closed")
 
     print("CML-CONFORMANCE-ADAPTER-SELFTEST: PASS")
     return 0
