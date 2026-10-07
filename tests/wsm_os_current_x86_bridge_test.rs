@@ -25,10 +25,8 @@ fn assemble_and_undefined_symbols(assembly: &str) -> BTreeSet<String> {
         .duration_since(UNIX_EPOCH)
         .expect("clock after epoch")
         .as_nanos();
-    let base = std::env::temp_dir().join(format!(
-        "cml-current-wsm-os-{}-{nonce}",
-        std::process::id()
-    ));
+    let base =
+        std::env::temp_dir().join(format!("cml-current-wsm-os-{}-{nonce}", std::process::id()));
     let source = base.with_extension("s");
     let object = base.with_extension("o");
     fs::write(&source, assembly).expect("write generated assembly");
