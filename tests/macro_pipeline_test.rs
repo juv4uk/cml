@@ -76,8 +76,8 @@ fn compatibility_cond_rejects_bare_t_instead_of_coercing_truthiness() {
     match compile_and_run("(cond (t 1))").expect("compile_and_run") {
         Observation::Error(error) => {
             assert!(
-                error.contains("Type") && error.contains("D1:1") && error.contains("EMPTY"),
-                "canonical COND must reject values outside D1:1 / D1:0 / D3:000 EMPTY: {error}"
+                error.contains("Type") && error.contains("compatibility cond test must be (1) or (0)"),
+                "compatibility COND must reject bare T instead of reviving generic truthiness: {error}"
             );
         }
         other => panic!("expected exact-control Type error, got {other:?}"),
@@ -85,11 +85,16 @@ fn compatibility_cond_rejects_bare_t_instead_of_coercing_truthiness() {
 }
 
 #[test]
-fn canonical_cond_accepts_structural_empty_as_non_selection() {
-    assert_eq!(
-        value("(cond (() 1) ((тотожне? (quote x) (quote x)) 42))"),
-        "42"
-    );
+fn compatibility_cond_does_not_claim_structural_empty_semantics() {
+    match compile_and_run("(cond (() 1) ((тотожне? (quote x) (quote x)) 42))")
+        .expect("compile_and_run")
+    {
+        Observation::Error(error) => assert!(
+            error.contains("Type") && error.contains("compatibility cond test must be (1) or (0)"),
+            "compatibility path must fail closed; current EMPTY semantics belongs to the exact-D1 role path: {error}"
+        ),
+        other => panic!("expected compatibility Type error, got {other:?}"),
+    }
 }
 
 #[test]
