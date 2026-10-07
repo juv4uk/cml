@@ -12,7 +12,7 @@
               ; compatibility claim.
               (contract . (2 0))
               (supported-revision-channel . supported-pin)
-              (observed-upstream-contract . (11 6))
+              (observed-upstream-contract . (11 8))
               (observed-revision-channel . observed-current)
               (status . upgrade-required)
               (contract-3.0-gap . ((status . unsupported)
