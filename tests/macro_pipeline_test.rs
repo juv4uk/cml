@@ -48,8 +48,12 @@ fn defmacro_my_if_expands_to_cond_result() {
     let src = r#"(defmacro my-if (test then else)
   (cons (quote cond)
         (cons (cons test (cons then (quote ())))
-              (cons (cons (quote t) (cons else (quote ()))) (quote ())))))
-(my-if (eq 1 1) 42 0)"#;
+              (cons
+                (cons
+                  (quote (тотожне? (quote my-if-fallback) (quote my-if-fallback)))
+                  (cons else (quote ())))
+                (quote ())))))
+(my-if (тотожне? 1 1) 42 0)"#;
     assert_eq!(value(src), "42");
 }
 
@@ -58,9 +62,34 @@ fn defmacro_my_if_else_branch() {
     let src = r#"(defmacro my-if (test then else)
   (cons (quote cond)
         (cons (cons test (cons then (quote ())))
-              (cons (cons (quote t) (cons else (quote ()))) (quote ())))))
-(my-if (eq 1 0) 1 99)"#;
+              (cons
+                (cons
+                  (quote (тотожне? (quote my-if-fallback) (quote my-if-fallback)))
+                  (cons else (quote ())))
+                (quote ())))))
+(my-if (тотожне? 1 0) 1 99)"#;
     assert_eq!(value(src), "99");
+}
+
+#[test]
+fn compatibility_cond_rejects_bare_t_instead_of_coercing_truthiness() {
+    match compile_and_run("(cond (t 1))").expect("compile_and_run") {
+        Observation::Error(error) => {
+            assert!(
+                error.contains("Type") && error.contains("D1:1") && error.contains("EMPTY"),
+                "canonical COND must reject values outside D1:1 / D1:0 / D3:000 EMPTY: {error}"
+            );
+        }
+        other => panic!("expected exact-control Type error, got {other:?}"),
+    }
+}
+
+#[test]
+fn canonical_cond_accepts_structural_empty_as_non_selection() {
+    assert_eq!(
+        value("(cond (() 1) ((тотожне? (quote x) (quote x)) 42))"),
+        "42"
+    );
 }
 
 #[test]
