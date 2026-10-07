@@ -41,12 +41,29 @@
   (lambda (value)
     (equal? value (quote ()))))
 
+; Current SENS COND consumes exact D1/D3 control, while the historical CML
+; macro meta-language still observes T/() as data. Keep that bridge local:
+; these helpers manufacture only internal control values, never macro output.
+(def cml-macro-control-yes
+  (lambda ()
+    (eq? (quote cml-macro-control) (quote cml-macro-control))))
+
+(def cml-macro-control-no
+  (lambda ()
+    (eq? (quote cml-macro-left) (quote cml-macro-right))))
+
+(def cml-macro-value-truthy?
+  (lambda (value)
+    (cond
+      ((macro-empty? value) (cml-macro-control-no))
+      ((cml-macro-control-yes) (cml-macro-control-yes)))))
+
 (def macro-atom?
   (lambda (value)
     (cond
-      ((macro-empty? value) t)
-      ((atom? value) t)
-      (t ()))))
+      ((macro-empty? value) (cml-macro-control-yes))
+      ((atom? value) (cml-macro-control-yes))
+      ((cml-macro-control-yes) (cml-macro-control-no)))))
 
 ; --- alist lookup, shared shape for both the macro table and bindings ---
 
@@ -55,7 +72,7 @@
     (cond
       ((macro-atom? alist) ())
       ((eq? (car (car alist)) key) (cdr (car alist)))
-      (t (alist-get (cdr alist) key)))))
+      ((cml-macro-control-yes) (alist-get (cdr alist) key)))))
 
 ; --- bind-params: params is a bare symbol, a proper list, or a dotted
 ; list, mirroring macros.rs's three Expr shapes for a defmacro's param
@@ -69,61 +86,69 @@
       ((macro-atom? params)
        (cond
          ((macro-empty? params) ())
-         (t (cons (cons params args) ()))))
+         ((cml-macro-control-yes) (cons (cons params args) ()))))
       ((macro-atom? args) ())
-      (t (cons (cons (car params) (car args))
-               (bind-params (cdr params) (cdr args)))))))
+      ((cml-macro-control-yes)
+       (cons (cons (car params) (car args))
+             (bind-params (cdr params) (cdr args)))))))
 
 ; --- eval-macro-body: the restricted meta-evaluator (quote/cons/car/cdr/
 ; atom/eq/cond only -- compatibility.my's `meta-evaluator-primitives`),
-; over unevaluated call-site ASTs bound in `env`. ---
+; over unevaluated call-site ASTs bound in `cml-macro-bindings`. ---
 
 (def eval-macro-body
-  (lambda (expr env)
+  (lambda (expr cml-macro-bindings)
     (cond
       ((macro-atom? expr)
        (cond
          ((macro-empty? expr) ())
          ((eq? expr (quote nil)) ())
          ((eq? expr (quote t)) (quote t))
-         (t (alist-get env expr))))
-      (t (eval-macro-form expr env)))))
+         ((cml-macro-control-yes) (alist-get cml-macro-bindings expr))))
+      ((cml-macro-control-yes) (eval-macro-form expr cml-macro-bindings)))))
 
 (def eval-macro-form
-  (lambda (expr env)
+  (lambda (expr cml-macro-bindings)
     (cond
       ((eq? (car expr) (quote quote)) (car (cdr expr)))
       ((eq? (car expr) (quote cons))
-       (cons (eval-macro-body (car (cdr expr)) env)
-             (eval-macro-body (car (cdr (cdr expr))) env)))
-      ((eq? (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) env)))
-      ((eq? (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) env)))
-      ((eq? (car expr) (quote atom)) (truthy (macro-atom? (eval-macro-body (car (cdr expr)) env))))
+       (cons (eval-macro-body (car (cdr expr)) cml-macro-bindings)
+             (eval-macro-body (car (cdr (cdr expr))) cml-macro-bindings)))
+      ((eq? (car expr) (quote car)) (car (eval-macro-body (car (cdr expr)) cml-macro-bindings)))
+      ((eq? (car expr) (quote cdr)) (cdr (eval-macro-body (car (cdr expr)) cml-macro-bindings)))
+      ((eq? (car expr) (quote atom)) (truthy (macro-atom? (eval-macro-body (car (cdr expr)) cml-macro-bindings))))
       ((eq? (car expr) (quote eq))
-       (truthy (equal? (eval-macro-body (car (cdr expr)) env)
-                        (eval-macro-body (car (cdr (cdr expr))) env))))
-      ((eq? (car expr) (quote cond)) (eval-macro-cond (cdr expr) env))
-      (t ()))))
+       (truthy (equal? (eval-macro-body (car (cdr expr)) cml-macro-bindings)
+                        (eval-macro-body (car (cdr (cdr expr))) cml-macro-bindings))))
+      ((eq? (car expr) (quote cond)) (eval-macro-cond (cdr expr) cml-macro-bindings))
+      ((cml-macro-control-yes) ()))))
 
-(def truthy (lambda (v) (cond (v (quote t)) (t ()))))
+(def truthy
+  (lambda (v)
+    (cond
+      (v (quote t))
+      ((cml-macro-control-yes) ()))))
 
 (def eval-macro-cond
-  (lambda (branches env)
+  (lambda (branches cml-macro-bindings)
     (cond
       ((macro-atom? branches) ())
-      (t (cond
-           ((eval-macro-body (car (car branches)) env)
-            (eval-macro-body (car (cdr (car branches))) env))
-           (t (eval-macro-cond (cdr branches) env)))))))
+      ((cml-macro-control-yes)
+       (cond
+         ((cml-macro-value-truthy?
+            (eval-macro-body (car (car branches)) cml-macro-bindings))
+          (eval-macro-body (car (cdr (car branches))) cml-macro-bindings))
+         ((cml-macro-control-yes)
+          (eval-macro-cond (cdr branches) cml-macro-bindings)))))))
 
 ; --- defmacro recognition and top-level expansion pass ---
 
 (def defmacro-form?
   (lambda (expr)
     (cond
-      ((macro-atom? expr) ())
-      ((eq? (car expr) (quote defmacro)) t)
-      (t ()))))
+      ((macro-atom? expr) (cml-macro-control-no))
+      ((eq? (car expr) (quote defmacro)) (cml-macro-control-yes))
+      ((cml-macro-control-yes) (cml-macro-control-no)))))
 
 (def defmacro-name (lambda (expr) (car (cdr expr))))
 (def defmacro-params (lambda (expr) (car (cdr (cdr expr)))))
@@ -137,24 +162,24 @@
        (cond
          ((macro-empty? (car expr)) (expand-list expr table))
          ((eq? (car expr) (quote quote)) expr)
-         (t (expand-call expr table))))
-      (t (expand-list expr table)))))
+         ((cml-macro-control-yes) (expand-call expr table))))
+      ((cml-macro-control-yes) (expand-list expr table)))))
 
 (def expand-call
   (lambda (expr table)
     (cond
       ((macro-atom? (car expr)) (expand-with-macro-check expr table))
-      (t (expand-list expr table)))))
+      ((cml-macro-control-yes) (expand-list expr table)))))
 
 (def expand-with-macro-check
   (lambda (expr table)
     (cond
-      ((alist-get table (car expr))
+      ((cml-macro-value-truthy? (alist-get table (car expr)))
        (expand (eval-macro-body (macro-entry-body (alist-get table (car expr)))
-                                 (bind-params (macro-entry-params (alist-get table (car expr)))
-                                               (cdr expr)))
+                                (bind-params (macro-entry-params (alist-get table (car expr)))
+                                             (cdr expr)))
                table))
-      (t (expand-list expr table)))))
+      ((cml-macro-control-yes) (expand-list expr table)))))
 
 ; macro table entries store (params . body); helpers to read them back
 ; out of that pair shape -- named distinctly from defmacro-params/-body
@@ -168,7 +193,8 @@
   (lambda (expr table)
     (cond
       ((macro-atom? expr) expr)
-      (t (cons (expand (car expr) table) (expand-list (cdr expr) table))))))
+      ((cml-macro-control-yes)
+       (cons (expand (car expr) table) (expand-list (cdr expr) table))))))
 
 ; --- process: one sequential staging walk, matching the live Rust
 ; MacroExpander::process exactly. A defmacro becomes visible only after its
@@ -190,7 +216,7 @@
        (expand-program-with
          (cdr exprs)
          (add-macro-definition (car exprs) table)))
-      (t
+      ((cml-macro-control-yes)
        (cons (expand (car exprs) table)
              (expand-program-with (cdr exprs) table))))))
 
