@@ -705,8 +705,7 @@ mod tests {
 
     #[test]
     fn c1_recompiles_identical_nucleus_to_byte_identical_c2_artifact() {
-        const SENS_DENOMINATOR: &str =
-            "c66d4743bb70882c75376dbcec27d393e5a9649d";
+        const SENS_DENOMINATOR: &str = "c66d4743bb70882c75376dbcec27d393e5a9649d";
 
         let cml_revision = producer_cml_revision();
         let c1 = build_current_sens_c1(SOURCE, pinned_compiler_export(), &cml_revision)
@@ -723,8 +722,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock after epoch")
             .as_nanos();
-        let base =
-            std::env::temp_dir().join(format!("cml-sens-c2-{}-{nonce}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("cml-sens-c2-{}-{nonce}", std::process::id()));
         let source_path = base.with_extension("c");
         let binary_path = base.with_extension("bin");
         std::fs::write(&source_path, &c1.c_source).expect("write generated C1 source");
