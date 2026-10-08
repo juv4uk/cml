@@ -267,7 +267,7 @@ mod tests {
           (identity . ((domain . D8) (bits . 00000010)))
           (law . ((authority-ref . \"x\") (proof-ref . \"x\") (semantic-status . current)))
           (mechanism . ((execution-role . lambda-form) (mechanism-status . unknown) (mechanism-ref . ())))
-          (provenance . ((repository . \"juv4uk/sens\") (revision . \"0000000000000000000000000000000000000000\") (authority-path . \"language-contract.lisp\") (authority-sha256 . \"0000000000000000000000000000000000000000000000000000000000000000\") (compiler-nucleus-sha256 . \"0000000000000000000000000000000000000000000000000000000000000000\") (contract . 11.6))))";
+          (provenance . ((repository . \"juv4uk/sens\") (revision . \"0000000000000000000000000000000000000000\") (authority-path . \"language-contract.lisp\") (authority-sha256 . \"0000000000000000000000000000000000000000000000000000000000000000\") (compiler-nucleus-sha256 . \"0000000000000000000000000000000000000000000000000000000000000000\") (contract . 11.8))))";
         assert!(matches!(
             parse_compiler_export(text),
             Err(CompilerExportError::UnsupportedDomain(domain)) if domain == "D8"
