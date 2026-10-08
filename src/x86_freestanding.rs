@@ -2201,15 +2201,11 @@ impl Emitter {
             let next_label = self.allocate_label();
             self.emit_ir(&pair[0])?;
 
-            // EMPTY/no-witness is an admitted non-selection result, but it
-            // remains structurally distinct from exact PredicateBit(0).
-            self.line(&format!("    movabsq ${}, %rcx", wsm_os_target::NIL));
-            self.line("    cmpq %rcx, %rax");
-            self.line(&format!("    je .Lcurrent_cond_d1_next_{next_label}"));
-
-            // Every non-EMPTY test must be exact D1. The ratified target
-            // runtime validates BoxedKind::PredicateBit and fails closed on
-            // Fixnum 0/1, Symbol(t), legacy True, or another boxed kind.
+            // SENS #4395 / merged #4411, Contract 11.8: every test-position
+            // value must be exact D1. Structural EMPTY is the exhaustion
+            // result of the whole COND, not an admitted predicate answer.
+            // The v8 validator therefore sees every test value and fails closed
+            // on EMPTY, Fixnum 0/1, Symbol(t), legacy True, and wrong boxed kinds.
             self.line("    movq %rax, %rsi");
             self.line("    movq %r12, %rdi");
             self.line("    call wsm_predicate_bit_bits");
