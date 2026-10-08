@@ -38,8 +38,11 @@ fn candidate_words() -> String {
     );
     let bytes = fs::read(file).expect("physical T5 file required");
     assert_eq!(bytes.len(), EXPECTED_SOURCE_BYTES);
-    assert_eq!(hex_digest(&bytes), EXPECTED_PHYSICAL_SHA256,
-               "BLOCK: candidate source not pinned to tested 22-byte T5 artifact");
+    assert_eq!(
+        hex_digest(&bytes),
+        EXPECTED_PHYSICAL_SHA256,
+        "BLOCK: candidate source not pinned to tested 22-byte T5 artifact"
+    );
     let words = sens::decode_ternary_program(&bytes)
         .expect("BLOCK: source is not canonical physical T5/D2 syntax");
     let visible = sens::render_ternary_words_spaced(&words);
@@ -53,9 +56,9 @@ fn candidate_words() -> String {
 }
 
 fn output(command: &mut Command, label: &str) -> Output {
-    let actual = command.output().unwrap_or_else(|error| {
-        panic!("BLOCK: {label} could not launch: {error}")
-    });
+    let actual = command
+        .output()
+        .unwrap_or_else(|error| panic!("BLOCK: {label} could not launch: {error}"));
     assert!(
         actual.status.success(),
         "BLOCK: {label} exit={:?} stderr={} stdout={}",
@@ -69,53 +72,75 @@ fn output(command: &mut Command, label: &str) -> Output {
 #[test]
 fn physical_core1_second_compiles_through_current_cml_to_real_native_wsm() {
     let projection = candidate_words();
-    let export = fs::read_to_string(std::env::var("SENS_COMPILER_EXPORT_FILE")
-        .expect("BLOCK: SENS export path must come from exact candidate checkout"))
-        .expect("BLOCK: SENS compiler export cannot be read");
+    let export = fs::read_to_string(
+        std::env::var("SENS_COMPILER_EXPORT_FILE")
+            .expect("BLOCK: SENS export path must come from exact candidate checkout"),
+    )
+    .expect("BLOCK: SENS compiler export cannot be read");
 
     // CML must consume current SENS-verified mechanism identities and roles.
     // No manual bit->meaning dispatcher or custom Rust CAR/CDR/CONS evaluator.
     let lowered = lower_current_sens_binary_projection(&projection, &export)
         .expect("BLOCK: current exact-domain SENS source not admitted by CML");
-    assert_eq!(lowered.ir.len(), 1, "one closed specialization, not two evaluators");
+    assert_eq!(
+        lowered.ir.len(),
+        1,
+        "one closed specialization, not two evaluators"
+    );
     let debug_ir = format!("{:?}", lowered.ir);
     for forbidden in ["Sid(", "Builtin("] {
-        assert!(!debug_ir.contains(forbidden),
-                "BLOCK: legacy runtime dispatch found: {forbidden}");
+        assert!(
+            !debug_ir.contains(forbidden),
+            "BLOCK: legacy runtime dispatch found: {forbidden}"
+        );
     }
 
     let backend = X86FreestandingBackend::new();
-    let asm = backend.compile_program(&lowered.ir)
+    let asm = backend
+        .compile_program(&lowered.ir)
         .expect("BLOCK: current verified D3 mechanism unsupported by WSM backend");
-    assert_eq!(asm, backend.compile_program(&lowered.ir).unwrap(),
-               "same exact input must produce deterministic freestanding assembly");
+    assert_eq!(
+        asm,
+        backend.compile_program(&lowered.ir).unwrap(),
+        "same exact input must produce deterministic freestanding assembly"
+    );
     for intrinsic in ["call wsm_cons", "call wsm_car", "call wsm_cdr"] {
-        assert!(asm.contains(intrinsic),
-                "BLOCK: expected current mechanism missing from generated machine source: {intrinsic}");
+        assert!(
+            asm.contains(intrinsic),
+            "BLOCK: expected current mechanism missing from generated machine source: {intrinsic}"
+        );
     }
-    assert!(!asm.contains("wsm_sid8"),
-            "BLOCK: historical SID8 cannot become current machine authority");
+    assert!(
+        !asm.contains("wsm_sid8"),
+        "BLOCK: historical SID8 cannot become current machine authority"
+    );
 
-    let nonce = SystemTime::now().duration_since(UNIX_EPOCH)
-        .expect("clock after epoch").as_nanos();
-    let folder = std::env::temp_dir().join(format!(
-        "core1-t5-cml-wsm-{}-{nonce}", std::process::id()));
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock after epoch")
+        .as_nanos();
+    let folder =
+        std::env::temp_dir().join(format!("core1-t5-cml-wsm-{}-{nonce}", std::process::id()));
     fs::create_dir(&folder).expect("create isolated test output directory");
 
     let asm_path = folder.join("core1-generated.s");
     let object_path = folder.join("core1-generated.o");
     let runtime_path = PathBuf::from(
-        std::env::var("WSM_NATIVE_NUCLEUS")
-            .expect("BLOCK: exact WSM native nucleus path missing")
+        std::env::var("WSM_NATIVE_NUCLEUS").expect("BLOCK: exact WSM native nucleus path missing"),
     );
-    assert!(runtime_path.is_file(), "BLOCK: WSM candidate nucleus missing");
+    assert!(
+        runtime_path.is_file(),
+        "BLOCK: WSM candidate nucleus missing"
+    );
 
     let harness_path = folder.join("main.c");
     let binary_path = folder.join("core1-native");
     fs::write(&asm_path, &asm).expect("write generated CML assembly");
     // This C shim only prints the native entrypoint result. WSM's real
     // nucleus owns its target failure ABI AND all structural operations.
-    fs::write(&harness_path, r#"
+    fs::write(
+        &harness_path,
+        r#"
 #include <stdint.h>
 #include <stdio.h>
 extern uint64_t wsm_entry(void *ctx);
@@ -124,28 +149,60 @@ int main(void) {
     printf("%llu\n", (unsigned long long)wsm_entry((void *)0));
     return 0;
 }
-"#).expect("write only target entrypoint stub");
+"#,
+    )
+    .expect("write only target entrypoint stub");
 
-    output(Command::new("cc")
-        .arg("-x").arg("assembler").arg("-c")
-        .arg(&asm_path).arg("-o").arg(&object_path), "CML assembler");
+    output(
+        Command::new("cc")
+            .arg("-x")
+            .arg("assembler")
+            .arg("-c")
+            .arg(&asm_path)
+            .arg("-o")
+            .arg(&object_path),
+        "CML assembler",
+    );
     let machine_bytes = fs::read(&object_path).expect("read compiled ELF object");
-    assert!(!machine_bytes.is_empty(), "BLOCK: compiled machine object is empty");
+    assert!(
+        !machine_bytes.is_empty(),
+        "BLOCK: compiled machine object is empty"
+    );
 
-    output(Command::new("cc").arg(&object_path).arg(&runtime_path)
-        .arg(&harness_path).arg("-o").arg(&binary_path),
-        "link compiler-emitted object to actual WSM nucleus");
+    output(
+        Command::new("cc")
+            .arg(&object_path)
+            .arg(&runtime_path)
+            .arg(&harness_path)
+            .arg("-o")
+            .arg(&binary_path),
+        "link compiler-emitted object to actual WSM nucleus",
+    );
 
-    let native = output(&mut Command::new(&binary_path),
-                        "native executable from physical Core1 .sens");
-    let actual: u64 = String::from_utf8(native.stdout).unwrap().trim()
-        .parse().expect("native entry prints exactly one target-contract word");
-    assert_eq!(actual, wsm_os_target::NIL,
-               "actual native result must match SENS D3:000 EMPTY oracle result");
+    let native = output(
+        &mut Command::new(&binary_path),
+        "native executable from physical Core1 .sens",
+    );
+    let actual: u64 = String::from_utf8(native.stdout)
+        .unwrap()
+        .trim()
+        .parse()
+        .expect("native entry prints exactly one target-contract word");
+    assert_eq!(
+        actual,
+        wsm_os_target::NIL,
+        "actual native result must match SENS D3:000 EMPTY oracle result"
+    );
 
-    println!("CORE1_T5_TO_NATIVE_PASS source_sens={} wsm_nucleus={} physical_sha256={} generated_asm_sha256={} object_sha256={} native_word={}",
-        UPSTREAM_SENS_SHA, NATIVE_WSM_SHA, EXPECTED_PHYSICAL_SHA256,
-        hex_digest(asm.as_bytes()), hex_digest(&machine_bytes), actual);
+    println!(
+        "CORE1_T5_TO_NATIVE_PASS source_sens={} wsm_nucleus={} physical_sha256={} generated_asm_sha256={} object_sha256={} native_word={}",
+        UPSTREAM_SENS_SHA,
+        NATIVE_WSM_SHA,
+        EXPECTED_PHYSICAL_SHA256,
+        hex_digest(asm.as_bytes()),
+        hex_digest(&machine_bytes),
+        actual
+    );
     let _ = fs::remove_dir_all(folder);
 }
 
