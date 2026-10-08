@@ -1,6 +1,11 @@
 name: Core1 exact T5 to CML native WSM experiment
 
 on:
+  push:
+    branches: [integration/core1-t5-native-handoff-20261008]
+    paths:
+      - "tests/core1_t5_to_native_test.rs"
+      - ".github/workflows/core1-t5-to-native.yml"
   pull_request:
     paths:
       - "tests/core1_t5_to_native_test.rs"
