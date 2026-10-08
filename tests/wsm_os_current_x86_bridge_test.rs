@@ -255,7 +255,7 @@ fn exact_d1_current_mechanisms_use_ratified_v8_carrier_without_sid_adapter() {
 }
 
 #[test]
-fn current_atom_and_partial_eq_execute_with_distinct_d1_and_empty_carriers() {
+fn current_atom_and_atom_domain_eq_use_exact_d1_and_pair_eq_fails_type() {
     let pair = current_mechanism(
         RichCompilerMechanismRef::PairConstruct,
         vec![Ir::Int(1), Ir::Nil],
@@ -274,9 +274,13 @@ fn current_atom_and_partial_eq_execute_with_distinct_d1_and_empty_carriers() {
         RichCompilerMechanismRef::AtomEqualityD1,
         vec![Ir::Int(4), Ir::Int(5)],
     );
-    let eq_empty = current_mechanism(
+    let eq_pair_left = current_mechanism(
         RichCompilerMechanismRef::AtomEqualityD1,
-        vec![pair.clone(), pair],
+        vec![pair.clone(), Ir::Int(4)],
+    );
+    let eq_pair_right = current_mechanism(
+        RichCompilerMechanismRef::AtomEqualityD1,
+        vec![Ir::Int(4), pair.clone()],
     );
 
     assert_eq!(
@@ -301,14 +305,16 @@ fn current_atom_and_partial_eq_execute_with_distinct_d1_and_empty_carriers() {
         output_word(&compile_and_run_with_exact_d1_runtime(&[eq_no], "eq-no")),
         ((257_u64) << 3) | 7
     );
-    assert_eq!(
-        output_word(&compile_and_run_with_exact_d1_runtime(
-            &[eq_empty],
-            "eq-empty"
-        )),
-        wsm_os_target::NIL,
-        "partial EQ outside the atom domain must preserve structural EMPTY/no-witness"
-    );
+    for (name, eq_pair) in [
+        ("eq-pair-left", eq_pair_left),
+        ("eq-pair-right", eq_pair_right),
+    ] {
+        let output = compile_and_run_with_exact_d1_runtime(&[eq_pair], name);
+        assert!(
+            !output.status.success(),
+            "Contract 11.8: pair/out-of-domain EQ must fail through Type"
+        );
+    }
 }
 
 #[test]
@@ -322,10 +328,7 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
         vec![pair.clone()],
     );
     let yes = current_mechanism(RichCompilerMechanismRef::AtomPredicateD1, vec![Ir::Int(1)]);
-    let empty = current_mechanism(
-        RichCompilerMechanismRef::AtomEqualityD1,
-        vec![pair.clone(), pair],
-    );
+    let empty = Ir::Nil;
 
     let selected_after_no = exact_cond(vec![(no.clone(), Ir::Int(10)), (yes.clone(), Ir::Int(42))]);
     assert_eq!(
