@@ -9,6 +9,15 @@ fn cml_consumes_upstream_width_authority_and_program_measure() {
         WIDTH_CERTIFICATE.contains("\"generated-projection-non-authoritative\""),
         "the host-visible certificate must remain a projection, not semantic authority"
     );
+    assert!(
+        WIDTH_CERTIFICATE.contains("\"sens-domain-width-certificate/v2\""),
+        "CML must consume the table-bound SENS width certificate"
+    );
+    assert!(
+        WIDTH_CERTIFICATE
+            .contains("\"canonical_sens_table_key_widths_match_declared_width\": true"),
+        "canonical SENS table coordinates must participate in width authority"
+    );
 
     let tokens = parse_binary_source_words("10 001 01").expect("canonical SENS source");
     assert_eq!(semantic_source_bits(&tokens), 7);
