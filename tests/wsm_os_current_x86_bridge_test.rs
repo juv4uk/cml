@@ -61,7 +61,6 @@ fn assemble_and_undefined_symbols(assembly: &str) -> BTreeSet<String> {
         .collect()
 }
 
-
 fn compile_and_run_with_exact_d1_runtime(program: &[Ir], stem: &str) -> std::process::Output {
     let assembly = X86FreestandingBackend::new()
         .compile_program(program)
@@ -263,7 +262,10 @@ fn current_atom_and_partial_eq_execute_with_distinct_d1_and_empty_carriers() {
     );
 
     let atom_yes = current_mechanism(RichCompilerMechanismRef::AtomPredicateD1, vec![Ir::Int(1)]);
-    let atom_no = current_mechanism(RichCompilerMechanismRef::AtomPredicateD1, vec![pair.clone()]);
+    let atom_no = current_mechanism(
+        RichCompilerMechanismRef::AtomPredicateD1,
+        vec![pair.clone()],
+    );
     let eq_yes = current_mechanism(
         RichCompilerMechanismRef::AtomEqualityD1,
         vec![Ir::Int(4), Ir::Int(4)],
@@ -278,11 +280,17 @@ fn current_atom_and_partial_eq_execute_with_distinct_d1_and_empty_carriers() {
     );
 
     assert_eq!(
-        output_word(&compile_and_run_with_exact_d1_runtime(&[atom_yes], "atom-yes")),
+        output_word(&compile_and_run_with_exact_d1_runtime(
+            &[atom_yes],
+            "atom-yes"
+        )),
         ((258_u64) << 3) | 7
     );
     assert_eq!(
-        output_word(&compile_and_run_with_exact_d1_runtime(&[atom_no], "atom-no")),
+        output_word(&compile_and_run_with_exact_d1_runtime(
+            &[atom_no],
+            "atom-no"
+        )),
         ((257_u64) << 3) | 7
     );
     assert_eq!(
@@ -294,7 +302,10 @@ fn current_atom_and_partial_eq_execute_with_distinct_d1_and_empty_carriers() {
         ((257_u64) << 3) | 7
     );
     assert_eq!(
-        output_word(&compile_and_run_with_exact_d1_runtime(&[eq_empty], "eq-empty")),
+        output_word(&compile_and_run_with_exact_d1_runtime(
+            &[eq_empty],
+            "eq-empty"
+        )),
         wsm_os_target::NIL,
         "partial EQ outside the atom domain must preserve structural EMPTY/no-witness"
     );
@@ -306,7 +317,10 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
         RichCompilerMechanismRef::PairConstruct,
         vec![Ir::Int(1), Ir::Nil],
     );
-    let no = current_mechanism(RichCompilerMechanismRef::AtomPredicateD1, vec![pair.clone()]);
+    let no = current_mechanism(
+        RichCompilerMechanismRef::AtomPredicateD1,
+        vec![pair.clone()],
+    );
     let yes = current_mechanism(RichCompilerMechanismRef::AtomPredicateD1, vec![Ir::Int(1)]);
     let empty = current_mechanism(
         RichCompilerMechanismRef::AtomEqualityD1,
@@ -322,8 +336,7 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
         wsm_os_target::encode_fixnum(42).expect("42 fits")
     );
 
-    let selected_after_empty =
-        exact_cond(vec![(empty.clone(), Ir::Int(10)), (yes, Ir::Int(43))]);
+    let selected_after_empty = exact_cond(vec![(empty.clone(), Ir::Int(10)), (yes, Ir::Int(43))]);
     assert_eq!(
         output_word(&compile_and_run_with_exact_d1_runtime(
             &[selected_after_empty],
@@ -334,7 +347,10 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
 
     let exhausted = exact_cond(vec![(no, Ir::Int(10)), (empty, Ir::Int(11))]);
     assert_eq!(
-        output_word(&compile_and_run_with_exact_d1_runtime(&[exhausted], "cond-exhausted")),
+        output_word(&compile_and_run_with_exact_d1_runtime(
+            &[exhausted],
+            "cond-exhausted"
+        )),
         wsm_os_target::NIL
     );
 
