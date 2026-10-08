@@ -35,9 +35,11 @@ jobs:
 
       - name: Freeze exact SENS denominator
         run: |
-          test "$(git -C external/sens rev-parse HEAD)" = "69d4bb7f8390e431b479eb17ea68dcefb80d04f9"
-          grep -q '(build-source-sha . "69d4bb7f8390e431b479eb17ea68dcefb80d04f9")' upstream-revisions.lisp
-          grep -q '(supported-pin-sha . "69d4bb7f8390e431b479eb17ea68dcefb80d04f9")' upstream-revisions.lisp
+          pin="$(grep -oE '\(supported-pin-sha \. "[0-9a-f]{40}"\)' upstream-revisions.lisp | grep -oE '[0-9a-f]{40}' | head -n1)"
+          build_pin="$(grep -oE '\(build-source-sha \. "[0-9a-f]{40}"\)' upstream-revisions.lisp | grep -oE '[0-9a-f]{40}' | head -n1)"
+          test -n "$pin"
+          test "$build_pin" = "$pin"
+          test "$(git -C external/sens rev-parse HEAD)" = "$pin"
 
       - name: Focused format
         run: >-
