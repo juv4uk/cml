@@ -23,7 +23,7 @@ from typing import Any
 
 SCHEMA = "sens-execution-conformance/v1"
 SIDECAR_SCHEMA = "cml-cuda-provenance-sidecar/v1"
-CURRENT_CONTRACT = "11.6"
+CURRENT_CONTRACT = "11.8"
 PRODUCER_LAYER = "L3"
 DEFAULT_PRODUCER = "cml-cuda-nvrtc-driver-jit"
 
