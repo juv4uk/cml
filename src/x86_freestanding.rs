@@ -2171,7 +2171,10 @@ impl Emitter {
         ));
         self.line(&format!("    je .Lcurrent_eq_d1_empty_{empty_label}"));
 
-        self.line(&format!("    movq {}(%rsp), %rcx", Self::slot_offset(left_slot)));
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(left_slot)
+        ));
         self.line(&format!(
             "    cmpq {}(%rsp), %rcx",
             Self::slot_offset(right_slot)
