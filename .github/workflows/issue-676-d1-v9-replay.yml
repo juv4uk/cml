@@ -1,0 +1,64 @@
+name: issue-676-d1-v9-replay
+
+on:
+  pull_request:
+    paths:
+      - "external/sens"
+      - "upstream-revisions.lisp"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/x86_freestanding.rs"
+      - "tests/wsm_os_current_x86_bridge_test.rs"
+      - "tests/target_abi_v8_pin_test.rs"
+      - "tests/sens_width_authority_consumer_test.rs"
+      - "tests/c_backend_conformance_test.rs"
+      - "tests/my_lisp_witness_bridge_test.rs"
+      - ".github/workflows/issue-676-d1-v9-replay.yml"
+  push:
+    branches: [master]
+    paths:
+      - "external/sens"
+      - "upstream-revisions.lisp"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/x86_freestanding.rs"
+      - "tests/wsm_os_current_x86_bridge_test.rs"
+      - "tests/target_abi_v8_pin_test.rs"
+      - "tests/sens_width_authority_consumer_test.rs"
+      - "tests/c_backend_conformance_test.rs"
+      - "tests/my_lisp_witness_bridge_test.rs"
+      - ".github/workflows/issue-676-d1-v9-replay.yml"
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: cml
+          submodules: recursive
+      - uses: actions/checkout@v5
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: fbfbcf6adb84f161757ae23eab4abbaa59985ddf
+          path: wsm-my-lisp
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format
+        working-directory: cml
+        run: cargo fmt -p cml -- --check
+      - name: Target v9 and SENS authority pins
+        working-directory: cml
+        run: |
+          cargo test --test target_abi_v8_pin_test
+          cargo test --test sens_width_authority_consumer_test
+      - name: Current exact-D1 freestanding x86
+        working-directory: cml
+        run: cargo test --test wsm_os_current_x86_bridge_test -- --nocapture
+      - name: Current Tier-1 C backend conformance
+        working-directory: cml
+        run: cargo test --test c_backend_conformance_test -- --nocapture
+      - name: Cross-repo witness bridge
+        working-directory: cml
+        env:
+          WSM_NUCLEUS_ASM: ${{ github.workspace }}/wsm-my-lisp/asm/nucleus.s
+        run: cargo test --test my_lisp_witness_bridge_test -- --nocapture
