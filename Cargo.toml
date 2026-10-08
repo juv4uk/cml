@@ -13,7 +13,7 @@ gpu-cuda = ["dep:cudarc"]
 cudarc = { version = "0.19.9", default-features = false, features = ["std", "driver", "nvrtc", "dynamic-loading", "cuda-12000"], optional = true }
 pollster = { version = "1.0.1", optional = true }
 wgpu = { version = "30.0.0", default-features = false, features = ["std", "wgsl", "vulkan", "gles"], optional = true }
-wsm-os-target = { git = "https://github.com/juv4uk/wsm-target-contract.git", rev = "b5ec3211f6bd07fb7c4a5f704875892eff145b91" }
+wsm-os-target = { git = "https://github.com/juv4uk/wsm-target-contract.git", rev = "d3663026dbcce73e2b8e32238910c3f8f7dea833" }
 sens = { path = "external/sens/crates/sens" }
 
 [dev-dependencies]
