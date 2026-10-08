@@ -141,7 +141,7 @@ int main(void) {
         .arg(&harness_path).arg("-o").arg(&binary_path),
         "link compiler-emitted object to actual WSM nucleus");
 
-    let native = output(Command::new(&binary_path),
+    let native = output(&mut Command::new(&binary_path),
                         "native executable from physical Core1 .sens");
     let actual: u64 = String::from_utf8(native.stdout).unwrap().trim()
         .parse().expect("native entry prints exactly one target-contract word");
