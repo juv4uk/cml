@@ -7,6 +7,7 @@ use std::fs;
 use std::process::Command;
 
 use cml::c_backend::CBackend;
+use cml::ir::Ir;
 use cml::lower;
 use cml::macros::MacroExpander;
 use cml::parser;
@@ -85,6 +86,37 @@ fn compile_and_run(expr_str: &str, stem: &str) -> Result<std::process::Output, S
     Ok(run)
 }
 
+
+fn contains_noncurrent_control(ir: &Ir) -> bool {
+    match ir {
+        Ir::Cond { .. } | Ir::CondMatch { .. } => true,
+        Ir::Lambda { body, .. } | Ir::Def { value: body, .. } => contains_noncurrent_control(body),
+        Ir::App { func, args } => {
+            contains_noncurrent_control(func) || args.iter().any(contains_noncurrent_control)
+        }
+        Ir::Let { bindings, body } => {
+            bindings
+                .iter()
+                .any(|(_, value)| contains_noncurrent_control(value))
+                || contains_noncurrent_control(body)
+        }
+        Ir::Prim { args, .. }
+        | Ir::MachinePrim { args, .. }
+        | Ir::TailSelfCall { args } => args.iter().any(contains_noncurrent_control),
+        Ir::Sid(_)
+        | Ir::Int(_)
+        | Ir::Float(_)
+        | Ir::Rational(_, _)
+        | Ir::String(_)
+        | Ir::Buffer(_)
+        | Ir::Nil
+        | Ir::True
+        | Ir::Var(_)
+        | Ir::Builtin(_)
+        | Ir::Quote(_) => false,
+    }
+}
+
 fn parse_contract_version(line: &str, field: &str) -> Option<(u32, u32)> {
     let marker = format!("({field} . (");
     let start = line.find(&marker)? + marker.len();
@@ -145,6 +177,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
     let mut unsupported_errors = 0;
     let mut unsupported_inexact = 0;
     let mut unsupported_newer_contract = 0;
+    let mut unsupported_current_control = 0;
     let mut failures = Vec::new();
 
     for (i, line) in fixture_content.lines().enumerate() {
@@ -233,6 +266,16 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
             continue;
         };
 
+        // This matrix exercises the generic compatibility parser/lowerer.
+        // Generic Ir::Cond / CondMatch is not the current exact-domain D3
+        // control path, so treating its result as current SENS evidence would
+        // be an authority error. Current COND is covered by verified current
+        // lowering tests (#604/#618/#668).
+        if program.iter().any(contains_noncurrent_control) {
+            unsupported_current_control += 1;
+            continue;
+        }
+
         let mut backend = CBackend::new();
         let c_source = match backend.compile_program(&program) {
             Ok(src) => src,
@@ -298,7 +341,8 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         + checked_errors
         + unsupported_errors
         + unsupported_inexact
-        + unsupported_newer_contract;
+        + unsupported_newer_contract
+        + unsupported_current_control;
     assert_eq!(
         accounted, selected,
         "every selected tier-1 fixture must be executed or assigned one explicit unsupported state"
@@ -307,6 +351,7 @@ fn c_backend_matches_every_constitutive_tier1_fixture() {
         "tier-1 matrix: selected={selected} supported-value={checked} supported-error={checked_errors} \
          unsupported-error={unsupported_errors} \
          unsupported-inexact={unsupported_inexact} unsupported-newer-contract={unsupported_newer_contract} \
+         unsupported-current-control={unsupported_current_control} \
         "
     );
 }
