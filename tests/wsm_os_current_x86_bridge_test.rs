@@ -255,7 +255,7 @@ fn exact_d1_current_mechanisms_use_ratified_v8_carrier_without_sid_adapter() {
 }
 
 #[test]
-fn current_atom_and_partial_eq_execute_with_distinct_d1_and_empty_carriers() {
+fn current_atom_and_eq_execute_exact_d1_and_reject_pair_domain() {
     let pair = current_mechanism(
         RichCompilerMechanismRef::PairConstruct,
         vec![Ir::Int(1), Ir::Nil],
@@ -301,18 +301,16 @@ fn current_atom_and_partial_eq_execute_with_distinct_d1_and_empty_carriers() {
         output_word(&compile_and_run_with_exact_d1_runtime(&[eq_no], "eq-no")),
         ((257_u64) << 3) | 7
     );
-    assert_eq!(
-        output_word(&compile_and_run_with_exact_d1_runtime(
-            &[eq_empty],
-            "eq-empty"
-        )),
-        wsm_os_target::NIL,
-        "partial EQ outside the atom domain must preserve structural EMPTY/no-witness"
+    let eq_pair_output =
+        compile_and_run_with_exact_d1_runtime(&[eq_empty], "eq-pair-type");
+    assert!(
+        !eq_pair_output.status.success(),
+        "current EQ outside the atom domain must fail the named Type path"
     );
 }
 
 #[test]
-fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
+fn current_cond_accepts_only_exact_d1_and_exhausts_to_empty() {
     let pair = current_mechanism(
         RichCompilerMechanismRef::PairConstruct,
         vec![Ir::Int(1), Ir::Nil],
@@ -322,11 +320,6 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
         vec![pair.clone()],
     );
     let yes = current_mechanism(RichCompilerMechanismRef::AtomPredicateD1, vec![Ir::Int(1)]);
-    let empty = current_mechanism(
-        RichCompilerMechanismRef::AtomEqualityD1,
-        vec![pair.clone(), pair],
-    );
-
     let selected_after_no = exact_cond(vec![(no.clone(), Ir::Int(10)), (yes.clone(), Ir::Int(42))]);
     assert_eq!(
         output_word(&compile_and_run_with_exact_d1_runtime(
@@ -336,16 +329,14 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
         wsm_os_target::encode_fixnum(42).expect("42 fits")
     );
 
-    let selected_after_empty = exact_cond(vec![(empty.clone(), Ir::Int(10)), (yes, Ir::Int(43))]);
-    assert_eq!(
-        output_word(&compile_and_run_with_exact_d1_runtime(
-            &[selected_after_empty],
-            "cond-empty-then-yes"
-        )),
-        wsm_os_target::encode_fixnum(43).expect("43 fits")
+    let no_again = current_mechanism(
+        RichCompilerMechanismRef::AtomPredicateD1,
+        vec![current_mechanism(
+            RichCompilerMechanismRef::PairConstruct,
+            vec![Ir::Int(2), Ir::Nil],
+        )],
     );
-
-    let exhausted = exact_cond(vec![(no, Ir::Int(10)), (empty, Ir::Int(11))]);
+    let exhausted = exact_cond(vec![(no, Ir::Int(10)), (no_again, Ir::Int(11))]);
     assert_eq!(
         output_word(&compile_and_run_with_exact_d1_runtime(
             &[exhausted],
@@ -354,7 +345,11 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
         wsm_os_target::NIL
     );
 
-    for (name, wrong) in [("fixnum-zero", Ir::Int(0)), ("symbol-t", Ir::True)] {
+    for (name, wrong) in [
+        ("fixnum-zero", Ir::Int(0)),
+        ("symbol-t", Ir::True),
+        ("literal-empty", Ir::Nil),
+    ] {
         let invalid = exact_cond(vec![(wrong, Ir::Int(99))]);
         let output = compile_and_run_with_exact_d1_runtime(&[invalid], name);
         assert!(

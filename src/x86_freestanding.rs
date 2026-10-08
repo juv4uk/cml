@@ -2145,7 +2145,7 @@ impl Emitter {
             Self::slot_offset(right_slot)
         ));
 
-        let empty_label = self.allocate_label();
+        let type_error = self.allocate_label();
         let no_label = self.allocate_label();
         let end_label = self.allocate_label();
 
@@ -2158,7 +2158,7 @@ impl Emitter {
             "    cmpq ${}, %rcx",
             wsm_os_target::Tag::Cons as u64
         ));
-        self.line(&format!("    je .Lcurrent_eq_d1_empty_{empty_label}"));
+        self.line(&format!("    je .Lcurrent_eq_d1_type_{type_error}"));
 
         self.line(&format!(
             "    movq {}(%rsp), %rcx",
@@ -2169,7 +2169,7 @@ impl Emitter {
             "    cmpq ${}, %rcx",
             wsm_os_target::Tag::Cons as u64
         ));
-        self.line(&format!("    je .Lcurrent_eq_d1_empty_{empty_label}"));
+        self.line(&format!("    je .Lcurrent_eq_d1_type_{type_error}"));
 
         self.line(&format!(
             "    movq {}(%rsp), %rcx",
@@ -2187,8 +2187,21 @@ impl Emitter {
         self.emit_predicate_bit_runtime(0);
         self.line(&format!("    jmp .Lcurrent_eq_d1_end_{end_label}"));
 
-        self.line(&format!(".Lcurrent_eq_d1_empty_{empty_label}:"));
-        self.emit_immediate(wsm_os_target::NIL);
+        self.line(&format!(".Lcurrent_eq_d1_type_{type_error}:"));
+        self.line("    movq %r12, %rdi");
+        self.line(&format!(
+            "    movl ${}, %esi",
+            wsm_os_target::ErrorCode::Type as u32
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rdx",
+            Self::slot_offset(left_slot)
+        ));
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(right_slot)
+        ));
+        self.line("    call wsm_fail");
         self.line(&format!(".Lcurrent_eq_d1_end_{end_label}:"));
         Ok(())
     }
@@ -2201,15 +2214,11 @@ impl Emitter {
             let next_label = self.allocate_label();
             self.emit_ir(&pair[0])?;
 
-            // EMPTY/no-witness is an admitted non-selection result, but it
-            // remains structurally distinct from exact PredicateBit(0).
-            self.line(&format!("    movabsq ${}, %rcx", wsm_os_target::NIL));
-            self.line("    cmpq %rcx, %rax");
-            self.line(&format!("    je .Lcurrent_cond_d1_next_{next_label}"));
-
-            // Every non-EMPTY test must be exact D1. The ratified target
-            // runtime validates BoxedKind::PredicateBit and fails closed on
-            // Fixnum 0/1, Symbol(t), legacy True, or another boxed kind.
+            // Contract 11.8 / sens#4395: every test-position value must
+            // be exact D1. Structural EMPTY is only the exhaustion result,
+            // never an admitted predicate answer. The target runtime validates
+            // BoxedKind::PredicateBit and fails closed on EMPTY, Fixnum 0/1,
+            // Symbol(t), legacy True, or another boxed kind.
             self.line("    movq %rax, %rsi");
             self.line("    movq %r12, %rdi");
             self.line("    call wsm_predicate_bit_bits");
