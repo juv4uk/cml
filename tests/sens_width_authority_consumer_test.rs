@@ -14,7 +14,8 @@ fn cml_consumes_upstream_width_authority_and_program_measure() {
         "CML must consume the table-bound SENS width certificate"
     );
     assert!(
-        WIDTH_CERTIFICATE.contains("\"canonical_sens_table_key_widths_match_declared_width\": true"),
+        WIDTH_CERTIFICATE
+            .contains("\"canonical_sens_table_key_widths_match_declared_width\": true"),
         "SENS canonical table coordinates must participate in width authority"
     );
 
