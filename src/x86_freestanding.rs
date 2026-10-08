@@ -114,29 +114,27 @@ fn check_symbol_capacity(count: u64) -> Result<(), CompileError> {
     Ok(())
 }
 
-fn current_compiler_runtime_contract(
+fn current_compiler_mechanism_arity(
     mechanism: RichCompilerMechanismRef,
-) -> Option<(usize, &'static str)> {
+) -> Option<usize> {
     match mechanism {
-        RichCompilerMechanismRef::SelectorTail => Some((1, "wsm_cdr")),
-        RichCompilerMechanismRef::SelectorHead => Some((1, "wsm_car")),
-        RichCompilerMechanismRef::PairConstruct => Some((2, "wsm_cons")),
-        // Current exact predicates and COND require a target-level D1 carrier.
-        // They remain fail-closed until wsm-target-contract#32 lands.
         RichCompilerMechanismRef::AtomPredicateD1
-        | RichCompilerMechanismRef::AtomEqualityD1
-        | RichCompilerMechanismRef::ConditionalD1
+        | RichCompilerMechanismRef::SelectorTail
+        | RichCompilerMechanismRef::SelectorHead => Some(1),
+        RichCompilerMechanismRef::AtomEqualityD1
+        | RichCompilerMechanismRef::PairConstruct => Some(2),
+        RichCompilerMechanismRef::ConditionalD1
         | RichCompilerMechanismRef::Quote
         | RichCompilerMechanismRef::Lambda
         | RichCompilerMechanismRef::Define => None,
     }
 }
 
-fn checked_current_compiler_runtime(
+fn checked_current_compiler_arity(
     mechanism: RichCompilerMechanismRef,
     actual: usize,
-) -> Result<&'static str, CompileError> {
-    let Some((expected, runtime)) = current_compiler_runtime_contract(mechanism) else {
+) -> Result<(), CompileError> {
+    let Some(expected) = current_compiler_mechanism_arity(mechanism) else {
         return Err(CompileError::UnsupportedCompilerMechanism(mechanism));
     };
     if actual != expected {
@@ -146,7 +144,42 @@ fn checked_current_compiler_runtime(
             actual,
         });
     }
-    Ok(runtime)
+    Ok(())
+}
+
+fn current_compiler_runtime_contract(
+    mechanism: RichCompilerMechanismRef,
+) -> Option<&'static str> {
+    match mechanism {
+        RichCompilerMechanismRef::SelectorTail => Some("wsm_cdr"),
+        RichCompilerMechanismRef::SelectorHead => Some("wsm_car"),
+        RichCompilerMechanismRef::PairConstruct => Some("wsm_cons"),
+        _ => None,
+    }
+}
+
+fn checked_current_compiler_runtime(
+    mechanism: RichCompilerMechanismRef,
+    actual: usize,
+) -> Result<&'static str, CompileError> {
+    checked_current_compiler_arity(mechanism, actual)?;
+    current_compiler_runtime_contract(mechanism)
+        .ok_or(CompileError::UnsupportedCompilerMechanism(mechanism))
+}
+
+fn checked_current_conditional(
+    mechanism: RichCompilerMechanismRef,
+    actual: usize,
+) -> Result<(), CompileError> {
+    if mechanism != RichCompilerMechanismRef::ConditionalD1 {
+        return Err(CompileError::UnsupportedCompilerMechanism(mechanism));
+    }
+    if actual % 2 != 0 {
+        return Err(CompileError::UnsupportedVariant(
+            "current COND branch arity",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Default)]
@@ -730,7 +763,7 @@ fn preflight_env(
             op: PrimOp::CompilerMechanism(mechanism),
             args,
         } => {
-            checked_current_compiler_runtime(*mechanism, args.len())?;
+            checked_current_compiler_arity(*mechanism, args.len())?;
             for argument in args {
                 preflight_env(argument, bindings, symbols, def_arities, slots)?;
             }
@@ -738,8 +771,14 @@ fn preflight_env(
         }
         Ir::Prim {
             op: PrimOp::CompilerConditionalExactD1(mechanism),
-            ..
-        } => return Err(CompileError::UnsupportedCompilerMechanism(*mechanism)),
+            args,
+        } => {
+            checked_current_conditional(*mechanism, args.len())?;
+            for argument in args {
+                preflight_env(argument, bindings, symbols, def_arities, slots)?;
+            }
+            return Ok(());
+        },
         Ir::Prim { .. } => return Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
@@ -1020,7 +1059,7 @@ fn preflight_lambda_body(
             op: PrimOp::CompilerMechanism(mechanism),
             args,
         } => {
-            checked_current_compiler_runtime(*mechanism, args.len())?;
+            checked_current_compiler_arity(*mechanism, args.len())?;
             for argument in args {
                 preflight_lambda_body(argument, bindings, symbols, slots)?;
             }
@@ -1028,8 +1067,14 @@ fn preflight_lambda_body(
         }
         Ir::Prim {
             op: PrimOp::CompilerConditionalExactD1(mechanism),
-            ..
-        } => Err(CompileError::UnsupportedCompilerMechanism(*mechanism)),
+            args,
+        } => {
+            checked_current_conditional(*mechanism, args.len())?;
+            for argument in args {
+                preflight_lambda_body(argument, bindings, symbols, slots)?;
+            }
+            Ok(())
+        },
         Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
@@ -1239,7 +1284,7 @@ fn preflight_def_body(
             op: PrimOp::CompilerMechanism(mechanism),
             args,
         } => {
-            checked_current_compiler_runtime(*mechanism, args.len())?;
+            checked_current_compiler_arity(*mechanism, args.len())?;
             for argument in args {
                 preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
             }
@@ -1247,8 +1292,14 @@ fn preflight_def_body(
         }
         Ir::Prim {
             op: PrimOp::CompilerConditionalExactD1(mechanism),
-            ..
-        } => Err(CompileError::UnsupportedCompilerMechanism(*mechanism)),
+            args,
+        } => {
+            checked_current_conditional(*mechanism, args.len())?;
+            for argument in args {
+                preflight_lambda_body(argument, bindings, symbols, slots)?;
+            }
+            Ok(())
+        },
         Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
