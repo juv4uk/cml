@@ -22,7 +22,7 @@ def make_valid_l0_row() -> dict:
     program = "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(10 20 30))"
     program_digest = adapter.sha256_text(program)
     case_identity = {
-        "contract": "11.6",
+        "contract": "11.8",
         "program_encoding": program_encoding,
         "program": program,
     }
@@ -47,7 +47,7 @@ def make_valid_l0_row() -> dict:
     return {
         "schema": "sens-execution-conformance/v1",
         "case_id": case_id,
-        "contract": "11.6",
+        "contract": "11.8",
         "upstream_sha": "a" * 40,
         "producer_layer": "L0",
         "producer": "sens-eval-l0",

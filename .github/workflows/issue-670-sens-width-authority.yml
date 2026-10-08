@@ -1,0 +1,33 @@
+name: issue-670-sens-width-authority
+
+on:
+  pull_request:
+    paths:
+      - "external/sens"
+      - "upstream-revisions.lisp"
+      - "src/sens_compiler_export.rs"
+      - "tests/sens_width_authority_consumer_test.rs"
+      - ".github/scripts/check-sens-width-authority.py"
+      - ".github/workflows/issue-670-sens-width-authority.yml"
+  push:
+    branches: [master]
+    paths:
+      - "external/sens"
+      - "upstream-revisions.lisp"
+      - "src/sens_compiler_export.rs"
+      - "tests/sens_width_authority_consumer_test.rs"
+      - ".github/scripts/check-sens-width-authority.py"
+      - ".github/workflows/issue-670-sens-width-authority.yml"
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Reject compiler-local SENS width guesses
+        run: python3 .github/scripts/check-sens-width-authority.py
+      - name: Prove upstream SENS width/program measure consumer
+        run: cargo test --test sens_width_authority_consumer_test
