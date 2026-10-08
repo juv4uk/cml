@@ -316,10 +316,7 @@ fn current_cond_accepts_only_exact_d1_and_exhausts_to_structural_empty() {
         RichCompilerMechanismRef::PairConstruct,
         vec![Ir::Int(1), Ir::Nil],
     );
-    let no = current_mechanism(
-        RichCompilerMechanismRef::AtomPredicateD1,
-        vec![pair],
-    );
+    let no = current_mechanism(RichCompilerMechanismRef::AtomPredicateD1, vec![pair]);
     let yes = current_mechanism(RichCompilerMechanismRef::AtomPredicateD1, vec![Ir::Int(1)]);
 
     let selected_after_no = exact_cond(vec![(no.clone(), Ir::Int(10)), (yes, Ir::Int(42))]);
