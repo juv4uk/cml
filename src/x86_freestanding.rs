@@ -2133,17 +2133,26 @@ impl Emitter {
 
         self.emit_ir(&args[0])?;
         let left_slot = self.allocate_slot();
-        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(left_slot)));
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(left_slot)
+        ));
 
         self.emit_ir(&args[1])?;
         let right_slot = self.allocate_slot();
-        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(right_slot)));
+        self.line(&format!(
+            "    movq %rax, {}(%rsp)",
+            Self::slot_offset(right_slot)
+        ));
 
         let empty_label = self.allocate_label();
         let no_label = self.allocate_label();
         let end_label = self.allocate_label();
 
-        self.line(&format!("    movq {}(%rsp), %rcx", Self::slot_offset(left_slot)));
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(left_slot)
+        ));
         self.line(&format!("    andq ${}, %rcx", wsm_os_target::TAG_MASK));
         self.line(&format!(
             "    cmpq ${}, %rcx",
@@ -2151,7 +2160,10 @@ impl Emitter {
         ));
         self.line(&format!("    je .Lcurrent_eq_d1_empty_{empty_label}"));
 
-        self.line(&format!("    movq {}(%rsp), %rcx", Self::slot_offset(right_slot)));
+        self.line(&format!(
+            "    movq {}(%rsp), %rcx",
+            Self::slot_offset(right_slot)
+        ));
         self.line(&format!("    andq ${}, %rcx", wsm_os_target::TAG_MASK));
         self.line(&format!(
             "    cmpq ${}, %rcx",
@@ -2160,7 +2172,10 @@ impl Emitter {
         self.line(&format!("    je .Lcurrent_eq_d1_empty_{empty_label}"));
 
         self.line(&format!("    movq {}(%rsp), %rcx", Self::slot_offset(left_slot)));
-        self.line(&format!("    cmpq {}(%rsp), %rcx", Self::slot_offset(right_slot)));
+        self.line(&format!(
+            "    cmpq {}(%rsp), %rcx",
+            Self::slot_offset(right_slot)
+        ));
         self.line(&format!("    jne .Lcurrent_eq_d1_no_{no_label}"));
         self.emit_predicate_bit_runtime(1);
         self.line(&format!("    jmp .Lcurrent_eq_d1_end_{end_label}"));
@@ -2176,10 +2191,7 @@ impl Emitter {
     }
 
     fn emit_current_conditional_d1(&mut self, args: &[Ir]) -> Result<(), CompileError> {
-        checked_current_conditional_mechanism(
-            RichCompilerMechanismRef::ConditionalD1,
-            args.len(),
-        )?;
+        checked_current_conditional_mechanism(RichCompilerMechanismRef::ConditionalD1, args.len())?;
         let end_label = self.allocate_label();
 
         for pair in args.chunks_exact(2) {
