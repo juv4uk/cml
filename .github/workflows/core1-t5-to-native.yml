@@ -1,0 +1,59 @@
+name: Core1 exact T5 to CML native WSM experiment
+
+on:
+  pull_request:
+    paths:
+      - "tests/core1_t5_to_native_test.rs"
+      - ".github/workflows/core1-t5-to-native.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core1-exact-physical-to-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SENS_COMPILER_EXPORT_FILE: ${{ runner.temp }}/sens-compiler-export.txt
+      WSM_NATIVE_NUCLEUS: ${{ github.workspace }}/candidate-wsm/asm/nucleus.s
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - name: Checkout CML without production SENS submodule changes
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Checkout tested SENS physical Core1 source as *test-only* candidate
+        uses: actions/checkout@v4
+        with:
+          repository: juv4uk/sens
+          ref: 5ccbeabfb1703ce5259dcb8cf55569f9e574c6c1
+          path: external/sens
+          submodules: false
+          persist-credentials: false
+      - name: Checkout actual pinned WSM native x86 nucleus as test-only candidate
+        uses: actions/checkout@v4
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: fbfbcf6adb84f161757ae23eab4abbaa59985ddf
+          path: candidate-wsm
+          submodules: false
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify exact candidate revisions and source-byte identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C external/sens rev-parse HEAD)" = 5ccbeabfb1703ce5259dcb8cf55569f9e574c6c1
+          test "$(git -C candidate-wsm rev-parse HEAD)" = fbfbcf6adb84f161757ae23eab4abbaa59985ddf
+          echo '43846420b5b4464ab6538d8927edfdf4759bd2446c427f34a165cc89c8812a2a  external/sens/tests/fixtures/core1-domain-canary/second.sens' | sha256sum -c -
+          test "$(wc -c < external/sens/tests/fixtures/core1-domain-canary/second.sens)" -eq 22
+          git ls-tree HEAD external/sens # CML production gitlink deliberately NOT updated
+      - name: Export the verified current SENS compiler-mechanism authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --quiet --manifest-path external/sens/Cargo.toml -p xtask -- compiler-export > "$SENS_COMPILER_EXPORT_FILE"
+          test -s "$SENS_COMPILER_EXPORT_FILE"
+      - name: Real physical T5 to verified CML compiler to generated x86 object to native WSM
+        run: cargo test --locked --test core1_t5_to_native_test -- --nocapture
