@@ -237,7 +237,9 @@ fn real_export_drives_full_current_closure_without_sid8() {
 
     assert_eq!(
         lowered.authority.revision,
-        "69d4bb7f8390e431b479eb17ea68dcefb80d04f9"
+        cml::sens_domain_bridge::pinned_authority()
+            .expect("pinned SENS authority")
+            .revision
     );
     assert_eq!(lowered.authority.authority_sha256.len(), 64);
 }
