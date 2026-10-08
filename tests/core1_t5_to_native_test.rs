@@ -113,18 +113,13 @@ fn physical_core1_second_compiles_through_current_cml_to_real_native_wsm() {
     let harness_path = folder.join("main.c");
     let binary_path = folder.join("core1-native");
     fs::write(&asm_path, &asm).expect("write generated CML assembly");
-    // These C functions are mechanical entrypoint/error reporting only.
-    // All language structural operations are in the real WSM x86 nucleus.
+    // This C shim only prints the native entrypoint result. WSM's real
+    // nucleus owns its target failure ABI AND all structural operations.
     fs::write(&harness_path, r#"
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 extern uint64_t wsm_entry(void *ctx);
-void wsm_fail(void *ctx, uint32_t code, uint64_t a, uint64_t b) {
-    (void)ctx; (void)a; (void)b;
-    fprintf(stderr, "WSM_FAIL %u\n", code);
-    exit(97);
-}
+/* The real WSM nucleus owns wsm_fail and target error ABI. */
 int main(void) {
     printf("%llu\n", (unsigned long long)wsm_entry((void *)0));
     return 0;
