@@ -5,7 +5,7 @@
 //! never moves the production external/sens gitlink or Cargo.lock. Current
 //! compiler-export and target mechanisms are the only semantic/ABI owners.
 //! It fails closed: no hand-built IR, pre-baked native output or Sid8 fallback.
-use cml::sens_current_lowering::lower_current_sens_source;
+use cml::sens_current_lowering::lower_current_sens_binary_projection;
 use cml::x86_freestanding::X86FreestandingBackend;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -75,7 +75,7 @@ fn physical_core1_second_compiles_through_current_cml_to_real_native_wsm() {
 
     // CML must consume current SENS-verified mechanism identities and roles.
     // No manual bit->meaning dispatcher or custom Rust CAR/CDR/CONS evaluator.
-    let lowered = lower_current_sens_source(&projection, &export)
+    let lowered = lower_current_sens_binary_projection(&projection, &export)
         .expect("BLOCK: current exact-domain SENS source not admitted by CML");
     assert_eq!(lowered.ir.len(), 1, "one closed specialization, not two evaluators");
     let debug_ir = format!("{:?}", lowered.ir);
