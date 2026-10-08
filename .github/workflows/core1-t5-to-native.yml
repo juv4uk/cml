@@ -61,4 +61,12 @@ jobs:
           cargo run --quiet --manifest-path external/sens/Cargo.toml -p xtask -- compiler-export > "$SENS_COMPILER_EXPORT_FILE"
           test -s "$SENS_COMPILER_EXPORT_FILE"
       - name: Real physical T5 to verified CML compiler to generated x86 object to native WSM
-        run: cargo test --locked --test core1_t5_to_native_test -- --nocapture
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Candidate SENS SHA is intentionally newer than CML's production
+          # submodule; an ephemeral candidate lockfile resolution is required.
+          # Never commit or promote the resulting candidate Cargo.lock.
+          cargo test --test core1_t5_to_native_test -- --nocapture
+          git diff --exit-code -- Cargo.toml .gitmodules
+          git diff --stat -- Cargo.lock || true
