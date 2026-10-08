@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      SENS_COMPILER_EXPORT_FILE: ${{ runner.temp }}/sens-compiler-export.txt
-      WSM_NATIVE_NUCLEUS: ${{ github.workspace }}/candidate-wsm/asm/nucleus.s
+      SENS_COMPILER_EXPORT_FILE: /tmp/sens-core1-compiler-export.txt
+      WSM_NATIVE_NUCLEUS: candidate-wsm/asm/nucleus.s
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - name: Checkout CML without production SENS submodule changes
