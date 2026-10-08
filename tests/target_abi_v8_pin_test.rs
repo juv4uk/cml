@@ -1,4 +1,4 @@
-use wsm_os_target::{BoxedKind, BoxedPredicateBit, ErrorCode, Tag, PREDICATE_BIT_BITS};
+use wsm_os_target::{BoxedKind, BoxedPredicateBit, ErrorCode, PREDICATE_BIT_BITS, Tag};
 
 #[test]
 fn pinned_target_abi_is_current_v8_predicate_bit_authority() {
