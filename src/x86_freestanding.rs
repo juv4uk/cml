@@ -121,8 +121,9 @@ fn current_compiler_runtime_contract(
         RichCompilerMechanismRef::SelectorTail => Some((1, "wsm_cdr")),
         RichCompilerMechanismRef::SelectorHead => Some((1, "wsm_car")),
         RichCompilerMechanismRef::PairConstruct => Some((2, "wsm_cons")),
-        // Current exact predicates and COND require a target-level D1 carrier.
-        // They remain fail-closed until wsm-target-contract#32 lands.
+        // Current exact predicates and COND use dedicated emitters below.
+        // They are not ordinary runtime calls and therefore stay absent from
+        // this structural runtime-contract table.
         RichCompilerMechanismRef::AtomPredicateD1
         | RichCompilerMechanismRef::AtomEqualityD1
         | RichCompilerMechanismRef::ConditionalD1
@@ -147,6 +148,40 @@ fn checked_current_compiler_runtime(
         });
     }
     Ok(runtime)
+}
+
+fn checked_current_predicate_mechanism(
+    mechanism: RichCompilerMechanismRef,
+    actual: usize,
+) -> Result<(), CompileError> {
+    let expected = match mechanism {
+        RichCompilerMechanismRef::AtomPredicateD1 => 1,
+        RichCompilerMechanismRef::AtomEqualityD1 => 2,
+        _ => return Err(CompileError::UnsupportedCompilerMechanism(mechanism)),
+    };
+    if actual != expected {
+        return Err(CompileError::InvalidArity {
+            operation: mechanism.as_str(),
+            expected,
+            actual,
+        });
+    }
+    Ok(())
+}
+
+fn checked_current_conditional_mechanism(
+    mechanism: RichCompilerMechanismRef,
+    actual: usize,
+) -> Result<(), CompileError> {
+    if mechanism != RichCompilerMechanismRef::ConditionalD1 {
+        return Err(CompileError::UnsupportedCompilerMechanism(mechanism));
+    }
+    if actual % 2 != 0 {
+        return Err(CompileError::UnsupportedVariant(
+            "current exact-D1 COND requires consecutive test/body pairs",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Default)]
@@ -730,7 +765,15 @@ fn preflight_env(
             op: PrimOp::CompilerMechanism(mechanism),
             args,
         } => {
-            checked_current_compiler_runtime(*mechanism, args.len())?;
+            match *mechanism {
+                RichCompilerMechanismRef::AtomPredicateD1
+                | RichCompilerMechanismRef::AtomEqualityD1 => {
+                    checked_current_predicate_mechanism(*mechanism, args.len())?;
+                }
+                _ => {
+                    checked_current_compiler_runtime(*mechanism, args.len())?;
+                }
+            }
             for argument in args {
                 preflight_env(argument, bindings, symbols, def_arities, slots)?;
             }
@@ -738,8 +781,14 @@ fn preflight_env(
         }
         Ir::Prim {
             op: PrimOp::CompilerConditionalExactD1(mechanism),
-            ..
-        } => return Err(CompileError::UnsupportedCompilerMechanism(*mechanism)),
+            args,
+        } => {
+            checked_current_conditional_mechanism(*mechanism, args.len())?;
+            for argument in args {
+                preflight_env(argument, bindings, symbols, def_arities, slots)?;
+            }
+            return Ok(());
+        }
         Ir::Prim { .. } => return Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
@@ -1020,7 +1069,15 @@ fn preflight_lambda_body(
             op: PrimOp::CompilerMechanism(mechanism),
             args,
         } => {
-            checked_current_compiler_runtime(*mechanism, args.len())?;
+            match *mechanism {
+                RichCompilerMechanismRef::AtomPredicateD1
+                | RichCompilerMechanismRef::AtomEqualityD1 => {
+                    checked_current_predicate_mechanism(*mechanism, args.len())?;
+                }
+                _ => {
+                    checked_current_compiler_runtime(*mechanism, args.len())?;
+                }
+            }
             for argument in args {
                 preflight_lambda_body(argument, bindings, symbols, slots)?;
             }
@@ -1028,8 +1085,14 @@ fn preflight_lambda_body(
         }
         Ir::Prim {
             op: PrimOp::CompilerConditionalExactD1(mechanism),
-            ..
-        } => Err(CompileError::UnsupportedCompilerMechanism(*mechanism)),
+            args,
+        } => {
+            checked_current_conditional_mechanism(*mechanism, args.len())?;
+            for argument in args {
+                preflight_lambda_body(argument, bindings, symbols, slots)?;
+            }
+            Ok(())
+        }
         Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
@@ -1239,7 +1302,15 @@ fn preflight_def_body(
             op: PrimOp::CompilerMechanism(mechanism),
             args,
         } => {
-            checked_current_compiler_runtime(*mechanism, args.len())?;
+            match *mechanism {
+                RichCompilerMechanismRef::AtomPredicateD1
+                | RichCompilerMechanismRef::AtomEqualityD1 => {
+                    checked_current_predicate_mechanism(*mechanism, args.len())?;
+                }
+                _ => {
+                    checked_current_compiler_runtime(*mechanism, args.len())?;
+                }
+            }
             for argument in args {
                 preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
             }
@@ -1247,8 +1318,14 @@ fn preflight_def_body(
         }
         Ir::Prim {
             op: PrimOp::CompilerConditionalExactD1(mechanism),
-            ..
-        } => Err(CompileError::UnsupportedCompilerMechanism(*mechanism)),
+            args,
+        } => {
+            checked_current_conditional_mechanism(*mechanism, args.len())?;
+            for argument in args {
+                preflight_def_body(argument, bindings, symbols, def_arities, slots)?;
+            }
+            Ok(())
+        }
         Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
         Ir::MachinePrim { op, args } => {
             let (name, expected) = machine_primitive_contract(*op)?;
@@ -1999,14 +2076,21 @@ impl Emitter {
             Ir::Prim {
                 op: PrimOp::CompilerMechanism(mechanism),
                 args,
-            } => {
-                let runtime = checked_current_compiler_runtime(*mechanism, args.len())?;
-                self.emit_runtime_call_with_structured_args(args, runtime)
-            }
+            } => match *mechanism {
+                RichCompilerMechanismRef::AtomPredicateD1 => self.emit_current_atom_d1(args),
+                RichCompilerMechanismRef::AtomEqualityD1 => self.emit_current_eq_d1(args),
+                _ => {
+                    let runtime = checked_current_compiler_runtime(*mechanism, args.len())?;
+                    self.emit_runtime_call_with_structured_args(args, runtime)
+                }
+            },
             Ir::Prim {
                 op: PrimOp::CompilerConditionalExactD1(mechanism),
-                ..
-            } => Err(CompileError::UnsupportedCompilerMechanism(*mechanism)),
+                args,
+            } => {
+                checked_current_conditional_mechanism(*mechanism, args.len())?;
+                self.emit_current_conditional_d1(args)
+            }
             Ir::Prim { .. } => Err(CompileError::UnsupportedVariant("Prim")),
             Ir::MachinePrim { op, args } => self.emit_machine_primitive(*op, args),
             Ir::TailSelfCall { .. } => Err(CompileError::UnsupportedVariant("TailSelfCall")),
@@ -2015,6 +2099,116 @@ impl Emitter {
 
     fn emit_immediate(&mut self, word: u64) {
         self.line(&format!("    movabsq ${word}, %rax"));
+    }
+
+    fn emit_predicate_bit_runtime(&mut self, bit: u8) {
+        debug_assert!(bit <= 1);
+        self.line("    movq %r12, %rdi");
+        self.line(&format!("    call wsm_predicate_bit_{bit}"));
+    }
+
+    fn emit_current_atom_d1(&mut self, args: &[Ir]) -> Result<(), CompileError> {
+        checked_current_predicate_mechanism(RichCompilerMechanismRef::AtomPredicateD1, args.len())?;
+        self.emit_ir(&args[0])?;
+
+        let no_label = self.allocate_label();
+        let end_label = self.allocate_label();
+        self.line("    movq %rax, %rcx");
+        self.line(&format!("    andq ${}, %rcx", wsm_os_target::TAG_MASK));
+        self.line(&format!(
+            "    cmpq ${}, %rcx",
+            wsm_os_target::Tag::Cons as u64
+        ));
+        self.line(&format!("    je .Lcurrent_atom_d1_no_{no_label}"));
+        self.emit_predicate_bit_runtime(1);
+        self.line(&format!("    jmp .Lcurrent_atom_d1_end_{end_label}"));
+        self.line(&format!(".Lcurrent_atom_d1_no_{no_label}:"));
+        self.emit_predicate_bit_runtime(0);
+        self.line(&format!(".Lcurrent_atom_d1_end_{end_label}:"));
+        Ok(())
+    }
+
+    fn emit_current_eq_d1(&mut self, args: &[Ir]) -> Result<(), CompileError> {
+        checked_current_predicate_mechanism(RichCompilerMechanismRef::AtomEqualityD1, args.len())?;
+
+        self.emit_ir(&args[0])?;
+        let left_slot = self.allocate_slot();
+        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(left_slot)));
+
+        self.emit_ir(&args[1])?;
+        let right_slot = self.allocate_slot();
+        self.line(&format!("    movq %rax, {}(%rsp)", Self::slot_offset(right_slot)));
+
+        let empty_label = self.allocate_label();
+        let no_label = self.allocate_label();
+        let end_label = self.allocate_label();
+
+        self.line(&format!("    movq {}(%rsp), %rcx", Self::slot_offset(left_slot)));
+        self.line(&format!("    andq ${}, %rcx", wsm_os_target::TAG_MASK));
+        self.line(&format!(
+            "    cmpq ${}, %rcx",
+            wsm_os_target::Tag::Cons as u64
+        ));
+        self.line(&format!("    je .Lcurrent_eq_d1_empty_{empty_label}"));
+
+        self.line(&format!("    movq {}(%rsp), %rcx", Self::slot_offset(right_slot)));
+        self.line(&format!("    andq ${}, %rcx", wsm_os_target::TAG_MASK));
+        self.line(&format!(
+            "    cmpq ${}, %rcx",
+            wsm_os_target::Tag::Cons as u64
+        ));
+        self.line(&format!("    je .Lcurrent_eq_d1_empty_{empty_label}"));
+
+        self.line(&format!("    movq {}(%rsp), %rcx", Self::slot_offset(left_slot)));
+        self.line(&format!("    cmpq {}(%rsp), %rcx", Self::slot_offset(right_slot)));
+        self.line(&format!("    jne .Lcurrent_eq_d1_no_{no_label}"));
+        self.emit_predicate_bit_runtime(1);
+        self.line(&format!("    jmp .Lcurrent_eq_d1_end_{end_label}"));
+
+        self.line(&format!(".Lcurrent_eq_d1_no_{no_label}:"));
+        self.emit_predicate_bit_runtime(0);
+        self.line(&format!("    jmp .Lcurrent_eq_d1_end_{end_label}"));
+
+        self.line(&format!(".Lcurrent_eq_d1_empty_{empty_label}:"));
+        self.emit_immediate(wsm_os_target::NIL);
+        self.line(&format!(".Lcurrent_eq_d1_end_{end_label}:"));
+        Ok(())
+    }
+
+    fn emit_current_conditional_d1(&mut self, args: &[Ir]) -> Result<(), CompileError> {
+        checked_current_conditional_mechanism(
+            RichCompilerMechanismRef::ConditionalD1,
+            args.len(),
+        )?;
+        let end_label = self.allocate_label();
+
+        for pair in args.chunks_exact(2) {
+            let next_label = self.allocate_label();
+            self.emit_ir(&pair[0])?;
+
+            // EMPTY/no-witness is an admitted non-selection result, but it
+            // remains structurally distinct from exact PredicateBit(0).
+            self.line(&format!("    movabsq ${}, %rcx", wsm_os_target::NIL));
+            self.line("    cmpq %rcx, %rax");
+            self.line(&format!("    je .Lcurrent_cond_d1_next_{next_label}"));
+
+            // Every non-EMPTY test must be exact D1. The ratified target
+            // runtime validates BoxedKind::PredicateBit and fails closed on
+            // Fixnum 0/1, Symbol(t), legacy True, or another boxed kind.
+            self.line("    movq %rax, %rsi");
+            self.line("    movq %r12, %rdi");
+            self.line("    call wsm_predicate_bit_bits");
+            self.line("    testq %rax, %rax");
+            self.line(&format!("    je .Lcurrent_cond_d1_next_{next_label}"));
+
+            self.emit_ir(&pair[1])?;
+            self.line(&format!("    jmp .Lcurrent_cond_d1_end_{end_label}"));
+            self.line(&format!(".Lcurrent_cond_d1_next_{next_label}:"));
+        }
+
+        self.emit_immediate(wsm_os_target::NIL);
+        self.line(&format!(".Lcurrent_cond_d1_end_{end_label}:"));
+        Ok(())
     }
 
     fn emit_runtime_call_with_structured_args(
