@@ -2101,115 +2101,36 @@ impl Emitter {
         self.line(&format!("    movabsq ${word}, %rax"));
     }
 
-    fn emit_predicate_bit_runtime(&mut self, bit: u8) {
-        debug_assert!(bit <= 1);
-        self.line("    movq %r12, %rdi");
-        self.line(&format!("    call wsm_predicate_bit_{bit}"));
-    }
-
     fn emit_current_atom_d1(&mut self, args: &[Ir]) -> Result<(), CompileError> {
-        checked_current_predicate_mechanism(RichCompilerMechanismRef::AtomPredicateD1, args.len())?;
-        self.emit_ir(&args[0])?;
-
-        let no_label = self.allocate_label();
-        let end_label = self.allocate_label();
-        self.line("    movq %rax, %rcx");
-        self.line(&format!("    andq ${}, %rcx", wsm_os_target::TAG_MASK));
-        self.line(&format!(
-            "    cmpq ${}, %rcx",
-            wsm_os_target::Tag::Cons as u64
-        ));
-        self.line(&format!("    je .Lcurrent_atom_d1_no_{no_label}"));
-        self.emit_predicate_bit_runtime(1);
-        self.line(&format!("    jmp .Lcurrent_atom_d1_end_{end_label}"));
-        self.line(&format!(".Lcurrent_atom_d1_no_{no_label}:"));
-        self.emit_predicate_bit_runtime(0);
-        self.line(&format!(".Lcurrent_atom_d1_end_{end_label}:"));
-        Ok(())
+        checked_current_predicate_mechanism(
+            RichCompilerMechanismRef::AtomPredicateD1,
+            args.len(),
+        )?;
+        self.emit_runtime_call_with_structured_args(args, "wsm_atom_predicate_bit")
     }
 
     fn emit_current_eq_d1(&mut self, args: &[Ir]) -> Result<(), CompileError> {
-        checked_current_predicate_mechanism(RichCompilerMechanismRef::AtomEqualityD1, args.len())?;
-
-        self.emit_ir(&args[0])?;
-        let left_slot = self.allocate_slot();
-        self.line(&format!(
-            "    movq %rax, {}(%rsp)",
-            Self::slot_offset(left_slot)
-        ));
-
-        self.emit_ir(&args[1])?;
-        let right_slot = self.allocate_slot();
-        self.line(&format!(
-            "    movq %rax, {}(%rsp)",
-            Self::slot_offset(right_slot)
-        ));
-
-        let empty_label = self.allocate_label();
-        let no_label = self.allocate_label();
-        let end_label = self.allocate_label();
-
-        self.line(&format!(
-            "    movq {}(%rsp), %rcx",
-            Self::slot_offset(left_slot)
-        ));
-        self.line(&format!("    andq ${}, %rcx", wsm_os_target::TAG_MASK));
-        self.line(&format!(
-            "    cmpq ${}, %rcx",
-            wsm_os_target::Tag::Cons as u64
-        ));
-        self.line(&format!("    je .Lcurrent_eq_d1_empty_{empty_label}"));
-
-        self.line(&format!(
-            "    movq {}(%rsp), %rcx",
-            Self::slot_offset(right_slot)
-        ));
-        self.line(&format!("    andq ${}, %rcx", wsm_os_target::TAG_MASK));
-        self.line(&format!(
-            "    cmpq ${}, %rcx",
-            wsm_os_target::Tag::Cons as u64
-        ));
-        self.line(&format!("    je .Lcurrent_eq_d1_empty_{empty_label}"));
-
-        self.line(&format!(
-            "    movq {}(%rsp), %rcx",
-            Self::slot_offset(left_slot)
-        ));
-        self.line(&format!(
-            "    cmpq {}(%rsp), %rcx",
-            Self::slot_offset(right_slot)
-        ));
-        self.line(&format!("    jne .Lcurrent_eq_d1_no_{no_label}"));
-        self.emit_predicate_bit_runtime(1);
-        self.line(&format!("    jmp .Lcurrent_eq_d1_end_{end_label}"));
-
-        self.line(&format!(".Lcurrent_eq_d1_no_{no_label}:"));
-        self.emit_predicate_bit_runtime(0);
-        self.line(&format!("    jmp .Lcurrent_eq_d1_end_{end_label}"));
-
-        self.line(&format!(".Lcurrent_eq_d1_empty_{empty_label}:"));
-        self.emit_immediate(wsm_os_target::NIL);
-        self.line(&format!(".Lcurrent_eq_d1_end_{end_label}:"));
-        Ok(())
+        checked_current_predicate_mechanism(
+            RichCompilerMechanismRef::AtomEqualityD1,
+            args.len(),
+        )?;
+        self.emit_runtime_call_with_structured_args(args, "wsm_eq_predicate_bit")
     }
 
     fn emit_current_conditional_d1(&mut self, args: &[Ir]) -> Result<(), CompileError> {
-        checked_current_conditional_mechanism(RichCompilerMechanismRef::ConditionalD1, args.len())?;
+        checked_current_conditional_mechanism(
+            RichCompilerMechanismRef::ConditionalD1,
+            args.len(),
+        )?;
         let end_label = self.allocate_label();
 
         for pair in args.chunks_exact(2) {
             let next_label = self.allocate_label();
             self.emit_ir(&pair[0])?;
 
-            // EMPTY/no-witness is an admitted non-selection result, but it
-            // remains structurally distinct from exact PredicateBit(0).
-            self.line(&format!("    movabsq ${}, %rcx", wsm_os_target::NIL));
-            self.line("    cmpq %rcx, %rax");
-            self.line(&format!("    je .Lcurrent_cond_d1_next_{next_label}"));
-
-            // Every non-EMPTY test must be exact D1. The ratified target
-            // runtime validates BoxedKind::PredicateBit and fails closed on
-            // Fixnum 0/1, Symbol(t), legacy True, or another boxed kind.
+            // Contract 11.8: every control input must already be exact D1.
+            // The target-v9 PredicateBit decoder validates the carrier and
+            // fails closed on EMPTY, numeric 0/1, T/NIL or any other value.
             self.line("    movq %rax, %rsi");
             self.line("    movq %r12, %rdi");
             self.line("    call wsm_predicate_bit_bits");
@@ -2221,6 +2142,8 @@ impl Emitter {
             self.line(&format!(".Lcurrent_cond_d1_next_{next_label}:"));
         }
 
+        // Exhaustion is structural EMPTY as a result value. It is never
+        // accepted as a control input above.
         self.emit_immediate(wsm_os_target::NIL);
         self.line(&format!(".Lcurrent_cond_d1_end_{end_label}:"));
         Ok(())
