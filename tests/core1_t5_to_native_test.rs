@@ -1,3 +1,5 @@
+#![cfg(feature = "core1-t5-candidate")]
+
 //! #667: a real physical Core1 T5 -> SENS verified current-domain source ->
 //! existing CML lowering -> freestanding x86 assembly -> real WSM nucleus.
 //!
