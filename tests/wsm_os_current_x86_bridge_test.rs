@@ -336,12 +336,8 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
         wsm_os_target::encode_fixnum(42).expect("42 fits")
     );
 
-    let empty_in_test = exact_cond(vec![
-        (empty, Ir::Int(10)),
-        (yes, Ir::Int(43)),
-    ]);
-    let empty_output =
-        compile_and_run_with_exact_d1_runtime(&[empty_in_test], "cond-empty-test");
+    let empty_in_test = exact_cond(vec![(empty, Ir::Int(10)), (yes, Ir::Int(43))]);
+    let empty_output = compile_and_run_with_exact_d1_runtime(&[empty_in_test], "cond-empty-test");
     assert!(
         !empty_output.status.success(),
         "merged SENS #4411: structural EMPTY is not an exact-D1 COND test"
