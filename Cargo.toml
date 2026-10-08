@@ -6,6 +6,8 @@ license-file = "LICENSE"
 
 [features]
 default = []
+# Opt-in proof on a separately pinned 11.8 candidate, never the production SENS gitlink.
+core1-t5-candidate = []
 gpu-wgpu = ["dep:pollster", "dep:wgpu"]
 gpu-cuda = ["dep:cudarc"]
 
@@ -23,3 +25,8 @@ sens = { path = "external/sens/crates/sens" }
 # in addition to its Rust API. This contract dependency is resolved from
 # external/sens; observed-current is evidence/drift input, not Cargo authority.
 sens = { path = "external/sens/crates/sens" }
+
+[[test]]
+name = "core1_t5_to_native_test"
+path = "tests/core1_t5_to_native_test.rs"
+required-features = ["core1-t5-candidate"]
