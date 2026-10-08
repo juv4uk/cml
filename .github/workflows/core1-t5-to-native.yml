@@ -64,9 +64,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Candidate SENS SHA is intentionally newer than CML's production
-          # submodule; an ephemeral candidate lockfile resolution is required.
-          # Never commit or promote the resulting candidate Cargo.lock.
+          # Testing a precise new SENS candidate MUST NOT mint a production
+          # supported pin. This local temporary channel exists only while
+          # this step runs; the checked-in old release generation is unchanged.
+          trap 'git restore -- upstream-revisions.lisp' EXIT
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("upstream-revisions.lisp")
+          text = p.read_text()
+          old = "81001ae3297ba9ef898539f19eedd9cb5f3b3162"
+          candidate = "5ccbeabfb1703ce5259dcb8cf55569f9e574c6c1"
+          for field in ("build-source-sha", "supported-pin-sha"):
+              prior = f'({field} . "{old}")'
+              changed = f'({field} . "{candidate}")'
+              if text.count(prior) != 1:
+                  raise SystemExit(f"BLOCK: original CML {field} changed unexpectedly")
+              text = text.replace(prior, changed, 1)
+          p.write_text(text)
+          print("TEST-ONLY candidate pin: both checked against exact SENS SHA")
+          PY
+          # Candidate is newer than CML's committed production SENS gitlink,
+          # so its Cargo.lock may re-resolve in CI; never commit/promote it.
           cargo test --test core1_t5_to_native_test -- --nocapture
           git diff --exit-code -- Cargo.toml .gitmodules
           git diff --stat -- Cargo.lock || true
