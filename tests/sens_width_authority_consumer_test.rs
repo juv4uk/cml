@@ -1,4 +1,4 @@
-use sens::{parse_binary_source_words, semantic_source_bits, DomainIdentity};
+use sens::{DomainIdentity, parse_binary_source_words, semantic_source_bits};
 
 const WIDTH_CERTIFICATE: &str =
     include_str!("../external/sens/knowledge/domain-width-authority.generated.json");
@@ -17,9 +17,7 @@ fn cml_consumes_upstream_width_authority_and_program_measure() {
         DomainIdentity::D3(_)
     ));
 
-    let mixed = parse_binary_source_words(
-        "1 10 101 1010 10101 101010 1010101 10101010 100000001",
-    )
-    .expect("mixed current domains");
+    let mixed = parse_binary_source_words("1 10 101 1010 10101 101010 1010101 10101010 100000001")
+        .expect("mixed current domains");
     assert_eq!(semantic_source_bits(&mixed), 45);
 }
