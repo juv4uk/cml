@@ -2102,26 +2102,17 @@ impl Emitter {
     }
 
     fn emit_current_atom_d1(&mut self, args: &[Ir]) -> Result<(), CompileError> {
-        checked_current_predicate_mechanism(
-            RichCompilerMechanismRef::AtomPredicateD1,
-            args.len(),
-        )?;
+        checked_current_predicate_mechanism(RichCompilerMechanismRef::AtomPredicateD1, args.len())?;
         self.emit_runtime_call_with_structured_args(args, "wsm_atom_predicate_bit")
     }
 
     fn emit_current_eq_d1(&mut self, args: &[Ir]) -> Result<(), CompileError> {
-        checked_current_predicate_mechanism(
-            RichCompilerMechanismRef::AtomEqualityD1,
-            args.len(),
-        )?;
+        checked_current_predicate_mechanism(RichCompilerMechanismRef::AtomEqualityD1, args.len())?;
         self.emit_runtime_call_with_structured_args(args, "wsm_eq_predicate_bit")
     }
 
     fn emit_current_conditional_d1(&mut self, args: &[Ir]) -> Result<(), CompileError> {
-        checked_current_conditional_mechanism(
-            RichCompilerMechanismRef::ConditionalD1,
-            args.len(),
-        )?;
+        checked_current_conditional_mechanism(RichCompilerMechanismRef::ConditionalD1, args.len())?;
         let end_label = self.allocate_label();
 
         for pair in args.chunks_exact(2) {
