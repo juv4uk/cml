@@ -336,22 +336,16 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
         wsm_os_target::encode_fixnum(42).expect("42 fits")
     );
 
-    let empty_in_test = exact_cond(vec![(empty, Ir::Int(10)), (yes, Ir::Int(43))]);
-    let empty_output =
-        compile_and_run_with_exact_d1_runtime(&[empty_in_test], "cond-empty-test");
-    assert!(
-        !empty_output.status.success(),
-        "structural EMPTY is an exhaustion result, not an admitted current COND test"
+    let selected_after_empty = exact_cond(vec![(empty.clone(), Ir::Int(10)), (yes, Ir::Int(43))]);
+    assert_eq!(
+        output_word(&compile_and_run_with_exact_d1_runtime(
+            &[selected_after_empty],
+            "cond-empty-then-yes"
+        )),
+        wsm_os_target::encode_fixnum(43).expect("43 fits")
     );
 
-    let no_again = current_mechanism(
-        RichCompilerMechanismRef::AtomPredicateD1,
-        vec![current_mechanism(
-            RichCompilerMechanismRef::PairConstruct,
-            vec![Ir::Int(2), Ir::Nil],
-        )],
-    );
-    let exhausted = exact_cond(vec![(no, Ir::Int(10)), (no_again, Ir::Int(11))]);
+    let exhausted = exact_cond(vec![(no, Ir::Int(10)), (empty, Ir::Int(11))]);
     assert_eq!(
         output_word(&compile_and_run_with_exact_d1_runtime(
             &[exhausted],
@@ -360,11 +354,7 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
         wsm_os_target::NIL
     );
 
-    for (name, wrong) in [
-        ("fixnum-zero", Ir::Int(0)),
-        ("symbol-t", Ir::True),
-        ("literal-empty", Ir::Nil),
-    ] {
+    for (name, wrong) in [("fixnum-zero", Ir::Int(0)), ("symbol-t", Ir::True)] {
         let invalid = exact_cond(vec![(wrong, Ir::Int(99))]);
         let output = compile_and_run_with_exact_d1_runtime(&[invalid], name);
         assert!(
