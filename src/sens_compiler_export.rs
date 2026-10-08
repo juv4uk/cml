@@ -89,23 +89,21 @@ fn dotted_symbol(text: &str, field: &'static str) -> Result<String, CompilerExpo
 }
 
 fn parse_identity(domain: &str, bits: &str) -> Result<sens::DomainIdentity, CompilerExportError> {
-    if !bits.bytes().all(|byte| matches!(byte, b'0' | b'1')) {
-        return Err(CompilerExportError::InvalidBits(bits.to_string()));
-    }
-    let raw = u8::from_str_radix(bits, 2)
+    // Width is owned by SENS. CML asks the canonical SENS binary-source
+    // boundary to materialize one exact word and only checks that the exported
+    // domain tag agrees with the resulting exact DomainIdentity variant.
+    let tokens = sens::parse_binary_source_words(bits)
         .map_err(|_| CompilerExportError::InvalidBits(bits.to_string()))?;
+    let [token] = tokens.as_slice() else {
+        return Err(CompilerExportError::InvalidBits(bits.to_string()));
+    };
+    let identity = token.word.domain_identity();
 
-    match domain {
-        "D3" if bits.len() == 3 => Ok(sens::DomainIdentity::D3(sens::Bija3::from_word(
-            sens::Bit3::new(raw)
-                .ok_or_else(|| CompilerExportError::InvalidBits(bits.to_string()))?,
-        ))),
-        "D4" if bits.len() == 4 => Ok(sens::DomainIdentity::D4(sens::CoreD4::from_word(
-            sens::Bit4::new(raw)
-                .ok_or_else(|| CompilerExportError::InvalidBits(bits.to_string()))?,
-        ))),
-        "D3" | "D4" => Err(CompilerExportError::InvalidBits(bits.to_string())),
-        other => Err(CompilerExportError::UnsupportedDomain(other.to_string())),
+    match (domain, identity) {
+        ("D3", identity @ sens::DomainIdentity::D3(_)) => Ok(identity),
+        ("D4", identity @ sens::DomainIdentity::D4(_)) => Ok(identity),
+        ("D3" | "D4", _) => Err(CompilerExportError::InvalidBits(bits.to_string())),
+        (other, _) => Err(CompilerExportError::UnsupportedDomain(other.to_string())),
     }
 }
 
@@ -240,6 +238,24 @@ mod tests {
         assert_eq!(
             verify_exported_request(request).unwrap_err(),
             CompilerExportError::CompilerNucleusDigestMismatch
+        );
+    }
+
+    #[test]
+    fn exported_identity_width_is_consumed_from_sens_not_reconstructed_by_cml() {
+        let d3 = parse_identity("D3", "010").expect("SENS-owned D3 identity");
+        assert!(matches!(d3, sens::DomainIdentity::D3(_)));
+
+        let d4 = parse_identity("D4", "0010").expect("SENS-owned D4 identity");
+        assert!(matches!(d4, sens::DomainIdentity::D4(_)));
+
+        assert_eq!(
+            parse_identity("D3", "0010").unwrap_err(),
+            CompilerExportError::InvalidBits("0010".into())
+        );
+        assert_eq!(
+            parse_identity("D4", "010").unwrap_err(),
+            CompilerExportError::InvalidBits("010".into())
         );
     }
 
