@@ -104,6 +104,23 @@ pub fn canonical_actual_from_word(word: wsm_os_target::Word) -> Result<String, W
 /// composite values remain explicitly unsupported unless compiler-owned symbol
 /// metadata is provided through execute_x86_actual_with_metadata.
 pub fn execute_x86_actual(assembly: &str) -> Result<String, WitnessBridgeError> {
+    execute_x86_scalar_actual(assembly, false)
+}
+
+/// Capture an exact D1 result through the *target runtime's* PredicateBit
+/// decoder. The decoder rejects T, NIL, fixnums and other boxed kinds before
+/// the bridge renders a Lisp-owned witness carrier. This is a transport
+/// projection, not a predicate/truthiness decision by CML.
+pub fn execute_x86_predicate_bit_actual(
+    assembly: &str,
+) -> Result<String, WitnessBridgeError> {
+    execute_x86_scalar_actual(assembly, true)
+}
+
+fn execute_x86_scalar_actual(
+    assembly: &str,
+    typed_predicate_bit: bool,
+) -> Result<String, WitnessBridgeError> {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| WitnessBridgeError::Io(error.to_string()))?
@@ -114,10 +131,14 @@ pub fn execute_x86_actual(assembly: &str) -> Result<String, WitnessBridgeError> 
     let executable = base.with_extension("bin");
 
     fs::write(&source, assembly).map_err(|error| WitnessBridgeError::Io(error.to_string()))?;
-    fs::write(
-        &launcher,
-        "#include <stdint.h>\n#include <stdio.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { printf(\"%llu\\n\", (unsigned long long)wsm_entry(0)); return 0; }\n",
-    )
+    let launcher_code = if typed_predicate_bit {
+        // Verification belongs to the pinned target ABI, not host-side
+        // comparisons against hardcoded boxed singleton word values.
+        "#include <stdint.h>\n#include <stdio.h>\nextern uint64_t wsm_entry(void *);\nextern uint64_t wsm_predicate_bit_bits(void *, uint64_t);\nint main(void) { uint64_t value = wsm_entry(0); uint64_t bit = wsm_predicate_bit_bits(0, value); if (bit > 1) return 2; printf(\"%llu\\n\", (unsigned long long)bit); return 0; }\n"
+    } else {
+        "#include <stdint.h>\n#include <stdio.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { printf(\"%llu\\n\", (unsigned long long)wsm_entry(0)); return 0; }\n"
+    };
+    fs::write(&launcher, launcher_code)
     .map_err(|error| WitnessBridgeError::Io(error.to_string()))?;
 
     let nucleus =
@@ -161,7 +182,18 @@ pub fn execute_x86_actual(assembly: &str) -> Result<String, WitnessBridgeError> 
         .parse::<wsm_os_target::Word>()
         .map_err(|error| WitnessBridgeError::InvalidOutput(error.to_string()))?;
 
-    canonical_actual_from_word(word)
+    if typed_predicate_bit {
+        // The target has already validated the *typed* boxed carrier; its
+        // returned 0/1 is an exact bit, not a numeric truthy value.
+        if word > 1 {
+            return Err(WitnessBridgeError::InvalidOutput(format!(
+                "target PredicateBit decoder returned non-bit {word}"
+            )));
+        }
+        Ok(format!("(value \"({word})\")"))
+    } else {
+        canonical_actual_from_word(word)
+    }
 }
 
 /// Execute an x86 witness and canonicalize proper/dotted composites using
