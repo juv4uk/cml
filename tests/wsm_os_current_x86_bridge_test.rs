@@ -90,14 +90,15 @@ fn compile_and_run_with_exact_d1_runtime(program: &[Ir], stem: &str) -> std::pro
 
 extern uint64_t wsm_entry(void *);
 
-uint64_t wsm_predicate_bit_0(void *ctx) {
+uint64_t wsm_atom_predicate_bit(void *ctx, uint64_t value) {
     (void)ctx;
-    return PB0;
+    return ((value & UINT64_C(7)) == 0) ? PB0 : PB1;
 }
 
-uint64_t wsm_predicate_bit_1(void *ctx) {
+uint64_t wsm_eq_predicate_bit(void *ctx, uint64_t left, uint64_t right) {
     (void)ctx;
-    return PB1;
+    if ((left & UINT64_C(7)) == 0 || (right & UINT64_C(7)) == 0) abort();
+    return left == right ? PB1 : PB0;
 }
 
 uint64_t wsm_predicate_bit_bits(void *ctx, uint64_t value) {
@@ -225,7 +226,7 @@ fn verified_structural_current_mechanisms_reach_wsm_runtime_without_sid_adapter(
 }
 
 #[test]
-fn exact_d1_current_mechanisms_use_ratified_v8_carrier_without_sid_adapter() {
+fn exact_d1_current_mechanisms_use_ratified_v9_runtime_without_sid_adapter() {
     let atom = current_mechanism(RichCompilerMechanismRef::AtomPredicateD1, vec![Ir::Int(7)]);
     let eq = current_mechanism(
         RichCompilerMechanismRef::AtomEqualityD1,
@@ -235,13 +236,13 @@ fn exact_d1_current_mechanisms_use_ratified_v8_carrier_without_sid_adapter() {
 
     let assembly = X86FreestandingBackend::new()
         .compile_program(&[atom, eq, cond])
-        .expect("verified exact-D1 mechanisms must compile after target v8 pin");
+        .expect("verified exact-D1 mechanisms must compile after target v9 pin");
 
-    assert!(assembly.contains("call wsm_predicate_bit_0"));
-    assert!(assembly.contains("call wsm_predicate_bit_1"));
+    assert!(assembly.contains("call wsm_atom_predicate_bit"));
+    assert!(assembly.contains("call wsm_eq_predicate_bit"));
     assert!(assembly.contains("call wsm_predicate_bit_bits"));
-    assert!(!assembly.contains("call wsm_atom"));
-    assert!(!assembly.contains("call wsm_eq"));
+    assert!(!assembly.contains("call wsm_atom\n"));
+    assert!(!assembly.contains("call wsm_eq\n"));
 
     let undefined = assemble_and_undefined_symbols(&assembly);
     let ratified: BTreeSet<String> = wsm_os_target::RUNTIME_IMPORTS
@@ -250,12 +251,12 @@ fn exact_d1_current_mechanisms_use_ratified_v8_carrier_without_sid_adapter() {
         .collect();
     assert!(
         undefined.is_subset(&ratified),
-        "exact-D1 projection escaped target ABI v8: {undefined:?}"
+        "exact-D1 projection escaped target ABI v9: {undefined:?}"
     );
 }
 
 #[test]
-fn current_atom_and_partial_eq_execute_with_distinct_d1_and_empty_carriers() {
+fn current_atom_and_eq_execute_via_target_v9_predicate_endpoints() {
     let pair = current_mechanism(
         RichCompilerMechanismRef::PairConstruct,
         vec![Ir::Int(1), Ir::Nil],
@@ -274,7 +275,7 @@ fn current_atom_and_partial_eq_execute_with_distinct_d1_and_empty_carriers() {
         RichCompilerMechanismRef::AtomEqualityD1,
         vec![Ir::Int(4), Ir::Int(5)],
     );
-    let eq_empty = current_mechanism(
+    let eq_pair = current_mechanism(
         RichCompilerMechanismRef::AtomEqualityD1,
         vec![pair.clone(), pair],
     );
@@ -301,33 +302,24 @@ fn current_atom_and_partial_eq_execute_with_distinct_d1_and_empty_carriers() {
         output_word(&compile_and_run_with_exact_d1_runtime(&[eq_no], "eq-no")),
         ((257_u64) << 3) | 7
     );
-    assert_eq!(
-        output_word(&compile_and_run_with_exact_d1_runtime(
-            &[eq_empty],
-            "eq-empty"
-        )),
-        wsm_os_target::NIL,
-        "partial EQ outside the atom domain must preserve structural EMPTY/no-witness"
+
+    let pair_eq = compile_and_run_with_exact_d1_runtime(&[eq_pair], "eq-pair-type");
+    assert!(
+        !pair_eq.status.success(),
+        "pair EQ must fail through the target Type/domain path"
     );
 }
 
 #[test]
-fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
+fn current_cond_accepts_only_exact_d1_and_exhausts_to_structural_empty() {
     let pair = current_mechanism(
         RichCompilerMechanismRef::PairConstruct,
         vec![Ir::Int(1), Ir::Nil],
     );
-    let no = current_mechanism(
-        RichCompilerMechanismRef::AtomPredicateD1,
-        vec![pair.clone()],
-    );
+    let no = current_mechanism(RichCompilerMechanismRef::AtomPredicateD1, vec![pair]);
     let yes = current_mechanism(RichCompilerMechanismRef::AtomPredicateD1, vec![Ir::Int(1)]);
-    let empty = current_mechanism(
-        RichCompilerMechanismRef::AtomEqualityD1,
-        vec![pair.clone(), pair],
-    );
 
-    let selected_after_no = exact_cond(vec![(no.clone(), Ir::Int(10)), (yes.clone(), Ir::Int(42))]);
+    let selected_after_no = exact_cond(vec![(no.clone(), Ir::Int(10)), (yes, Ir::Int(42))]);
     assert_eq!(
         output_word(&compile_and_run_with_exact_d1_runtime(
             &[selected_after_no],
@@ -336,21 +328,7 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
         wsm_os_target::encode_fixnum(42).expect("42 fits")
     );
 
-    let empty_in_test = exact_cond(vec![(empty, Ir::Int(10)), (yes, Ir::Int(43))]);
-    let empty_output = compile_and_run_with_exact_d1_runtime(&[empty_in_test], "cond-empty-test");
-    assert!(
-        !empty_output.status.success(),
-        "merged SENS #4411: structural EMPTY is not an exact-D1 COND test"
-    );
-
-    let no_again = current_mechanism(
-        RichCompilerMechanismRef::AtomPredicateD1,
-        vec![current_mechanism(
-            RichCompilerMechanismRef::PairConstruct,
-            vec![Ir::Int(2), Ir::Nil],
-        )],
-    );
-    let exhausted = exact_cond(vec![(no, Ir::Int(10)), (no_again, Ir::Int(11))]);
+    let exhausted = exact_cond(vec![(no, Ir::Int(10))]);
     assert_eq!(
         output_word(&compile_and_run_with_exact_d1_runtime(
             &[exhausted],
@@ -362,7 +340,7 @@ fn current_cond_distinguishes_yes_no_empty_and_rejects_non_d1() {
     for (name, wrong) in [
         ("fixnum-zero", Ir::Int(0)),
         ("symbol-t", Ir::True),
-        ("literal-empty", Ir::Nil),
+        ("structural-empty", Ir::Nil),
     ] {
         let invalid = exact_cond(vec![(wrong, Ir::Int(99))]);
         let output = compile_and_run_with_exact_d1_runtime(&[invalid], name);

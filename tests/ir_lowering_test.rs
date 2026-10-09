@@ -30,6 +30,7 @@ fn lowers_every_tier1_conformance_fixture() {
         fs::read_to_string(fixture_path).expect("Failed to read conformance fixture");
 
     let mut checked = 0;
+    let mut eligible = 0;
     let mut failures = Vec::new();
 
     for line in fixture_content.lines() {
@@ -48,7 +49,11 @@ fn lowers_every_tier1_conformance_fixture() {
         if line.contains("3.0") {
             continue;
         }
+        eligible += 1;
         let Some((expr_str, _)) = parse_conformance_line(line) else {
+            failures.push(format!(
+                "eligible tier-1 row {eligible}: expected-value record is missing or malformed"
+            ));
             continue;
         };
 
@@ -72,8 +77,12 @@ fn lowers_every_tier1_conformance_fixture() {
     }
 
     assert!(
-        checked > 20,
-        "expected to actually exercise a meaningful number of fixtures, got {checked}"
+        eligible > 0,
+        "tier-1 lowering inventory unexpectedly has no eligible fixtures"
+    );
+    assert_eq!(
+        checked, eligible,
+        "every eligible tier-1 value fixture must reach macro-expanded IR lowering"
     );
     assert!(
         failures.is_empty(),

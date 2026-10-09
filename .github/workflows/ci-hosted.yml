@@ -63,7 +63,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: juv4uk/wsm-my-lisp
-          ref: 1fe661664479c92da1968d60914b512320678ac2
+          ref: fbfbcf6adb84f161757ae23eab4abbaa59985ddf
           path: wsm-my-lisp
           fetch-depth: 1
 
