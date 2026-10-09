@@ -111,9 +111,7 @@ pub fn execute_x86_actual(assembly: &str) -> Result<String, WitnessBridgeError> 
 /// decoder. The decoder rejects T, NIL, fixnums and other boxed kinds before
 /// the bridge renders a Lisp-owned witness carrier. This is a transport
 /// projection, not a predicate/truthiness decision by CML.
-pub fn execute_x86_predicate_bit_actual(
-    assembly: &str,
-) -> Result<String, WitnessBridgeError> {
+pub fn execute_x86_predicate_bit_actual(assembly: &str) -> Result<String, WitnessBridgeError> {
     execute_x86_scalar_actual(assembly, true)
 }
 
@@ -139,7 +137,7 @@ fn execute_x86_scalar_actual(
         "#include <stdint.h>\n#include <stdio.h>\nextern uint64_t wsm_entry(void *);\nint main(void) { printf(\"%llu\\n\", (unsigned long long)wsm_entry(0)); return 0; }\n"
     };
     fs::write(&launcher, launcher_code)
-    .map_err(|error| WitnessBridgeError::Io(error.to_string()))?;
+        .map_err(|error| WitnessBridgeError::Io(error.to_string()))?;
 
     let nucleus =
         crate::x86_freestanding::resolve_nucleus_asm_path().map_err(WitnessBridgeError::Link)?;
