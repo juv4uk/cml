@@ -1,0 +1,28 @@
+name: Archived Lisp assembler research provenance
+
+on:
+  pull_request:
+    paths:
+      - "docs/research/lisp-assembler-comparative-notes.md"
+      - ".github/workflows/archived-lisp-assembler-research.yml"
+  push:
+    paths:
+      - "docs/research/lisp-assembler-comparative-notes.md"
+      - ".github/workflows/archived-lisp-assembler-research.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-research-blob:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert archived research Git blob is identical to donor
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object docs/research/lisp-assembler-comparative-notes.md)" = "00583d6608430f44546776672d4c3f76587bb081"
+          echo "CML-LISP-ASSEMBLER-RESEARCH: PASS"
