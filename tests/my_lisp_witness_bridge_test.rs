@@ -176,3 +176,22 @@ fn executed_cml_actual_is_judged_only_by_lisp_owned_witness_logic() {
         "historical Symbol(t) is not an exact D1 PredicateBit"
     );
 }
+
+#[test]
+fn current_d1_atom_no_is_judged_by_lisp_owned_witness() {
+    // A structural pair is not an atom. Both the compiler mechanism and
+    // the outcome remain owned by pinned SENS; CML only transports exact D1.
+    let corpus = upstream_corpus();
+    let source = "(00000010 (quote (radio antenna)))";
+    let row = compiler_witness_row(&corpus, source);
+    let current_source = "(атом? (як-є (radio antenna)))";
+    let export = pinned_current_compiler_export();
+    let current = lower_current_sens_source(current_source, &export)
+        .expect("verified SENS D1 ATOM must admit a structural list operand");
+    let assembly = X86FreestandingBackend::new()
+        .compile_program(&current.ir)
+        .expect("verified D1 ATOM on structural pair must compile");
+    let actual = execute_x86_predicate_bit_actual(&assembly)
+        .expect("target runtime must validate D1:0 without coercing NIL or t");
+    lisp_owned_verdict_passes(row, &actual);
+}
