@@ -26,8 +26,12 @@ fn run_assembler(asm_code: &str, test_name: &str) {
     let bin_path = format!("{}.bin", test_name);
     let asm_abs = env::current_dir().unwrap().join(&asm_path);
     let bin_abs = env::current_dir().unwrap().join(&bin_path);
-    let configured = env::var("MY_LISP_BIN")
-        .unwrap_or_else(|_| "/home/agents/GitHub/my-lisp/target/release/my-lisp".to_string());
+    let configured = env::var("MY_LISP_BIN").unwrap_or_else(|_| {
+        // sens ships `my-lisp` and `sens` as two declared bins over the same
+        // src/main.rs, so the binary name is a supported alias; only the
+        // repository directory changed in the my-lisp -> sens rename.
+        "/home/agents/GitHub/sens/target/release/my-lisp".to_string()
+    });
     let output = if std::path::Path::new(&configured).is_file() {
         // Prefer the self-hosted my-lisp assembler. Run from fpga-lisp so its
         // canonical core.my load resolves; keep Python as explicit fallback.
@@ -125,9 +129,18 @@ fn test_compile_with_symbols_matches_self_hosted_my_lisp_assembler() {
         python
     );
 
-    let my_lisp = env::var("MY_LISP_BIN")
-        .unwrap_or_else(|_| "/home/agents/GitHub/my-lisp/target/release/my-lisp".to_string());
+    let my_lisp = env::var("MY_LISP_BIN").unwrap_or_else(|_| {
+        "/home/agents/GitHub/sens/target/release/my-lisp".to_string()
+    });
     if !std::path::Path::new(&my_lisp).is_file() {
+        // Do not let a skipped comparison read as a passing parity witness.
+        // The Python baseline above still ran; the self-hosted side did not.
+        eprintln!(
+            "SKIPPED self-hosted assembler parity for {}: binary not found at {}. \
+             Set MY_LISP_BIN to the sens build to run this comparison.",
+            root.display(),
+            my_lisp
+        );
         let _ = fs::remove_file(&asm_path);
         let _ = fs::remove_file(&python_bin);
         return;
