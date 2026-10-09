@@ -71,10 +71,20 @@ jobs:
           trap 'git restore -- upstream-revisions.lisp' EXIT
           python3 - <<'PY'
           from pathlib import Path
+          import subprocess
+
           p = Path("upstream-revisions.lisp")
           text = p.read_text()
-          old = "81001ae3297ba9ef898539f19eedd9cb5f3b3162"
+          # Derive the production build source from this checked-out Git tree;
+          # never bind a candidate experiment to a stale literal revision.
+          old = subprocess.check_output(
+              ["git", "rev-parse", "HEAD:external/sens"], text=True
+          ).strip()
+          if len(old) != 40 or not all(c in "0123456789abcdef" for c in old):
+              raise SystemExit("BLOCK: Git tree contains no exact SENS gitlink SHA")
           candidate = "5ccbeabfb1703ce5259dcb8cf55569f9e574c6c1"
+          if candidate == old:
+              raise SystemExit("BLOCK: candidate test is already the production pin")
           for field in ("build-source-sha", "supported-pin-sha"):
               prior = f'({field} . "{old}")'
               changed = f'({field} . "{candidate}")'
