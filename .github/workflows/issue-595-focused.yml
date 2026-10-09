@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+      # Hosted native Rust semantics; exact Guix-pure reproducibility is NOT certified here.
+      - uses: dtolnay/rust-toolchain@stable
       - name: Require private dependency read token
         env:
           SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
@@ -33,16 +35,16 @@ jobs:
           submodules: true
 
       - name: Rustfmt contract
-        run: guix shell --pure -m manifest.scm -- cargo fmt -p cml -- --check
+        run:  cargo fmt -p cml -- --check
 
       - name: Role to private mechanism mapping
-        run: guix shell --pure -m manifest.scm -- cargo test -p cml compiler_mechanism::tests -- --nocapture
+        run:  cargo test -p cml compiler_mechanism::tests -- --nocapture
 
       - name: Proof-carrying request verification
-        run: guix shell --pure -m manifest.scm -- cargo test -p cml sens_domain_bridge::tests -- --nocapture
+        run:  cargo test -p cml sens_domain_bridge::tests -- --nocapture
 
       - name: Recursive canonical source to SLOT lowering
-        run: guix shell --pure -m manifest.scm -- cargo test -p cml sens_slot_bridge::tests -- --nocapture
+        run:  cargo test -p cml sens_slot_bridge::tests -- --nocapture
 
       - name: Full shared D3 corpus differential
-        run: guix shell --pure -m manifest.scm -- cargo test -p cml --test domain_bridge_slot_vertical_494_test -- --nocapture
+        run:  cargo test -p cml --test domain_bridge_slot_vertical_494_test -- --nocapture

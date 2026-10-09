@@ -21,23 +21,25 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
+      # Hosted native Rust semantics; exact Guix-pure reproducibility is NOT certified here.
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/checkout@v5
         with:
           token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: recursive
       - name: Format check
-        run: guix shell --pure -m manifest.scm -- cargo fmt -p cml -- --check
+        run:  cargo fmt -p cml -- --check
       - name: C backend regression
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test -- --nocapture
+        run:  cargo test --test c_backend_test -- --nocapture
       - name: C backend conformance
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_conformance_test -- --nocapture
+        run:  cargo test --test c_backend_conformance_test -- --nocapture
       - name: Exhaustive classification
-        run: guix shell --pure -m manifest.scm -- cargo test --test exhaustive_classification_test -- --nocapture
+        run:  cargo test --test exhaustive_classification_test -- --nocapture
       - name: IR classification matrix
-        run: guix shell --pure -m manifest.scm -- cargo test --test ir_classification_matrix_test -- --nocapture
+        run:  cargo test --test ir_classification_matrix_test -- --nocapture
       - name: C frontend preserves exact Sid8
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_frontend_sid8_identity_test -- --nocapture
+        run:  cargo test --test c_frontend_sid8_identity_test -- --nocapture
       - name: Direct SID8 C dispatch remains exact
-        run: guix shell --pure -m manifest.scm -- cargo test --test direct_sid8_c_backend_dispatch_test -- --nocapture
+        run:  cargo test --test direct_sid8_c_backend_dispatch_test -- --nocapture
       - name: Current predicate record-domain witness
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test c_backend_current_predicates_return_upstream_record_domains -- --exact --nocapture
+        run:  cargo test --test c_backend_test c_backend_current_predicates_return_upstream_record_domains -- --exact --nocapture

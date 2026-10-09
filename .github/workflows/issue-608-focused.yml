@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+      # Hosted native Rust semantics; exact Guix-pure reproducibility is NOT certified here.
+      - uses: dtolnay/rust-toolchain@stable
       - name: Require private dependency read token
         env:
           SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
@@ -26,17 +28,17 @@ jobs:
 
       - name: Focused formatting
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           rustfmt --edition 2024 --check
           src/c_backend.rs tests/current_d1_c_backend_test.rs
 
       - name: Current exact D1 carrier witness
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           cargo test -p cml --test current_d1_c_backend_test -- --nocapture
 
       - name: Historical predicate carrier remains unchanged
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           cargo test -p cml --test c_backend_test
           c_backend_current_predicates_return_upstream_record_domains -- --nocapture
