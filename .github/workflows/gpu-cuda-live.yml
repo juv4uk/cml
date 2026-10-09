@@ -20,9 +20,11 @@ concurrency:
 
 jobs:
   cuda-live:
+    # SKIPPED = hardware UNVERIFIED, not a GPU pass. GitHub-hosted GPU required.
+    if: vars.GITHUB_HOSTED_GPU_RUNNER != ''
     # GPU lane адресує клас механізму, а не конкретний CPU host.
     # `gtx-1050-ti` гарантує живий Pascal/CUDA 6.1 witness на машині власника.
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.GITHUB_HOSTED_GPU_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 30
     env:
       # WSL: драйвер Windows має йти першим. NVRTC 12.6 також потребує
