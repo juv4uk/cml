@@ -507,6 +507,26 @@ pub fn lower_current_sens_source_with_registry(
     })
 }
 
+// Canonical exact-domain entry, not the historical text-reader entry.
+// SENS alone owns D2 grammar and recognition of D1..D9 typed words.
+// CML only consumes the verified AST and its proof-carrying mechanism export.
+pub fn lower_current_sens_binary_projection(
+    source: &str,
+    compiler_export: &str,
+) -> Result<CurrentSensProgram, CurrentLowerError> {
+    let registry = VerifiedCurrentRegistry::from_export(compiler_export)?;
+    let parsed = sens::parse_canonical_binary(source)
+        .map_err(|error| CurrentLowerError::Parse(error.to_string()))?;
+    let lowered = sens::lower_program(&parsed);
+    Ok(CurrentSensProgram {
+        ir: lowered
+            .iter()
+            .map(|expr| lower_expr(expr, &registry))
+            .collect::<Result<Vec<_>, _>>()?,
+        authority: registry.authority().clone(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
