@@ -19,7 +19,7 @@ concurrency:
 jobs:
   sync:
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, guix]
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     env:
@@ -103,7 +103,7 @@ jobs:
 
   verify:
     if: github.event_name == 'pull_request'
-    runs-on: [self-hosted, guix]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     env:
