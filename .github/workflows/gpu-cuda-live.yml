@@ -20,9 +20,11 @@ concurrency:
 
 jobs:
   cuda-live:
+    # SKIPPED = hardware UNVERIFIED, not a GPU pass. GitHub-hosted GPU required.
+    if: vars.GITHUB_HOSTED_GPU_RUNNER != ''
     # GPU lane адресує клас механізму, а не конкретний CPU host.
     # `gtx-1050-ti` гарантує живий Pascal/CUDA 6.1 witness на машині власника.
-    runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
+    runs-on: ubuntu-24.04  # fixed GitHub-owned image; no variable can route to the owner PC
     timeout-minutes: 30
     env:
       # WSL: драйвер Windows має йти першим. NVRTC 12.6 також потребує
@@ -37,6 +39,13 @@ jobs:
       CARGO_BUILD_JOBS: 1
       CARGO_INCREMENTAL: 0
     steps:
+      - name: Verify GitHub-hosted CUDA hardware (fail closed)
+        shell: bash
+        run: |
+          test "${RUNNER_ENVIRONMENT:-}" = github-hosted || { echo "::error::Owner-host runners forbidden"; exit 1; }
+          command -v nvidia-smi >/dev/null 2>&1 || { echo "::error::GitHub-hosted GPU larger runner required; CUDA proof unavailable"; exit 1; }
+          nvidia-smi
+
       - uses: actions/checkout@v4
       - name: Isolate Cargo target by rustc build
         run: |

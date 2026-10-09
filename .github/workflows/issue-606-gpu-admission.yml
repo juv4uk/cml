@@ -10,9 +10,11 @@ concurrency:
 jobs:
   focused:
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, guix]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+      # Hosted native Rust semantics; Guix-pure reproducibility remains UNVERIFIED.
+      - uses: dtolnay/rust-toolchain@stable
       - name: Require private dependency read token
         env:
           SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
@@ -26,22 +28,22 @@ jobs:
 
       - name: Focused formatting
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           rustfmt --edition 2024 --check
           src/sens_domain_bridge.rs
           src/sens_rich_bridge.rs
 
       - name: Existing exact-domain authority bridge
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           cargo test -j 1 -p cml sens_domain_bridge::tests -- --nocapture --test-threads=1
 
       - name: Verified rich-role admission
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           cargo test -j 1 -p cml sens_rich_bridge::tests -- --nocapture --test-threads=1
 
       - name: Rich mechanism binding regression
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           cargo test -j 1 -p cml compiler_mechanism::tests -- --nocapture --test-threads=1

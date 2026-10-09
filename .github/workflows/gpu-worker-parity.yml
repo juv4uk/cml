@@ -33,8 +33,10 @@ concurrency:
 
 jobs:
   parity:
+    # SKIPPED = hardware UNVERIFIED, not a GPU pass. GitHub-hosted GPU required.
+    if: vars.GITHUB_HOSTED_GPU_RUNNER != ''
     # Лише GPU-runner: ніколи не падаємо назад на CPU-runner.
-    runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
+    runs-on: ubuntu-24.04  # fixed GitHub-owned image; no variable can route to the owner PC
     timeout-minutes: 25
     env:
       LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/lib/wsm-gcc-runtime
@@ -49,6 +51,13 @@ jobs:
       # Воркер після #535 стартує лише з host-probe (ecosystem#58), інакше ProbeNotConfigured.
       CML_CUDA_HOST_PROBE: /home/agents/ecosystem/scripts/cuda-host-profile.sh
     steps:
+      - name: Verify GitHub-hosted CUDA hardware (fail closed)
+        shell: bash
+        run: |
+          test "${RUNNER_ENVIRONMENT:-}" = github-hosted || { echo "::error::Owner-host runners forbidden"; exit 1; }
+          command -v nvidia-smi >/dev/null 2>&1 || { echo "::error::GitHub-hosted GPU larger runner required; CUDA proof unavailable"; exit 1; }
+          nvidia-smi
+
       - uses: actions/checkout@v4
 
       - name: Isolate Cargo target by rustc build

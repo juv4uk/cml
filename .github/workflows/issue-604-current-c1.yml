@@ -10,9 +10,11 @@ concurrency:
 jobs:
   focused:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, guix]
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      # Hosted native Rust semantics; Guix-pure reproducibility remains UNVERIFIED.
+      - uses: dtolnay/rust-toolchain@stable
       - name: Require private dependency read token
         env:
           SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
@@ -32,23 +34,23 @@ jobs:
 
       - name: Focused formatting
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           rustfmt --edition 2024 --check
           src/sens_c1_artifact.rs
 
       - name: Canonical verified lowering regression
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           cargo test -j 1 -p cml --lib sens_current_lowering::tests -- --nocapture --test-threads=1
 
       - name: C1 artifact proof and executable witness
         env:
           CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           cargo test -j 1 -p cml --lib sens_c1_artifact::tests -- --nocapture --test-threads=1
 
       - name: Existing real-export C0 lowering regression
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           cargo test -j 1 -p cml --test current_sens_c0_lowering_test -- --nocapture --test-threads=1

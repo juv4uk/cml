@@ -17,28 +17,30 @@ concurrency:
 jobs:
   focused:
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, guix]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+      # Hosted native Rust semantics; Guix-pure reproducibility remains UNVERIFIED.
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/checkout@v5
         with:
           token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: recursive
       - name: C frontend preserves exact Sid8
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_frontend_sid8_identity_test -- --nocapture
+        run:  cargo test --test c_frontend_sid8_identity_test -- --nocapture
       - name: Stored Sid8 callable executes
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test c_backend_calls_a_builtin_stored_as_a_value -- --exact --nocapture
+        run:  cargo test --test c_backend_test c_backend_calls_a_builtin_stored_as_a_value -- --exact --nocapture
       - name: Higher-order Sid8 callable executes
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test c_backend_passes_a_builtin_as_a_higher_order_argument -- --exact --nocapture
+        run:  cargo test --test c_backend_test c_backend_passes_a_builtin_as_a_higher_order_argument -- --exact --nocapture
       - name: Sid8 callable presentation remains contractual
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test c_backend_prints_the_contractual_builtin_representation -- --exact --nocapture
+        run:  cargo test --test c_backend_test c_backend_prints_the_contractual_builtin_representation -- --exact --nocapture
       - name: First-class subtraction uses Sid8 payload
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test c_backend_supports_first_class_subtraction -- --exact --nocapture
+        run:  cargo test --test c_backend_test c_backend_supports_first_class_subtraction -- --exact --nocapture
       - name: Numeric buffer map resolves exact SID8 mechanism
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test c_backend_lowers_source_level_numeric_buffer_map -- --exact --nocapture
+        run:  cargo test --test c_backend_test c_backend_lowers_source_level_numeric_buffer_map -- --exact --nocapture
       - name: Numeric buffer map matches CPU reference
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test c_backend_i32_map_matches_cpu_reference_for_source_fixtures -- --exact --nocapture
+        run:  cargo test --test c_backend_test c_backend_i32_map_matches_cpu_reference_for_source_fixtures -- --exact --nocapture
       - name: Named runtime arity survives SID8 dispatch
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test c_backend_rejects_wrong_builtin_arity_with_a_named_error -- --exact --nocapture
+        run:  cargo test --test c_backend_test c_backend_rejects_wrong_builtin_arity_with_a_named_error -- --exact --nocapture
       - name: Contractual core errors survive SID8 dispatch
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test c_backend_reports_contractual_core_error_kinds -- --exact --nocapture
+        run:  cargo test --test c_backend_test c_backend_reports_contractual_core_error_kinds -- --exact --nocapture

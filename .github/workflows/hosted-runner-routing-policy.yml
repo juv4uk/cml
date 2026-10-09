@@ -1,0 +1,27 @@
+name: Hosted runner routing policy
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  routing:
+    name: No self-hosted actions runner on owner PC
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Reject any literal self-hosted runner route
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE '^[[:space:]]*runs-on:[[:space:]].*self-hosted' .github/workflows; then
+            echo '::error::This repository must use GitHub-hosted runners only'
+            exit 1
+          fi
+          echo 'HOSTED_ROUTING_GREEN: no explicit self-hosted runs-on'
+          echo '::notice::Hardware GPU/FPGA parity remains unverified when gated jobs are skipped'

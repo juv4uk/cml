@@ -19,7 +19,7 @@ concurrency:
 jobs:
   focused:
     name: Core profile request provenance
-    runs-on: [self-hosted, guix]
+    runs-on: ubuntu-24.04
     steps:
       - name: Require private dependency read token
         env:

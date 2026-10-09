@@ -11,9 +11,11 @@ concurrency:
 jobs:
   focused:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, i5-6400]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+      # Hosted native Rust semantics; exact Guix-pure reproducibility is NOT certified here.
+      - uses: dtolnay/rust-toolchain@stable
       - name: Require private dependency read token
         env:
           SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
@@ -27,13 +29,13 @@ jobs:
 
       - name: Rustfmt changed Rust surfaces
         run: |
-          guix shell --pure -m manifest.scm -- \
+           \
             rustfmt --edition 2024 --check --config skip_children=true \
               src/compiler_artifact.rs \
               tests/domain_bridge_slot_vertical_494_test.rs
 
       - name: Artifact provenance envelope unit tests
-        run: guix shell --pure -m manifest.scm -- cargo test -p cml compiler_artifact::tests -- --nocapture
+        run:  cargo test -p cml compiler_artifact::tests -- --nocapture
 
       - name: Full D3 compiler artifact provenance differential
-        run: guix shell --pure -m manifest.scm -- cargo test -p cml --test domain_bridge_slot_vertical_494_test -- --nocapture
+        run:  cargo test -p cml --test domain_bridge_slot_vertical_494_test -- --nocapture

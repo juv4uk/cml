@@ -19,22 +19,24 @@ concurrency:
 jobs:
   focused:
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, guix]
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
+      # Hosted native Rust semantics; Guix-pure reproducibility remains UNVERIFIED.
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/checkout@v5
         with:
           token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
           submodules: recursive
       - name: Format check
-        run: guix shell --pure -m manifest.scm -- cargo fmt -p cml -- --check
+        run:  cargo fmt -p cml -- --check
       - name: Standard Sid8 lowering guard
-        run: guix shell --pure -m manifest.scm -- cargo test --test sid8_standard_lowering_guard_test -- --nocapture
+        run:  cargo test --test sid8_standard_lowering_guard_test -- --nocapture
       - name: C backend regression
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_test -- --nocapture
+        run:  cargo test --test c_backend_test -- --nocapture
       - name: C backend conformance
-        run: guix shell --pure -m manifest.scm -- cargo test --test c_backend_conformance_test -- --nocapture
+        run:  cargo test --test c_backend_conformance_test -- --nocapture
       - name: Exact-Q multiplication upstream execution
-        run: guix shell --pure -m manifest.scm -- cargo test --test exact_q_mul_upstream_execution_test -- --nocapture
+        run:  cargo test --test exact_q_mul_upstream_execution_test -- --nocapture
       - name: Exact rational upstream authority
-        run: guix shell --pure -m manifest.scm -- cargo test --test exact_rational_upstream_authority_test -- --nocapture
+        run:  cargo test --test exact_rational_upstream_authority_test -- --nocapture
