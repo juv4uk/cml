@@ -2145,31 +2145,36 @@ impl Emitter {
             Self::slot_offset(right_slot)
         ));
 
-        let empty_label = self.allocate_label();
+        let type_label = self.allocate_label();
         let no_label = self.allocate_label();
         let end_label = self.allocate_label();
 
+        // Contract 11.8: EQ is atom-domain only. Preserve the offending target
+        // word in %rdx before checking its tag so the existing target failure
+        // ABI can report a named Type/domain failure for any pair input.
         self.line(&format!(
             "    movq {}(%rsp), %rcx",
             Self::slot_offset(left_slot)
         ));
+        self.line("    movq %rcx, %rdx");
         self.line(&format!("    andq ${}, %rcx", wsm_os_target::TAG_MASK));
         self.line(&format!(
             "    cmpq ${}, %rcx",
             wsm_os_target::Tag::Cons as u64
         ));
-        self.line(&format!("    je .Lcurrent_eq_d1_empty_{empty_label}"));
+        self.line(&format!("    je .Lcurrent_eq_d1_type_{type_label}"));
 
         self.line(&format!(
             "    movq {}(%rsp), %rcx",
             Self::slot_offset(right_slot)
         ));
+        self.line("    movq %rcx, %rdx");
         self.line(&format!("    andq ${}, %rcx", wsm_os_target::TAG_MASK));
         self.line(&format!(
             "    cmpq ${}, %rcx",
             wsm_os_target::Tag::Cons as u64
         ));
-        self.line(&format!("    je .Lcurrent_eq_d1_empty_{empty_label}"));
+        self.line(&format!("    je .Lcurrent_eq_d1_type_{type_label}"));
 
         self.line(&format!(
             "    movq {}(%rsp), %rcx",
@@ -2187,8 +2192,15 @@ impl Emitter {
         self.emit_predicate_bit_runtime(0);
         self.line(&format!("    jmp .Lcurrent_eq_d1_end_{end_label}"));
 
-        self.line(&format!(".Lcurrent_eq_d1_empty_{empty_label}:"));
-        self.emit_immediate(wsm_os_target::NIL);
+        self.line(&format!(".Lcurrent_eq_d1_type_{type_label}:"));
+        self.line("    movq %r12, %rdi");
+        self.line(&format!(
+            "    movl ${}, %esi",
+            wsm_os_target::ErrorCode::Type as u32
+        ));
+        self.line("    xorq %rcx, %rcx");
+        self.line("    call wsm_fail");
+        self.line("    ud2");
         self.line(&format!(".Lcurrent_eq_d1_end_{end_label}:"));
         Ok(())
     }
