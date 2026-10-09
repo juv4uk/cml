@@ -179,7 +179,7 @@ jobs:
         with:
           repository: juv4uk/wsm-my-lisp
           token: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN || github.token }}
-          ref: 1fe661664479c92da1968d60914b512320678ac2
+          ref: fbfbcf6adb84f161757ae23eab4abbaa59985ddf
           path: wsm-my-lisp
 
       - name: Install Rust toolchain

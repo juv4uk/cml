@@ -1103,7 +1103,7 @@ dependencies = [
 [[package]]
 name = "wsm-os-target"
 version = "0.1.0"
-source = "git+https://github.com/juv4uk/wsm-target-contract.git?rev=b5ec3211f6bd07fb7c4a5f704875892eff145b91#b5ec3211f6bd07fb7c4a5f704875892eff145b91"
+source = "git+https://github.com/juv4uk/wsm-target-contract.git?rev=d3663026dbcce73e2b8e32238910c3f8f7dea833#d3663026dbcce73e2b8e32238910c3f8f7dea833"
 
 [[package]]
 name = "xml-rs"
