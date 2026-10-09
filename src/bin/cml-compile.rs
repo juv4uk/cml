@@ -34,8 +34,9 @@ cml-compile x86-elf-profile <source.lisp> <output> | cml-compile passes";
         }
         for pass in cml::compiler_passes::pass_manifest() {
             println!(
-                "CML-PASS\tid={}\tinput={}\toutput={}\tevidence={}\tobligation={}",
+                "CML-PASS\tid={}\tversion={}\tinput={}\toutput={}\tevidence={}\tobligation={}",
                 pass.id,
+                pass.version,
                 pass.input,
                 pass.output,
                 pass.current_evidence.as_str(),
