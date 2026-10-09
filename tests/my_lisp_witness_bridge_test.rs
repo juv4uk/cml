@@ -44,13 +44,22 @@ fn first_compiler_witness_expr(corpus: &str) -> String {
         .expect("#116 requires at least one compiler-corpus witness with an expr")
 }
 
-fn compiler_witness_row<'a>(corpus: &'a str, expr: &str) -> &'a str {
+fn witness_row<'a>(corpus: &'a str, expr: &str) -> &'a str {
     let marker = format!("((expr . \"{expr}\")");
     corpus
         .lines()
         .filter(|line| !line.trim_start().starts_with(';'))
-        .find(|line| line.contains(&marker) && line.contains("(compiler-corpus . t)"))
-        .unwrap_or_else(|| panic!("#46 requires compiler-corpus witness {expr}"))
+        .find(|line| line.contains(&marker))
+        .unwrap_or_else(|| panic!("#46 requires upstream Lisp-owned witness {expr}"))
+}
+
+fn compiler_witness_row<'a>(corpus: &'a str, expr: &str) -> &'a str {
+    let row = witness_row(corpus, expr);
+    assert!(
+        row.contains("(compiler-corpus . t)"),
+        "#46 selected upstream witness is not in the compiler corpus: {expr}"
+    );
+    row
 }
 
 /// Obtain the current nine-role proof-carrying export from the pinned SENS
@@ -183,7 +192,7 @@ fn current_d1_atom_no_is_judged_by_lisp_owned_witness() {
     // the outcome remain owned by pinned SENS; CML only transports exact D1.
     let corpus = upstream_corpus();
     let source = "(00000010 (quote (radio antenna)))";
-    let row = compiler_witness_row(&corpus, source);
+    let row = witness_row(&corpus, source);
     let current_source = "(атом? (як-є (radio antenna)))";
     let export = pinned_current_compiler_export();
     let current = lower_current_sens_source(current_source, &export)
