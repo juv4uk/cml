@@ -1,10 +1,25 @@
 use std::{
     fs,
     process::Command,
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use cml::{lower, parser, x86_freestanding::X86FreestandingBackend};
+
+static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
+
+fn unique_temp_base() -> std::path::PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock must be after epoch")
+        .as_nanos();
+    let sequence = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!(
+        "cml-x86-top-level-let-{}-{nonce}-{sequence}",
+        std::process::id()
+    ))
+}
 
 fn run_witness(source: &str, expected: u64, link_nucleus: bool) -> (bool, String, String) {
     let expressions = parser::parse(source).expect("fixture must parse");
@@ -13,14 +28,7 @@ fn run_witness(source: &str, expected: u64, link_nucleus: bool) -> (bool, String
         .compile_program(&program)
         .expect("top-level let fixture must compile");
 
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock must be after epoch")
-        .as_nanos();
-    let base = std::env::temp_dir().join(format!(
-        "cml-x86-top-level-let-{}-{nonce}",
-        std::process::id()
-    ));
+    let base = unique_temp_base();
     let asm_path = base.with_extension("s");
     let c_path = base.with_extension("c");
     let exe_path = base.with_extension("bin");
@@ -274,5 +282,23 @@ fn row13_corpus_fixture_exact_witness() {
     assert!(
         ok,
         "row 13 exact fixture ((lambda args args) 1 2 3) -> (1 2 3) must execute; stdout={out} stderr={err}"
+    );
+}
+
+#[test]
+fn temp_witness_paths_are_unique_under_parallel_creation() {
+    let handles = (0..64)
+        .map(|_| std::thread::spawn(unique_temp_base))
+        .collect::<Vec<_>>();
+    let mut paths = handles
+        .into_iter()
+        .map(|handle| handle.join().expect("path worker must not panic"))
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    assert_eq!(
+        paths.len(),
+        64,
+        "parallel witness artifacts must be unique by construction"
     );
 }
