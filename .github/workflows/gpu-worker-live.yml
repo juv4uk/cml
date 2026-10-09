@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   worker-live:
-    runs-on: [self-hosted, Linux, X64, gpu, gtx-1050-ti, cuda-12.6]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       CML_CUDA_HOST_PROBE: /home/agents/ecosystem/scripts/cuda-host-profile.sh
@@ -25,6 +25,13 @@ jobs:
       CARGO_BUILD_JOBS: 1
       CARGO_INCREMENTAL: 0
     steps:
+      - name: Verify GitHub-hosted CUDA hardware (fail closed)
+        shell: bash
+        run: |
+          test "${RUNNER_ENVIRONMENT:-}" = github-hosted || { echo "::error::Self-hosted execution forbidden"; exit 1; }
+          command -v nvidia-smi >/dev/null 2>&1 || { echo "::error::GitHub-hosted GPU larger runner required"; exit 1; }
+          nvidia-smi
+
       - uses: actions/checkout@v4
 
       - name: Isolate Cargo target by rustc build
