@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+      # Hosted native Rust checks; Guix-pure build reproducibility is separately UNVERIFIED.
+      - uses: dtolnay/rust-toolchain@stable
       - name: Require private dependency read token
         env:
           SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
@@ -32,12 +34,12 @@ jobs:
 
       - name: Rustfmt admission surfaces
         run: |
-          guix shell --pure -m manifest.scm -- rustfmt --edition 2024 --check src/gpu_admission.rs tests/gpu_admission_contention_test.rs
+          rustfmt --edition 2024 --check src/gpu_admission.rs tests/gpu_admission_contention_test.rs
 
       - name: GPU admission unit tests
         run: |
-          guix shell --pure -m manifest.scm -- cargo test -p cml --lib gpu_admission::tests -- --nocapture
+          cargo test -p cml --lib gpu_admission::tests -- --nocapture
 
       - name: GPU admission process contention witness
         run: |
-          timeout --signal=TERM 30s guix shell --pure -m manifest.scm -- cargo test -p cml --test gpu_admission_contention_test -- --nocapture
+          timeout --signal=TERM 30s cargo test -p cml --test gpu_admission_contention_test -- --nocapture
