@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      # Hosted native Rust semantics; Guix-pure reproducibility remains UNVERIFIED.
+      - uses: dtolnay/rust-toolchain@stable
       - name: Require private dependency read token
         env:
           SENS_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN || secrets.SENS_READ_TOKEN }}
@@ -33,22 +35,22 @@ jobs:
 
       - name: Focused formatting
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           rustfmt --edition 2024 --check
           src/sens_compiler_export.rs
           tests/sens_compiler_export_consumer_test.rs
 
       - name: Transport parser unit tests
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           cargo test -j 1 -p cml --lib sens_compiler_export::tests -- --nocapture --test-threads=1
 
       - name: Verified rich admission regression
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           cargo test -j 1 -p cml --lib sens_rich_bridge::tests -- --nocapture --test-threads=1
 
       - name: Real pinned exporter round-trip
         run: >-
-          guix shell --pure -m manifest.scm --
+          
           cargo test -j 1 -p cml --test sens_compiler_export_consumer_test -- --nocapture --test-threads=1

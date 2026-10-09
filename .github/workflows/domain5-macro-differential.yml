@@ -28,6 +28,8 @@ jobs:
     name: Rust MacroExpander vs Lisp reference
     runs-on: ubuntu-24.04
     steps:
+      # Hosted native Rust semantics; Guix-pure reproducibility remains UNVERIFIED.
+      - uses: dtolnay/rust-toolchain@stable
       - name: Checkout CML with pinned SENS
         uses: actions/checkout@v4
         with:
@@ -35,10 +37,10 @@ jobs:
           submodules: true
 
       - name: Check focused formatting
-        run: guix shell --pure -m manifest.scm -- cargo fmt -p cml -- --check
+        run:  cargo fmt -p cml -- --check
 
       - name: Run D5 macro differential
-        run: guix shell --pure -m manifest.scm -- cargo test -p cml --test domain5_macro_differential_test -- --nocapture
+        run:  cargo test -p cml --test domain5_macro_differential_test -- --nocapture
 
       - name: Publish D5 summary
         if: always()
