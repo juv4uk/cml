@@ -33,8 +33,10 @@ concurrency:
 
 jobs:
   parity:
+    # SKIPPED = hardware UNVERIFIED, not a GPU pass. GitHub-hosted GPU required.
+    if: vars.GITHUB_HOSTED_GPU_RUNNER != ''
     # Лише GPU-runner: ніколи не падаємо назад на CPU-runner.
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.GITHUB_HOSTED_GPU_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 25
     env:
       LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/lib/wsm-gcc-runtime
