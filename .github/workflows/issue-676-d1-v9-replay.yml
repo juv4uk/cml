@@ -57,6 +57,9 @@ jobs:
       - name: Current Tier-1 C backend conformance
         working-directory: cml
         run: cargo test --test c_backend_conformance_test -- --nocapture
+      - name: Exact Tier-1 IR lowering inventory
+        working-directory: cml
+        run: cargo test --test ir_lowering_test -- --nocapture
       - name: Cross-repo witness bridge
         working-directory: cml
         env:
