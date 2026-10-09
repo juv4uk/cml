@@ -14,9 +14,9 @@ use cml::sens_current_lowering::lower_current_sens_source;
 use cml::witness_bridge::{execute_x86_actual, execute_x86_predicate_bit_actual};
 use cml::x86_freestanding::X86FreestandingBackend;
 use cml::{lower, parser};
+use sens::{Session, eval_program, load_core_library};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
-use sens::{Session, eval_program, load_core_library};
 
 fn upstream_path(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -164,8 +164,8 @@ fn executed_cml_actual_is_judged_only_by_lisp_owned_witness_logic() {
 
     // Negative control: the old SID/truthiness path must NOT be accepted as
     // current D1, even if its historical result is the symbol t.
-    let expressions = parser::parse(source)
-        .expect("historical compiler-corpus witness must remain parseable");
+    let expressions =
+        parser::parse(source).expect("historical compiler-corpus witness must remain parseable");
     let program = lower::lower_program(&expressions)
         .expect("historical compiler-corpus witness must remain lowerable");
     let old_assembly = X86FreestandingBackend::new()
