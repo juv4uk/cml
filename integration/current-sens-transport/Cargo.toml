@@ -1,0 +1,11 @@
+[package]
+name = "cml-current-sens-transport"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Isolated candidate-only verifier for the modern SENS domain/transport API.
+# Deliberately independent of the historical CML crate (which still uses
+# removed Sid8 symbols). NOT a production dependency or alternate language law.
+[dependencies]
+sens = { path = "../../external/sens/crates/sens" }
