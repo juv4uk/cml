@@ -786,10 +786,22 @@ mod tests {
     fn baseline_report_preserves_observations_and_authority_provenance() {
         let report = generate_baseline_report("test-commit", "test-mylisp-pin");
         assert_eq!(report.workloads.len(), 4);
-        assert!(report.workloads[..3].iter().all(|workload| {
+        // The first two workloads carry the pinned upstream witness.
+        // The buffer-map workload is intentionally non-semantic until its
+        // current SENS domain law is proved; the fourth records only CML policy.
+        assert!(report.workloads[..2].iter().all(|workload| {
             workload.verdict_source.contains("upstream my-lisp")
                 && workload.upstream_witness_ref.contains("test-mylisp-pin")
         }));
+        assert!(report.workloads[2]
+            .verdict_source
+            .contains("SENS current exact-domain law not yet proved"));
+        assert!(report.workloads[2]
+            .upstream_witness_ref
+            .contains("CML migration"));
+        assert!(report.workloads[3]
+            .verdict_source
+            .contains("CML compiler admission policy"));
 
         let json = report.to_json();
         assert!(json.contains("\"format_version\": 1"));
