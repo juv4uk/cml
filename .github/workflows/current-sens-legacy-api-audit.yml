@@ -12,6 +12,8 @@ on:
       - "src/coverage.rs"
       - "src/bin/cml-coverage.rs"
       - "src/x86_lir.rs"
+      - "src/native_baseline.rs"
+      - "tests/native_perf_baseline_test.rs"
       - "src/numeric_specialization.rs"
       - "build.rs"
       - "tests/core_profile_request_test.rs"
@@ -150,6 +152,28 @@ jobs:
                   if required not in code:
                       raise SystemExit(f"BLOCK: compiler-private ALU mechanism missing in {filename}")
           print("CML_X86_NUMERIC_MECHANISM_ONLY_PASS no_byte_identity_dispatch=true")
+          PY
+      - name: Fail if historical buffer-map SID is silently run under current SENS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path("src/native_baseline.rs").read_text()
+          current=source.split("// Workload 3: contiguous i32 buffer map",1)[-1].split(
+              "// Workload 4: compiler admission-policy",1)[0]
+          tests=Path("tests/native_perf_baseline_test.rs").read_text()
+          if not current or "admitted: false" not in current:
+              raise SystemExit("BLOCK: historical buffer-map incorrectly admitted")
+          if "BLOCKED_UNVERIFIED_DOMAIN" not in current or "runtime: None" not in current:
+              raise SystemExit("BLOCK: unverified CML lane lacks fail-closed status/timing")
+          if "Ir::Sid(" in current or "sens::sid!" in current:
+              raise SystemExit("BLOCK: retired 8-bit source code remains in live baseline")
+          if 'lane_name: "c-gcc-O3-reference"' not in current:
+              raise SystemExit("BLOCK: independent reference was silently removed")
+          if 'assert!(!w3.admitted' not in tests or "BLOCKED_UNVERIFIED_DOMAIN" not in tests:
+              raise SystemExit("BLOCK: root regression test still admits byte-only compute")
+          print("CML_BUFFER_MAP_CURRENT_DOMAIN_BLOCKED_PASS independent_C_reference_preserved=true")
           PY
       - name: Verify root build.rs generated nine SENS-owned D3/D4 coordinates
         shell: bash
