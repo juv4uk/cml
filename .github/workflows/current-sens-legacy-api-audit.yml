@@ -87,6 +87,9 @@ jobs:
           import sys
           from pathlib import Path
           content=Path(sys.argv[1]).read_text(errors="replace")
+          # Rust/GitHub runner forces ANSI color even for redirected cargo stderr.
+          # Strip escape sequences before exact Rust diagnostic site matching.
+          content=re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", content)
           matches=list(re.finditer(
               r"^error(?:\[([A-Z]\d+)\])?: (.+)$",content,re.M))
           errors=[]
