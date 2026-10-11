@@ -56,6 +56,29 @@ jobs:
           grep -q CML_PRODUCTION_PROFILE_WIDTH_COLLISION_REJECTED "$RUNNER_TEMP/modern-sens-transport.log"
           test "$(git rev-parse HEAD:external/sens)" != "$SENS_CANDIDATE_SHA"
           echo CML_MODERN_BRIDGE_EXACT_CANDIDATE_PASS
+      - name: Execute actual root CML coverage CLI against SENS law, verify schema v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --manifest-path integration/current-sens-transport/Cargo.toml \
+            --quiet --bin cml_coverage_current > "$RUNNER_TEMP/cml-current-coverage.tsv"
+          python3 - "$RUNNER_TEMP/cml-current-coverage.tsv" <<'PY'
+          from pathlib import Path
+          import sys
+          rows=Path(sys.argv[1]).read_text().splitlines()
+          assert rows[0]=="schema\tcml-coverage/2", rows[0]
+          assert "upstream-channel\tcurrent-sens-executable-compiler-law" in rows
+          assert "compiler-role-identities\t9" in rows
+          assert "x86-executable\t0" in rows
+          assert "x86-assembly-witness-only\t0" in rows
+          assert "x86-representation-limited\t0" in rows
+          parsed=[line.split("\t") for line in rows if line.startswith("row\t")]
+          assert len(parsed)==9
+          assert sum(p[1].startswith("D3:") for p in parsed)==7
+          assert sum(p[1].startswith("D4:") for p in parsed)==2
+          assert all(len(p)==7 and p[3]=="source-admitted" and p[6]=="-" for p in parsed)
+          print("CML_ROOT_CURRENT_COVERAGE_CLI_PASS schema_v2=true roles=9 native_unproven=true")
+          PY
       - name: Build exact-domain consumer and verify ALL real T5 and selected F3 carriers
         shell: bash
         run: |
@@ -119,6 +142,7 @@ jobs:
           name: cml-modern-domain-transport-${{ github.sha }}
           path: |
             ${{ runner.temp }}/modern-sens-transport.log
+            ${{ runner.temp }}/cml-current-coverage.tsv
             ${{ runner.temp }}/production-sens-gitlink.txt
             ${{ runner.temp }}/cml-tiny-manifest.json
             ${{ runner.temp }}/cml-tiny-audit.json
