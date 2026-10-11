@@ -33,7 +33,7 @@ fn same_exact_domain_identity_can_request_distinct_core_laws() {
     )
     .expect("complete Core4 provenance must be admitted as a request");
 
-    assert_eq!(core1.semantic_id, core4.semantic_id);
+    assert_eq!(core1.domain_identity, core4.domain_identity);
     assert_ne!(core1.core_profile, core4.core_profile);
     assert_ne!(core1.upstream_law_ref, core4.upstream_law_ref);
     assert_ne!(core1, core4);
@@ -152,6 +152,6 @@ fn equal_payload_with_different_domain_width_is_never_one_identity() {
         "contracts/current/domain-call-law.lisp", "sha256:pinned-law",
         "x86_64", "wsm-value-abi/v1"
     ).unwrap();
-    assert_ne!(request(d3).semantic_id, request(d4).semantic_id);
+    assert_ne!(request(d3).domain_identity, request(d4).domain_identity);
     assert_ne!(request(d3), request(d4));
 }
