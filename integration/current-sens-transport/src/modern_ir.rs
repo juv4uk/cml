@@ -98,6 +98,45 @@ mod tests {
     }
 
     #[test]
+    fn fabricated_proof_or_role_in_user_constructed_ast_never_reaches_cml_ir() {
+        let identity = CoreDomainIdentity::D3(sens::Bija3::from_word(
+            sens::Bit3::new(0b001).unwrap()
+        ));
+        let checked = verified_role(identity).expect("SENS must verify D3 QUOTE");
+        assert_eq!(checked.role, CompilerLoweringRole::QuoteForm);
+
+        let proper = ModernAst::Quote {
+            binding: checked.clone(),
+            data: ExactQuotedData::EmptyList,
+        };
+        assert!(matches!(lower(&proper), Ok(ModernIr::Quote { .. })));
+
+        // A caller might construct public VerifiedRole fields by hand: never
+        // trust the carried role/digest, even when exact domain bits match.
+        let mut forged_role = checked.clone();
+        forged_role.role = CompilerLoweringRole::PairConstruct;
+        assert_eq!(
+            lower(&ModernAst::Call { binding: forged_role, args: vec![] }),
+            Err(ModernLowerError::InvalidCompilerAuthority)
+        );
+        let mut forged_digest = checked.clone();
+        forged_digest.authority_sha256 = "0".repeat(64);
+        assert_eq!(
+            lower(&ModernAst::Quote {
+                binding: forged_digest,
+                data: ExactQuotedData::EmptyList,
+            }),
+            Err(ModernLowerError::InvalidCompilerAuthority)
+        );
+        // Even an authentic QUOTE proof must not be used as COND authority.
+        assert_eq!(
+            lower(&ModernAst::Conditional { binding: checked, branches: vec![] }),
+            Err(ModernLowerError::InvalidCompilerAuthority)
+        );
+        println!("CML_MODERN_FORGED_ROLE_REJECTED all_ast_call_forms=true");
+    }
+
+    #[test]
     fn tiny_f3_and_t5_lower_to_identical_proof_carrying_cml_ir() {
         let t5 = [0x63, 0x89, 0x06, 0xa1];
         let f3 = [0xf3, 0x40, 0x60];
