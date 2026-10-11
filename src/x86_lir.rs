@@ -452,10 +452,14 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
         // These are PRIVATE target mechanisms, NOT SENS language calls.
         // The verified SENS role -> CML mechanism cutover is a separate
         // admission step. A raw historical byte code never selects x86 ALU.
-        Ir::Prim { op: PrimOp::Add, args } =>
-            lower_binary_alu(args, LirAluOp::Add, ctx, prov),
-        Ir::Prim { op: PrimOp::Sub, args } =>
-            lower_binary_alu(args, LirAluOp::Sub, ctx, prov),
+        Ir::Prim {
+            op: PrimOp::Add,
+            args,
+        } => lower_binary_alu(args, LirAluOp::Add, ctx, prov),
+        Ir::Prim {
+            op: PrimOp::Sub,
+            args,
+        } => lower_binary_alu(args, LirAluOp::Sub, ctx, prov),
         Ir::Cond { branches } => {
             if branches.is_empty() {
                 return Err(LirLowerError::Unsupported(
@@ -488,7 +492,10 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
                 // primitive. It CANNOT attest the D3 EQ language meaning:
                 // that requires SENS-verified exact atomic operands upstream.
                 let normalized_test = match test_expr {
-                    Ir::Prim { op: PrimOp::Eq, args } => Some(args.as_slice()),
+                    Ir::Prim {
+                        op: PrimOp::Eq,
+                        args,
+                    } => Some(args.as_slice()),
                     _ => None,
                 };
 
