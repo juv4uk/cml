@@ -128,3 +128,93 @@ pub fn lower(ast: &ModernAst) -> Result<ModernIr, ModernLowerError> {
     }
 }
 
+
+// SENS owns the D3/D4 compiler law. Only a pinned, executable law +
+// exact contract digest can authorize one callable AST head.
+pub fn verified_role(identity: CoreDomainIdentity) -> Result<VerifiedRole, ModernLowerError> {
+    // No role, proof or semantics are inferred from width / bits / name.
+    let record = sens::compiler_semantic_input_from_sens(identity)
+        .map_err(|_| ModernLowerError::UnverifiedCompilerRole)?
+        .ok_or(ModernLowerError::UnverifiedCompilerRole)?;
+    if record.identity != identity || record.semantic_status != "current"
+        || record.authority_ref.is_empty() || record.proof_ref.is_empty()
+        || record.authority_path != "language-contract.lisp"
+        || record.language_contract_version.is_empty()
+        || record.authority_sha256.len() != 64
+    {
+        return Err(ModernLowerError::InvalidCompilerAuthority);
+    }
+    let pinned_authority = sens::sha256_source(
+        include_bytes!("../external/sens/language-contract.lisp"),
+    ).iter().map(|b| format!("{b:02x}")).collect::<String>();
+    if record.authority_sha256 != pinned_authority {
+        return Err(ModernLowerError::InvalidCompilerAuthority);
+    }
+    Ok(VerifiedRole {
+        identity, role: record.lowering_role,
+        law_ref: record.authority_ref, proof_ref: record.proof_ref,
+        authority_path: record.authority_path,
+        authority_sha256: record.authority_sha256,
+        contract_version: record.language_contract_version,
+    })
+}
+
+
+// Build executable current-domain AST ONLY through the above SENS role.
+// Quoted residual structures remain data; unsupported binders fail closed.
+pub fn exact_call(source: &Expr, depth: usize) -> Result<ModernAst, ModernLowerError> {
+    if depth > 128 { return Err(ModernLowerError::StructuralDepthExceeded); }
+    match &source.kind {
+        ExprKind::List(items) if items.is_empty() =>
+            Ok(ModernAst::Literal(ExactQuotedData::EmptyList)),
+        ExprKind::DomainIdentity(DomainIdentity::D1(_)) =>
+            Ok(ModernAst::Literal(quoted_data(source, depth)?)),
+        ExprKind::DomainCall(identity, args) => {
+            let binding = verified_role(*identity)?;
+            match binding.role {
+                CompilerLoweringRole::QuoteForm => {
+                    if args.len() != 1 { return Err(ModernLowerError::InvalidArity); }
+                    Ok(ModernAst::Quote {
+                        binding,
+                        data: quoted_data(&args[0], depth + 1)?,
+                    })
+                }
+                CompilerLoweringRole::CondForm => {
+                    let mut branches = Vec::with_capacity(args.len());
+                    for clause in args.iter() {
+                        let ExprKind::List(parts) = &clause.kind else {
+                            return Err(ModernLowerError::InvalidConditionClause);
+                        };
+                        if parts.len() != 2 { return Err(ModernLowerError::InvalidConditionClause); }
+                        branches.push((exact_call(&parts[0], depth + 1)?,
+                                       exact_call(&parts[1], depth + 1)?));
+                    }
+                    Ok(ModernAst::Conditional { binding, branches })
+                }
+                CompilerLoweringRole::LambdaForm | CompilerLoweringRole::DefineForm =>
+                    Err(ModernLowerError::UnsupportedForm), // binder/locals proof not yet migrated
+                _ => {
+                    let arity = match binding.role {
+                        CompilerLoweringRole::AtomPredicate
+                        | CompilerLoweringRole::SelectorHead
+                        | CompilerLoweringRole::SelectorTail => 1,
+                        CompilerLoweringRole::AtomEquality
+                        | CompilerLoweringRole::PairConstruct => 2,
+                        _ => return Err(ModernLowerError::UnsupportedForm),
+                    };
+                    if args.len() != arity { return Err(ModernLowerError::InvalidArity); }
+                    Ok(ModernAst::Call {
+                        binding,
+                        args: args.iter().map(|a| exact_call(a, depth + 1))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    })
+                }
+            }
+        }
+        // For a raw D2 List with a non-callable head, reject instead of
+        // inventing a callable identity ("(((0)))" is not an executable call).
+        ExprKind::List(_) => Err(ModernLowerError::NonCallableHead),
+        _ => Err(ModernLowerError::UnsupportedLiteral),
+    }
+}
+
