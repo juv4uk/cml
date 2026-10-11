@@ -1,15 +1,15 @@
-//! Machine-readable CML coverage foundation (#106).
+//! Exact-domain CML compiler coverage, supplied by the executable SENS law.
 //!
-//! Language identity comes from the build-source my-lisp semantic registry,
-//! generated into `canon` by build.rs. This module only joins those opaque
-//! IDs with CML's existing operation-admission table and evidence-backed
-//! compiler target facts. It never derives backend execution from source
-//! admission alone.
+//! This is NOT historical byte-SID coverage. Compiler admission is proved
+//! per D3/D4 *width-qualified* identity against pinned SENS authority.
+//! Historic x86 witnesses for old byte keys cannot grant modern execution:
+//! target evidence stays empty until a new end-to-end oracle proves parity.
 
-use crate::canon::{
-    CANON_BUILD_SOURCE_REGISTRY_FNV1A64, CANON_BUILD_SOURCE_SEMANTIC_IDS, find_operation_by_id,
-};
-use sens::Sid8;
+use sens::{Bija3, Bit3, Bit4, CompilerLoweringRole, CoreD4, CoreDomainIdentity};
+
+const SOURCE_CORPUS: &str =
+    include_str!("../external/sens/contracts/compiler-nucleus-identity-corpus-v1.tsv");
+const LANGUAGE_CONTRACT: &[u8] = include_bytes!("../external/sens/language-contract.lisp");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdmissionState {
@@ -32,18 +32,22 @@ pub struct BackendEvidence {
     pub representation_limit: Option<&'static str>,
 }
 
+/// A current compiler-language *role*, not a legacy semantic byte.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemanticCoverageRow {
-    pub semantic_id: Sid8,
+    pub identity: CoreDomainIdentity,
+    pub execution_role: CompilerLoweringRole,
     pub admission: AdmissionState,
-    pub operation_status: Option<&'static str>,
-    pub evidence: Option<&'static str>,
+    pub operation_status: &'static str,
+    pub evidence: &'static str,
+    pub authority_sha256: String,
     pub backend_evidence: Vec<BackendEvidence>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CoverageSummary {
-    pub semantic_identities: usize,
+    /// Current SENS compiler-role subset (7 D3 + 2 D4), not all D1..D9 words.
+    pub compiler_role_identities: usize,
     pub source_admitted: usize,
     pub not_yet_admitted: usize,
     pub x86_executable: usize,
@@ -54,157 +58,117 @@ pub struct CoverageSummary {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoverageLedger {
     pub upstream_channel: &'static str,
-    pub registry_digest_fnv1a64: u64,
+    pub authority_sha256: String,
     pub rows: Vec<SemanticCoverageRow>,
 }
 
-fn x86_canon_evidence(semantic_id: Sid8) -> Vec<BackendEvidence> {
-    let (state, evidence) = if semantic_id == sens::sid!(00000001) {
-        (
-            BackendEvidenceState::Executable,
-            "x86_freestanding_test.rs: compiler_corpus_quote_radio_returns_the_interned_symbol",
-        )
-    } else if semantic_id == sens::sid!(00000010) {
-        (
-            BackendEvidenceState::AssemblyWitness,
-            "x86_freestanding_test.rs: primitive_slice_uses_only_ratified_runtime_imports",
-        )
-    } else if semantic_id == sens::sid!(00000011) {
-        (
-            BackendEvidenceState::Executable,
-            "x86_freestanding_test.rs: compiler_corpus_eq_on_matching_and_differing_quoted_symbols",
-        )
-    } else if semantic_id == sens::sid!(00000100) {
-        (
-            BackendEvidenceState::Executable,
-            "x86_freestanding_test.rs: frozen_cons_fixture_is_deterministic_and_assembles; named_definition_allocates_a_list_through_the_asm_nucleus",
-        )
-    } else if semantic_id == sens::sid!(00000101) {
-        (
-            BackendEvidenceState::AssemblyWitness,
-            "x86_freestanding_test.rs: primitive_slice_uses_only_ratified_runtime_imports",
-        )
-    } else if semantic_id == sens::sid!(00000110) {
-        (
-            BackendEvidenceState::AssemblyWitness,
-            "x86_freestanding_test.rs: primitive_slice_uses_only_ratified_runtime_imports",
-        )
-    } else if semantic_id == sens::sid!(00000111) {
-        (
-            BackendEvidenceState::Executable,
-            "x86_freestanding_test.rs: standalone_cond_true_false_branch_selection_witness",
-        )
-    } else {
-        return Vec::new();
+fn exact_identity(domain: &str, bits: &str) -> Result<CoreDomainIdentity, String> {
+    let width = match domain {
+        "D3" => 3usize,
+        "D4" => 4usize,
+        other => return Err(format!("unratified compiler role domain {other}")),
     };
-
-    vec![BackendEvidence {
-        backend: "x86-freestanding",
-        state,
-        evidence,
-        representation_limit: None,
-    }]
-}
-
-fn x86_fixnum_arithmetic_evidence(semantic_id: Sid8) -> Vec<BackendEvidence> {
-    let evidence = if semantic_id == sens::sid!(00001100) {
-        "x86_freestanding_test.rs: named_definition_uses_a_lexical_let_binding; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract"
-    } else if semantic_id == sens::sid!(00001101) {
-        "x86_freestanding_test.rs: out_of_line_named_self_tail_recursion_reuses_its_native_frame; checked_add_and_sub_produce_inline_arithmetic; fixnum_range_is_owned_by_the_target_contract"
-    } else {
-        return Vec::new();
-    };
-
-    vec![BackendEvidence {
-        backend: "x86-freestanding",
-        state: BackendEvidenceState::ExecutableRepresentationLimited,
-        evidence,
-        representation_limit: Some(
-            "target-fixnum-only; exact-rational x86 representation remains blocked by #105/#137",
-        ),
-    }]
+    if bits.len() != width || !bits.bytes().all(|c| c == b'0' || c == b'1') {
+        return Err(format!("noncanonical width-qualified compiler identity {domain}:{bits}"));
+    }
+    let raw = u8::from_str_radix(bits, 2)
+        .map_err(|_| "unparseable binary compiler coordinate".to_string())?;
+    match domain {
+        "D3" => Ok(CoreDomainIdentity::D3(Bija3::from_word(
+            Bit3::new(raw).ok_or("invalid D3 coordinate")?
+        ))),
+        "D4" => Ok(CoreDomainIdentity::D4(CoreD4::from_word(
+            Bit4::new(raw).ok_or("invalid D4 coordinate")?
+        ))),
+        _ => unreachable!("width-validated D3/D4"),
+    }
 }
 
 impl CoverageLedger {
-    pub fn build_source() -> Self {
-        let rows = CANON_BUILD_SOURCE_SEMANTIC_IDS
-            .iter()
-            .map(|semantic_id| {
-                let semantic_id = *semantic_id;
-                if let Some(operation) = find_operation_by_id(semantic_id) {
-                    SemanticCoverageRow {
-                        semantic_id,
-                        admission: AdmissionState::SourceAdmitted,
-                        operation_status: Some(operation.status),
-                        evidence: Some(operation.provenance_witness),
-                        backend_evidence: {
-                            let mut evidence = x86_canon_evidence(semantic_id);
-                            evidence.extend(x86_fixnum_arithmetic_evidence(semantic_id));
-                            evidence
-                        },
-                    }
-                } else {
-                    SemanticCoverageRow {
-                        semantic_id,
-                        admission: AdmissionState::NotYetAdmitted,
-                        operation_status: None,
-                        evidence: None,
-                        backend_evidence: Vec::new(),
-                    }
-                }
-            })
-            .collect();
-
-        Self {
-            upstream_channel: "build-source",
-            registry_digest_fnv1a64: CANON_BUILD_SOURCE_REGISTRY_FNV1A64,
-            rows,
+    /// Reconstruct coverage only from pinned SENS-owned coordinates and a
+    /// runtime-evaluated exact language-law projection. Never use surface
+    /// spellings, a historical 8-bit registry, or x86 legacy evidence.
+    pub fn try_current_sens() -> Result<Self, String> {
+        let authority_sha256 = sens::sha256_source(LANGUAGE_CONTRACT)
+            .iter().map(|b| format!("{b:02x}")).collect::<String>();
+        let mut rows = Vec::new();
+        let mut d3 = 0;
+        let mut d4 = 0;
+        for source_line in SOURCE_CORPUS.lines() {
+            let line = source_line.trim();
+            if line.is_empty() || line.starts_with('#') { continue; }
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() != 3 {
+                return Err("malformed source-owned compiler corpus".into());
+            }
+            let (fixture, domain, bits) = (parts[0], parts[1], parts[2]);
+            if fixture != format!("nucleus-{}-{bits}", domain.to_ascii_lowercase()) {
+                return Err("source-owned compiler fixture and domain disagree".into());
+            }
+            let identity = exact_identity(domain, bits)?;
+            if rows.iter().any(|row: &SemanticCoverageRow| row.identity == identity) {
+                return Err("duplicate exact compiler coordinate".into());
+            }
+            let record = sens::compiler_semantic_input_from_sens(identity)
+                .map_err(|e| format!("SENS compiler law failed: {e:?}"))?
+                .ok_or("SENS compiler law refused coordinate")?;
+            if record.identity != identity
+                || record.semantic_status != "current"
+                || record.authority_path != "language-contract.lisp"
+                || record.authority_ref.is_empty()
+                || record.proof_ref.is_empty()
+                || record.language_contract_version.is_empty()
+                || record.authority_sha256 != authority_sha256
+            {
+                return Err("SENS compiler-law authority/proof mismatch".into());
+            }
+            if domain == "D3" { d3 += 1; } else { d4 += 1; }
+            rows.push(SemanticCoverageRow {
+                identity,
+                execution_role: record.lowering_role,
+                admission: AdmissionState::SourceAdmitted,
+                operation_status: record.semantic_status,
+                evidence: record.proof_ref,
+                authority_sha256: record.authority_sha256,
+                backend_evidence: Vec::new(), // no migrated native oracle yet
+            });
         }
+        if rows.len() != 9 || d3 != 7 || d4 != 2 {
+            return Err("SENS compiler-role source subset drift (expected D3:7/D4:2)".into());
+        }
+        Ok(Self {
+            upstream_channel: "current-sens-executable-compiler-law",
+            authority_sha256,
+            rows,
+        })
     }
 
-    pub fn row(&self, semantic_id: Sid8) -> Option<&SemanticCoverageRow> {
-        self.rows.iter().find(|row| row.semantic_id == semantic_id)
+    /// Deliberately fail-closed for callers that previously used an implicit
+    /// historical source registry; no fallback to retired eight-bit keys.
+    pub fn build_source() -> Self {
+        Self::try_current_sens().expect("BLOCK: exact SENS compiler coverage unavailable")
+    }
+
+    pub fn row(&self, identity: CoreDomainIdentity) -> Option<&SemanticCoverageRow> {
+        self.rows.iter().find(|row| row.identity == identity)
     }
 
     pub fn summary(&self) -> CoverageSummary {
-        let source_admitted = self
-            .rows
-            .iter()
-            .filter(|row| row.admission == AdmissionState::SourceAdmitted)
-            .count();
-        let not_yet_admitted = self.rows.len() - source_admitted;
-        let x86_executable = self
-            .rows
-            .iter()
-            .flat_map(|row| row.backend_evidence.iter())
-            .filter(|evidence| {
-                evidence.backend == "x86-freestanding"
-                    && evidence.state == BackendEvidenceState::Executable
-            })
-            .count();
-        let x86_assembly_witness_only = self
-            .rows
-            .iter()
-            .flat_map(|row| row.backend_evidence.iter())
-            .filter(|evidence| {
-                evidence.backend == "x86-freestanding"
-                    && evidence.state == BackendEvidenceState::AssemblyWitness
-            })
-            .count();
-        let x86_representation_limited = self
-            .rows
-            .iter()
-            .flat_map(|row| row.backend_evidence.iter())
-            .filter(|evidence| {
-                evidence.backend == "x86-freestanding"
-                    && evidence.state == BackendEvidenceState::ExecutableRepresentationLimited
-            })
-            .count();
-
+        let source_admitted = self.rows.iter()
+            .filter(|r| r.admission == AdmissionState::SourceAdmitted).count();
+        let x86_executable = self.rows.iter().flat_map(|r| &r.backend_evidence)
+            .filter(|e| e.backend == "x86-freestanding"
+                && e.state == BackendEvidenceState::Executable).count();
+        let x86_assembly_witness_only = self.rows.iter().flat_map(|r| &r.backend_evidence)
+            .filter(|e| e.backend == "x86-freestanding"
+                && e.state == BackendEvidenceState::AssemblyWitness).count();
+        let x86_representation_limited = self.rows.iter().flat_map(|r| &r.backend_evidence)
+            .filter(|e| e.backend == "x86-freestanding"
+                && e.state == BackendEvidenceState::ExecutableRepresentationLimited).count();
         CoverageSummary {
-            semantic_identities: self.rows.len(),
+            compiler_role_identities: self.rows.len(),
             source_admitted,
-            not_yet_admitted,
+            not_yet_admitted: self.rows.len() - source_admitted,
             x86_executable,
             x86_assembly_witness_only,
             x86_representation_limited,
