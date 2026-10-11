@@ -1,12 +1,15 @@
-use std::process::Command;
 use cml::coverage::CoverageLedger;
+use std::process::Command;
 
 fn run_report() -> Vec<u8> {
-    let out = Command::new(env!("CARGO_BIN_EXE_cml-coverage")).output()
+    let out = Command::new(env!("CARGO_BIN_EXE_cml-coverage"))
+        .output()
         .expect("coverage report CLI must execute");
-    assert!(out.status.success(),
+    assert!(
+        out.status.success(),
         "coverage must fail closed rather than emit unverifiable data: {}",
-        String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stderr)
+    );
     out.stdout
 }
 
@@ -20,7 +23,10 @@ fn exact_domain_report_is_deterministic_and_matches_executable_sens_law() {
 
     assert!(text.starts_with("schema\tcml-coverage/2\n"));
     assert!(text.contains("\nupstream-channel\tcurrent-sens-executable-compiler-law\n"));
-    assert!(text.contains(&format!("\nauthority-sha256\t{}\n", ledger.authority_sha256)));
+    assert!(text.contains(&format!(
+        "\nauthority-sha256\t{}\n",
+        ledger.authority_sha256
+    )));
     assert!(text.contains("\ncompiler-role-identities\t9\n"));
     assert!(text.contains(&format!("\nsource-admitted\t{}\n", summary.source_admitted)));
     assert!(text.contains("\nnot-yet-admitted\t0\n"));
@@ -28,11 +34,18 @@ fn exact_domain_report_is_deterministic_and_matches_executable_sens_law() {
     assert!(text.contains("\nx86-assembly-witness-only\t0\n"));
     assert!(text.contains("\nx86-representation-limited\t0\n"));
 
-    let rows: Vec<_> = text.lines().filter(|line| line.starts_with("row\t")).collect();
+    let rows: Vec<_> = text
+        .lines()
+        .filter(|line| line.starts_with("row\t"))
+        .collect();
     assert_eq!(rows.len(), 9);
     for line in rows {
         let fields: Vec<_> = line.split('\t').collect();
-        assert_eq!(fields.len(), 7, "schema v2: tag/domain/role/status/proof/native: {line}");
+        assert_eq!(
+            fields.len(),
+            7,
+            "schema v2: tag/domain/role/status/proof/native: {line}"
+        );
         let coordinate = fields[1];
         if let Some(bits) = coordinate.strip_prefix("D3:") {
             assert_eq!(bits.len(), 3);
@@ -42,6 +55,9 @@ fn exact_domain_report_is_deterministic_and_matches_executable_sens_law() {
             panic!("the compiler closure must not contain an unverified domain: {coordinate}");
         }
         assert!(line.contains("\tsource-admitted\t"));
-        assert_eq!(fields[6], "-", "no historical byte-keyed x86 evidence may carry over");
+        assert_eq!(
+            fields[6], "-",
+            "no historical byte-keyed x86 evidence may carry over"
+        );
     }
 }
