@@ -128,51 +128,46 @@ jobs:
           if not is_green and not errors:
               raise SystemExit("unexpected failure not covered by Rust diagnostic inventory")
           PY
-      - name: Verify production build.rs emitted only the 9 exact D3/D4 source coordinates
+      - name: Verify root build.rs generated nine SENS-owned D3/D4 coordinates
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           import re
-          source=Path("external/sens/contracts/compiler-nucleus-identity-corpus-v1.tsv")
+          corpus=Path("external/sens/contracts/compiler-nucleus-identity-corpus-v1.tsv")
           expected=[]
-          for raw in source.read_text().splitlines():
-              line=raw.strip()
-              if line and not line.startswith("#"):
-                  parts=line.split("\t")
-                  if len(parts)!=3:
-                      raise SystemExit("invalid upstream coordinate TSV")
-                  expected.append(tuple(parts))
+          for line in corpus.read_text().splitlines():
+              line=line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              parts=line.split("\t")
+              if len(parts)!=3:
+                  raise SystemExit("BLOCK: invalid upstream fixture row")
+              expected.append(tuple(parts))
           if len(expected)!=9:
-              raise SystemExit("upstream nine-role fixture unexpectedly changed")
+              raise SystemExit("BLOCK: source-owned compiler fixture count changed")
           generated=list(Path("target/debug/build").glob(
               "cml-*/out/sens_current_compiler_candidates.rs"
           ))
           if not generated:
-              raise SystemExit("BLOCK: actual root build.rs produced no modern coordinate file")
-          for file in generated:
-              text=file.read_text()
-              if "SENS_CURRENT_DOMAIN_CORPUS_AVAILABLE: bool = true;" not in text:
-                  raise SystemExit(f"BLOCK: current SENS corpus not admitted: {file}")
-              if "Sid8" in text or "CompilerLoweringRole" in text or "semantic_id" in text:
-                  raise SystemExit("BLOCK: byte identity/semantic role leaked into coordinate generator")
-              rows=re.findall(
-                  r'^\s*\("([^"]+)", "([^"]+)", "([01]+)"\),\s*
-        with:
-          name: cml-modern-candidate-compile-audit-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/full-cml-modern-candidate.stderr
-            ${{ runner.temp }}/full-cml-modern-candidate-report.json
-            ${{ runner.temp }}/cml-sens-compiler-export.lisp
-          if-no-files-found: warn
-          retention-days: 30
-,
-                  text,re.M
-              )
+              raise SystemExit("BLOCK: root build.rs failed to emit current coordinates")
+          for output in generated:
+              data=output.read_text()
+              if "SENS_CURRENT_DOMAIN_CORPUS_AVAILABLE: bool = true;" not in data:
+                  raise SystemExit("BLOCK: current SENS corpus not admitted")
+              if any(term in data for term in ("Sid8", "CompilerLoweringRole", "semantic_id")):
+                  raise SystemExit("BLOCK: old identity or owned role leaked into projection")
+              rows=[]
+              for line in data.splitlines():
+                  if line.lstrip().startswith('("nucleus-'):
+                      quoted=re.findall('"([^"]+)"',line)
+                      if len(quoted)!=3:
+                          raise SystemExit("BLOCK: malformed generated coordinate")
+                      rows.append(tuple(quoted))
               if rows!=expected:
-                  raise SystemExit(f"BLOCK: generated current SENS coordinates drift: {file}")
-          print(f"CML_ROOT_GENERATOR_CURRENT_D3_D4_PASS files={len(generated)} exact_coords=9")
+                  raise SystemExit("BLOCK: generated D3/D4 coordinate drift")
+          print("CML_ROOT_GENERATOR_CURRENT_D3_D4_PASS exact_coords=9")
           PY
       - uses: actions/upload-artifact@v4
         if: always()
