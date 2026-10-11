@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   c2-witness:
-    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository)
     # CPU-only fixed-point proof; do not queue on the disabled local GPU runner.
     runs-on: ubuntu-latest
     timeout-minutes: 30
