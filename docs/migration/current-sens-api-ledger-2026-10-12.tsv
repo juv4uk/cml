@@ -1,0 +1,20 @@
+# Evidence: CML exact upstream candidate compile run https://github.com/juv4uk/cml/actions/runs/38173957686 (142 compiler errors); error counts are compiler diagnostics, NOT 142 distinct root causes.
+# Canon generated Rust file is attributed to build.rs source; do not edit generated output. Modern isolated transport green: https://github.com/juv4uk/cml/actions/runs/38175530790 (23 T5/9 F3).
+# Production dependency cannot be changed until all old CML references are resolved. No reintroduction of old numeric meaning or feature-hiding the compiler modules.
+path	observed_diagnostics	component	migration_action	required_proof	state
+src/ast.rs	1	compiler frontend	Replace retired legacy AST identity with SENS exact DomainIdentity and DomainCall; no numerical reinterpretation	Canonical typed AST, legacy rejected, current T5 program parsed	BLOCKED
+src/ir.rs	1	compiler IR	Keep verified exact-domain call and CML private mechanism distinct; drop raw legacy identity as authority	DomainCall and VerifiedCurrentRegistry integration parity	BLOCKED
+build.rs -> target/.../canon_spellings.rs	1	source generator	Stop producing retired eight-bit identity dependencies; consume proven current SENS compiler export	Generated typed domain registry, no surface meaning inference	BLOCKED
+src/core_profile.rs	1	request provenance	Replace old SID profile request with current domain+source revision+law digest	Cross-width collision and stale pin fail-closed	BLOCKED
+src/upstream_sid_bridge.rs	2	legacy source intake	Remove byte-SID semantic ownership from current path; route exact domain words through SENS parser	Legacy input fails, ratified DomainCall succeeds	BLOCKED
+src/native_baseline.rs	2	native baseline	Bind only verified CML mechanisms after SENS semantic admission	SENS-vs-native oracle positive and negative	BLOCKED
+src/numeric_specialization.rs	3	numeric specialization	Select arithmetic operations only from verified domain/exact-number contract	No guessed coordinates; exact arithmetic parity	BLOCKED
+src/lisp_asm_vertical.rs	4	assembly source	Consume current exact domain result and reject removed byte identities	Bytes and semantic negative cases on real substrate	BLOCKED
+src/x86_lir.rs	4	x86 LIR	Translate verified CML mechanism IR, not raw language identity byte	Machine IR roundtrip and emulator oracle	BLOCKED
+src/canon.rs	9	canon/registry	Remove legacy generated SID dispatch from current semantic route	Unambiguous domain identity and source-provenance proof	BLOCKED
+src/coverage.rs	10	coverage	Replace SID coverage counts with exact domain-role coordinates from SENS export	Coverage exact 9 current compiler roles, no hidden aliases	BLOCKED
+src/semantic.rs	13	semantic layer	Remove eight-bit assumptions and replace with SENS verified semantic inputs	Canonical D3/D4 control, exact width negative tests	BLOCKED
+src/compute.rs	15	compute substrate	Consume verified backend mechanisms only, independent of source encoding	T5/F3 same SENS program -> backend parity	BLOCKED
+src/compiler.rs	15	code generator	Route verified CML modern IR instead of retired SID special casing	Exact DomainCall compiler corpus, no address remap	BLOCKED
+src/c_backend.rs	24	C backend	Switch 24 source-level SID-dependent sites to verified private mechanism IR	Native C output matches SENS evaluator	BLOCKED
+src/x86_freestanding.rs	37	x86 freestanding backend	Replace 37 source-level old SID references with derived mechanism/IR	x86 real-run and differential oracle parity	BLOCKED
