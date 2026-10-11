@@ -14,6 +14,7 @@ mod shared_current_exact_model;
 pub use shared_current_exact_model::{
     quoted_data, lower, CmlMechanism, ExactQuotedData, ModernAst, ModernIr,
     ModernLowerError, VerifiedProgramIr, VerifiedRole, exact_call, verified_role,
+    lower_canonical_t5_bytes,
 };
 
 mod generated {
@@ -61,17 +62,14 @@ pub fn compiler_registry() -> Result<Vec<VerifiedRole>, ModernLowerError> {
 pub fn lower_verified_program(program: &VerifiedPhysicalProgram)
     -> Result<VerifiedProgramIr, ModernLowerError>
 {
-    let read = sens::parse_canonical_binary(&program.exact_source)
+    // The carrier's *physical* T5, not caller-provided exact_source metadata,
+    // is the authority. Reject a forged pair where source and bytes differ.
+    let actual_source = sens::open_ternary_program(&program.canonical_t5)
         .map_err(|_| ModernLowerError::InvalidCanonicalSource)?;
-    if read.is_empty() { return Err(ModernLowerError::NoExecutableRoot); }
-    let lowered = sens::lower_program(&read);
-    let ast = lowered.iter().map(|node| exact_call(node, 0))
-        .collect::<Result<Vec<_>, _>>()?;
-    let ir = ast.iter().map(lower).collect::<Result<Vec<_>, _>>()?;
-    Ok(VerifiedProgramIr {
-        ast, ir,
-        canonical_t5_sha256: sens::sha256_source(&program.canonical_t5),
-    })
+    if actual_source != program.exact_source {
+        return Err(ModernLowerError::InvalidCanonicalSource);
+    }
+    lower_canonical_t5_bytes(&program.canonical_t5)
 }
 
 #[cfg(test)]
