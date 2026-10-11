@@ -12,26 +12,12 @@ use crate::VerifiedPhysicalProgram;
 #[path = "../../../src/current_exact_model.rs"]
 mod shared_current_exact_model;
 pub use shared_current_exact_model::{
-    CmlMechanism, ExactQuotedData, ModernAst, ModernIr, VerifiedProgramIr, VerifiedRole,
+    quoted_data, lower, CmlMechanism, ExactQuotedData, ModernAst, ModernIr,
+    ModernLowerError, VerifiedProgramIr, VerifiedRole,
 };
 
 mod generated {
     include!(concat!(env!("OUT_DIR"), "/sens_compiler_candidates.rs"));
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ModernLowerError {
-    InvalidCanonicalSource,
-    NoExecutableRoot,
-    NonCallableHead,
-    UnsupportedLiteral,
-    UnsupportedForm,
-    InvalidArity,
-    InvalidConditionClause,
-    StructuralDepthExceeded,
-    UnverifiedCompilerRole,
-    InvalidCompilerAuthority,
-    InvalidGeneratedCorpus,
 }
 
 fn verified_role(identity: CoreDomainIdentity) -> Result<VerifiedRole, ModernLowerError> {
@@ -98,22 +84,6 @@ pub fn compiler_registry() -> Result<Vec<VerifiedRole>, ModernLowerError> {
     Ok(registry)
 }
 
-fn quoted_data(source: &Expr, depth: usize) -> Result<ExactQuotedData, ModernLowerError> {
-    if depth > 128 { return Err(ModernLowerError::StructuralDepthExceeded); }
-    match &source.kind {
-        ExprKind::List(items) if items.is_empty() => Ok(ExactQuotedData::EmptyList),
-        ExprKind::List(items) => Ok(ExactQuotedData::ProperList(items.iter()
-            .map(|x| quoted_data(x, depth + 1))
-            .collect::<Result<Vec<_>, _>>()?)),
-        ExprKind::DomainIdentity(id) => Ok(ExactQuotedData::DomainWord(*id)),
-        ExprKind::Pair(a, b) => Ok(ExactQuotedData::DottedPair(
-            Box::new(quoted_data(a, depth + 1)?),
-            Box::new(quoted_data(b, depth + 1)?),
-        )),
-        _ => Err(ModernLowerError::UnsupportedLiteral),
-    }
-}
-
 fn exact_call(source: &Expr, depth: usize) -> Result<ModernAst, ModernLowerError> {
     if depth > 128 { return Err(ModernLowerError::StructuralDepthExceeded); }
     match &source.kind {
@@ -167,34 +137,6 @@ fn exact_call(source: &Expr, depth: usize) -> Result<ModernAst, ModernLowerError
         // inventing a callable identity ("(((0)))" is not an executable call).
         ExprKind::List(_) => Err(ModernLowerError::NonCallableHead),
         _ => Err(ModernLowerError::UnsupportedLiteral),
-    }
-}
-
-fn lower(ast: &ModernAst) -> Result<ModernIr, ModernLowerError> {
-    match ast {
-        ModernAst::Literal(data) => Ok(ModernIr::Literal(data.clone())),
-        ModernAst::Quote {binding, data} => Ok(ModernIr::Quote {
-            binding: binding.clone(), data: data.clone()
-        }),
-        ModernAst::Call {binding, args} => {
-            let target = match binding.role {
-                CompilerLoweringRole::AtomPredicate => CmlMechanism::AtomPredicate,
-                CompilerLoweringRole::SelectorHead => CmlMechanism::Head,
-                CompilerLoweringRole::SelectorTail => CmlMechanism::Tail,
-                CompilerLoweringRole::AtomEquality => CmlMechanism::AtomEquality,
-                CompilerLoweringRole::PairConstruct => CmlMechanism::PairConstruct,
-                _ => return Err(ModernLowerError::UnsupportedForm),
-            };
-            Ok(ModernIr::Mechanism {
-                binding: binding.clone(), target,
-                args: args.iter().map(lower).collect::<Result<Vec<_>, _>>()?,
-            })
-        }
-        ModernAst::Conditional {binding, branches} => Ok(ModernIr::Conditional {
-            binding: binding.clone(),
-            branches: branches.iter().map(|(x, y)| Ok((lower(x)?, lower(y)?)))
-                .collect::<Result<Vec<_>, ModernLowerError>>()?,
-        }),
     }
 }
 
