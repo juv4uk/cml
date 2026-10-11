@@ -619,8 +619,80 @@ fn collect_surfaces(root: &[Sexp], ids: &[&str]) -> (Vec<String>, Vec<String>) {
     (upper_surfaces, exact_surfaces)
 }
 
+/// Stage the *current* domain identity coordinates from SENS's own ratified
+/// compiler fixture corpus. This is intentionally separate from the retained
+/// historical Canon generator below: its 8-bit IDs MUST NOT be projected
+/// into domain meanings or silently repurposed.
+///
+/// An older production SENS gitlink may have no such fixture. In that case
+/// emit a clearly unavailable/empty coordinate table; a modern consumer
+/// must reject it, never guess a mapping from the historical table.
+fn generate_exact_domain_candidates(manifest_dir: &std::path::Path, out_dir: &std::path::Path) {
+    let corpus = manifest_dir.join(
+        "external/sens/contracts/compiler-nucleus-identity-corpus-v1.tsv",
+    );
+    println!("cargo:rerun-if-changed={}", corpus.display());
+    let output = out_dir.join("sens_current_compiler_candidates.rs");
+    let Some(source) = std::fs::read_to_string(&corpus).map(Some).unwrap_or_else(|err| {
+        if err.kind() == std::io::ErrorKind::NotFound {
+            None
+        } else {
+            panic!("BLOCK: cannot read current SENS domain corpus: {err}");
+        }
+    }) else {
+        std::fs::write(
+            &output,
+            "// Current SENS fixture corpus absent from historical production pin.\n\
+             pub const SENS_CURRENT_DOMAIN_CORPUS_AVAILABLE: bool = false;\n\
+             pub const SENS_CURRENT_COMPILER_COORDINATES: &[(&str, &str, &str)] = &[];\n",
+        ).expect("BLOCK: cannot write unavailable modern-domain coordinate sentinel");
+        return;
+    };
+
+    let mut seen = BTreeSet::<(String, String)>::new();
+    let mut rows = Vec::<(String, String, String)>::new();
+    let mut d3 = 0usize;
+    let mut d4 = 0usize;
+    for (line_number, line) in source.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let cols = line.split('\t').collect::<Vec<_>>();
+        assert!(cols.len() == 3, "BLOCK: invalid SENS fixture TSV at line {}", line_number+1);
+        let (fixture, domain, bits) = (cols[0], cols[1], cols[2]);
+        let width = match domain {
+            "D3" => { d3 += 1; 3 },
+            "D4" => { d4 += 1; 4 },
+            _ => panic!("BLOCK: unexpected domain in compiler fixture"),
+        };
+        assert!(bits.len() == width && bits.bytes().all(|b| b == b'0' || b == b'1'),
+            "BLOCK: non-canonical exact-width compiler coordinate");
+        assert!(fixture == format!("nucleus-{}-{bits}", domain.to_ascii_lowercase()),
+            "BLOCK: source-owned compiler fixture name mismatch");
+        assert!(seen.insert((domain.to_owned(), bits.to_owned())),
+            "BLOCK: duplicate exact domain coordinate");
+        rows.push((fixture.to_owned(), domain.to_owned(), bits.to_owned()));
+    }
+    assert!(rows.len() == 9 && d3 == 7 && d4 == 2,
+        "BLOCK: current D3/D4 nine-role coordinate closure has changed");
+    let mut body = String::from(
+        "// GENERATED: SENS-owned exact candidate COORDINATES, never roles/semantics.\n\
+         pub const SENS_CURRENT_DOMAIN_CORPUS_AVAILABLE: bool = true;\n\
+         pub const SENS_CURRENT_COMPILER_COORDINATES: &[(&str, &str, &str)] = &[\n",
+    );
+    for (fixture, domain, bits) in rows {
+        body.push_str(&format!("    ({fixture:?}, {domain:?}, {bits:?}),\n"));
+    }
+    body.push_str("];\n");
+    std::fs::write(&output, body)
+        .expect("BLOCK: cannot write current compiler domain candidate projection");
+}
+
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set");
+    let current_out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR must be set"));
+    generate_exact_domain_candidates(std::path::Path::new(&manifest_dir), &current_out_dir);
     // #84 build-source channel: semantic build inputs come from the
     // external/sens gitlink, never from the observed-current sibling checkout.
     let mut registry_path = PathBuf::from(&manifest_dir)
