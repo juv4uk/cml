@@ -17,8 +17,7 @@ use crate::compiler_mechanism::RichCompilerMechanismRef;
 // Ir::Sid route until all legacy lowering/backends are migrated and tested.
 #[cfg(feature = "core1-t5-candidate")]
 pub use crate::current_exact_model::{
-    CmlMechanism, ModernIr, VerifiedProgramIr,
-    lower as lower_verified_modern_ast,
+    CmlMechanism, ModernIr, VerifiedProgramIr, lower as lower_verified_modern_ast,
 };
 
 /// A fully self-contained literal produced by `quote` -- data, never
