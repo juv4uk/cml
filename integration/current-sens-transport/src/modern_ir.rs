@@ -8,6 +8,13 @@ use sens::syntax::{Expr, ExprKind};
 
 use crate::VerifiedPhysicalProgram;
 
+// The same Rust SOURCE defines the modern root CML AST/IR and candidate types.
+#[path = "../../../src/current_exact_model.rs"]
+mod shared_current_exact_model;
+pub use shared_current_exact_model::{
+    CmlMechanism, ExactQuotedData, ModernAst, ModernIr, VerifiedProgramIr, VerifiedRole,
+};
+
 mod generated {
     include!(concat!(env!("OUT_DIR"), "/sens_compiler_candidates.rs"));
 }
@@ -25,17 +32,6 @@ pub enum ModernLowerError {
     UnverifiedCompilerRole,
     InvalidCompilerAuthority,
     InvalidGeneratedCorpus,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VerifiedRole {
-    pub identity: CoreDomainIdentity,
-    pub role: CompilerLoweringRole,
-    pub law_ref: &'static str,
-    pub proof_ref: &'static str,
-    pub authority_path: &'static str,
-    pub authority_sha256: String,
-    pub contract_version: &'static str,
 }
 
 fn verified_role(identity: CoreDomainIdentity) -> Result<VerifiedRole, ModernLowerError> {
@@ -102,14 +98,6 @@ pub fn compiler_registry() -> Result<Vec<VerifiedRole>, ModernLowerError> {
     Ok(registry)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExactQuotedData {
-    EmptyList,
-    DomainWord(DomainIdentity),
-    ProperList(Vec<ExactQuotedData>),
-    DottedPair(Box<ExactQuotedData>, Box<ExactQuotedData>),
-}
-
 fn quoted_data(source: &Expr, depth: usize) -> Result<ExactQuotedData, ModernLowerError> {
     if depth > 128 { return Err(ModernLowerError::StructuralDepthExceeded); }
     match &source.kind {
@@ -124,31 +112,6 @@ fn quoted_data(source: &Expr, depth: usize) -> Result<ExactQuotedData, ModernLow
         )),
         _ => Err(ModernLowerError::UnsupportedLiteral),
     }
-}
-
-/// Intermediate syntax owned by CML: every call includes a SENS-verified
-/// compiler-law proof, and a quoted payload is never recursively executed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ModernAst {
-    Literal(ExactQuotedData),
-    Quote { binding: VerifiedRole, data: ExactQuotedData },
-    Call { binding: VerifiedRole, args: Vec<ModernAst> },
-    Conditional { binding: VerifiedRole, branches: Vec<(ModernAst, ModernAst)> },
-}
-
-/// Target mechanisms are CML-private, selected from ALREADY SENS-verified
-/// lowering roles. No CML table associates numeric domain codes with meaning.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CmlMechanism {
-    AtomPredicate, Head, Tail, AtomEquality, PairConstruct,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ModernIr {
-    Literal(ExactQuotedData),
-    Quote { binding: VerifiedRole, data: ExactQuotedData },
-    Mechanism { binding: VerifiedRole, target: CmlMechanism, args: Vec<ModernIr> },
-    Conditional { binding: VerifiedRole, branches: Vec<(ModernIr, ModernIr)> },
 }
 
 fn exact_call(source: &Expr, depth: usize) -> Result<ModernAst, ModernLowerError> {
@@ -233,15 +196,6 @@ fn lower(ast: &ModernAst) -> Result<ModernIr, ModernLowerError> {
                 .collect::<Result<Vec<_>, ModernLowerError>>()?,
         }),
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VerifiedProgramIr {
-    /// Every leaf is an exact D1 value or a quoted D1..D9 word/structure.
-    /// Callable nodes have verified proof/ref and a CML-private mechanism.
-    pub ast: Vec<ModernAst>,
-    pub ir: Vec<ModernIr>,
-    pub canonical_t5_sha256: [u8; 32],
 }
 
 /// Use only already-verified T5 bytes (from either explicit physical route).
