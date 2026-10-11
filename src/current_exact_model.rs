@@ -100,13 +100,29 @@ pub fn quoted_data(source: &Expr, depth: usize) -> Result<ExactQuotedData, Moder
     }
 }
 
+/// Revalidate even caller-created AST bindings before producing CML target IR.
+/// A public VerifiedRole value is just data until its law/proof/authority digest
+/// matches a fresh SENS-owned executable compiler semantic request.
+fn verify_ast_binding(binding: &VerifiedRole) -> Result<(), ModernLowerError> {
+    let proven = verified_role(binding.identity)?;
+    if &proven != binding {
+        return Err(ModernLowerError::InvalidCompilerAuthority);
+    }
+    Ok(())
+}
+
 pub fn lower(ast: &ModernAst) -> Result<ModernIr, ModernLowerError> {
     match ast {
         ModernAst::Literal(data) => Ok(ModernIr::Literal(data.clone())),
-        ModernAst::Quote {binding, data} => Ok(ModernIr::Quote {
-            binding: binding.clone(), data: data.clone()
-        }),
+        ModernAst::Quote {binding, data} => {
+            verify_ast_binding(binding)?;
+            if binding.role != CompilerLoweringRole::QuoteForm {
+                return Err(ModernLowerError::InvalidCompilerAuthority);
+            }
+            Ok(ModernIr::Quote { binding: binding.clone(), data: data.clone() })
+        },
         ModernAst::Call {binding, args} => {
+            verify_ast_binding(binding)?;
             let target = match binding.role {
                 CompilerLoweringRole::AtomPredicate => CmlMechanism::AtomPredicate,
                 CompilerLoweringRole::SelectorHead => CmlMechanism::Head,
@@ -120,11 +136,17 @@ pub fn lower(ast: &ModernAst) -> Result<ModernIr, ModernLowerError> {
                 args: args.iter().map(lower).collect::<Result<Vec<_>, _>>()?,
             })
         }
-        ModernAst::Conditional {binding, branches} => Ok(ModernIr::Conditional {
-            binding: binding.clone(),
-            branches: branches.iter().map(|(x, y)| Ok((lower(x)?, lower(y)?)))
-                .collect::<Result<Vec<_>, ModernLowerError>>()?,
-        }),
+        ModernAst::Conditional {binding, branches} => {
+            verify_ast_binding(binding)?;
+            if binding.role != CompilerLoweringRole::CondForm {
+                return Err(ModernLowerError::InvalidCompilerAuthority);
+            }
+            Ok(ModernIr::Conditional {
+                binding: binding.clone(),
+                branches: branches.iter().map(|(x, y)| Ok((lower(x)?, lower(y)?)))
+                    .collect::<Result<Vec<_>, ModernLowerError>>()?,
+            })
+        },
     }
 }
 
