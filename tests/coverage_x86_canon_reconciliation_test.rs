@@ -1,133 +1,53 @@
-use sens::Sid8;
+//! Historical native x86 witnesses remain mechanism evidence only.
+//! A matching English name or retired byte address cannot authorize a new
+//! ratified D3/D4 semantic identity; that proof comes from SENS's law.
 use std::fs;
+use cml::coverage::CoverageLedger;
 
-use cml::canon::find_operation_by_id;
-use cml::coverage::{BackendEvidenceState, CoverageLedger};
-
-const EXPECTED: &[(sens::Sid8, &str, BackendEvidenceState)] = &[
-    (
-        sens::sid!(00000001),
-        "quote",
-        BackendEvidenceState::Executable,
-    ),
-    (
-        sens::sid!(00000010),
-        "atom",
-        BackendEvidenceState::AssemblyWitness,
-    ),
-    (sens::sid!(00000011), "eq", BackendEvidenceState::Executable),
-    (
-        sens::sid!(00000100),
-        "cons",
-        BackendEvidenceState::Executable,
-    ),
-    (
-        sens::sid!(00000101),
-        "car",
-        BackendEvidenceState::AssemblyWitness,
-    ),
-    (
-        sens::sid!(00000110),
-        "cdr",
-        BackendEvidenceState::AssemblyWitness,
-    ),
-    (
-        sens::sid!(00000111),
-        "cond",
-        BackendEvidenceState::Executable,
-    ),
+const HISTORICAL_X86_WITNESSES: &[(&str, &str)] = &[
+    ("quote", "compiler_corpus_quote_radio_returns_the_interned_symbol"),
+    ("atom", "primitive_slice_uses_only_ratified_runtime_imports"),
+    ("eq", "compiler_corpus_eq_on_matching_and_differing_quoted_symbols"),
+    ("cons", "frozen_cons_fixture_is_deterministic_and_assembles"),
+    ("car", "primitive_slice_uses_only_ratified_runtime_imports"),
+    ("cdr", "primitive_slice_uses_only_ratified_runtime_imports"),
+    ("cond", "standalone_cond_true_false_branch_selection_witness"),
 ];
 
 fn read_repo(path: &str) -> String {
-    fs::read_to_string(path).unwrap_or_else(|error| panic!("must read {path}: {error}"))
+    fs::read_to_string(path).unwrap_or_else(|e| panic!("must read {path}: {e}"))
 }
 
 fn x86_section(matrix: &str) -> &str {
-    let start = matrix
-        .find("(x86-freestanding")
-        .expect("capability matrix must contain x86-freestanding");
+    let start = matrix.find("(x86-freestanding")
+        .expect("capability matrix needs x86-freestanding");
     let tail = &matrix[start..];
-    let end = tail
-        .find("\n\n\n ; Global")
-        .or_else(|| tail.find("\n\n ; Global"))
+    let end = tail.find("\n\n\n ; Global").or_else(|| tail.find("\n\n ; Global"))
         .expect("x86 section must end before global admission");
     &tail[..end]
 }
 
 #[test]
-fn x86_canon_evidence_reconciles_matrix_ledger_and_pushed_witnesses() {
+fn historical_native_witnesses_still_exist_but_are_not_current_sens_evidence() {
     let matrix = read_repo("capability-matrix.lisp");
     let x86 = x86_section(&matrix);
-    let witness_source = read_repo("tests/x86_freestanding_test.rs");
-    let ledger = CoverageLedger::build_source();
-
-    let mut x86_rows = 0usize;
-    for (semantic_id, capability_key, expected_state) in EXPECTED {
-        let operation = find_operation_by_id(*semantic_id)
-            .unwrap_or_else(|| panic!("Canon operation {semantic_id} must exist"));
-        assert!(
-            x86.contains(&format!("({capability_key} . supported)")),
-            "x86 capability matrix must keep capability {capability_key} supported while Canon operation {} has x86 evidence",
-            operation.canonical_name
-        );
-
-        let row = ledger
-            .row(*semantic_id)
-            .unwrap_or_else(|| panic!("ledger row {semantic_id} must exist"));
-        let evidence: Vec<_> = row
-            .backend_evidence
-            .iter()
-            .filter(|e| e.backend == "x86-freestanding")
-            .collect();
-        assert_eq!(
-            evidence.len(),
-            1,
-            "{semantic_id} must have exactly one bounded x86 evidence classification"
-        );
-        let evidence = evidence[0];
-        assert_eq!(
-            evidence.state, *expected_state,
-            "{semantic_id} x86 evidence class must not be upgraded implicitly"
-        );
-        assert!(
-            x86.contains(&format!("({capability_key} . {:?})", evidence.evidence)),
-            "capability matrix must own the same named evidence as the ledger for capability {capability_key} / Canon {}",
-            operation.canonical_name
-        );
-
-        let (_, tests) = evidence
-            .evidence
-            .split_once(": ")
-            .expect("evidence must be path: test-name(s)");
-        for test_name in tests.split("; ") {
-            assert!(
-                witness_source.contains(&format!("fn {test_name}(")),
-                "named x86 witness {test_name} must exist in pushed test source"
-            );
-        }
-        x86_rows += 1;
+    let test_source = read_repo("tests/x86_freestanding_test.rs");
+    for &(legacy_surface, witness) in HISTORICAL_X86_WITNESSES {
+        assert!(x86.contains(&format!("({legacy_surface} . supported)")));
+        assert!(x86.contains(witness), "the historical matrix lost {legacy_surface} evidence");
+        assert!(test_source.contains(&format!("fn {witness}(")),
+            "historical test witness disappeared: {witness}");
     }
-
-    let actual_x86_rows = ledger
-        .rows
-        .iter()
-        .filter(|row| {
-            row.backend_evidence
-                .iter()
-                .any(|e| e.backend == "x86-freestanding")
-        })
-        .count();
-    assert_eq!(x86_rows, EXPECTED.len());
-    assert!(
-        actual_x86_rows >= x86_rows,
-        "later evidence-backed x86 slices may add rows, but must not remove the seven Canon-core rows"
-    );
+    let current = CoverageLedger::try_current_sens().unwrap();
+    assert_eq!(current.rows.len(), 9);
+    assert!(current.rows.iter().all(|row| row.backend_evidence.is_empty()),
+        "legacy native witness cannot grant current domain native execution");
 }
 
 #[test]
-fn x86_summary_distinguishes_executable_from_assembly_only() {
-    let summary = CoverageLedger::build_source().summary();
-
-    assert_eq!(summary.x86_executable, 4);
-    assert_eq!(summary.x86_assembly_witness_only, 3);
+fn current_exact_domain_summary_never_infers_native_execution_from_historical_name() {
+    let summary = CoverageLedger::try_current_sens().unwrap().summary();
+    assert_eq!(summary.x86_executable, 0);
+    assert_eq!(summary.x86_assembly_witness_only, 0);
+    assert_eq!(summary.x86_representation_limited, 0);
 }
