@@ -31,7 +31,10 @@ fn main() {
     println!("schema\tcml-coverage/2");
     println!("upstream-channel\t{}", ledger.upstream_channel);
     println!("authority-sha256\t{}", ledger.authority_sha256);
-    println!("compiler-role-identities\t{}", summary.compiler_role_identities);
+    println!(
+        "compiler-role-identities\t{}",
+        summary.compiler_role_identities
+    );
     println!("source-admitted\t{}", summary.source_admitted);
     println!("not-yet-admitted\t{}", summary.not_yet_admitted);
     println!("x86-executable\t{}", summary.x86_executable);
@@ -43,7 +46,9 @@ fn main() {
         "x86-representation-limited\t{}",
         summary.x86_representation_limited
     );
-    println!("columns\tdomain-identity\tcompiler-role\tadmission\toperation-status\tproof-ref\tbackend-evidence");
+    println!(
+        "columns\tdomain-identity\tcompiler-role\tadmission\toperation-status\tproof-ref\tbackend-evidence"
+    );
 
     for row in &ledger.rows {
         let admission = match row.admission {
