@@ -12,10 +12,10 @@ pub mod compute;
 pub mod core_profile;
 // Modern SENS proof-carrying AST/IR types are admitted only on candidate.
 // Historical pinned production continues to use its unmodified old modules.
-#[cfg(feature = "core1-t5-candidate")]
-pub mod current_exact_model;
 pub mod coverage;
 pub mod cpu_profile;
+#[cfg(feature = "core1-t5-candidate")]
+pub mod current_exact_model;
 pub mod elf64;
 pub mod exact_q_rep;
 pub mod execution;
