@@ -28,8 +28,8 @@ fn compile_request(identity: sens::DomainIdentity) -> ProfileCompileRequest {
 #[test]
 fn production_profile_compiles_against_exact_domain_identity() {
     let request = compile_request(d3_eq());
-    assert_eq!(request.semantic_id.width(), 3);
-    assert_eq!(request.semantic_id.packed_bits(), 0b101);
+    assert_eq!(request.domain_identity.width(), 3);
+    assert_eq!(request.domain_identity.packed_bits(), 0b101);
     assert_eq!(request.core_profile, CoreProfile::Core1);
     println!("CML_PRODUCTION_CORE_PROFILE_MODERN_PASS exact_D3_101=true");
 }
@@ -46,7 +46,7 @@ fn exact_same_numeric_payload_in_two_domains_does_not_collapse() {
     assert_ne!(d3.width(), d4.width());
     let a = compile_request(d3);
     let b = compile_request(d4);
-    assert_ne!(a.semantic_id, b.semantic_id);
+    assert_ne!(a.domain_identity, b.domain_identity);
     assert_ne!(a, b);
     println!("CML_PRODUCTION_PROFILE_WIDTH_COLLISION_REJECTED d3_001_d4_0001");
 }
