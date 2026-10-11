@@ -6,7 +6,6 @@ fn exact_d3_equality() -> sens::DomainIdentity {
     sens::DomainIdentity::D3(sens::Bija3::from_word(sens::Bit3::new(0b101).unwrap()))
 }
 
-
 #[test]
 fn same_exact_domain_identity_can_request_distinct_core_laws() {
     let eq_identity = exact_d3_equality();
@@ -136,22 +135,24 @@ fn core_profile_roundtrip_is_byte_stable_for_artifact_metadata() {
 
 #[test]
 fn equal_payload_with_different_domain_width_is_never_one_identity() {
-    let d3 = sens::DomainIdentity::D3(
-        sens::Bija3::from_word(sens::Bit3::new(0b001).unwrap())
-    );
-    let d4 = sens::DomainIdentity::D4(
-        sens::CoreD4::from_word(sens::Bit4::new(0b0001).unwrap())
-    );
+    let d3 = sens::DomainIdentity::D3(sens::Bija3::from_word(sens::Bit3::new(0b001).unwrap()));
+    let d4 = sens::DomainIdentity::D4(sens::CoreD4::from_word(sens::Bit4::new(0b0001).unwrap()));
     assert_eq!(d3.packed_bits(), d4.packed_bits());
     assert_ne!(d3.width(), d4.width());
     assert_ne!(d3, d4);
 
-    let request = |id| ProfileCompileRequest::new(
-        id, CoreProfile::Core1,
-        "0123456789abcdef0123456789abcdef01234567",
-        "contracts/current/domain-call-law.lisp", "sha256:pinned-law",
-        "x86_64", "wsm-value-abi/v1"
-    ).unwrap();
+    let request = |id| {
+        ProfileCompileRequest::new(
+            id,
+            CoreProfile::Core1,
+            "0123456789abcdef0123456789abcdef01234567",
+            "contracts/current/domain-call-law.lisp",
+            "sha256:pinned-law",
+            "x86_64",
+            "wsm-value-abi/v1",
+        )
+        .unwrap()
+    };
     assert_ne!(request(d3).domain_identity, request(d4).domain_identity);
     assert_ne!(request(d3), request(d4));
 }
