@@ -25,6 +25,25 @@ fn candidate_fixture() -> Vec<u8> {
 }
 
 #[test]
+fn verified_tiny_f3_transport_and_execution_without_compiler_authority() {
+    let raw = candidate_fixture();
+    let framed = sens::frame3_small::encode_explicit_small_f3(&raw)
+        .expect("original F3 encode must validate the exact SENS D2/D3")
+        .expect("tiny physical F3 saves one real byte");
+    assert_eq!(framed, QUOTE_F3);
+    let back = sens::frame3_small::decode_explicit_small_f3(&framed)
+        .expect("strict original F3 requires exact carrier and SENS canonical reader");
+    assert_eq!(raw, back);
+    let baseline = sens::PhysicalT5Program::decode(&raw)
+        .unwrap().execute(&mut sens::Session::default()).unwrap();
+    let again = sens::PhysicalT5Program::decode(&back)
+        .unwrap().execute(&mut sens::Session::default()).unwrap();
+    assert_eq!(baseline.value, again.value);
+    assert_eq!(baseline.output, again.output);
+    println!("CML_CANDIDATE_F3_TRANSPORT_PASS sens_sha={TESTED_SENS_SHA} t5=4 f3=3 exact_eval=true");
+}
+
+#[test]
 fn original_frame3_and_t5_lower_into_same_verified_cml_ir() {
     let baseline = candidate_fixture();
     let framed = sens::frame3_small::encode_explicit_small_f3(&baseline)
