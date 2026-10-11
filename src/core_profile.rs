@@ -1,11 +1,11 @@
 //! Core-profile compiler request provenance.
 //!
-//! CML owns compilation mechanism, not language-law selection. A semantic SID
-//! therefore cannot be sufficient input for profile-sensitive compilation.
-//! This module carries an explicit Core profile and exact upstream law
-//! provenance without defining any SID -> meaning or Core -> meaning table.
+//! CML owns compilation mechanism, not language-law selection.
+//! The request carries an exact Dn-qualified SENS identity, Core profile,
+//! and immutable upstream law provenance. Numeric payload alone is NEVER
+//! an identity, and this module does not derive domain meaning or callability.
 
-use sens::Sid8;
+use sens::DomainIdentity;
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -51,7 +51,7 @@ impl FromStr for CoreProfile {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProfileCompileRequest {
-    pub semantic_id: Sid8,
+    pub semantic_id: DomainIdentity,
     pub core_profile: CoreProfile,
     pub upstream_commit: String,
     pub upstream_law_ref: String,
@@ -63,7 +63,7 @@ pub struct ProfileCompileRequest {
 impl ProfileCompileRequest {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        semantic_id: Sid8,
+        semantic_id: DomainIdentity,
         core_profile: CoreProfile,
         upstream_commit: impl Into<String>,
         upstream_law_ref: impl Into<String>,
