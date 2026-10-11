@@ -28,10 +28,10 @@ fn main() {
     let ledger = CoverageLedger::build_source();
     let summary = ledger.summary();
 
-    println!("schema\tcml-coverage/1");
+    println!("schema\tcml-coverage/2");
     println!("upstream-channel\t{}", ledger.upstream_channel);
-    println!("registry-fnv1a64\t{:016x}", ledger.registry_digest_fnv1a64);
-    println!("semantic-identities\t{}", summary.semantic_identities);
+    println!("authority-sha256\t{}", ledger.authority_sha256);
+    println!("compiler-role-identities\t{}", summary.compiler_role_identities);
     println!("source-admitted\t{}", summary.source_admitted);
     println!("not-yet-admitted\t{}", summary.not_yet_admitted);
     println!("x86-executable\t{}", summary.x86_executable);
@@ -43,7 +43,7 @@ fn main() {
         "x86-representation-limited\t{}",
         summary.x86_representation_limited
     );
-    println!("columns\tsemantic-id\tadmission\toperation-status\tevidence\tbackend-evidence");
+    println!("columns\tdomain-identity\tcompiler-role\tadmission\toperation-status\tproof-ref\tbackend-evidence");
 
     for row in &ledger.rows {
         let admission = match row.admission {
@@ -75,12 +75,15 @@ fn main() {
         };
 
         println!(
-            "row\t{}\t{}\t{}\t{}\t{}",
-            row.semantic_id,
+            "row\tD{}:{:0width$b}\t{:?}\t{}\t{}\t{}\t{}",
+            row.identity.width(),
+            row.identity.packed_bits(),
+            row.execution_role,
             admission,
             field(operation_status),
             evidence,
-            backend_evidence
+            backend_evidence,
+            width = row.identity.width() as usize
         );
     }
 }
