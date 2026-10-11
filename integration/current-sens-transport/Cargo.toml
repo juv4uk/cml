@@ -9,3 +9,12 @@ publish = false
 # removed Sid8 symbols). NOT a production dependency or alternate language law.
 [dependencies]
 sens = { path = "../../external/sens/crates/sens" }
+
+# Exercise actual root CML LIR/backend mechanics against modern pinned SENS.
+# Keep separate from the lib test harness: its imported root files contain
+# unrelated historical unit tests that do not yet compile with current SENS.
+[[bin]]
+name = "verify_root_x86_lir"
+path = "src/bin/verify_root_x86_lir.rs"
+test = false
+bench = false
