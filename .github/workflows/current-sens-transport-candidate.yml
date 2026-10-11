@@ -47,6 +47,44 @@ jobs:
           grep -q CML_MODERN_DOMAIN_AUTHORITY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           test "$(git rev-parse HEAD:external/sens)" != "$SENS_CANDIDATE_SHA"
           echo CML_MODERN_BRIDGE_EXACT_CANDIDATE_PASS
+      - name: Build exact-domain consumer and verify ALL real T5 and selected F3 carriers
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path integration/current-sens-transport/Cargo.toml --bin verify_stage
+          (
+            cd external/sens
+            python3 scripts/prepare-two-codec-migration.py \
+              --stage "$RUNNER_TEMP/cml-tiny-stage" \
+              > "$RUNNER_TEMP/cml-tiny-manifest.json"
+            python3 scripts/prepare-two-codec-migration.py \
+              --verify-stage "$RUNNER_TEMP/cml-tiny-stage" \
+              > "$RUNNER_TEMP/cml-tiny-audit.json"
+          )
+          python3 - "$RUNNER_TEMP/cml-tiny-manifest.json" "$RUNNER_TEMP/cml-tiny-stage" <<'PY'
+          import json, subprocess, sys
+          from pathlib import Path
+          manifest=json.loads(Path(sys.argv[1]).read_text())
+          stage=Path(sys.argv[2])
+          executable=Path("integration/current-sens-transport/target/debug/verify_stage").resolve()
+          root=Path("external/sens").resolve()
+          t5_count=f3_count=0
+          for row in manifest["files"]:
+              source=root / row["source"]
+              subprocess.run([executable, "--t5", source], check=True)
+              t5_count+=1
+              if row["codec"] == "F3":
+                  f3=stage / row["staged_file"]
+                  subprocess.run([
+                      executable,"--f3",source,f3,row["staged_sha256"]
+                  ],check=True)
+                  f3_count+=1
+              elif row["codec"] != "T5":
+                  raise SystemExit(f"unknown staged codec: {row['codec']}")
+          if t5_count != manifest["source_files"] or t5_count != 23 or f3_count != 9:
+              raise SystemExit(f"regressed full staged corpus: T5={t5_count} F3={f3_count}")
+          print(f"CML_MODERN_STAGE_CORPUS_PASS source_t5={t5_count} selected_f3={f3_count}")
+          PY
       - name: Preserve positive and negative evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -55,5 +93,7 @@ jobs:
           path: |
             ${{ runner.temp }}/modern-sens-transport.log
             ${{ runner.temp }}/production-sens-gitlink.txt
+            ${{ runner.temp }}/cml-tiny-manifest.json
+            ${{ runner.temp }}/cml-tiny-audit.json
           if-no-files-found: warn
           retention-days: 30
