@@ -50,8 +50,8 @@ fn main() {
             AdmissionState::SourceAdmitted => "source-admitted",
             AdmissionState::NotYetAdmitted => "not-yet-admitted",
         };
-        let operation_status = row.operation_status.unwrap_or("-");
-        let evidence = row.evidence.map(field).unwrap_or_else(|| "-".to_string());
+        let operation_status = row.operation_status;
+        let evidence = field(row.evidence);
         let backend_evidence = if row.backend_evidence.is_empty() {
             "-".to_string()
         } else {
