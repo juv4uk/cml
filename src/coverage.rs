@@ -69,16 +69,18 @@ fn exact_identity(domain: &str, bits: &str) -> Result<CoreDomainIdentity, String
         other => return Err(format!("unratified compiler role domain {other}")),
     };
     if bits.len() != width || !bits.bytes().all(|c| c == b'0' || c == b'1') {
-        return Err(format!("noncanonical width-qualified compiler identity {domain}:{bits}"));
+        return Err(format!(
+            "noncanonical width-qualified compiler identity {domain}:{bits}"
+        ));
     }
     let raw = u8::from_str_radix(bits, 2)
         .map_err(|_| "unparseable binary compiler coordinate".to_string())?;
     match domain {
         "D3" => Ok(CoreDomainIdentity::D3(Bija3::from_word(
-            Bit3::new(raw).ok_or("invalid D3 coordinate")?
+            Bit3::new(raw).ok_or("invalid D3 coordinate")?,
         ))),
         "D4" => Ok(CoreDomainIdentity::D4(CoreD4::from_word(
-            Bit4::new(raw).ok_or("invalid D4 coordinate")?
+            Bit4::new(raw).ok_or("invalid D4 coordinate")?,
         ))),
         _ => unreachable!("width-validated D3/D4"),
     }
@@ -90,13 +92,17 @@ impl CoverageLedger {
     /// spellings, a historical 8-bit registry, or x86 legacy evidence.
     pub fn try_current_sens() -> Result<Self, String> {
         let authority_sha256 = sens::sha256_source(LANGUAGE_CONTRACT)
-            .iter().map(|b| format!("{b:02x}")).collect::<String>();
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
         let mut rows = Vec::new();
         let mut d3 = 0;
         let mut d4 = 0;
         for source_line in SOURCE_CORPUS.lines() {
             let line = source_line.trim();
-            if line.is_empty() || line.starts_with('#') { continue; }
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
             let parts: Vec<&str> = line.split('\t').collect();
             if parts.len() != 3 {
                 return Err("malformed source-owned compiler corpus".into());
@@ -106,7 +112,10 @@ impl CoverageLedger {
                 return Err("source-owned compiler fixture and domain disagree".into());
             }
             let identity = exact_identity(domain, bits)?;
-            if rows.iter().any(|row: &SemanticCoverageRow| row.identity == identity) {
+            if rows
+                .iter()
+                .any(|row: &SemanticCoverageRow| row.identity == identity)
+            {
                 return Err("duplicate exact compiler coordinate".into());
             }
             let record = sens::compiler_semantic_input_from_sens(identity)
@@ -122,7 +131,11 @@ impl CoverageLedger {
             {
                 return Err("SENS compiler-law authority/proof mismatch".into());
             }
-            if domain == "D3" { d3 += 1; } else { d4 += 1; }
+            if domain == "D3" {
+                d3 += 1;
+            } else {
+                d4 += 1;
+            }
             rows.push(SemanticCoverageRow {
                 identity,
                 execution_role: record.lowering_role,
@@ -154,17 +167,36 @@ impl CoverageLedger {
     }
 
     pub fn summary(&self) -> CoverageSummary {
-        let source_admitted = self.rows.iter()
-            .filter(|r| r.admission == AdmissionState::SourceAdmitted).count();
-        let x86_executable = self.rows.iter().flat_map(|r| &r.backend_evidence)
-            .filter(|e| e.backend == "x86-freestanding"
-                && e.state == BackendEvidenceState::Executable).count();
-        let x86_assembly_witness_only = self.rows.iter().flat_map(|r| &r.backend_evidence)
-            .filter(|e| e.backend == "x86-freestanding"
-                && e.state == BackendEvidenceState::AssemblyWitness).count();
-        let x86_representation_limited = self.rows.iter().flat_map(|r| &r.backend_evidence)
-            .filter(|e| e.backend == "x86-freestanding"
-                && e.state == BackendEvidenceState::ExecutableRepresentationLimited).count();
+        let source_admitted = self
+            .rows
+            .iter()
+            .filter(|r| r.admission == AdmissionState::SourceAdmitted)
+            .count();
+        let x86_executable = self
+            .rows
+            .iter()
+            .flat_map(|r| &r.backend_evidence)
+            .filter(|e| {
+                e.backend == "x86-freestanding" && e.state == BackendEvidenceState::Executable
+            })
+            .count();
+        let x86_assembly_witness_only = self
+            .rows
+            .iter()
+            .flat_map(|r| &r.backend_evidence)
+            .filter(|e| {
+                e.backend == "x86-freestanding" && e.state == BackendEvidenceState::AssemblyWitness
+            })
+            .count();
+        let x86_representation_limited = self
+            .rows
+            .iter()
+            .flat_map(|r| &r.backend_evidence)
+            .filter(|e| {
+                e.backend == "x86-freestanding"
+                    && e.state == BackendEvidenceState::ExecutableRepresentationLimited
+            })
+            .count();
         CoverageSummary {
             compiler_role_identities: self.rows.len(),
             source_admitted,
