@@ -4,6 +4,8 @@ on:
     branches: [master]
     paths:
       - "integration/current-sens-transport/**"
+      - "src/core_profile.rs"
+      - "tests/core_profile_request_test.rs"
       - ".github/workflows/current-sens-transport-candidate.yml"
   workflow_dispatch:
 permissions:
@@ -47,6 +49,8 @@ jobs:
           grep -q CML_MODERN_DOMAIN_AUTHORITY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           grep -q CML_MODERN_REGISTRY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           grep -q CML_MODERN_IR_PARITY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
+          grep -q CML_PRODUCTION_CORE_PROFILE_MODERN_PASS "$RUNNER_TEMP/modern-sens-transport.log"
+          grep -q CML_PRODUCTION_PROFILE_WIDTH_COLLISION_REJECTED "$RUNNER_TEMP/modern-sens-transport.log"
           test "$(git rev-parse HEAD:external/sens)" != "$SENS_CANDIDATE_SHA"
           echo CML_MODERN_BRIDGE_EXACT_CANDIDATE_PASS
       - name: Build exact-domain consumer and verify ALL real T5 and selected F3 carriers
