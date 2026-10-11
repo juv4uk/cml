@@ -1,11 +1,18 @@
 use cml::core_profile::{CoreProfile, ProfileCompileRequest, ProfileRequestError};
 
+// The identity is admitted by the current SENS D3 contract, not a conversion
+// of an old 8-bit address. Width is part of the typed value.
+fn exact_d3_equality() -> sens::DomainIdentity {
+    sens::DomainIdentity::D3(sens::Bija3::from_word(sens::Bit3::new(0b101).unwrap()))
+}
+
+
 #[test]
-fn same_sid_can_request_different_core_laws_without_identity_duplication() {
-    let sid = sens::sid!(00000011);
+fn same_exact_domain_identity_can_request_distinct_core_laws() {
+    let eq_identity = exact_d3_equality();
 
     let core1 = ProfileCompileRequest::new(
-        sid,
+        eq_identity,
         CoreProfile::Core1,
         "0123456789abcdef0123456789abcdef01234567",
         "contracts/core1/eq-historical.lisp",
@@ -16,7 +23,7 @@ fn same_sid_can_request_different_core_laws_without_identity_duplication() {
     .expect("complete Core1 provenance must be admitted as a request");
 
     let core4 = ProfileCompileRequest::new(
-        sid,
+        eq_identity,
         CoreProfile::Core4,
         "89abcdef0123456789abcdef0123456789abcdef",
         "contracts/core4/eq-identity-relation.lisp",
@@ -33,8 +40,8 @@ fn same_sid_can_request_different_core_laws_without_identity_duplication() {
 }
 
 #[test]
-fn profile_request_rejects_bare_sid_or_incomplete_upstream_provenance() {
-    let sid = sens::sid!(00000011);
+fn profile_request_rejects_incomplete_upstream_provenance() {
+    let eq_identity = exact_d3_equality();
 
     let cases = [
         ("", "contracts/core1/eq.lisp", "sha256:eq", "x86", "abi"),
@@ -71,7 +78,7 @@ fn profile_request_rejects_bare_sid_or_incomplete_upstream_provenance() {
     for (commit, law_ref, law_digest, target, abi) in cases {
         assert!(
             ProfileCompileRequest::new(
-                sid,
+                eq_identity,
                 CoreProfile::Core1,
                 commit,
                 law_ref,
@@ -88,7 +95,7 @@ fn profile_request_rejects_bare_sid_or_incomplete_upstream_provenance() {
 #[test]
 fn upstream_commit_must_be_an_exact_sha_not_a_moving_ref() {
     let err = ProfileCompileRequest::new(
-        sens::sid!(00000011),
+        exact_d3_equality(),
         CoreProfile::Core1,
         "main",
         "contracts/core1/eq.lisp",
@@ -125,4 +132,26 @@ fn core_profile_roundtrip_is_byte_stable_for_artifact_metadata() {
         assert_eq!(text.parse::<CoreProfile>().unwrap(), profile);
         assert_eq!(profile.as_str(), text);
     }
+}
+
+#[test]
+fn equal_payload_with_different_domain_width_is_never_one_identity() {
+    let d3 = sens::DomainIdentity::D3(
+        sens::Bija3::from_word(sens::Bit3::new(0b001).unwrap())
+    );
+    let d4 = sens::DomainIdentity::D4(
+        sens::CoreD4::from_word(sens::Bit4::new(0b0001).unwrap())
+    );
+    assert_eq!(d3.packed_bits(), d4.packed_bits());
+    assert_ne!(d3.width(), d4.width());
+    assert_ne!(d3, d4);
+
+    let request = |id| ProfileCompileRequest::new(
+        id, CoreProfile::Core1,
+        "0123456789abcdef0123456789abcdef01234567",
+        "contracts/current/domain-call-law.lisp", "sha256:pinned-law",
+        "x86_64", "wsm-value-abi/v1"
+    ).unwrap();
+    assert_ne!(request(d3).semantic_id, request(d4).semantic_id);
+    assert_ne!(request(d3), request(d4));
 }
