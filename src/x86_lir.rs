@@ -20,7 +20,7 @@
 //! оптимізацій (#55 Unboxing, #58 Inlining, #57 DCE, #56 RegAlloc). Він не змінює
 //! семантику мови `my-lisp` і не додає жодних сторонніх варіантів у спільний `src/ir.rs`.
 
-use crate::ir::Ir;
+use crate::ir::{Ir, PrimOp};
 use crate::machine_inst::{AluOp, CondCode, MachineItem, Provenance};
 use std::collections::HashMap;
 use std::fmt;
@@ -449,17 +449,13 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
                 )))
             }
         }
-        Ir::App { func, args }
-            if matches!(func.as_ref(), Ir::Sid(sid)
-            if *sid == sens::sid!(00001100) || *sid == sens::sid!(00001101)) =>
-        {
-            let lir_op = if *func.as_ref() == Ir::Sid(sens::sid!(00001100)) {
-                LirAluOp::Add
-            } else {
-                LirAluOp::Sub
-            };
-            lower_binary_alu(args, lir_op, ctx, prov)
-        }
+        // These are PRIVATE target mechanisms, NOT SENS language calls.
+        // The verified SENS role -> CML mechanism cutover is a separate
+        // admission step. A raw historical byte code never selects x86 ALU.
+        Ir::Prim { op: PrimOp::Add, args } =>
+            lower_binary_alu(args, LirAluOp::Add, ctx, prov),
+        Ir::Prim { op: PrimOp::Sub, args } =>
+            lower_binary_alu(args, LirAluOp::Sub, ctx, prov),
         Ir::Cond { branches } => {
             if branches.is_empty() {
                 return Err(LirLowerError::Unsupported(
@@ -488,13 +484,11 @@ fn lower_expr(expr: &Ir, ctx: &mut LowerContext) -> Result<VReg, LirLowerError> 
                     break;
                 }
 
-                // Exact SID8 eq (00000011) is the only admitted semantic
-                // identity for this scalar branch test. Legacy PrimOp host
-                // enums are not callable identity in the LIR boundary.
+                // An x86 scalar equality comparison is a machine-level
+                // primitive. It CANNOT attest the D3 EQ language meaning:
+                // that requires SENS-verified exact atomic operands upstream.
                 let normalized_test = match test_expr {
-                    Ir::App { func, args } if matches!(func.as_ref(), Ir::Sid(sid) if *sid == sens::sid!(00000011)) => {
-                        Some(args.as_slice())
-                    }
+                    Ir::Prim { op: PrimOp::Eq, args } => Some(args.as_slice()),
                     _ => None,
                 };
 
@@ -694,8 +688,8 @@ mod tests {
 
     #[test]
     fn test_lower_arithmetic_witness() {
-        let ir = Ir::App {
-            func: Box::new(Ir::Sid(sens::sid!(00001100))),
+        let ir = Ir::Prim {
+            op: PrimOp::Add,
             args: vec![Ir::Int(10), Ir::Int(32)],
         };
         let func = lower_ir_to_lir(&ir).expect("lower arithmetic witness");
@@ -710,8 +704,8 @@ mod tests {
         let ir = Ir::Cond {
             branches: vec![
                 (
-                    Ir::App {
-                        func: Box::new(Ir::Sid(sens::sid!(00000011))),
+                    Ir::Prim {
+                        op: PrimOp::Eq,
                         args: vec![Ir::Int(5), Ir::Int(5)],
                     },
                     Ir::Int(42),
