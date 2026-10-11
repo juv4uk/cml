@@ -7,9 +7,14 @@
     "workflow": "https://github.com/juv4uk/cml/actions/runs/38183052531",
     "cml_source_commit": "3320fe3b00a4a099ecb9ff06e22e0be2b1fee499",
     "sens_gitlink_commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
-    "runner_sha256": "d45e09837a10103879c3d405c54ddf53ee2b1376bce969ccd20316ece4065be4",
-    "on_disk_bytes": 34580696,
-    "measurement_role": "runner ELF component only; not complete seed total"
+    "runner_sha256": "fe5b6912d0cc346c531ef1f96f7d15e894d69fadb21515cdd53dd717215892d9",
+    "on_disk_bytes": 34575192,
+    "measurement_role": "K1 instrumented CML lib-test runner ELF component only; this is not comparable to the frozen K0 runner because the test harness source changed, and it is not the complete seed total.",
+    "k0_reference": {
+      "sha256": "d45e09837a10103879c3d405c54ddf53ee2b1376bce969ccd20316ece4065be4",
+      "on_disk_bytes": 34580696,
+      "role": "separate earlier K0 runner; do not interpret the difference as an optimization"
+    }
   },
   "pinned_trees": {
     "cml": {
