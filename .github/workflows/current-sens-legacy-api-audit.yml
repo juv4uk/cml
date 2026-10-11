@@ -9,6 +9,8 @@ on:
       - "integration/current-sens-transport/src/modern_ir.rs"
       - "src/ir.rs"
       - "src/lower.rs"
+      - "src/coverage.rs"
+      - "src/bin/cml-coverage.rs"
       - "build.rs"
       - "tests/core_profile_request_test.rs"
       - ".github/workflows/current-sens-legacy-api-audit.yml"
