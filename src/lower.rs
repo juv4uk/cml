@@ -9,6 +9,13 @@
 //! Assumes macro-expanded input, same contract `compiler.rs` has (see
 //! `main.rs`: `MacroExpander::new().process(&exprs)` runs first).
 
+// Current-SENS canonical physical T5 enters through one root-owned,
+// law-verified AST/IR pipeline. This API NEVER calls historical Expr::Sid
+// dispatch or invents a numeric byte-to-domain correspondence.
+// The remaining legacy compiler/backends are migrated separately.
+#[cfg(feature = "core1-t5-candidate")]
+pub use crate::current_exact_model::lower_canonical_t5_bytes as lower_current_exact_t5;
+
 use crate::ast::{Expr, NumericBufferLiteral};
 use crate::ir::{BufferLiteral, Ir, MachineOp, Params, Quoted};
 use crate::semantic::{self, SemanticError};
