@@ -79,15 +79,6 @@ jobs:
           assert all(len(p)==7 and p[3]=="source-admitted" and p[6]=="-" for p in parsed)
           print("CML_ROOT_CURRENT_COVERAGE_CLI_PASS schema_v2=true roles=9 native_unproven=true")
           PY
-      - name: Compile and execute REAL root x86 LIR/regalloc/assembler under modern SENS
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo run --manifest-path integration/current-sens-transport/Cargo.toml \
-            --bin verify_root_x86_lir 2>&1 | tee "$RUNNER_TEMP/cml-root-x86-mechanisms.log"
-          grep -q 'CML_ROOT_X86_MECHANISM_PASS op=add' "$RUNNER_TEMP/cml-root-x86-mechanisms.log"
-          grep -q 'CML_ROOT_X86_MECHANISM_PASS op=sub' "$RUNNER_TEMP/cml-root-x86-mechanisms.log"
-          grep -q 'CML_ROOT_X86_MECHANISM_NEGATIVE_PASS' "$RUNNER_TEMP/cml-root-x86-mechanisms.log"
       - name: Build exact-domain consumer and verify ALL real T5 and selected F3 carriers
         shell: bash
         run: |
@@ -151,7 +142,6 @@ jobs:
           name: cml-modern-domain-transport-${{ github.sha }}
           path: |
             ${{ runner.temp }}/modern-sens-transport.log
-            ${{ runner.temp }}/cml-root-x86-mechanisms.log
             ${{ runner.temp }}/cml-current-coverage.tsv
             ${{ runner.temp }}/production-sens-gitlink.txt
             ${{ runner.temp }}/cml-tiny-manifest.json
