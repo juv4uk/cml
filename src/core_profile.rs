@@ -51,7 +51,7 @@ impl FromStr for CoreProfile {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProfileCompileRequest {
-    pub semantic_id: DomainIdentity,
+    pub domain_identity: DomainIdentity,
     pub core_profile: CoreProfile,
     pub upstream_commit: String,
     pub upstream_law_ref: String,
@@ -63,7 +63,7 @@ pub struct ProfileCompileRequest {
 impl ProfileCompileRequest {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        semantic_id: DomainIdentity,
+        domain_identity: DomainIdentity,
         core_profile: CoreProfile,
         upstream_commit: impl Into<String>,
         upstream_law_ref: impl Into<String>,
@@ -94,7 +94,7 @@ impl ProfileCompileRequest {
         }
 
         Ok(Self {
-            semantic_id,
+            domain_identity,
             core_profile,
             upstream_commit,
             upstream_law_ref,
