@@ -653,5 +653,60 @@
     "Measure or remove runtime Git metadata requirements; never silently count .git as zero bytes.",
     "Inventory generated build outputs separately from source inputs and verify clean rebuild reproducibility.",
     "Do not combine the runner ELF, CML/SENS source-subset totals, and external dependency sizes into a whole-chain seed total until all categories are closed and minimal."
-  ]
+  ],
+  "git_metadata_measurement": {
+    "schema": "nano-sens-git-checkout-metadata-measurement/1",
+    "policy": "External checkout metadata; reported separately and excluded from trusted seed bytes. Sum of regular-file lengths is a measured checkout snapshot, not the minimal Git metadata required for git rev-parse.",
+    "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38185559594",
+    "workflow_head_commit": "e2f76f63017add8574f6c5224bf3a80857927faf",
+    "clean_runs": [
+      {
+        "run": 1,
+        "artifact_id": 11718759765,
+        "artifact_sha256": "sha256:46d668676781b1751caaf92909aab01037aa90938fe0fba2a13b6bc236187175",
+        "expires_at": "2026-11-10T23:47:52Z",
+        "runner_sha256": "ea865f2911d7322319f96be0d3a25b555c59c62370dd5bdc25d3bde355c7ead3",
+        "runner_on_disk_bytes": 34580920,
+        "git_metadata_regular_file_bytes": {
+          "cml": 33586639,
+          "sens_submodule": 30729145,
+          "wsm_witness": 1810846,
+          "total": 66126630
+        }
+      },
+      {
+        "run": 2,
+        "artifact_id": 11719377856,
+        "artifact_sha256": "sha256:45734899ff5383740f4bc47fd31f5ee094d22020feedfa59438cd449c0cb267a",
+        "expires_at": "2026-11-10T23:47:40Z",
+        "runner_sha256": "ea865f2911d7322319f96be0d3a25b555c59c62370dd5bdc25d3bde355c7ead3",
+        "runner_on_disk_bytes": 34580920,
+        "git_metadata_regular_file_bytes": {
+          "cml": 33584388,
+          "sens_submodule": 30726886,
+          "wsm_witness": 1810848,
+          "total": 66122122
+        }
+      }
+    ],
+    "differences_run1_minus_run2": {
+      "cml": 2251,
+      "sens_submodule": 2259,
+      "wsm_witness": -2,
+      "total": 4508
+    },
+    "two_clean_run_proof_artifact": {
+      "artifact_id": 11718994225,
+      "artifact_sha256": "sha256:c5c93ddf7d73927c6c9e82db03d18e8142552c9e402e22a25490518b076bf2a4",
+      "expires_at": "2026-11-10T23:48:03Z"
+    },
+    "result": "Both clean-run jobs and compare-two-clean-runs job passed. Both reports byte-identical. Git metadata size differs slightly across clean checkouts and is not used as seed bytes."
+  },
+  "follow_up_checkpoint": {
+    "cml_commit": "e2f76f63017add8574f6c5224bf3a80857927faf",
+    "sens_gitlink_commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+    "runner_sha256": "ea865f2911d7322319f96be0d3a25b555c59c62370dd5bdc25d3bde355c7ead3",
+    "runner_on_disk_bytes": 34580920,
+    "relation_to_k1_checkpoint": "This follow-up is a distinct CML source checkpoint from the earlier K1 source commit 3320fe3b00a4a099ecb9ff06e22e0be2b1fee499 (runner fe5b6912... / 34,575,192 bytes). Do not compare the runner-size difference as an optimization; each checkpoint is independently measured."
+  }
 }
