@@ -9,6 +9,8 @@
 //! CML backends are migrated. A green test here is NOT a green CML production
 //! compiler or a claim of full current CML IR parity.
 
+pub mod modern_ir;
+
 use sens::{CoreDomainIdentity, CompilerLoweringRole};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
