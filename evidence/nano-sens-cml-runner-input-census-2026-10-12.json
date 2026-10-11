@@ -1,0 +1,652 @@
+{
+  "schema": "nano-sens-cml-runner-input-census/1",
+  "status": "PARTIAL_VERIFIED_BUILD_AND_RUNTIME_INPUT_SUBSET_NOT_MINIMUM_SEED_TOTAL",
+  "measured_at": "2026-10-12",
+  "scope": "Inputs checked for the K1 CML unit-test runner built by cargo test -j 2 -p cml --lib at the pinned CML commit. This is not a byte total for the full Nano-SENS seed: the runner ELF is a measured component, while nested SENS cargo run -p xtask -- compiler-export remains a runtime input chain.",
+  "runner_artifact": {
+    "workflow": "https://github.com/juv4uk/cml/actions/runs/38183052531",
+    "cml_source_commit": "3320fe3b00a4a099ecb9ff06e22e0be2b1fee499",
+    "sens_gitlink_commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+    "runner_sha256": "d45e09837a10103879c3d405c54ddf53ee2b1376bce969ccd20316ece4065be4",
+    "on_disk_bytes": 34580696,
+    "measurement_role": "runner ELF component only; not complete seed total"
+  },
+  "pinned_trees": {
+    "cml": {
+      "commit": "3320fe3b00a4a099ecb9ff06e22e0be2b1fee499",
+      "tree_sha": "3320fe3b00a4a099ecb9ff06e22e0be2b1fee499",
+      "entry_count": 506,
+      "tracked_blob_count": 454,
+      "truncated": false
+    },
+    "sens": {
+      "commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+      "tree_sha": "d0787a40fcea36501747732aa61b6de19fe29c70",
+      "entry_count": 8038,
+      "truncated": false
+    },
+    "wsm_my_lisp": {
+      "commit": "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947",
+      "tree_sha": "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947",
+      "entry_count": 87,
+      "truncated": false
+    }
+  },
+  "cml_build_inputs": {
+    "module_graph_file_count": 62,
+    "module_graph_source_bytes": 1221256,
+    "module_graph_files": [
+      {
+        "path": "src/accelerator.rs",
+        "git_blob_sha1": "356679cbc65b1120e04b257f3042fb85a65d35c6",
+        "size_bytes": 7241,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/ast.rs",
+        "git_blob_sha1": "4c581b21f0c83ef31767e1e8a56cc0f084624552",
+        "size_bytes": 1357,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/build.rs",
+        "git_blob_sha1": "b04d0db165593b4141e6d5e8b85af365a89ea84b",
+        "size_bytes": 7458,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/c_backend.rs",
+        "git_blob_sha1": "03d0d9afeb871a2e73b00d88bfcb3042ec0fdbc1",
+        "size_bytes": 59692,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/c1_driver_runtime.rs",
+        "git_blob_sha1": "176076a77d0e820da1ae557507ea8344d4f45dbe",
+        "size_bytes": 12429,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/canon.rs",
+        "git_blob_sha1": "06b43e112bc2f8901b4acda625b2d0fbc92f722d",
+        "size_bytes": 8013,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/compiler_artifact.rs",
+        "git_blob_sha1": "6ef55a7dc94590eb10ff78cdfcae7ce6a6179f1d",
+        "size_bytes": 12816,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/compiler_mechanism.rs",
+        "git_blob_sha1": "61939cec37e922bf94b1115338725120b08c570e",
+        "size_bytes": 7278,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/compiler_passes.rs",
+        "git_blob_sha1": "f3a2d943dfeab4073c57d6621c697c208d933152",
+        "size_bytes": 4439,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/compiler.rs",
+        "git_blob_sha1": "a8acc4c53693c0bfcf5c96b46c8320da384c471e",
+        "size_bytes": 38701,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/compute.rs",
+        "git_blob_sha1": "a1a572a329bd7d990b01ca526c3d5df62f92069e",
+        "size_bytes": 69540,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/core_profile.rs",
+        "git_blob_sha1": "390a9f45087d7fa7a7b205e59c98f50a949196a2",
+        "size_bytes": 4561,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/coverage.rs",
+        "git_blob_sha1": "24d23ca616ae90f1296137cc5ffef20ff6309566",
+        "size_bytes": 7536,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/cpu_profile.rs",
+        "git_blob_sha1": "85b372235ffa87afd942a0ee870c46502a4e4c81",
+        "size_bytes": 14372,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/elf64.rs",
+        "git_blob_sha1": "975a5268d22a6f6f62c421074fb9ff9ae2a90456",
+        "size_bytes": 7373,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/exact_q_rep.rs",
+        "git_blob_sha1": "9809758ccdc1db78d510bf1a68e2287c7329099f",
+        "size_bytes": 9111,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/execution_scheduler.rs",
+        "git_blob_sha1": "66f25cc77cadc8afcd62cc52c795c9e640086d92",
+        "size_bytes": 5043,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/execution_store.rs",
+        "git_blob_sha1": "414e68e2e4b3c645cec48aa0602b4f8731e8f88c",
+        "size_bytes": 1019,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/execution.rs",
+        "git_blob_sha1": "6a2fed630ede5cb81115b8fd43c50da04cdcb355",
+        "size_bytes": 34329,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/fpga_transport.rs",
+        "git_blob_sha1": "3ff601698826dc0943d12b73d19dfeaf80e5180e",
+        "size_bytes": 11362,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/fs.rs",
+        "git_blob_sha1": "51c90c4998470f0059497fb2dc52bfa4d91498d2",
+        "size_bytes": 3100,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/gpu_admission.rs",
+        "git_blob_sha1": "9fb0e107a8e877f896dc94df3375f798cd211b22",
+        "size_bytes": 6803,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/gpu_cuda.rs",
+        "git_blob_sha1": "57ac5488bee3c11702c3e578741357ad749bfffc",
+        "size_bytes": 25428,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/gpu_host.rs",
+        "git_blob_sha1": "1c47f98fb7e2ee91b3108aa7927601d4ee2515ea",
+        "size_bytes": 10151,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/gpu_wgsl.rs",
+        "git_blob_sha1": "661efd3602a0effecdb42158ce4e8b499e1515bd",
+        "size_bytes": 3822,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/gpu_worker_client.rs",
+        "git_blob_sha1": "3d67ef5d661be2dd92e2cbf072a020d25b4251a7",
+        "size_bytes": 9353,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/ir.rs",
+        "git_blob_sha1": "e1335a65059d64391a2230a2ef718c77a467f978",
+        "size_bytes": 7942,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/lib.rs",
+        "git_blob_sha1": "d83a5d21bca3efc8a8908aa2d6d7a96e441c3177",
+        "size_bytes": 1671,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/lisp_asm_vertical.rs",
+        "git_blob_sha1": "81f5a8cf25535c617732aa498a8c17786b411833",
+        "size_bytes": 11338,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/lisp_encoder_bridge.rs",
+        "git_blob_sha1": "071efd0d451a293d981fc705d22057b468f869d2",
+        "size_bytes": 11708,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/lower.rs",
+        "git_blob_sha1": "9660d7489b0a1f3a30f7fd16c054e3aef2df1061",
+        "size_bytes": 40891,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/machine_boundary.rs",
+        "git_blob_sha1": "1c2a484ab77f896e214d6026ce0818605009527b",
+        "size_bytes": 7616,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/machine_inst.rs",
+        "git_blob_sha1": "e6c1bfee40594c585e1c39638e77981ce342ee8e",
+        "size_bytes": 58077,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/machine_substrate.rs",
+        "git_blob_sha1": "9d4068b483b79496f4150dcee29f2ce744da7aaa",
+        "size_bytes": 19835,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/macros.rs",
+        "git_blob_sha1": "211e0c21559b720513dff5f834e82e26ee80702e",
+        "size_bytes": 8386,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/native_baseline.rs",
+        "git_blob_sha1": "bd85a3cbb5ba1dce744c9b78473bea5820895e6f",
+        "size_bytes": 29542,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/numeric_specialization.rs",
+        "git_blob_sha1": "5ae38106be16970bd7f3fe0a465d8f6f307c0616",
+        "size_bytes": 22111,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/parser.rs",
+        "git_blob_sha1": "f8cc9438018a411477f932db4891add01c262b14",
+        "size_bytes": 20598,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/placement.rs",
+        "git_blob_sha1": "593e3ccedc43c024fab71882eaa820866a465f5c",
+        "size_bytes": 43782,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/pratyahara.rs",
+        "git_blob_sha1": "3aae480aaf4c80cfa08d16159f292a2072f4bb2f",
+        "size_bytes": 8306,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/runtime_abi.rs",
+        "git_blob_sha1": "dc5b55d9d9a81dba7939feceb4f5ec8cc5c1ec6b",
+        "size_bytes": 4217,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/semantic_export.rs",
+        "git_blob_sha1": "504cf49a5048a8c89e9e04a3546ca420d87c53e2",
+        "size_bytes": 9063,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/semantic.rs",
+        "git_blob_sha1": "e65c3ef4038423c58fc42121571508599aaca8c3",
+        "size_bytes": 12227,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/sens_c1_artifact.rs",
+        "git_blob_sha1": "9dea863fdb96b39fa379f75917f3076d33e8d97f",
+        "size_bytes": 47949,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/sens_compiler_export.rs",
+        "git_blob_sha1": "e1bbbbc42141d54f17853716990f39fb5af02477",
+        "size_bytes": 11056,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/sens_current_lowering.rs",
+        "git_blob_sha1": "b986ebed1e8e8d067084a5c908eed8e78f80fc17",
+        "size_bytes": 20867,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/sens_domain_bridge.rs",
+        "git_blob_sha1": "fd91d65ead8d51bcb2bd0676251b8772aaae372d",
+        "size_bytes": 20074,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/sens_rich_bridge.rs",
+        "git_blob_sha1": "03777d72bdf0b411b1c985a01e5a1ec109e8b15f",
+        "size_bytes": 12299,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/sens_slot_bridge.rs",
+        "git_blob_sha1": "1ec1bc6b2771f5c5e77ea4d1fc80edbadad188b1",
+        "size_bytes": 14319,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/slot_vm.rs",
+        "git_blob_sha1": "50ba167d779e0e2713b8ed08a684f2f8f1477709",
+        "size_bytes": 26868,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/substrate_dispatch.rs",
+        "git_blob_sha1": "290da325101da4c76cbd4f28f3cd4209e48ee0c0",
+        "size_bytes": 14353,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/upstream_sid_bridge.rs",
+        "git_blob_sha1": "87ee647ca832af600d1d614c4c2eaf0b749dda7e",
+        "size_bytes": 6692,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/witness_bridge.rs",
+        "git_blob_sha1": "40483ee7cad1a95c90cbdc00ca3ac2eba216257b",
+        "size_bytes": 32174,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/x86_avx2.rs",
+        "git_blob_sha1": "531aeb2e43801a7ee4c700d38bc1647f0084b52d",
+        "size_bytes": 13613,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/x86_elf.rs",
+        "git_blob_sha1": "38e87eae6c4b646525a7f298da8e7f64596d7543",
+        "size_bytes": 1406,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/x86_freestanding_metadata.rs",
+        "git_blob_sha1": "9ad4bf3e63f7ae97e449c27e9f5c9c1c974845bb",
+        "size_bytes": 24123,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/x86_freestanding.rs",
+        "git_blob_sha1": "1ef2b1fbd5167eafd269ab242aa8b5b3f7a0896b",
+        "size_bytes": 159257,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/x86_inline.rs",
+        "git_blob_sha1": "fbc96250abf1bdf5c3221772a701fe81ccdb11ad",
+        "size_bytes": 18655,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/x86_isel.rs",
+        "git_blob_sha1": "3eaab1ce9d0ff28b6b60273be4c31da122915030",
+        "size_bytes": 25739,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/x86_lir.rs",
+        "git_blob_sha1": "0a38dfc9fd8c31fb5e64f56f3bd8799bd44badea",
+        "size_bytes": 23381,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/x86_opt.rs",
+        "git_blob_sha1": "67ab6d8d798b0786838aa690a6d08954eef98174",
+        "size_bytes": 18694,
+        "role": "default cargo test --lib module source"
+      },
+      {
+        "path": "src/x86_regalloc.rs",
+        "git_blob_sha1": "441ae3eb043820e46a1293359a54422ba323013f",
+        "size_bytes": 30100,
+        "role": "default cargo test --lib module source"
+      }
+    ],
+    "build_and_metadata_files": [
+      {
+        "path": "Cargo.toml",
+        "git_blob_sha1": "67d126a495e3662212902d2195d1e7b8c30bdfd1",
+        "size_bytes": 1314
+      },
+      {
+        "path": "Cargo.lock",
+        "git_blob_sha1": "7882c2be6e83b26660a1e855d8ce97211620096e",
+        "size_bytes": 28600
+      },
+      {
+        "path": "build.rs",
+        "git_blob_sha1": "c156ee54253150916d453f3fd110978c63f1f064",
+        "size_bytes": 38256
+      },
+      {
+        "path": "LICENSE",
+        "git_blob_sha1": "a49660652423dcc5352c11456f31bca8806c0d25",
+        "size_bytes": 649
+      },
+      {
+        "path": ".gitmodules",
+        "git_blob_sha1": "2de700a974c032f94e8daa0c4e19f7c7e649ae7b",
+        "size_bytes": 92
+      },
+      {
+        "path": "upstream-revisions.lisp",
+        "git_blob_sha1": "004c9a2f4ace9cbec4f0c14655e0ef4960c540a8",
+        "size_bytes": 2651
+      },
+      {
+        "path": "contracts/mylisp-cml-export.lisp",
+        "git_blob_sha1": "313ab83b0f07422599012b90c8a887823e14c78c",
+        "size_bytes": 26782
+      },
+      {
+        "path": "contracts/machine-lowering-boundary.lisp",
+        "git_blob_sha1": "e3e89721863142ff03689086c0985552eed5cb39",
+        "size_bytes": 1129
+      }
+    ],
+    "build_and_metadata_bytes": 99473,
+    "combined_known_cml_source_subset_file_count": 70,
+    "combined_known_cml_source_subset_bytes": 1320729,
+    "note": "Subset of CML tracked build inputs. It excludes SENS subtree inputs listed separately below, third-party dependency source bytes, generated build outputs, and Git metadata."
+  },
+  "cross_repository_inputs": {
+    "sens_compile_or_runtime_files": [
+      {
+        "repository": "juv4uk/sens",
+        "commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+        "path": "lib/surface/semantic-registry.lisp",
+        "git_blob_sha1": "ed267a5a21de8c59842469b2e8927ff475bae6be",
+        "size_bytes": 26904
+      },
+      {
+        "repository": "juv4uk/sens",
+        "commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+        "path": "contracts/compiler-nucleus-identity-corpus-v1.tsv",
+        "git_blob_sha1": "c57b0df98f467ddcad067158dad1c97a349ad1bf",
+        "size_bytes": 426
+      },
+      {
+        "repository": "juv4uk/sens",
+        "commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+        "path": "language-contract.lisp",
+        "git_blob_sha1": "6649ad418e75dd74a64b4c911a7f140a31979443",
+        "size_bytes": 12648
+      },
+      {
+        "repository": "juv4uk/sens",
+        "commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+        "path": "lib/compiler-nucleus.lisp",
+        "git_blob_sha1": "c81ff7341a3a18c7cb6ff8e77038318bb935b232",
+        "size_bytes": 24506
+      },
+      {
+        "repository": "juv4uk/sens",
+        "commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+        "path": "contracts/compiler-semantic-input-v1.lisp",
+        "git_blob_sha1": "c74cffd50d251d5f1b9ddd9709aeee6b9855b689",
+        "size_bytes": 5727
+      },
+      {
+        "repository": "juv4uk/sens",
+        "commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+        "path": "contracts/bija3-l1-l5-ratification.lisp",
+        "git_blob_sha1": "2dff6997345baad3bedf989b8772ea97c2e7d46a",
+        "size_bytes": 1337
+      },
+      {
+        "repository": "juv4uk/sens",
+        "commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+        "path": "contracts/d4-bootstrap-ratification.lisp",
+        "git_blob_sha1": "9f398d9b5fff4c724603f5339bbb248109ec3c34",
+        "size_bytes": 1566
+      },
+      {
+        "repository": "juv4uk/sens",
+        "commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+        "path": "knowledge/bija3-l1-l5-structure-projection.json",
+        "git_blob_sha1": "05a48b0ce07a611a21e09c8ba274dab5fdeafb46",
+        "size_bytes": 851
+      },
+      {
+        "repository": "juv4uk/sens",
+        "commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+        "path": "knowledge/d4-bootstrap-compiler-structure-projection.json",
+        "git_blob_sha1": "361fc6c6d95a29756758e0879d90b82ec416efcf",
+        "size_bytes": 861
+      },
+      {
+        "repository": "juv4uk/sens",
+        "commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+        "path": "lib/machine/cpu/intel-core-i5-6400.lisp",
+        "git_blob_sha1": "1b4f98e86f8e9fac14dcc74862bf82afd536c8a3",
+        "size_bytes": 2528
+      }
+    ],
+    "sens_source_census": "https://github.com/juv4uk/sens/blob/main/evidence/nano-sens-seed-v0-source-closure-census-2026-10-12.json",
+    "wsm_nucleus": {
+      "repository": "juv4uk/wsm-my-lisp",
+      "commit": "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947",
+      "path": "asm/nucleus.s",
+      "git_blob_sha1": "0fd0787bff2f64f0f9432f4395e9acb177544973",
+      "size_bytes": 11461,
+      "role": "source read by the test-side x86 freestanding witness"
+    }
+  },
+  "observed_input_edges": [
+    {
+      "source": "build.rs",
+      "reads": [
+        "external/sens/lib/surface/semantic-registry.lisp",
+        "external/sens/contracts/compiler-nucleus-identity-corpus-v1.tsv"
+      ],
+      "writes": [
+        "OUT_DIR/canon_spellings.rs",
+        "OUT_DIR/sens_current_compiler_candidates.rs",
+        "contracts/cml-operations.lisp"
+      ]
+    },
+    {
+      "source": "src/coverage.rs",
+      "includes": [
+        "external/sens/contracts/compiler-nucleus-identity-corpus-v1.tsv",
+        "external/sens/language-contract.lisp"
+      ]
+    },
+    {
+      "source": "src/cpu_profile.rs",
+      "includes": [
+        "external/sens/lib/machine/cpu/intel-core-i5-6400.lisp"
+      ]
+    },
+    {
+      "source": "src/semantic_export.rs",
+      "includes": [
+        "contracts/mylisp-cml-export.lisp"
+      ]
+    },
+    {
+      "source": "src/sens_c1_artifact.rs",
+      "includes": [
+        "external/sens/lib/compiler-nucleus.lisp"
+      ],
+      "runtime": [
+        "cargo run --manifest-path external/sens/Cargo.toml -p xtask -- compiler-export",
+        "GCC compilation of generated C1/C2 witnesses"
+      ]
+    },
+    {
+      "source": "src/sens_compiler_export.rs",
+      "includes": [
+        "external/sens/lib/compiler-nucleus.lisp"
+      ]
+    },
+    {
+      "source": "src/sens_domain_bridge.rs",
+      "includes": [
+        "upstream-revisions.lisp",
+        "external/sens/language-contract.lisp",
+        "external/sens/contracts/compiler-semantic-input-v1.lisp",
+        "external/sens/contracts/bija3-l1-l5-ratification.lisp"
+      ],
+      "runtime": [
+        "git -C external/sens rev-parse HEAD"
+      ]
+    },
+    {
+      "source": "src/sens_rich_bridge.rs",
+      "includes": [
+        "external/sens/lib/compiler-nucleus.lisp",
+        "external/sens/contracts/bija3-l1-l5-ratification.lisp",
+        "external/sens/contracts/d4-bootstrap-ratification.lisp"
+      ]
+    },
+    {
+      "source": "src/machine_boundary.rs",
+      "runtime_read": [
+        "contracts/machine-lowering-boundary.lisp"
+      ]
+    },
+    {
+      "source": "src/x86_freestanding.rs",
+      "runtime_read": [
+        "../wsm-my-lisp/asm/nucleus.s"
+      ]
+    }
+  ],
+  "external_dependencies_not_counted": {
+    "toolchain": [
+      "rustc 1.99.0",
+      "Cargo 1.99.0",
+      "GCC 13.3.0",
+      "GNU ld 2.42",
+      "assembler as",
+      "objcopy",
+      "nm",
+      "Git executable",
+      "Ubuntu/Linux and runtime shared libraries"
+    ],
+    "cargo_source_dependencies": [
+      "wsm-os-target Git dependency pinned at d3663026dbcce73e2b8e32238910c3f8f7dea833",
+      "registry crates reachable from the selected CML/SENS build/test graph"
+    ],
+    "git_metadata": [
+      "CML .git metadata for build/test revision provenance",
+      "external/sens .git metadata for runtime revision verification"
+    ],
+    "status": "Version/revision pins recorded; external source checkout/cache bytes and complete dependency closure not measured."
+  },
+  "closure_gaps": [
+    "Compute exact active Cargo build/test dependency graph from Cargo.lock, including the pinned wsm-os-target tree and registry crate source archives; inventory each dependency as counted or explicitly external.",
+    "Run a fresh controlled build from clean checkouts and instrument actual file reads/commands during the entire CML lib-test runner, beyond the static call-site scan.",
+    "Measure or remove runtime Git metadata requirements; never silently count .git as zero bytes.",
+    "Inventory generated build outputs separately from source inputs and verify clean rebuild reproducibility.",
+    "Do not combine the runner ELF, CML/SENS source-subset totals, and external dependency sizes into a whole-chain seed total until all categories are closed and minimal."
+  ]
+}
