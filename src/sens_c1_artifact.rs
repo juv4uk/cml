@@ -980,6 +980,7 @@ mod tests {
             std::process::id()
         ));
         let c1_path = base.with_extension("c1.bin");
+        let c1_static_path = base.with_extension("c1.static.bin");
         let c2_path = base.with_extension("c2.bin");
         let c2_repeat_path = base.with_extension("c2.repeat.bin");
 
@@ -1003,6 +1004,26 @@ mod tests {
             child.wait_with_output().expect("gcc must finish")
         };
 
+        let compile_source_static = |source: &str, path: &std::path::Path, seed: &str| {
+            let mut child = Command::new("gcc")
+                .args(["-static", "-x", "c", "-"])
+                .arg(format!("-frandom-seed={seed}"))
+                .args(["-Wl,--build-id=none", "-s", "-o"])
+                .arg(path)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("gcc must execute for static-link K1 variant");
+            child
+                .stdin
+                .take()
+                .expect("static-link gcc stdin pipe")
+                .write_all(source.as_bytes())
+                .expect("generated C1 source reaches static-link gcc stdin");
+            child.wait_with_output().expect("static-link gcc must finish")
+        };
+
         let c1_compile = compile_source(&c1.c_source, &c1_path, "cml-sens-selfhost-fixed");
         assert!(
             c1_compile.status.success(),
@@ -1019,6 +1040,46 @@ mod tests {
         assert_eq!(
             c1_run.stdout, c0_artifact,
             "C1 output must be byte-identical to the C0/SENS expected artifact"
+        );
+
+        // K1 is an isolated static-link + strip experiment. The baseline C1
+        // above remains unchanged and is still the C1/C2 lineage authority.
+        let static_compile = compile_source_static(
+            &c1.c_source, &c1_static_path, "cml-sens-k1-static-strip",
+        );
+        assert!(
+            static_compile.status.success(),
+            "static-linked stripped C1 failed to compile: {}",
+            String::from_utf8_lossy(&static_compile.stderr)
+        );
+        let c1_static_run = run_c1(&c1_static_path, &wire);
+        assert!(
+            c1_static_run.status.success(),
+            "static-linked stripped C1 failed to execute: {}",
+            String::from_utf8_lossy(&c1_static_run.stderr)
+        );
+        assert_eq!(
+            c1_static_run.stdout, c1_run.stdout,
+            "static-linked C1 must preserve the exact baseline C1 observable"
+        );
+        for (label, program) in minimal_current_programs() {
+            let role_wire = sens::wire_encode_program(&program);
+            let role_expected = expected_sens_artifact(&role_wire, &c1.authority.revision);
+            let role_run = run_c1(&c1_static_path, &role_wire);
+            assert!(
+                role_run.status.success(),
+                "static-linked C1 failed minimal {label} witness: {}",
+                String::from_utf8_lossy(&role_run.stderr)
+            );
+            assert_eq!(
+                role_run.stdout, role_expected,
+                "static-linked C1 diverged from the SENS oracle for minimal {label}"
+            );
+        }
+        let invalid_wire = run_c1(&c1_static_path, b"not-a-valid-SW1-program");
+        assert!(
+            !invalid_wire.status.success(),
+            "static-linked C1 must fail closed for malformed SW1 input"
         );
 
         let c2 = build_current_sens_c2_from_c1_evidence(&c1_run.stdout, &cml_revision)
@@ -1068,6 +1129,14 @@ mod tests {
         );
 
         println!(
+            "NANO_SENS_K1_EVIDENCE baseline_c1_bytes={} static_c1_bytes={} baseline_c1_sha256={} static_c1_sha256={} static_output_sha256={} output_equivalence=byte-identical malformed_wire=fail-closed full_module_tests_required=true",
+            c1_executable.len(),
+            std::fs::metadata(&c1_static_path).expect("static C1 metadata").len(),
+            sha256_hex(&c1_executable),
+            sha256_hex(&std::fs::read(&c1_static_path).expect("read static C1 executable")),
+            sha256_hex(&c1_static_run.stdout),
+        );
+        println!(
             "SELFHOST_C2_EXEC_EVIDENCE sens_revision={} cml_revision={} c1_evidence_sha256={} semantic_requests_sha256={} c1_c_source_sha256={} c2_c_source_sha256={} c1_executable_sha256={} c2_executable_sha256={} output_sha256={} source_equivalence=byte-identical executable_equivalence=byte-identical output_equivalence=byte-identical",
             c2.authority.revision,
             cml_revision,
@@ -1083,8 +1152,11 @@ mod tests {
         if let Some(output_dir) = std::env::var_os("SENS_SELFHOST_ARTIFACT_DIR") {
             let output_dir = std::path::PathBuf::from(output_dir);
             std::fs::create_dir_all(&output_dir).expect("create selfhost artifact directory");
-            let artifacts: [(&str, &[u8]); 9] = [
+            let static_c1_executable =
+                std::fs::read(&c1_static_path).expect("read static-linked stripped C1 executable");
+            let artifacts: [(&str, &[u8]); 11] = [
                 ("c1-executable.bin", c1_executable.as_slice()),
+                ("c1-static-executable.bin", static_c1_executable.as_slice()),
                 ("c2-executable.bin", c2_executable.as_slice()),
                 ("c2-repeat-executable.bin", c2_repeat_executable.as_slice()),
                 ("c1-source.c", c1.c_source.as_bytes()),
@@ -1092,6 +1164,7 @@ mod tests {
                 ("input-program.sw1", wire.as_slice()),
                 ("c0-expected-artifact.bin", c0_artifact.as_slice()),
                 ("c1-output-artifact.bin", c1_run.stdout.as_slice()),
+                ("c1-static-output-artifact.bin", c1_static_run.stdout.as_slice()),
                 ("c2-output-artifact.bin", c2_run.stdout.as_slice()),
             ];
             for (name, bytes) in artifacts {
@@ -1101,6 +1174,7 @@ mod tests {
         }
 
         let _ = std::fs::remove_file(c1_path);
+        let _ = std::fs::remove_file(c1_static_path);
         let _ = std::fs::remove_file(c2_path);
         let _ = std::fs::remove_file(c2_repeat_path);
     }
