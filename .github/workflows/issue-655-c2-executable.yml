@@ -105,7 +105,7 @@ jobs:
         run: |
           root="$SENS_SELFHOST_ARTIFACT_DIR"
           cargo tree --locked --manifest-path Cargo.toml -p cml --edges normal,build,dev --prefix none > "$root/cml-active-cargo-tree.txt"
-          cargo tree --locked --manifest-path external/sens/Cargo.toml -p xtask --edges normal,build --prefix none > "$root/sens-xtask-active-cargo-tree.txt"
+          (cd external/sens && cargo tree --locked -p xtask --edges normal,build --prefix none) > "$root/sens-xtask-active-cargo-tree.txt"
           {
             echo "schema=nano-sens-active-cargo-graphs/1"
             echo "cml_lock_sha256=$(sha256sum Cargo.lock | cut -d' ' -f1)"
