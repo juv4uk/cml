@@ -24,6 +24,7 @@ fn current_coverage_is_exactly_nine_sens_law_verified_compiler_roles() {
         match row.identity {
             sens::CoreDomainIdentity::D3(_) => d3 += 1,
             sens::CoreDomainIdentity::D4(_) => d4 += 1,
+            _ => panic!("unexpected compiler domain in SENS-owned nine-role corpus"),
         }
     }
     assert_eq!((d3, d4), (7, 2));
