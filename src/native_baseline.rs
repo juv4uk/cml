@@ -5,8 +5,6 @@
 //! pinned upstream witness provenance. In particular, this module must not mint
 //! expected Lisp answers or local PASS/FAIL semantic verdicts.
 
-use crate::compute::{ComputeBackend, CpuComputeBackend};
-use crate::ir::{BufferLiteral, Ir, Params};
 use crate::machine_inst::{
     AluOp, CondCode, MachineInst, MachineItem, Provenance, X86Reg, assemble_program,
 };
