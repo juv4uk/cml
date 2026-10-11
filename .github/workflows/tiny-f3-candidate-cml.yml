@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      SENS_CANDIDATE_SHA: 2ac5cbe001dcc949561aeb6bca231e52befd75a7
+      SENS_CANDIDATE_SHA: df9343ce1ac92a456b01192da7e318d7e9ddf59d
       SENS_COMPILER_EXPORT_FILE: /tmp/cml-frame3-candidate-verified-export.txt
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: juv4uk/sens
-          ref: 2ac5cbe001dcc949561aeb6bca231e52befd75a7
+          ref: df9343ce1ac92a456b01192da7e318d7e9ddf59d
           path: external/sens
           submodules: false
           persist-credentials: false
