@@ -1,0 +1,59 @@
+name: CML modern exact-domain transport candidate
+on:
+  push:
+    branches: [master]
+    paths:
+      - "integration/current-sens-transport/**"
+      - ".github/workflows/current-sens-transport-candidate.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-modern-bridge:
+    name: Build modern CML bridge with exact SENS candidate, no historical SID
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      SENS_CANDIDATE_SHA: 390f313242b538cb954dc00afa32ef0003f7d94b
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: juv4uk/sens
+          ref: 390f313242b538cb954dc00afa32ef0003f7d94b
+          path: external/sens
+          persist-credentials: false
+          submodules: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify candidate SHA, physical fixture and unchanged production gitlink
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C external/sens rev-parse HEAD)" = "$SENS_CANDIDATE_SHA"
+          test "$(od -An -tx1 external/sens/tests/fixtures/migration-quote-cohort-main/quote-legacy.sens | tr -d ' \n')" = 638906a1
+          git ls-tree HEAD external/sens > "$RUNNER_TEMP/production-sens-gitlink.txt"
+          test -s "$RUNNER_TEMP/production-sens-gitlink.txt"
+          ! grep -Eq 'sens::sid|sens::Sid8|ExprKind::Sid' integration/current-sens-transport/src/lib.rs
+      - name: Compile exact D3-D4 authority and both physical transports
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --manifest-path integration/current-sens-transport/Cargo.toml \
+            -- --nocapture 2>&1 | tee "$RUNNER_TEMP/modern-sens-transport.log"
+          grep -q CML_MODERN_TRANSPORT_PASS "$RUNNER_TEMP/modern-sens-transport.log"
+          grep -q CML_MODERN_DOMAIN_AUTHORITY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
+          test "$(git rev-parse HEAD:external/sens)" != "$SENS_CANDIDATE_SHA"
+          echo CML_MODERN_BRIDGE_EXACT_CANDIDATE_PASS
+      - name: Preserve positive and negative evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cml-modern-domain-transport-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/modern-sens-transport.log
+            ${{ runner.temp }}/production-sens-gitlink.txt
+          if-no-files-found: warn
+          retention-days: 30
