@@ -1,7 +1,10 @@
 // Modern SENS exact AST and quoted data share their single source with the
 // candidate verifier, never reinterpret an old numeric SID as a domain call.
 #[cfg(feature = "core1-t5-candidate")]
-pub use crate::current_exact_model::{ExactQuotedData, ModernAst, VerifiedRole};
+pub use crate::current_exact_model::{
+    ExactQuotedData, ModernAst, ModernLowerError, VerifiedRole,
+    exact_call, quoted_data, verified_role,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NumericBufferLiteral {
