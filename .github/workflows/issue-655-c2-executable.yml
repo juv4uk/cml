@@ -14,6 +14,18 @@ on:
       - ".github/workflows/issue-648-selfhost-c2.yml"
       - ".github/workflows/issue-655-c2-executable.yml"
   workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "external/sens"
+      - "upstream-revisions.lisp"
+      - "src/sens_rich_bridge.rs"
+      - "src/sens_current_lowering.rs"
+      - "src/sens_c1_artifact.rs"
+      - "src/c_backend.rs"
+      - ".github/workflows/issue-630-c1-driver.yml"
+      - ".github/workflows/issue-648-selfhost-c2.yml"
+      - ".github/workflows/issue-655-c2-executable.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -33,6 +45,29 @@ jobs:
         with:
           submodules: true
 
+      - name: Capture pinned bootstrap inputs and toolchain
+        env:
+          SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
+        run: |
+          mkdir -p "$SENS_SELFHOST_ARTIFACT_DIR"
+          {
+            echo "schema=seed-v0-input-inventory/1"
+            echo "measurement_scope=bootstrap-runner-file-bytes-only"
+            echo "cml_commit=$(git rev-parse HEAD)"
+            echo "sens_commit=$(git -C external/sens rev-parse HEAD)"
+            echo "external_dependencies=rustc,cargo,gcc,ld,ubuntu-latest; excluded_from_seed_bytes"
+            echo "rustc:"
+            rustc -Vv
+            echo "cargo:"
+            cargo -V
+            echo "gcc_version=$(gcc -dumpfullversion -dumpversion)"
+            echo "gcc_target=$(gcc -dumpmachine)"
+            echo "linker:"
+            ld --version | head -n 1
+            echo "source_file_sha256:"
+            sha256sum src/sens_c1_artifact.rs src/sens_current_lowering.rs src/sens_rich_bridge.rs external/sens/lib/compiler-nucleus.lisp external/sens/language-contract.lisp external/sens/knowledge/bija3-l1-l5-structure-projection.json
+          } > "$SENS_SELFHOST_ARTIFACT_DIR/bootstrap-input-manifest.txt"
+
       - name: Freeze exact SENS verifier denominator
         run: |
           pin="$(grep -oE '\(supported-pin-sha \. "[0-9a-f]{40}"\)' upstream-revisions.lisp | grep -oE '[0-9a-f]{40}' | head -n1)"
@@ -47,7 +82,21 @@ jobs:
       - name: C1 binary artifact materializes and runs C2 executable
         env:
           CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: >-
-          cargo test -j 2 -p cml --lib
-          sens_c1_artifact::tests::c1_binary_artifact_materializes_and_runs_distinct_c2_executable
-          -- --nocapture --test-threads=1
+          SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
+        run: |
+          cargo test -j 2 -p cml --lib \
+            sens_c1_artifact::tests::c1_binary_artifact_materializes_and_runs_distinct_c2_executable \
+            -- --nocapture --test-threads=1
+          runner="$(find target/debug/deps -maxdepth 1 -type f -executable -name 'cml-*' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
+          test -n "$runner"
+          cp "$runner" "$SENS_SELFHOST_ARTIFACT_DIR/seed-v0-c0-runner.bin"
+          sha256sum "$SENS_SELFHOST_ARTIFACT_DIR/seed-v0-c0-runner.bin" >> "$SENS_SELFHOST_ARTIFACT_DIR/bootstrap-input-manifest.txt"
+
+      - name: Preserve selfhost lineage artifacts for 30 days
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nano-sens-selfhost-c2-executable-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/nano-sens-selfhost-artifacts/
+          retention-days: 30
+          if-no-files-found: error
