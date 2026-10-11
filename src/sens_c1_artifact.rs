@@ -938,6 +938,25 @@ mod tests {
             c2_artifact_sha256,
         );
 
+        if let Some(output_dir) = std::env::var_os("SENS_SELFHOST_ARTIFACT_DIR") {
+            let output_dir = std::path::PathBuf::from(output_dir);
+            std::fs::create_dir_all(&output_dir).expect("create selfhost artifact directory");
+            let artifacts: [(&str, &[u8]); 8] = [
+                ("c1-executable.bin", c1_executable.as_slice()),
+                ("c1-repeat-executable.bin", repeat_c1_executable.as_slice()),
+                ("c1-source.c", c1.c_source.as_bytes()),
+                ("input-program.sw1", wire.as_slice()),
+                ("c0-expected-artifact.bin", c0_artifact.as_slice()),
+                ("c1-output-artifact.bin", run.stdout.as_slice()),
+                ("c2-output-artifact.bin", first_c2.stdout.as_slice()),
+                ("c2-repeat-output-artifact.bin", second_c2.stdout.as_slice()),
+            ];
+            for (name, bytes) in artifacts {
+                std::fs::write(output_dir.join(name), bytes)
+                    .unwrap_or_else(|error| panic!("preserve {name}: {error}"));
+            }
+        }
+
         let _ = std::fs::remove_file(binary_path);
         let _ = std::fs::remove_file(repeat_binary_path);
     }
@@ -995,6 +1014,11 @@ mod tests {
             c1_run.status.success(),
             "C1 executable failed to emit whole-program artifact: {}",
             String::from_utf8_lossy(&c1_run.stderr)
+        );
+        let c0_artifact = expected_sens_artifact(&wire, &c1.authority.revision);
+        assert_eq!(
+            c1_run.stdout, c0_artifact,
+            "C1 output must be byte-identical to the C0/SENS expected artifact"
         );
 
         let c2 = build_current_sens_c2_from_c1_evidence(&c1_run.stdout, &cml_revision)
@@ -1055,6 +1079,25 @@ mod tests {
             sha256_hex(&c2_executable),
             sha256_hex(&c2_run.stdout),
         );
+
+        if let Some(output_dir) = std::env::var_os("SENS_SELFHOST_ARTIFACT_DIR") {
+            let output_dir = std::path::PathBuf::from(output_dir);
+            std::fs::create_dir_all(&output_dir).expect("create selfhost artifact directory");
+            let artifacts: [(&str, &[u8]); 8] = [
+                ("c1-executable.bin", c1_executable.as_slice()),
+                ("c2-executable.bin", c2_executable.as_slice()),
+                ("c2-repeat-executable.bin", c2_repeat_executable.as_slice()),
+                ("c1-source.c", c1.c_source.as_bytes()),
+                ("c2-source.c", c2.c_source.as_bytes()),
+                ("input-program.sw1", wire.as_slice()),
+                ("c1-output-artifact.bin", c1_run.stdout.as_slice()),
+                ("c2-output-artifact.bin", c2_run.stdout.as_slice()),
+            ];
+            for (name, bytes) in artifacts {
+                std::fs::write(output_dir.join(name), bytes)
+                    .unwrap_or_else(|error| panic!("preserve {name}: {error}"));
+            }
+        }
 
         let _ = std::fs::remove_file(c1_path);
         let _ = std::fs::remove_file(c2_path);
