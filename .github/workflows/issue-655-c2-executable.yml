@@ -33,6 +33,10 @@ concurrency:
 
 jobs:
   c2-executable:
+    strategy:
+      fail-fast: false
+      matrix:
+        clean_run: [1, 2]
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -76,12 +80,23 @@ jobs:
           test "$build_pin" = "$pin"
           test "$(git -C external/sens rev-parse HEAD)" = "$pin"
 
+      - name: Pin CML compiler-source revision
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+        run: |
+          if [ -n "$PR_HEAD_SHA" ]; then
+            producer="$PR_HEAD_SHA"
+          else
+            producer="$(git log -1 --format=%H -- src/sens_c1_artifact.rs src/sens_current_lowering.rs src/sens_rich_bridge.rs)"
+          fi
+          test -n "$producer"
+          echo "CML_PRODUCER_SHA=$producer" >> "$GITHUB_ENV"
+
       - name: Focused format
         run: rustfmt --edition 2024 --check src/sens_rich_bridge.rs src/sens_current_lowering.rs src/sens_c1_artifact.rs
 
       - name: C1 binary artifact materializes and runs C2 executable
         env:
-          CML_PRODUCER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
         run: |
           cargo test -j 2 -p cml --lib \
@@ -91,12 +106,223 @@ jobs:
           test -n "$runner"
           cp "$runner" "$SENS_SELFHOST_ARTIFACT_DIR/seed-v0-c0-runner.bin"
           sha256sum "$SENS_SELFHOST_ARTIFACT_DIR/seed-v0-c0-runner.bin" >> "$SENS_SELFHOST_ARTIFACT_DIR/bootstrap-input-manifest.txt"
+          {
+            echo "external_runtime_shared_libraries:"
+            ldd "$SENS_SELFHOST_ARTIFACT_DIR/seed-v0-c0-runner.bin" || true
+          } >> "$SENS_SELFHOST_ARTIFACT_DIR/bootstrap-input-manifest.txt"
+
+      - name: Build pinned lineage and measure seed-v0
+        env:
+          SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          root = Path(os.environ["SENS_SELFHOST_ARTIFACT_DIR"])
+          def raw(name):
+              p = root / name
+              assert p.is_file() and p.stat().st_size > 0, f"missing/empty required witness: {name}"
+              return p.read_bytes()
+          def sha(data):
+              return hashlib.sha256(data).hexdigest()
+          def file_sha(path):
+              return sha(Path(path).read_bytes())
+          def command(*args):
+              return subprocess.check_output(args, text=True).strip()
+
+          c1_bin = raw("c1-executable.bin")
+          c2_bin = raw("c2-executable.bin")
+          c2_repeat_bin = raw("c2-repeat-executable.bin")
+          c1_src = raw("c1-source.c")
+          c2_src = raw("c2-source.c")
+          c0_expected = raw("c0-expected-artifact.bin")
+          c1_out = raw("c1-output-artifact.bin")
+          c2_out = raw("c2-output-artifact.bin")
+          raw("input-program.sw1")
+          raw("seed-v0-c0-runner.bin")
+          assert c1_bin == c2_bin == c2_repeat_bin, "C1/C2 executable bytes diverged"
+          assert c1_src == c2_src, "C1/C2 generated C source bytes diverged"
+          assert c0_expected == c1_out == c2_out, "C0/C1/C2 compiler-artifact bytes diverged"
+
+          sens_rev = command("git", "-C", "external/sens", "rev-parse", "HEAD")
+          cml_source_rev = command(
+              "git", "log", "-1", "--format=%H", "--",
+              "src/sens_c1_artifact.rs", "src/sens_current_lowering.rs", "src/sens_rich_bridge.rs"
+          )
+          target = command("gcc", "-dumpmachine")
+          gcc_version = command("gcc", "-dumpfullversion", "-dumpversion")
+          source = {
+              "sens_source_sha": sens_rev,
+              "compiler_nucleus_sha256": file_sha("external/sens/lib/compiler-nucleus.lisp"),
+              "language_contract_sha256": file_sha("external/sens/language-contract.lisp"),
+              "structural_law_projection_sha256": file_sha(
+                  "external/sens/knowledge/bija3-l1-l5-structure-projection.json"
+              ),
+          }
+          c1_sha, c2_sha = sha(c1_bin), sha(c2_bin)
+          c1_src_sha, c2_src_sha = sha(c1_src), sha(c2_src)
+          c1_out_sha, c2_out_sha = sha(c1_out), sha(c2_out)
+          report = {
+              "schema": "compiler-selfhost-lineage-report/1",
+              "status": "pass",
+              "source": source,
+              "c0": {
+                  "implementation_sha": cml_source_rev,
+                  "cml_sha": cml_source_rev,
+                  "backend": "CML Rust bootstrap + GCC C execution",
+                  "target": target,
+                  "abi_profile": "SW1+compiler-evidence-canonical/1",
+              },
+              "fresh_bootstrap": {
+                  "preexisting_c1_read": False,
+                  "preexisting_c2_read": False,
+                  "c0_produced_c1": True,
+                  "c1_produced_c2": True,
+              },
+              "generations": {
+                  "c1": {
+                      "produced": True, "executable": True,
+                      "artifact_sha256": c1_sha, "normalized_sha256": c1_src_sha,
+                  },
+                  "c2": {
+                      "produced": True, "executable": True,
+                      "artifact_sha256": c2_sha, "normalized_sha256": c2_src_sha,
+                  },
+              },
+              "equivalence": {
+                  "attempts": [
+                      {"method": "byte-identical-artifact", "status": "pass", "reason": None},
+                      {"method": "normalized-ir-or-artifact-identical", "status": "unavailable",
+                       "reason": "The stronger byte-identical criterion passed."},
+                      {"method": "canonical-lowering-and-executable-corpus-identical", "status": "unavailable",
+                       "reason": "A complete GAS/NASM golden corpus was not run by this witness."},
+                  ],
+                  "selected_method": "byte-identical-artifact",
+              },
+              "d8_admitted": False,
+              "legacy_core1_sid8_substitution": False,
+              "failure_category": None,
+              "evidence": {
+                  "cml_source_revision": cml_source_rev,
+                  "gcc_version": gcc_version,
+                  "gcc_target": target,
+                  "c1_c_source_sha256": c1_src_sha,
+                  "c2_c_source_sha256": c2_src_sha,
+                  "c1_executable_sha256": c1_sha,
+                  "c2_executable_sha256": c2_sha,
+                  "c1_executable_size": len(c1_bin),
+                  "c1_output_sha256": c1_out_sha,
+                  "c2_output_sha256": c2_out_sha,
+                  "c0_expected_artifact_sha256": sha(c0_expected),
+                  "source_equivalence": "byte-identical",
+                  "executable_equivalence": "byte-identical",
+                  "output_equivalence": "byte-identical",
+                  "c2_repeat_executable_sha256": sha(c2_repeat_bin),
+              },
+          }
+          (root / "compiler-selfhost-lineage-report.json").write_text(
+              json.dumps(report, sort_keys=True, indent=2) + "\\n", encoding="utf-8"
+          )
+          print("FRESH_C0_C1_C2_LINEAGE_REPORT=PASS")
+          PY
+          git -C external/sens rev-parse HEAD > "$SENS_SELFHOST_ARTIFACT_DIR/sens-source-revision.txt"
+          git rev-parse HEAD > "$SENS_SELFHOST_ARTIFACT_DIR/cml-workflow-head.txt"
+
+      - name: Checkout pinned Nano-SENS measurement validators
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/sens
+          ref: ca9babfec9d20259a206153476d7717f91be3bb6
+          path: nano-sens-measure-tools
+
+      - name: Validate lineage and measure seed-v0
+        env:
+          SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
+        run: |
+          root="$SENS_SELFHOST_ARTIFACT_DIR"
+          python3 nano-sens-measure-tools/scripts/validate-compiler-selfhost-lineage.py "$root/compiler-selfhost-lineage-report.json"
+          python3 nano-sens-measure-tools/scripts/measure-nano-sens-size.py --self-test
+          toolchain="$(rustc -Vv | tr '\\n' ';') | cargo=$(cargo -V) | gcc=$(gcc -dumpfullversion -dumpversion) | ld=$(ld --version | head -n 1)"
+          python3 nano-sens-measure-tools/scripts/measure-nano-sens-size.py \\
+            --seed "$root/seed-v0-c0-runner.bin" \\
+            --seed-role "Operational seed-v0: pinned CML lib-test bootstrap runner that produces C1 and runs C1/C2; includes Rust host/bootstrap compiler code; not a minimum-size claim" \\
+            --c1-executable "$root/c1-executable.bin" \\
+            --c2-executable "$root/c2-executable.bin" \\
+            --lineage-report "$root/compiler-selfhost-lineage-report.json" \\
+            --source-revision "$(git -C external/sens rev-parse HEAD)" \\
+            --toolchain "$toolchain" \\
+            --target "$(gcc -dumpmachine)" \\
+            --abi-profile "SW1+compiler-evidence-canonical/1" \\
+            --build-command "cargo test -j 2 -p cml --lib sens_c1_artifact::tests::c1_binary_artifact_materializes_and_runs_distinct_c2_executable -- --nocapture --test-threads=1; generated C1/C2 compiled by GCC with -Wl,--build-id=none -s" \\
+            --out "$root/nano-sens-size-report.json"
 
       - name: Preserve selfhost lineage artifacts for 30 days
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nano-sens-selfhost-c2-executable-${{ github.run_id }}-${{ github.run_attempt }}
+          name: nano-sens-selfhost-c2-executable-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.clean_run }}
           path: ${{ runner.temp }}/nano-sens-selfhost-artifacts/
+          retention-days: 30
+          if-no-files-found: error
+
+  compare-two-clean-runs:
+    needs: c2-executable
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the two 30-day evidence bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nano-sens-selfhost-c2-executable-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: artifacts
+          merge-multiple: false
+
+      - name: Require two independent clean runs to agree byte-for-byte
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          paths = sorted(Path("artifacts").glob("*/nano-sens-size-report.json"))
+          assert len(paths) == 2, f"expected exactly two fresh-run reports, got {len(paths)}"
+          raw = [p.read_bytes() for p in paths]
+          reports = [json.loads(b) for b in raw]
+          assert all(r.get("schema") == "nano-sens-size-report/1" for r in reports)
+          assert all(r.get("status") == "MEASURED_WITH_PINNED_SELFHOST_LINEAGE" for r in reports)
+          assert raw[0] == raw[1], "two clean-run Nano-SENS reports differ byte-for-byte"
+          result = {
+              "schema": "nano-sens-two-clean-runs-proof/1",
+              "status": "PASS",
+              "clean_runs": 2,
+              "identical_report_sha256": hashlib.sha256(raw[0]).hexdigest(),
+              "seed_sha256": reports[0]["seed_artifact"]["sha256"],
+              "seed_file_bytes": reports[0]["seed_artifact"]["file_bytes"],
+              "c1_executable_sha256": reports[0]["c1_executable"]["sha256"],
+              "c1_executable_file_bytes": reports[0]["c1_executable"]["file_bytes"],
+              "c2_executable_sha256": reports[0]["c2_executable"]["sha256"],
+              "c2_executable_file_bytes": reports[0]["c2_executable"]["file_bytes"],
+              "pinned_sens_source_sha": reports[0]["source"]["sens_source_sha"],
+              "pinned_lineage_report_sha256": reports[0]["source"]["lineage_report_sha256"],
+              "report_paths": [str(p) for p in paths],
+          }
+          Path("nano-sens-two-clean-runs-proof.json").write_text(
+              json.dumps(result, sort_keys=True, indent=2) + "\\n", encoding="utf-8"
+          )
+          print(json.dumps(result, sort_keys=True))
+          PY
+
+      - name: Preserve two-run measurement proof for 30 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: nano-sens-seed-v0-two-clean-runs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            nano-sens-two-clean-runs-proof.json
+            artifacts/*/compiler-selfhost-lineage-report.json
+            artifacts/*/nano-sens-size-report.json
+            artifacts/*/bootstrap-input-manifest.txt
           retention-days: 30
           if-no-files-found: error
