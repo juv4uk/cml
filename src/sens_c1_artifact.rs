@@ -1021,7 +1021,9 @@ mod tests {
                 .expect("static-link gcc stdin pipe")
                 .write_all(source.as_bytes())
                 .expect("generated C1 source reaches static-link gcc stdin");
-            child.wait_with_output().expect("static-link gcc must finish")
+            child
+                .wait_with_output()
+                .expect("static-link gcc must finish")
         };
 
         let c1_compile = compile_source(&c1.c_source, &c1_path, "cml-sens-selfhost-fixed");
@@ -1044,9 +1046,8 @@ mod tests {
 
         // K1 is an isolated static-link + strip experiment. The baseline C1
         // above remains unchanged and is still the C1/C2 lineage authority.
-        let static_compile = compile_source_static(
-            &c1.c_source, &c1_static_path, "cml-sens-k1-static-strip",
-        );
+        let static_compile =
+            compile_source_static(&c1.c_source, &c1_static_path, "cml-sens-k1-static-strip");
         assert!(
             static_compile.status.success(),
             "static-linked stripped C1 failed to compile: {}",
