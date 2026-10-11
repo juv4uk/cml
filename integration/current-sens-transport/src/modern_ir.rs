@@ -78,6 +78,34 @@ mod tests {
     use crate::VerifiedPhysicalProgram;
 
     #[test]
+    fn forged_source_metadata_cannot_rebind_physical_program_meaning() {
+        let physical_t5 = [0x63, 0x89, 0x06, 0xa1];
+        let verified = VerifiedPhysicalProgram::from_t5(&physical_t5).unwrap();
+        let baseline = lower_verified_program(&verified).unwrap();
+
+        let mut swapped_projection = verified.clone();
+        swapped_projection.exact_source = "10 000 01".to_string();
+        assert_eq!(
+            lower_verified_program(&swapped_projection),
+            Err(ModernLowerError::InvalidCanonicalSource),
+            "physical T5 bytes, not a human-created source string, own AST semantics",
+        );
+
+        let mut swapped_physical = verified.clone();
+        swapped_physical.canonical_t5 = vec![0xf3, 0x40, 0x60];
+        assert_eq!(
+            lower_verified_program(&swapped_physical),
+            Err(ModernLowerError::InvalidCanonicalSource),
+            "F3 bytes cannot be smuggled through canonical T5-only root entry",
+        );
+        assert_eq!(
+            lower_canonical_t5_bytes(&verified.canonical_t5).unwrap(),
+            baseline
+        );
+        println!("CML_ROOT_PHYSICAL_TO_IR_AUTHORITY_PASS forged_source_rejected=true");
+    }
+
+    #[test]
     fn generated_registry_is_nine_roles_proved_by_current_sens_not_source_bits() {
         let registry = compiler_registry().unwrap();
         assert_eq!(registry.len(), 9);
