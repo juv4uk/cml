@@ -645,10 +645,92 @@
       "CML .git metadata for build/test revision provenance",
       "external/sens .git metadata for runtime revision verification"
     ],
-    "status": "Version/revision pins recorded; external source checkout/cache bytes and complete dependency closure not measured."
+    "status": "Version/revision pins recorded; external source checkout/cache bytes and complete dependency closure not measured.",
+    "cml_default_build_graph": {
+      "policy": "CML Cargo.toml declares default-features = [] for this workflow; optional cudarc/pollster/wgpu feature trees in Cargo.lock are not active under `cargo test -p cml --lib` without --all-features. `Cargo.lock` has 118 package records for the full feature space; do not mistake that for the active default dependency graph.",
+      "active_crates_io_packages": [
+        {
+          "name": "serde",
+          "version": "1.0.229",
+          "checksum": "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
+        },
+        {
+          "name": "serde_core",
+          "version": "1.0.229",
+          "checksum": "67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48"
+        },
+        {
+          "name": "serde_derive",
+          "version": "1.0.229",
+          "checksum": "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
+        },
+        {
+          "name": "proc-macro2",
+          "version": "1.0.107",
+          "checksum": "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
+        },
+        {
+          "name": "quote",
+          "version": "1.0.47",
+          "checksum": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001"
+        },
+        {
+          "name": "syn",
+          "version": "3.0.3",
+          "checksum": "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3"
+        },
+        {
+          "name": "unicode-ident",
+          "version": "1.0.24",
+          "checksum": "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+        }
+      ],
+      "source_bytes": "CML root has no .cargo/config.toml in the pinned tree, so the outer CML `cargo test` resolves these from Cargo's external registry/cache, not from external/sens/.cargo/config.toml. Registry/cache bytes are excluded and not measured here; SENS nested cargo run uses its own vendor-source override separately.",
+      "shared_versions_note": "These seven version/checksum pairs match the vendor packages enumerated by the pinned SENS submodule census, but this does not mean the CML outer Cargo process consumes those vendor directories."
+    },
+    "wsm_os_target_git_dependency": {
+      "repository": "juv4uk/wsm-target-contract",
+      "commit": "d3663026dbcce73e2b8e32238910c3f8f7dea833",
+      "tree_sha": "d3663026dbcce73e2b8e32238910c3f8f7dea833",
+      "tree_entries": 29,
+      "tracked_files": 22,
+      "full_repository_tracked_bytes": 48742,
+      "compile_selected_source_subset": {
+        "file_count": 4,
+        "tracked_bytes": 24935,
+        "files": [
+          {
+            "path": "Cargo.toml",
+            "git_blob_sha1": "83c8961c929eede687a8b6525f0bdadb1379c995",
+            "size_bytes": 55,
+            "role": "workspace manifest"
+          },
+          {
+            "path": "LICENSE",
+            "git_blob_sha1": "a49660652423dcc5352c11456f31bca8806c0d25",
+            "size_bytes": 649,
+            "role": "package license metadata"
+          },
+          {
+            "path": "wsm-os-target/Cargo.toml",
+            "git_blob_sha1": "61414cc21fe1c9309c91de4da892cc07ff200639",
+            "size_bytes": 199,
+            "role": "crate manifest"
+          },
+          {
+            "path": "wsm-os-target/src/lib.rs",
+            "git_blob_sha1": "e0684bc354457dd5bb3468be2f2e649201cea0e6",
+            "size_bytes": 24032,
+            "role": "crate source compiled as CML dependency"
+          }
+        ]
+      },
+      "classification": "external Git dependency; both tracked source bytes and full repository byte count excluded from Nano-SENS trusted seed",
+      "full_tree_file_inventory_url": "https://api.github.com/repos/juv4uk/wsm-target-contract/git/trees/d3663026dbcce73e2b8e32238910c3f8f7dea833?recursive=1"
+    }
   },
   "closure_gaps": [
-    "Compute exact active Cargo build/test dependency graph from Cargo.lock, including the pinned wsm-os-target tree and registry crate source archives; inventory each dependency as counted or explicitly external.",
+    "The CML-only wsm-os-target Git dependency now has an exact pinned tree census: 22 tracked files / 48,742 bytes total repository tree, with a 4-file / 24,935-byte selected compile-source subset; keep it external and excluded. Confirm the selected default CML registry package graph through a controlled offline build; seven active crate versions/checksums are listed, while Cargo registry/cache bytes remain external and unmeasured.",
     "Run a fresh controlled build from clean checkouts and instrument actual file reads/commands during the entire CML lib-test runner, beyond the static call-site scan.",
     "Measure or remove runtime Git metadata requirements; never silently count .git as zero bytes.",
     "Inventory generated build outputs separately from source inputs and verify clean rebuild reproducibility.",
