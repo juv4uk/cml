@@ -947,7 +947,7 @@ mod tests {
                 ("c1-source.c", c1.c_source.as_bytes()),
                 ("input-program.sw1", wire.as_slice()),
                 ("c0-expected-artifact.bin", c0_artifact.as_slice()),
-                ("c1-output-artifact.bin", run.stdout.as_slice()),
+                ("c1-output-artifact.bin", first_c2.stdout.as_slice()),
                 ("c2-output-artifact.bin", first_c2.stdout.as_slice()),
                 ("c2-repeat-output-artifact.bin", second_c2.stdout.as_slice()),
             ];
@@ -1083,13 +1083,14 @@ mod tests {
         if let Some(output_dir) = std::env::var_os("SENS_SELFHOST_ARTIFACT_DIR") {
             let output_dir = std::path::PathBuf::from(output_dir);
             std::fs::create_dir_all(&output_dir).expect("create selfhost artifact directory");
-            let artifacts: [(&str, &[u8]); 8] = [
+            let artifacts: [(&str, &[u8]); 9] = [
                 ("c1-executable.bin", c1_executable.as_slice()),
                 ("c2-executable.bin", c2_executable.as_slice()),
                 ("c2-repeat-executable.bin", c2_repeat_executable.as_slice()),
                 ("c1-source.c", c1.c_source.as_bytes()),
                 ("c2-source.c", c2.c_source.as_bytes()),
                 ("input-program.sw1", wire.as_slice()),
+                ("c0-expected-artifact.bin", c0_artifact.as_slice()),
                 ("c1-output-artifact.bin", c1_run.stdout.as_slice()),
                 ("c2-output-artifact.bin", c2_run.stdout.as_slice()),
             ];
