@@ -225,7 +225,7 @@ jobs:
               },
           }
           (root / "compiler-selfhost-lineage-report.json").write_text(
-              json.dumps(report, sort_keys=True, indent=2) + "\\n", encoding="utf-8"
+              json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8"
           )
           print("FRESH_C0_C1_C2_LINEAGE_REPORT=PASS")
           PY
@@ -246,18 +246,18 @@ jobs:
           root="$SENS_SELFHOST_ARTIFACT_DIR"
           python3 nano-sens-measure-tools/scripts/validate-compiler-selfhost-lineage.py "$root/compiler-selfhost-lineage-report.json"
           python3 nano-sens-measure-tools/scripts/measure-nano-sens-size.py --self-test
-          toolchain="$(rustc -Vv | tr '\\n' ';') | cargo=$(cargo -V) | gcc=$(gcc -dumpfullversion -dumpversion) | ld=$(ld --version | head -n 1)"
-          python3 nano-sens-measure-tools/scripts/measure-nano-sens-size.py \\
-            --seed "$root/seed-v0-c0-runner.bin" \\
-            --seed-role "Operational seed-v0: pinned CML lib-test bootstrap runner that produces C1 and runs C1/C2; includes Rust host/bootstrap compiler code; not a minimum-size claim" \\
-            --c1-executable "$root/c1-executable.bin" \\
-            --c2-executable "$root/c2-executable.bin" \\
-            --lineage-report "$root/compiler-selfhost-lineage-report.json" \\
-            --source-revision "$(git -C external/sens rev-parse HEAD)" \\
-            --toolchain "$toolchain" \\
-            --target "$(gcc -dumpmachine)" \\
-            --abi-profile "SW1+compiler-evidence-canonical/1" \\
-            --build-command "cargo test -j 2 -p cml --lib sens_c1_artifact::tests::c1_binary_artifact_materializes_and_runs_distinct_c2_executable -- --nocapture --test-threads=1; generated C1/C2 compiled by GCC with -Wl,--build-id=none -s" \\
+          toolchain="$(rustc -Vv | tr '\n' ';') | cargo=$(cargo -V) | gcc=$(gcc -dumpfullversion -dumpversion) | ld=$(ld --version | head -n 1)"
+          python3 nano-sens-measure-tools/scripts/measure-nano-sens-size.py \
+            --seed "$root/seed-v0-c0-runner.bin" \
+            --seed-role "Operational seed-v0: pinned CML lib-test bootstrap runner that produces C1 and runs C1/C2; includes Rust host/bootstrap compiler code; not a minimum-size claim" \
+            --c1-executable "$root/c1-executable.bin" \
+            --c2-executable "$root/c2-executable.bin" \
+            --lineage-report "$root/compiler-selfhost-lineage-report.json" \
+            --source-revision "$(git -C external/sens rev-parse HEAD)" \
+            --toolchain "$toolchain" \
+            --target "$(gcc -dumpmachine)" \
+            --abi-profile "SW1+compiler-evidence-canonical/1" \
+            --build-command "cargo test -j 2 -p cml --lib sens_c1_artifact::tests::c1_binary_artifact_materializes_and_runs_distinct_c2_executable -- --nocapture --test-threads=1; generated C1/C2 compiled by GCC with -Wl,--build-id=none -s" \
             --out "$root/nano-sens-size-report.json"
 
       - name: Preserve selfhost lineage artifacts for 30 days
@@ -310,7 +310,7 @@ jobs:
               "report_paths": [str(p) for p in paths],
           }
           Path("nano-sens-two-clean-runs-proof.json").write_text(
-              json.dumps(result, sort_keys=True, indent=2) + "\\n", encoding="utf-8"
+              json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8"
           )
           print(json.dumps(result, sort_keys=True))
           PY
