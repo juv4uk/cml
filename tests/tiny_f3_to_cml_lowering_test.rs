@@ -6,7 +6,7 @@
 use cml::sens_current_lowering::lower_current_sens_binary_projection;
 use std::{fs, path::PathBuf};
 
-const TESTED_SENS_SHA: &str = "2ac5cbe001dcc949561aeb6bca231e52befd75a7";
+const TESTED_SENS_SHA: &str = "df9343ce1ac92a456b01192da7e318d7e9ddf59d";
 const QUOTE_T5: [u8; 4] = [0x63, 0x89, 0x06, 0xa1];
 const QUOTE_F3: [u8; 3] = [0xf3, 0x40, 0x60];
 
