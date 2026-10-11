@@ -41,6 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      WSM_NUCLEUS_ASM: ${{ github.workspace }}/wsm-my-lisp/asm/nucleus.s
       CARGO_BUILD_JOBS: "2"
       RUST_TEST_THREADS: "1"
     steps:
@@ -48,6 +49,13 @@ jobs:
         uses: actions/checkout@v5
         with:
           submodules: true
+
+      - name: Checkout pinned WSM x86 nucleus witness
+        uses: actions/checkout@v5
+        with:
+          repository: juv4uk/wsm-my-lisp
+          ref: a6bd9747196f2d676ab6883cbb4b84c7fcfc6947
+          path: wsm-my-lisp
 
       - name: Capture pinned bootstrap inputs and toolchain
         env:
@@ -59,6 +67,7 @@ jobs:
             echo "measurement_scope=bootstrap-runner-file-bytes-only"
             echo "cml_commit=$(git rev-parse HEAD)"
             echo "sens_commit=$(git -C external/sens rev-parse HEAD)"
+            echo "wsm_my_lisp_commit=$(git -C wsm-my-lisp rev-parse HEAD)"
             echo "external_dependencies=rustc,cargo,gcc,ld,ubuntu-latest; excluded_from_seed_bytes"
             echo "rustc:"
             rustc -Vv
@@ -69,7 +78,7 @@ jobs:
             echo "linker:"
             ld --version | head -n 1
             echo "source_file_sha256:"
-            sha256sum src/sens_c1_artifact.rs src/sens_current_lowering.rs src/sens_rich_bridge.rs external/sens/lib/compiler-nucleus.lisp external/sens/language-contract.lisp external/sens/knowledge/bija3-l1-l5-structure-projection.json
+            sha256sum src/sens_c1_artifact.rs src/sens_current_lowering.rs src/sens_rich_bridge.rs external/sens/lib/compiler-nucleus.lisp external/sens/language-contract.lisp external/sens/knowledge/bija3-l1-l5-structure-projection.json wsm-my-lisp/asm/nucleus.s
           } > "$SENS_SELFHOST_ARTIFACT_DIR/bootstrap-input-manifest.txt"
 
       - name: Freeze exact SENS verifier denominator
