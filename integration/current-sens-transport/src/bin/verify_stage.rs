@@ -68,9 +68,27 @@ fn main() {
                 failure("F3 and T5 disagree on verified modern AST/IR or rejection");
             }
             let ir_status = if a.is_ok() { "ADMITTED" } else { "UNSUPPORTED" };
+            // The CML candidate never invents execution semantics: after
+            // the physical+law checks, actual results are evaluated by SENS.
+            // This proves the two carriers' runtime outputs agree on
+            // admitted examples, not that a native CML backend is finished.
+            if a.is_ok() {
+                let canonical = sens::PhysicalT5Program::decode(&oracle.canonical_t5)
+                    .unwrap_or_else(|_| failure("T5 parser rejected admitted IR"));
+                let restored = sens::PhysicalT5Program::decode(&candidate.canonical_t5)
+                    .unwrap_or_else(|_| failure("F3 reconstructed T5 parser rejected"));
+                let baseline = canonical.execute(&mut sens::Session::default())
+                    .unwrap_or_else(|_| failure("admitted candidate is not executable by SENS"));
+                let trial = restored.execute(&mut sens::Session::default())
+                    .unwrap_or_else(|_| failure("F3 rebuilt candidate not executable by SENS"));
+                if baseline.value != trial.value || baseline.output != trial.output {
+                    failure("SENS evaluation differs between canonical T5 and F3");
+                }
+            }
             println!(
-                "CML_MODERN_STAGE_PASS type=F3 t5_bytes={} f3_bytes={} ir={}",
-                t5.len(), f3.len(), ir_status
+                "CML_MODERN_STAGE_PASS type=F3 t5_bytes={} f3_bytes={} ir={} eval={}",
+                t5.len(), f3.len(), ir_status,
+                if a.is_ok() { "EQUAL" } else { "NOT_RUN" }
             );
         }
         _ => failure("usage: verify_stage --t5 <path.sens> | --f3 <path.sens> <path.senc> <trusted_sha256>"),
