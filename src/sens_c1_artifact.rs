@@ -1131,7 +1131,9 @@ mod tests {
         println!(
             "NANO_SENS_K1_EVIDENCE baseline_c1_bytes={} static_c1_bytes={} baseline_c1_sha256={} static_c1_sha256={} static_output_sha256={} output_equivalence=byte-identical malformed_wire=fail-closed full_module_tests_required=true",
             c1_executable.len(),
-            std::fs::metadata(&c1_static_path).expect("static C1 metadata").len(),
+            std::fs::metadata(&c1_static_path)
+                .expect("static C1 metadata")
+                .len(),
             sha256_hex(&c1_executable),
             sha256_hex(&std::fs::read(&c1_static_path).expect("read static C1 executable")),
             sha256_hex(&c1_static_run.stdout),
@@ -1164,7 +1166,10 @@ mod tests {
                 ("input-program.sw1", wire.as_slice()),
                 ("c0-expected-artifact.bin", c0_artifact.as_slice()),
                 ("c1-output-artifact.bin", c1_run.stdout.as_slice()),
-                ("c1-static-output-artifact.bin", c1_static_run.stdout.as_slice()),
+                (
+                    "c1-static-output-artifact.bin",
+                    c1_static_run.stdout.as_slice(),
+                ),
                 ("c2-output-artifact.bin", c2_run.stdout.as_slice()),
             ];
             for (name, bytes) in artifacts {
