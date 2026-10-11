@@ -662,30 +662,17 @@ pub fn generate_baseline_report(cml_commit: &str, mylisp_pin: &str) -> BaselineR
         });
     }
 
-    // Workload 3: contiguous i32 buffer map.
+    // Workload 3: contiguous i32 buffer map (MECHANISM REFERENCE ONLY).
+    //
+    // The historical benchmark used two retired byte-keyed SID8 identities to
+    // construct a supposedly admitted CML program. Those addresses are NOT
+    // SENS current-domain identities. Until SENS supplies an exact verified
+    // domain law plus a CML-private mechanism for this workload, no current
+    // CML compute execution is admitted. Keep the independent C reference,
+    // its hardware measurement, and an explicit blocked CML lane; never
+    // transplant the historical byte keys into new Dn words.
     {
         let lisp_src = "(numeric-buffer-map (lambda (x) (+ x 1)) #i32(1 2 3 4 5))";
-        let ir = Ir::App {
-            func: Box::new(Ir::Sid(sens::sid!(01011001))),
-            args: vec![
-                Ir::Lambda {
-                    params: Params::Fixed(vec!["X".to_string()]),
-                    body: Box::new(Ir::App {
-                        func: Box::new(Ir::Sid(sens::sid!(00001100))),
-                        args: vec![Ir::Var("X".to_string()), Ir::Int(1)],
-                    }),
-                },
-                Ir::Buffer(BufferLiteral::I32(vec![1, 2, 3, 4, 5])),
-            ],
-        };
-
-        let backend = CpuComputeBackend;
-        let (backend_status, backend_outcome) = match backend.execute(&ir) {
-            Ok(BufferLiteral::I32(values)) => ("OK", format_i32_buffer(&values)),
-            Ok(other) => ("ERROR", format!("unexpected buffer type: {other:?}")),
-            Err(error) => ("ERROR", format!("error: {error:?}")),
-        };
-
         let mut reference_values = vec![1i32, 2, 3, 4, 5];
         for value in &mut reference_values {
             *value += 1;
@@ -706,18 +693,22 @@ pub fn generate_baseline_report(cml_commit: &str, mylisp_pin: &str) -> BaselineR
 
         workloads.push(WorkloadReport {
             id: "buffer-map-i32".to_string(),
-            description: "Contiguous i32 buffer map mechanism workload".to_string(),
+            description: "Contiguous i32 buffer map mechanism; SENS domain admission pending"
+                .to_string(),
             lisp_source: lisp_src.to_string(),
-            admitted: true,
-            verdict_source: lisp_verdict_source.to_string(),
-            upstream_witness_ref: lisp_witness_ref.clone(),
+            admitted: false,
+            verdict_source: "SENS current exact-domain law not yet proved for this workload; CML makes no semantic assertion"
+                .to_string(),
+            upstream_witness_ref: "CML migration: retired byte-keyed compute IDs not admissible as current SENS domain calls"
+                .to_string(),
             structural: None,
             lanes: vec![
                 LaneReport {
                     lane_name: "cml-compute-cpu".to_string(),
-                    status: backend_status.to_string(),
-                    outcome: backend_outcome,
-                    runtime: Some(reference_rt.clone()),
+                    status: "BLOCKED_UNVERIFIED_DOMAIN".to_string(),
+                    outcome: "No SENS-proven exact DomainIdentity/DomainCall and no migrated CML compute mechanism; historical byte addresses rejected"
+                        .to_string(),
+                    runtime: None,
                 },
                 LaneReport {
                     lane_name: "c-gcc-O3-reference".to_string(),
