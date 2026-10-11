@@ -1,0 +1,25 @@
+name: ЗАБОРОНА створення Git-гілок (SENS)
+
+on:
+  create:
+
+permissions:
+  contents: read
+
+jobs:
+  signal-branch-creation:
+    if: ${{ github.event.ref_type == 'branch' }}
+    name: Порушення директиви — branch create
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Зупинити workflow з зафіксованим порушенням
+        env:
+          CREATED_REF: ${{ github.event.ref }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "::error title=Порушення заборони гілок::${ACTOR} створив ${CREATED_REF}. Уся робота має бути в головній гілці."
+          exit 1
+
+# Це постфактум CI-сигнал. Справжній блок створення гілок вимагає
+# адміністративного GitHub Ruleset: ~ALL + Restrict creations + Active, без bypass.
+# Цей workflow не видаляє refs: спершу зберегти неперенесену роботу.
