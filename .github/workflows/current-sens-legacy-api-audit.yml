@@ -75,6 +75,9 @@ jobs:
             > "$RUNNER_TEMP/full-cml-modern-candidate.stderr" 2>&1
           code=$?
           set -e
+          echo "--- CML candidate build raw diagnostic (last 110 lines) ---"
+          tail -n 110 "$RUNNER_TEMP/full-cml-modern-candidate.stderr"
+          echo "--- end diagnostic ---"
           export CML_BUILD_EXIT="$code"
           python3 - "$RUNNER_TEMP/full-cml-modern-candidate.stderr" "$RUNNER_TEMP/full-cml-modern-candidate-report.json" <<'PY'
           import collections
