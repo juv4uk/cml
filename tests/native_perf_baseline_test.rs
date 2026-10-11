@@ -39,17 +39,26 @@ fn test_corpus_records_mechanism_outcomes_without_semantic_answer_keys() {
         assert!(lane.runtime.is_some());
     }
 
-    // Workload 3: buffer-map-i32 remains an admitted mechanism workload.
+    // Workload 3: never present historical SID-addressed numeric map as
+    // current SENS-admitted compute. Keep only an independent C reference
+    // until exact domain semantics and native CML mechanisms are proved.
     let w3 = report
         .workloads
         .iter()
         .find(|w| w.id == "buffer-map-i32")
-        .expect("buffer-map-i32 workload must be present");
-    assert!(w3.admitted);
-    for lane in &w3.lanes {
-        assert_eq!(lane.status, "OK");
-        assert_eq!(lane.outcome, "#i32(2 3 4 5 6)");
-    }
+        .expect("buffer-map-i32 observation must remain in the corpus");
+    assert!(!w3.admitted, "no historical 8-bit code can admit a current domain");
+    assert!(w3.verdict_source.contains("SENS current exact-domain law"));
+    let blocked = w3.lanes.iter().find(|lane| lane.lane_name == "cml-compute-cpu")
+        .expect("the blocked CML lane must be reported, not silently dropped");
+    assert_eq!(blocked.status, "BLOCKED_UNVERIFIED_DOMAIN");
+    assert!(blocked.runtime.is_none(), "never show unrun CML timings");
+    assert!(blocked.outcome.contains("historical byte addresses rejected"));
+    let reference = w3.lanes.iter().find(|lane| lane.lane_name == "c-gcc-O3-reference")
+        .expect("retain the independent C reference baseline");
+    assert_eq!(reference.status, "OK");
+    assert_eq!(reference.outcome, "#i32(2 3 4 5 6)");
+    assert!(reference.runtime.is_some());
 
     // Workload 4 is a compiler admission-policy observation, not a Lisp answer key.
     let w4 = report
