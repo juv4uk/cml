@@ -178,7 +178,6 @@ pub fn lower(ast: &ModernAst) -> Result<ModernIr, ModernLowerError> {
         }
     }
 }
-
 // SENS owns the D3/D4 compiler law. Only a pinned, executable law +
 // exact contract digest can authorize one callable AST head.
 pub fn verified_role(identity: CoreDomainIdentity) -> Result<VerifiedRole, ModernLowerError> {
