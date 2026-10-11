@@ -90,7 +90,7 @@ jobs:
           cargo test -j 2 -p cml --lib \
             sens_c1_artifact::tests::c1_recompiles_identical_nucleus_to_byte_identical_c2_artifact \
             -- --nocapture --test-threads=1
-          runner="$(find target/debug/deps -maxdepth 1 -type f -executable -name 'cml-*' -printf '%T@ %p\\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
+          runner="$(find target/debug/deps -maxdepth 1 -type f -executable -name 'cml-*' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
           test -n "$runner"
           cp "$runner" "$SENS_SELFHOST_ARTIFACT_DIR/seed-v0-c0-runner.bin"
           sha256sum "$SENS_SELFHOST_ARTIFACT_DIR/seed-v0-c0-runner.bin" >> "$SENS_SELFHOST_ARTIFACT_DIR/bootstrap-input-manifest.txt"
