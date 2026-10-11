@@ -106,13 +106,14 @@ jobs:
           root="$SENS_SELFHOST_ARTIFACT_DIR"
           cml_committed_lock_blob="$(git rev-parse HEAD:Cargo.lock)"
           sens_committed_lock_blob="$(git -C external/sens rev-parse HEAD:Cargo.lock)"
-          # Do not use --locked on the outer graph until we know the root lockfile
-          # exactly represents the current SENS gitlink. Record resolution drift instead of hiding it.
-          cargo tree --manifest-path Cargo.toml -p cml --edges normal,build,dev --prefix none > "$root/cml-active-cargo-tree.txt"
+          # Cargo.lock now includes the SENS serde dependency closure; require exact pinning.
+          cargo tree --locked --manifest-path Cargo.toml -p cml --edges normal,build,dev --prefix none > "$root/cml-active-cargo-tree.txt"
           (cd external/sens && cargo tree --locked -p xtask --edges normal,build --prefix none) > "$root/sens-xtask-active-cargo-tree.txt"
           cml_resolved_lock_blob="$(git hash-object Cargo.lock)"
           sens_resolved_lock_blob="$(git -C external/sens hash-object Cargo.lock)"
           git diff -- Cargo.lock > "$root/cml-cargo-lock-resolution.diff"
+          test "$cml_committed_lock_blob" = "$cml_resolved_lock_blob"
+          test "$sens_committed_lock_blob" = "$sens_resolved_lock_blob"
           {
             echo "schema=nano-sens-active-cargo-graphs/1"
             echo "cml_committed_lock_git_blob=$cml_committed_lock_blob"
