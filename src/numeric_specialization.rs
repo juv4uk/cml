@@ -291,10 +291,14 @@ fn lower_spec_expr(
         // This is a bounded CML machine arithmetic mechanism, never an
         // interpretation of a historical language byte address. Only
         // SENS-verified IR admission may authorize a language operation.
-        Ir::Prim { op: PrimOp::Add, args } =>
-            lower_numeric_binary(args, NumericAluKind::Add, ctx, prov),
-        Ir::Prim { op: PrimOp::Sub, args } =>
-            lower_numeric_binary(args, NumericAluKind::Sub, ctx, prov),
+        Ir::Prim {
+            op: PrimOp::Add,
+            args,
+        } => lower_numeric_binary(args, NumericAluKind::Add, ctx, prov),
+        Ir::Prim {
+            op: PrimOp::Sub,
+            args,
+        } => lower_numeric_binary(args, NumericAluKind::Sub, ctx, prov),
         other => Err(LirLowerError::Unsupported(format!(
             "IR form {:?} is not admitted in numeric specialization slice",
             other
