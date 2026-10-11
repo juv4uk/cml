@@ -83,7 +83,7 @@ jobs:
                       executable,"--f3",source,f3,row["staged_sha256"]
                   ],check=True,text=True,capture_output=True)
                   print(accepted.stdout.strip())
-                  if "ir=ADMITTED" in accepted.stdout:
+                  if "ir=ADMITTED" in accepted.stdout and "eval=EQUAL" in accepted.stdout:
                       ir_admitted+=1
                   elif "ir=UNSUPPORTED" in accepted.stdout:
                       ir_unsupported+=1
@@ -101,7 +101,7 @@ jobs:
                   raise SystemExit(f"unknown staged codec: {row['codec']}")
           if t5_count != manifest["source_files"] or t5_count != 23 or f3_count != 9:
               raise SystemExit(f"regressed full staged corpus: T5={t5_count} F3={f3_count}")
-          if ir_admitted < 1 or ir_admitted+ir_unsupported != f3_count:
+          if ir_admitted != f3_count or ir_unsupported != 0:
               raise SystemExit(f"typed IR admission proof insufficient: {ir_admitted}/{ir_unsupported}")
           print(f"CML_MODERN_STAGE_CORPUS_PASS source_t5={t5_count} selected_f3={f3_count} ir_admitted={ir_admitted} ir_unsupported={ir_unsupported}")
           PY
