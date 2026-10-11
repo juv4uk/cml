@@ -1,0 +1,129 @@
+name: Current SENS candidate - CML legacy API diagnostic audit (not a release)
+on:
+  push:
+    branches: [master]
+    paths:
+      - "src/core_profile.rs"
+      - "src/ast.rs"
+      - "src/ir.rs"
+      - "build.rs"
+      - "tests/core_profile_request_test.rs"
+      - ".github/workflows/current-sens-legacy-api-audit.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  legacy-api-inventory:
+    name: Full CML modern-pin compile AUDIT - red diagnostics expected, not a production release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SENS_CANDIDATE_SHA: 390f313242b538cb954dc00afa32ef0003f7d94b
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: juv4uk/sens
+          ref: 390f313242b538cb954dc00afa32ef0003f7d94b
+          path: external/sens
+          persist-credentials: false
+          submodules: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Exact upstream candidate compiler export must really work
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C external/sens rev-parse HEAD)" = "$SENS_CANDIDATE_SHA"
+          cargo run --quiet --manifest-path external/sens/Cargo.toml \
+            -p xtask -- compiler-export > "$RUNNER_TEMP/cml-sens-compiler-export.lisp"
+          test -s "$RUNNER_TEMP/cml-sens-compiler-export.lisp"
+      - name: Temporarily align test-only authority, leave gitlink and lock untouched
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+          p=Path("upstream-revisions.lisp")
+          source=p.read_text()
+          old=subprocess.check_output(
+              ["git","rev-parse","HEAD:external/sens"],text=True
+          ).strip()
+          current=os.environ["SENS_CANDIDATE_SHA"]
+          if len(old)!=40 or old==current:
+              raise SystemExit("BLOCK: stale or unexpectedly promoted SENS pin")
+          for key in ("build-source-sha","supported-pin-sha"):
+              before=f'({key} . "{old}")'
+              if source.count(before)!=1:
+                  raise SystemExit(f"BLOCK: unexpected CML authority metadata: {key}")
+              source=source.replace(before,f'({key} . "{current}")',1)
+          p.write_text(source)
+          PY
+          git diff --exit-code -- Cargo.toml .gitmodules
+          test "$(git rev-parse HEAD:external/sens)" != "$SENS_CANDIDATE_SHA"
+      - name: Count real full-CML compiler diagnostics, NEVER hide a failing production build
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          cargo test --features core1-t5-candidate \
+            --test tiny_f3_to_cml_lowering_test --no-run \
+            > "$RUNNER_TEMP/full-cml-modern-candidate.stderr" 2>&1
+          code=$?
+          set -e
+          export CML_BUILD_EXIT="$code"
+          python3 - "$RUNNER_TEMP/full-cml-modern-candidate.stderr" "$RUNNER_TEMP/full-cml-modern-candidate-report.json" <<'PY'
+          import collections
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+          content=Path(sys.argv[1]).read_text(errors="replace")
+          matches=list(re.finditer(
+              r"^error(?:\[([A-Z]\d+)\])?: (.+)$",content,re.M))
+          errors=[]
+          for match in matches:
+              remainder=content[match.end():match.end()+500]
+              m=re.search(r"\n\s*-->\s+([^:\n]+):(\d+):(\d+)",remainder)
+              if m:
+                  errors.append({"code":match.group(1),"message":match.group(2),
+                                 "file":m.group(1),"line":int(m.group(2))})
+          histogram=dict(collections.Counter(x["file"] for x in errors))
+          is_green=int(os.environ["CML_BUILD_EXIT"])==0
+          report={
+            "kind":"candidate-full-build-diagnostic-audit-NOT-release",
+            "candidate_sha":os.environ["SENS_CANDIDATE_SHA"],
+            "candidate_full_cml_compiles":is_green,
+            "pre_migration_baseline_diagnostics":142,
+            "diagnostic_sites":len(errors),
+            "by_file":histogram,
+            "modern_core_profile_sid8_error":any(
+                x["file"].endswith("src/core_profile.rs") and
+                ("Sid8" in x["message"] or "sid" in x["message"].lower())
+                for x in errors),
+          }
+          Path(sys.argv[2]).write_text(
+              json.dumps(report,indent=2,ensure_ascii=False)+"\n")
+          print(json.dumps(report,ensure_ascii=False))
+          if not is_green:
+              print("CML_FULL_COMPILER_STILL_BLOCKED - NOT a green compiler",file=sys.stderr)
+          if report["modern_core_profile_sid8_error"]:
+              raise SystemExit("regression: migrated source still imports retired old SID")
+          if not is_green and not errors:
+              raise SystemExit("unexpected failure not covered by Rust diagnostic inventory")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cml-modern-candidate-compile-audit-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/full-cml-modern-candidate.stderr
+            ${{ runner.temp }}/full-cml-modern-candidate-report.json
+            ${{ runner.temp }}/cml-sens-compiler-export.lisp
+          if-no-files-found: warn
+          retention-days: 30
