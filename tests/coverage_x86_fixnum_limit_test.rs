@@ -9,7 +9,15 @@ const HISTORICAL_LIMITS: &[(&str, &str)] = &[
 ];
 
 fn read(path: &str) -> String {
-    fs::read_to_string(path).unwrap_or_else(|e| panic!("must read {path}: {e}"))
+    let source = std::path::Path::new(path);
+    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let resolved = if source.is_file() {
+        source.to_path_buf()
+    } else {
+        base.join("../../").join(path)
+    };
+    fs::read_to_string(&resolved)
+        .unwrap_or_else(|e| panic!("must read {}: {e}", resolved.display()))
 }
 
 fn x86_section(matrix: &str) -> &str {
