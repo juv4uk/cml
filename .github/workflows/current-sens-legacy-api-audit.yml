@@ -127,8 +127,8 @@ jobs:
               raise SystemExit("regression: migrated source still imports retired old SID")
           # Freeze proven migration progress. This does not claim a compiler
           # build pass; it only rejects reintroduced obsolete API diagnostics.
-          if len(errors) > 141:
-              raise SystemExit("legacy API diagnostic count regressed above 141")
+          if len(errors) > 131:
+              raise SystemExit("legacy API diagnostic count regressed above 131")
           print(f"CML_LEGACY_MIGRATION_AUDIT_PASS baseline=142 remaining={len(errors)}")
           if not is_green and not errors:
               raise SystemExit("unexpected failure not covered by Rust diagnostic inventory")
