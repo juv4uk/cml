@@ -268,7 +268,7 @@ jobs:
             --toolchain "$toolchain" \
             --target "$(gcc -dumpmachine)" \
             --abi-profile "SW1+compiler-evidence-canonical/1" \
-            sens_c1_artifact::tests:: \
+            --build-command "C1/C2 baseline: GCC -Wl,--build-id=none -s; K1: GCC -static -Wl,--build-id=none -s; full CML library corpus passed; baseline and static C1 outputs compared byte-for-byte" \
             --out "$root/nano-sens-size-report.json"
 
       - name: Preserve selfhost lineage artifacts for 30 days
