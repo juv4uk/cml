@@ -1,98 +1,47 @@
 use std::process::Command;
-
 use cml::coverage::CoverageLedger;
 
 fn run_report() -> Vec<u8> {
-    let output = Command::new(env!("CARGO_BIN_EXE_cml-coverage"))
-        .output()
-        .expect("cml-coverage binary must execute");
-    assert!(
-        output.status.success(),
-        "cml-coverage must exit successfully: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    output.stdout
+    let out = Command::new(env!("CARGO_BIN_EXE_cml-coverage")).output()
+        .expect("coverage report CLI must execute");
+    assert!(out.status.success(),
+        "coverage must fail closed rather than emit unverifiable data: {}",
+        String::from_utf8_lossy(&out.stderr));
+    out.stdout
 }
 
 #[test]
-fn report_is_deterministic_and_matches_the_merged_ledger() {
+fn exact_domain_report_is_deterministic_and_matches_executable_sens_law() {
     let first = run_report();
-    let second = run_report();
-    assert_eq!(first, second, "coverage report must be byte-deterministic");
-
-    let text = String::from_utf8(first).expect("coverage report must be UTF-8");
-    let ledger = CoverageLedger::build_source();
+    assert_eq!(first, run_report());
+    let text = String::from_utf8(first).unwrap();
+    let ledger = CoverageLedger::try_current_sens().unwrap();
     let summary = ledger.summary();
 
-    assert!(text.starts_with("schema\tcml-coverage/1\n"));
-    assert!(text.contains("\nupstream-channel\tbuild-source\n"));
-    assert!(text.contains(&format!(
-        "\nsemantic-identities\t{}\n",
-        summary.semantic_identities
-    )));
+    assert!(text.starts_with("schema\tcml-coverage/2\n"));
+    assert!(text.contains("\nupstream-channel\tcurrent-sens-executable-compiler-law\n"));
+    assert!(text.contains(&format!("\nauthority-sha256\t{}\n", ledger.authority_sha256)));
+    assert!(text.contains("\ncompiler-role-identities\t9\n"));
     assert!(text.contains(&format!("\nsource-admitted\t{}\n", summary.source_admitted)));
-    assert!(text.contains(&format!(
-        "\nnot-yet-admitted\t{}\n",
-        summary.not_yet_admitted
-    )));
-    assert!(text.contains(&format!("\nx86-executable\t{}\n", summary.x86_executable)));
-    assert!(text.contains(&format!(
-        "\nx86-assembly-witness-only\t{}\n",
-        summary.x86_assembly_witness_only
-    )));
-    assert!(text.contains(&format!(
-        "\nx86-representation-limited\t{}\n",
-        summary.x86_representation_limited
-    )));
+    assert!(text.contains("\nnot-yet-admitted\t0\n"));
+    assert!(text.contains("\nx86-executable\t0\n"));
+    assert!(text.contains("\nx86-assembly-witness-only\t0\n"));
+    assert!(text.contains("\nx86-representation-limited\t0\n"));
 
-    let row_lines: Vec<_> = text
-        .lines()
-        .filter(|line| line.starts_with("row\t"))
-        .collect();
-    assert_eq!(row_lines.len(), ledger.rows.len());
-
-    for line in &row_lines {
+    let rows: Vec<_> = text.lines().filter(|line| line.starts_with("row\t")).collect();
+    assert_eq!(rows.len(), 9);
+    for line in rows {
         let fields: Vec<_> = line.split('\t').collect();
-        assert_eq!(
-            fields.len(),
-            6,
-            "row must expose exactly schema tag + 5 stable columns: {line}"
-        );
+        assert_eq!(fields.len(), 7, "schema v2: tag/domain/role/status/proof/native: {line}");
+        let coordinate = fields[1];
+        if let Some(bits) = coordinate.strip_prefix("D3:") {
+            assert_eq!(bits.len(), 3);
+        } else if let Some(bits) = coordinate.strip_prefix("D4:") {
+            assert_eq!(bits.len(), 4);
+        } else {
+            panic!("the compiler closure must not contain an unverified domain: {coordinate}");
+        }
+        assert!(line.contains("\tsource-admitted\t"));
+        assert_eq!(fields[6], "-", "no historical byte-keyed x86 evidence may carry over");
     }
-
-    assert!(
-        row_lines
-            .iter()
-            .any(|line| line.contains("\tnot-yet-admitted\t")),
-        "report must preserve unsupported upstream identities"
-    );
-
-    let x86_executable = row_lines
-        .iter()
-        .filter(|line| line.contains("\tx86-freestanding:executable:"))
-        .count();
-    let x86_assembly = row_lines
-        .iter()
-        .filter(|line| line.contains("\tx86-freestanding:assembly-witness:"))
-        .count();
-    let x86_representation_limited = row_lines
-        .iter()
-        .filter(|line| line.contains("\tx86-freestanding:executable-representation-limited:"))
-        .count();
-    assert_eq!(x86_executable, summary.x86_executable);
-    assert_eq!(x86_assembly, summary.x86_assembly_witness_only);
-    assert_eq!(
-        x86_representation_limited,
-        summary.x86_representation_limited
-    );
-    assert_eq!(
-        x86_executable + x86_assembly + x86_representation_limited,
-        9
-    );
-    assert!(
-        row_lines
-            .iter()
-            .filter(|line| line.contains("\tx86-freestanding:executable-representation-limited:"))
-            .all(|line| line.contains("target-fixnum-only"))
-    );
 }
