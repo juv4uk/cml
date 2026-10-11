@@ -1,0 +1,84 @@
+name: Candidate tiny F3/T5 SENS to verified CML lowering
+on:
+  push:
+    branches: [master]
+    paths:
+      - "tests/tiny_f3_to_cml_lowering_test.rs"
+      - ".github/workflows/tiny-f3-candidate-cml.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate-two-codecs:
+    name: Physical F3 vs T5 on exact SENS candidate to identical CML IR
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SENS_CANDIDATE_SHA: 2ac5cbe001dcc949561aeb6bca231e52befd75a7
+      SENS_COMPILER_EXPORT_FILE: /tmp/cml-frame3-candidate-verified-export.txt
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: juv4uk/sens
+          ref: 2ac5cbe001dcc949561aeb6bca231e52befd75a7
+          path: external/sens
+          submodules: false
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Fail closed if tested SENS candidate or physical fixture drifted
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C external/sens rev-parse HEAD)" = "$SENS_CANDIDATE_SHA"
+          test "$(od -An -tx1 external/sens/tests/fixtures/migration-quote-cohort-main/quote-legacy.sens | tr -d ' \n')" = 638906a1
+          test -s external/sens/crates/sens/src/frame3_small.rs
+          git ls-tree HEAD external/sens > "$RUNNER_TEMP/production-sens-gitlink.txt"
+      - name: Produce compiler authority only from the exact upstream candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --quiet --manifest-path external/sens/Cargo.toml -p xtask -- compiler-export > "$SENS_COMPILER_EXPORT_FILE"
+          test -s "$SENS_COMPILER_EXPORT_FILE"
+      - name: Compile CML with candidate only inside this disposable runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The production gitlink/lockfile stays pinned. Only the temporary
+          # checkout's authority metadata is rewritten for a candidate test.
+          trap 'git restore -- upstream-revisions.lisp' EXIT
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, subprocess
+          p=Path("upstream-revisions.lisp")
+          source=p.read_text()
+          old=subprocess.check_output(["git","rev-parse","HEAD:external/sens"],text=True).strip()
+          candidate=os.environ["SENS_CANDIDATE_SHA"]
+          if not len(old)==len(candidate)==40 or old==candidate:
+              raise SystemExit("BLOCK: candidate or pin mismatch")
+          for field in ("build-source-sha","supported-pin-sha"):
+              before=f'({field} . "{old}")'
+              after=f'({field} . "{candidate}")'
+              if source.count(before)!=1:
+                  raise SystemExit(f"BLOCK: unexpected production authority: {field}")
+              source=source.replace(before,after,1)
+          p.write_text(source)
+          print("CML candidate-only authority; production gitlink never changed")
+          PY
+          cargo test --features core1-t5-candidate --test tiny_f3_to_cml_lowering_test -- --nocapture \
+            2>&1 | tee "$RUNNER_TEMP/cml-t5-tiny-f3-parity.log"
+          grep -q CML_TWO_CODEC_BRIDGE_PASS "$RUNNER_TEMP/cml-t5-tiny-f3-parity.log"
+          git diff --exit-code -- Cargo.toml .gitmodules
+      - name: Preserve proof and pinned production gitlink
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cml-two-codec-candidate-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/cml-t5-tiny-f3-parity.log
+            ${{ runner.temp }}/production-sens-gitlink.txt
+          if-no-files-found: warn
+          retention-days: 30
