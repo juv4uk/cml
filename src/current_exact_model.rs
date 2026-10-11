@@ -240,3 +240,36 @@ pub fn exact_call(source: &Expr, depth: usize) -> Result<ModernAst, ModernLowerE
     }
 }
 
+
+
+/// Single authoritative canonical T5 -> AST -> CML-private IR intake.
+/// This source is compiled both in the root candidate CML module and in the
+/// isolated migration verifier. It never accepts an independent caller-owned
+/// source projection without checking its *physical* T5 carrier.
+pub fn lower_canonical_t5_bytes(physical_t5: &[u8]) -> Result<VerifiedProgramIr, ModernLowerError> {
+    let decoded = sens::PhysicalT5Program::decode(physical_t5)
+        .map_err(|_| ModernLowerError::InvalidCanonicalSource)?;
+    if decoded.form_count() == 0 {
+        return Err(ModernLowerError::NoExecutableRoot);
+    }
+    let exact_source = sens::open_ternary_program(physical_t5)
+        .map_err(|_| ModernLowerError::InvalidCanonicalSource)?;
+    let reencoded = sens::encode_binary_projection_ternary(&exact_source)
+        .map_err(|_| ModernLowerError::InvalidCanonicalSource)?;
+    if reencoded != physical_t5 {
+        return Err(ModernLowerError::InvalidCanonicalSource);
+    }
+    let read = sens::parse_canonical_binary(&exact_source)
+        .map_err(|_| ModernLowerError::InvalidCanonicalSource)?;
+    if read.len() != decoded.form_count() {
+        return Err(ModernLowerError::InvalidCanonicalSource);
+    }
+    let lowered = sens::lower_program(&read);
+    let ast = lowered.iter().map(|node| exact_call(node, 0))
+        .collect::<Result<Vec<_>, _>>()?;
+    let ir = ast.iter().map(lower).collect::<Result<Vec<_>, _>>()?;
+    Ok(VerifiedProgramIr {
+        ast, ir,
+        canonical_t5_sha256: sens::sha256_source(physical_t5),
+    })
+}
