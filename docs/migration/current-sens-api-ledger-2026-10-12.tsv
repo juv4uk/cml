@@ -1,3 +1,4 @@
+# Modern isolated AST/IR and shape-only generator are separate candidate modules; production legacy diagnostics remain 142 until original files are migrated.
 # Evidence: CML exact upstream candidate compile run https://github.com/juv4uk/cml/actions/runs/38173957686 (142 compiler errors); error counts are compiler diagnostics, NOT 142 distinct root causes.
 # Canon generated Rust file is attributed to build.rs source; do not edit generated output. Modern isolated transport green: https://github.com/juv4uk/cml/actions/runs/38175530790 (23 T5/9 F3).
 # Production dependency cannot be changed until all old CML references are resolved. No reintroduction of old numeric meaning or feature-hiding the compiler modules.
@@ -18,3 +19,5 @@ src/compute.rs	15	compute substrate	Consume verified backend mechanisms only, in
 src/compiler.rs	15	code generator	Route verified CML modern IR instead of retired SID special casing	Exact DomainCall compiler corpus, no address remap	BLOCKED
 src/c_backend.rs	24	C backend	Switch 24 source-level SID-dependent sites to verified private mechanism IR	Native C output matches SENS evaluator	BLOCKED
 src/x86_freestanding.rs	37	x86 freestanding backend	Replace 37 source-level old SID references with derived mechanism/IR	x86 real-run and differential oracle parity	BLOCKED
+integration/current-sens-transport/build.rs	0	candidate source-owned coordinate generator	Project 9 D3/D4 identities from SENS corpus only; verify live SENS roles at runtime	9/9 roles law-verified; exact widths and tampering fail closed	GREEN_CANDIDATE_ONLY
+integration/current-sens-transport/src/modern_ir.rs	0	candidate typed AST/IR	SENS canonical reader/lower + SENS-owned role proof, CML private IR; quote data preserved	9/9 F3-vs-T5 real corpus identical CML IR; 7/7 unit tests	GREEN_CANDIDATE_ONLY
