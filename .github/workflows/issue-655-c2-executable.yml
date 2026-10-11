@@ -99,6 +99,20 @@ jobs:
           test "$build_pin" = "$pin"
           test "$(git -C external/sens rev-parse HEAD)" = "$pin"
 
+      - name: Capture active Cargo dependency graphs
+        env:
+          SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
+        run: |
+          root="$SENS_SELFHOST_ARTIFACT_DIR"
+          cargo tree --locked --manifest-path Cargo.toml -p cml --edges normal,build,dev --prefix none > "$root/cml-active-cargo-tree.txt"
+          cargo tree --locked --manifest-path external/sens/Cargo.toml -p xtask --edges normal,build --prefix none > "$root/sens-xtask-active-cargo-tree.txt"
+          {
+            echo "schema=nano-sens-active-cargo-graphs/1"
+            echo "cml_lock_sha256=$(sha256sum Cargo.lock | cut -d' ' -f1)"
+            echo "sens_lock_sha256=$(sha256sum external/sens/Cargo.lock | cut -d' ' -f1)"
+            sha256sum "$root/cml-active-cargo-tree.txt" "$root/sens-xtask-active-cargo-tree.txt"
+          } > "$root/active-cargo-graph-digests.txt"
+          cat "$root/active-cargo-graph-digests.txt"
       - name: Pin CML compiler-source revision
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
@@ -330,6 +344,16 @@ jobs:
               "pinned_lineage_report_sha256": reports[0]["source"]["lineage_report_sha256"],
               "report_paths": [str(p) for p in paths],
           }
+          # The active dependency graph is separate from the whole Cargo.lock
+          # feature universe. Require the same graph in both clean runs.
+          graph_proof = {}
+          for name in ("cml-active-cargo-tree.txt", "sens-xtask-active-cargo-tree.txt", "active-cargo-graph-digests.txt"):
+              graph_paths = sorted(Path("artifacts").glob(f"*/{name}"))
+              assert len(graph_paths) == 2, f"expected graph artifact {name} in both runs, got {len(graph_paths)}"
+              graph_raw = [p.read_bytes() for p in graph_paths]
+              assert graph_raw[0] == graph_raw[1], f"active Cargo graph differs between clean runs: {name}"
+              graph_proof[name] = hashlib.sha256(graph_raw[0]).hexdigest()
+          result["active_cargo_graphs"] = {"schema": "nano-sens-active-cargo-graphs/1", "byte_identical_across_runs": True, "sha256": graph_proof}
           Path("nano-sens-two-clean-runs-proof.json").write_text(
               json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8"
           )
