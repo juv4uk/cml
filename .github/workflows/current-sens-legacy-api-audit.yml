@@ -11,6 +11,8 @@ on:
       - "src/lower.rs"
       - "src/coverage.rs"
       - "src/bin/cml-coverage.rs"
+      - "src/x86_lir.rs"
+      - "src/numeric_specialization.rs"
       - "build.rs"
       - "tests/core_profile_request_test.rs"
       - ".github/workflows/current-sens-legacy-api-audit.yml"
@@ -132,6 +134,22 @@ jobs:
           print(f"CML_LEGACY_MIGRATION_AUDIT_PASS baseline=142 remaining={len(errors)}")
           if not is_green and not errors:
               raise SystemExit("unexpected failure not covered by Rust diagnostic inventory")
+          PY
+      - name: Ensure x86 and numeric LIR select private mechanisms, not retired bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          for filename in ("src/x86_lir.rs", "src/numeric_specialization.rs"):
+              code=Path(filename).read_text()
+              for prohibited in ("sens::sid!", "sens::sens!", "Ir::Sid("):
+                  if prohibited in code:
+                      raise SystemExit(f"BLOCK: old language-byte dispatch in {filename}: {prohibited}")
+              for required in ("Ir::Prim", "PrimOp::Add", "PrimOp::Sub"):
+                  if required not in code:
+                      raise SystemExit(f"BLOCK: compiler-private ALU mechanism missing in {filename}")
+          print("CML_X86_NUMERIC_MECHANISM_ONLY_PASS no_byte_identity_dispatch=true")
           PY
       - name: Verify root build.rs generated nine SENS-owned D3/D4 coordinates
         shell: bash
