@@ -50,6 +50,8 @@ jobs:
           grep -q CML_MODERN_REGISTRY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           grep -q CML_MODERN_IR_PARITY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           grep -q CML_ROOT_PHYSICAL_TO_IR_AUTHORITY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
+          grep -q CML_ROOT_CURRENT_COVERAGE_PASS "$RUNNER_TEMP/modern-sens-transport.log"
+          grep -q CML_ROOT_CURRENT_COVERAGE_NATIVE_UNPROVEN_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           grep -q CML_PRODUCTION_CORE_PROFILE_MODERN_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           grep -q CML_PRODUCTION_PROFILE_WIDTH_COLLISION_REJECTED "$RUNNER_TEMP/modern-sens-transport.log"
           test "$(git rev-parse HEAD:external/sens)" != "$SENS_CANDIDATE_SHA"
