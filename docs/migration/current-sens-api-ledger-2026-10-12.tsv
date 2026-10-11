@@ -1,12 +1,13 @@
 # Modern isolated AST/IR and shape-only generator are separate candidate modules; production legacy diagnostics remain 142 until original files are migrated.
 # Evidence: CML exact upstream candidate compile run https://github.com/juv4uk/cml/actions/runs/38173957686 (142 compiler errors); error counts are compiler diagnostics, NOT 142 distinct root causes.
 # Canon generated Rust file is attributed to build.rs source; do not edit generated output. Modern isolated transport green: https://github.com/juv4uk/cml/actions/runs/38175530790 (23 T5/9 F3).
+# Diagnostic total 142 is the PRE-MIGRATION count and must not be presented as a current remeasurement. Root core_profile.rs has now been migrated and independently compiled against candidate SENS at https://github.com/juv4uk/cml/actions/runs/38177717575.
 # Production dependency cannot be changed until all old CML references are resolved. No reintroduction of old numeric meaning or feature-hiding the compiler modules.
 path	observed_diagnostics	component	migration_action	required_proof	state
 src/ast.rs	1	compiler frontend	Replace retired legacy AST identity with SENS exact DomainIdentity and DomainCall; no numerical reinterpretation	Canonical typed AST, legacy rejected, current T5 program parsed	BLOCKED
 src/ir.rs	1	compiler IR	Keep verified exact-domain call and CML private mechanism distinct; drop raw legacy identity as authority	DomainCall and VerifiedCurrentRegistry integration parity	BLOCKED
 build.rs -> target/.../canon_spellings.rs	1	source generator	Stop producing retired eight-bit identity dependencies; consume proven current SENS compiler export	Generated typed domain registry, no surface meaning inference	BLOCKED
-src/core_profile.rs	1	request provenance	Replace old SID profile request with current domain+source revision+law digest	Cross-width collision and stale pin fail-closed	BLOCKED
+src/core_profile.rs	1 (pre-fix historic diagnostic)	Core-profile request provenance	MIGRATED: production source accepts exact sens::DomainIdentity, no Sid8; current SENS candidate test compiles same source	3/3 positive and negative profile tests, D3/D4 equal-bit collision rejected, original root test migrated	GREEN_EXACT_DOMAIN_SOURCE_CANDIDATE
 src/upstream_sid_bridge.rs	2	legacy source intake	Remove byte-SID semantic ownership from current path; route exact domain words through SENS parser	Legacy input fails, ratified DomainCall succeeds	BLOCKED
 src/native_baseline.rs	2	native baseline	Bind only verified CML mechanisms after SENS semantic admission	SENS-vs-native oracle positive and negative	BLOCKED
 src/numeric_specialization.rs	3	numeric specialization	Select arithmetic operations only from verified domain/exact-number contract	No guessed coordinates; exact arithmetic parity	BLOCKED
