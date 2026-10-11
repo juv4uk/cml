@@ -1,83 +1,63 @@
+//! Current coverage counts only SENS-executable-law verified, exact-width
+//! D3/D4 compiler roles. Historical byte-indexed source and backend tables
+//! are not interchangeable with the ratified domain ladder.
 use std::collections::HashSet;
 
-use cml::canon::{CANON_BUILD_SOURCE_SEMANTIC_IDS, CANON_OPERATIONS_TABLE};
 use cml::coverage::{AdmissionState, CoverageLedger};
 
 #[test]
-fn build_source_ledger_covers_every_upstream_identity_once() {
-    let ledger = CoverageLedger::build_source();
-
-    assert_eq!(ledger.upstream_channel, "build-source");
-    assert_eq!(ledger.rows.len(), CANON_BUILD_SOURCE_SEMANTIC_IDS.len());
-    assert!(
-        ledger.rows.len() > CANON_OPERATIONS_TABLE.len(),
-        "the upstream denominator must remain larger than CML's admitted operation slice"
-    );
-
-    let ids: HashSet<_> = ledger.rows.iter().map(|row| row.semantic_id).collect();
-    assert_eq!(ids.len(), ledger.rows.len(), "semantic IDs must be unique");
-    assert!(
-        ids.iter().all(|id| {
-            let spelling = id.to_string();
-            spelling.len() == 8 && spelling.chars().all(|c| c == '0' || c == '1')
-        }),
-        "build-source semantic identities remain opaque 8-bit binary spellings"
-    );
+fn source_owned_compiler_corpus_has_nine_unique_exact_domain_identities() {
+    let ledger = CoverageLedger::try_current_sens().unwrap();
+    assert_eq!(ledger.upstream_channel, "current-sens-executable-compiler-law");
+    assert_eq!(ledger.rows.len(), 9);
+    let identities: HashSet<_> = ledger.rows.iter().map(|row| {
+        let width = row.identity.width();
+        let bits = row.identity.packed_bits();
+        format!("D{width}:{bits:0width$b}", width = width as usize)
+    }).collect();
+    assert_eq!(identities.len(), 9);
+    assert_eq!(identities.iter().filter(|id| id.starts_with("D3:")).count(), 7);
+    assert_eq!(identities.iter().filter(|id| id.starts_with("D4:")).count(), 2);
 }
 
 #[test]
-fn every_cml_operation_is_joined_to_the_upstream_denominator_with_existing_evidence() {
-    let ledger = CoverageLedger::build_source();
-
-    for operation in CANON_OPERATIONS_TABLE {
-        let row = ledger
-            .row(operation.semantic_id)
-            .expect("every admitted CML operation must exist in the build-source denominator");
-
+fn every_compiler_role_is_rechecked_by_executable_sens_law() {
+    let ledger = CoverageLedger::try_current_sens().unwrap();
+    for row in &ledger.rows {
+        let law = sens::compiler_semantic_input_from_sens(row.identity)
+            .unwrap().expect("no unproved compiler role");
+        assert_eq!(row.execution_role, law.lowering_role);
+        assert_eq!(row.evidence, law.proof_ref);
+        assert_eq!(row.authority_sha256, law.authority_sha256);
         assert_eq!(row.admission, AdmissionState::SourceAdmitted);
-        assert_eq!(row.operation_status, Some(operation.status));
-        assert_eq!(row.evidence, Some(operation.provenance_witness));
+        assert_eq!(ledger.row(row.identity), Some(row));
     }
 }
 
 #[test]
-fn upstream_known_does_not_collapse_into_supported() {
-    let ledger = CoverageLedger::build_source();
-
-    assert!(
-        ledger
-            .rows
-            .iter()
-            .any(|row| row.admission == AdmissionState::NotYetAdmitted),
-        "the ledger must preserve upstream-known but not-yet-admitted identities"
-    );
+fn current_coverage_denominator_does_not_implicitly_include_all_domain_words() {
+    let summary = CoverageLedger::try_current_sens().unwrap().summary();
+    assert_eq!(summary.compiler_role_identities, 9);
+    assert_eq!(summary.source_admitted, 9);
+    assert_eq!(summary.not_yet_admitted, 0);
 }
 
 #[test]
-fn summary_partitions_the_build_source_denominator_and_keeps_backend_evidence_bounded() {
-    let ledger = CoverageLedger::build_source();
+fn historical_x86_evidence_is_never_promoted_to_exact_compiler_roles() {
+    let ledger = CoverageLedger::try_current_sens().unwrap();
+    assert!(ledger.rows.iter().all(|row| row.backend_evidence.is_empty()));
     let summary = ledger.summary();
-
-    assert_eq!(summary.semantic_identities, ledger.rows.len());
-    assert_eq!(
-        summary.source_admitted + summary.not_yet_admitted,
-        summary.semantic_identities
-    );
-    assert_eq!(summary.x86_executable, 4);
-    assert_eq!(summary.x86_assembly_witness_only, 3);
-
-    assert!(
-        ledger
-            .rows
-            .iter()
-            .filter(|row| row.admission == AdmissionState::NotYetAdmitted)
-            .all(|row| row.backend_evidence.is_empty()),
-        "not-yet-admitted identities must never receive backend evidence"
-    );
+    assert_eq!(summary.x86_executable, 0);
+    assert_eq!(summary.x86_assembly_witness_only, 0);
+    assert_eq!(summary.x86_representation_limited, 0);
 }
 
 #[test]
-fn ledger_records_a_nonzero_digest_of_the_exact_build_source_registry_input() {
-    let ledger = CoverageLedger::build_source();
-    assert_ne!(ledger.registry_digest_fnv1a64, 0);
+fn the_executable_law_authority_sha_is_not_the_legacy_fnv_registry_digest() {
+    let ledger = CoverageLedger::try_current_sens().unwrap();
+    assert_eq!(ledger.authority_sha256.len(), 64);
+    assert!(ledger.authority_sha256.bytes().all(|b| b.is_ascii_hexdigit()));
+    assert_eq!(ledger.authority_sha256,
+        sens::sha256_source(include_bytes!("../external/sens/language-contract.lisp"))
+            .iter().map(|b| format!("{b:02x}")).collect::<String>());
 }
