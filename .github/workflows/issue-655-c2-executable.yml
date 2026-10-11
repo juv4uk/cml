@@ -100,7 +100,6 @@ jobs:
           SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
         run: |
           cargo test -j 2 -p cml --lib \
-            sens_c1_artifact::tests:: \
             -- --nocapture --test-threads=1
           runner="$(find target/debug/deps -maxdepth 1 -type f -executable -name 'cml-*' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
           test -n "$runner"
