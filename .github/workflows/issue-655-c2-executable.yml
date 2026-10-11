@@ -1,4 +1,4 @@
-name: Issue 655 C1 artifact to C2 executable
+name: Issue 655 C1 artifact to C2 executable + Nano-SENS K1
 
 on:
   pull_request:
@@ -100,7 +100,7 @@ jobs:
           SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
         run: |
           cargo test -j 2 -p cml --lib \
-            sens_c1_artifact::tests::c1_binary_artifact_materializes_and_runs_distinct_c2_executable \
+            sens_c1_artifact::tests:: \
             -- --nocapture --test-threads=1
           runner="$(find target/debug/deps -maxdepth 1 -type f -executable -name 'cml-*' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
           test -n "$runner"
@@ -236,7 +236,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: juv4uk/sens
-          ref: ca9babfec9d20259a206153476d7717f91be3bb6
+          ref: 283934355a10864647b6ad72dddeaeb4148ac4c0
           path: nano-sens-measure-tools
 
       - name: Validate lineage and measure seed-v0
@@ -252,12 +252,15 @@ jobs:
             --seed-role "Operational seed-v0: pinned CML lib-test bootstrap runner that produces C1 and runs C1/C2; includes Rust host/bootstrap compiler code; not a minimum-size claim" \
             --c1-executable "$root/c1-executable.bin" \
             --c2-executable "$root/c2-executable.bin" \
+            --c1-static-executable "$root/c1-static-executable.bin" \
+            --c1-static-output "$root/c1-static-output-artifact.bin" \
+            --baseline-c1-output "$root/c1-output-artifact.bin" \
             --lineage-report "$root/compiler-selfhost-lineage-report.json" \
             --source-revision "$(git -C external/sens rev-parse HEAD)" \
             --toolchain "$toolchain" \
             --target "$(gcc -dumpmachine)" \
             --abi-profile "SW1+compiler-evidence-canonical/1" \
-            --build-command "cargo test -j 2 -p cml --lib sens_c1_artifact::tests::c1_binary_artifact_materializes_and_runs_distinct_c2_executable -- --nocapture --test-threads=1; generated C1/C2 compiled by GCC with -Wl,--build-id=none -s" \
+            sens_c1_artifact::tests:: \
             --out "$root/nano-sens-size-report.json"
 
       - name: Preserve selfhost lineage artifacts for 30 days
