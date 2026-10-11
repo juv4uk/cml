@@ -5,6 +5,8 @@ on:
     paths:
       - "src/core_profile.rs"
       - "src/ast.rs"
+      - "src/current_exact_model.rs"
+      - "integration/current-sens-transport/src/modern_ir.rs"
       - "src/ir.rs"
       - "build.rs"
       - "tests/core_profile_request_test.rs"
