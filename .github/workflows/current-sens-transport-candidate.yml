@@ -52,6 +52,8 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --manifest-path integration/current-sens-transport/Cargo.toml --bin verify_stage
+          cargo build --locked --release --manifest-path external/sens/Cargo.toml \
+            -p sens --example two_codec_small_programs
           (
             cd external/sens
             python3 scripts/prepare-two-codec-migration.py \
