@@ -54,8 +54,8 @@ jobs:
           set -euo pipefail
           cargo test --features core1-t5-candidate --test tiny_f3_to_cml_lowering_test \
             verified_tiny_f3_transport_and_execution_without_compiler_authority \
-            -- --nocapture 2>&1 | tee "$RUNNER_TEMP/cml-f3-physical.log"
-          grep -q CML_CANDIDATE_F3_TRANSPORT_PASS "$RUNNER_TEMP/cml-f3-physical.log"
+            -- --nocapture 2>&1 | tee "/tmp/cml-f3-physical.log"
+          grep -q CML_CANDIDATE_F3_TRANSPORT_PASS "/tmp/cml-f3-physical.log"
           git diff --exit-code -- Cargo.toml .gitmodules
           test "$(git rev-parse HEAD:external/sens)" != "$SENS_CANDIDATE_SHA"
       - uses: actions/upload-artifact@v4
