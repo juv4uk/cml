@@ -1,0 +1,66 @@
+name: Candidate SENS tiny F3 and T5 exact transport in CML checkout
+on:
+  push:
+    branches: [master]
+    paths:
+      - "tests/tiny_f3_to_cml_lowering_test.rs"
+      - ".github/workflows/tiny-f3-transport-cml.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      SENS_CANDIDATE_SHA: 2ac5cbe001dcc949561aeb6bca231e52befd75a7
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: juv4uk/sens
+          ref: 2ac5cbe001dcc949561aeb6bca231e52befd75a7
+          path: external/sens
+          submodules: false
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Temporarily bind exact candidate, not checked-in production pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C external/sens rev-parse HEAD)" = "$SENS_CANDIDATE_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, subprocess
+          p=Path("upstream-revisions.lisp")
+          s=p.read_text()
+          prod=subprocess.check_output(["git","rev-parse","HEAD:external/sens"],text=True).strip()
+          cand=os.environ["SENS_CANDIDATE_SHA"]
+          if len(prod)!=40 or prod==cand:
+              raise SystemExit("not a distinct candidate pin")
+          for name in ("build-source-sha","supported-pin-sha"):
+              original=f'({name} . "{prod}")'
+              if s.count(original)!=1:
+                  raise SystemExit(f"unexpected production pin: {name}")
+              s=s.replace(original,f'({name} . "{cand}")',1)
+          p.write_text(s)
+          PY
+      - name: Verify real F3/T5 physical bytes and execution via canonical SENS
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --features core1-t5-candidate --test tiny_f3_to_cml_lowering_test \
+            verified_tiny_f3_transport_and_execution_without_compiler_authority \
+            -- --nocapture 2>&1 | tee "$RUNNER_TEMP/cml-f3-physical.log"
+          grep -q CML_CANDIDATE_F3_TRANSPORT_PASS "$RUNNER_TEMP/cml-f3-physical.log"
+          git diff --exit-code -- Cargo.toml .gitmodules
+          test "$(git rev-parse HEAD:external/sens)" != "$SENS_CANDIDATE_SHA"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cml-f3-candidate-physical
+          path: /tmp/cml-f3-physical.log
+          if-no-files-found: warn
