@@ -80,6 +80,13 @@ jobs:
                   subprocess.run([
                       executable,"--f3",source,f3,row["staged_sha256"]
                   ],check=True)
+                  # Every real F3 file must reject a wrong trusted digest,
+                  # even when the payload itself remains physically decodable.
+                  untrusted=subprocess.run(
+                      [executable,"--f3",source,f3,"0"*64],
+                      capture_output=True,text=True,check=False)
+                  if untrusted.returncode == 0 or "Untrusted" not in untrusted.stderr and "rejected" not in untrusted.stderr:
+                      raise SystemExit(f"unsafe digest handling for {f3}")
                   f3_count+=1
               elif row["codec"] != "T5":
                   raise SystemExit(f"unknown staged codec: {row['codec']}")
