@@ -72,16 +72,23 @@ jobs:
           stage=Path(sys.argv[2])
           executable=Path("integration/current-sens-transport/target/debug/verify_stage").resolve()
           root=Path("external/sens").resolve()
-          t5_count=f3_count=0
+          t5_count=f3_count=ir_admitted=ir_unsupported=0
           for row in manifest["files"]:
               source=root / row["source"]
               subprocess.run([executable, "--t5", source], check=True)
               t5_count+=1
               if row["codec"] == "F3":
                   f3=stage / row["staged_file"]
-                  subprocess.run([
+                  accepted=subprocess.run([
                       executable,"--f3",source,f3,row["staged_sha256"]
-                  ],check=True)
+                  ],check=True,text=True,capture_output=True)
+                  print(accepted.stdout.strip())
+                  if "ir=ADMITTED" in accepted.stdout:
+                      ir_admitted+=1
+                  elif "ir=UNSUPPORTED" in accepted.stdout:
+                      ir_unsupported+=1
+                  else:
+                      raise SystemExit(f"missing typed AST/IR result: {f3}")
                   # Every real F3 file must reject a wrong trusted digest,
                   # even when the payload itself remains physically decodable.
                   untrusted=subprocess.run(
@@ -94,7 +101,9 @@ jobs:
                   raise SystemExit(f"unknown staged codec: {row['codec']}")
           if t5_count != manifest["source_files"] or t5_count != 23 or f3_count != 9:
               raise SystemExit(f"regressed full staged corpus: T5={t5_count} F3={f3_count}")
-          print(f"CML_MODERN_STAGE_CORPUS_PASS source_t5={t5_count} selected_f3={f3_count}")
+          if ir_admitted < 1 or ir_admitted+ir_unsupported != f3_count:
+              raise SystemExit(f"typed IR admission proof insufficient: {ir_admitted}/{ir_unsupported}")
+          print(f"CML_MODERN_STAGE_CORPUS_PASS source_t5={t5_count} selected_f3={f3_count} ir_admitted={ir_admitted} ir_unsupported={ir_unsupported}")
           PY
       - name: Preserve positive and negative evidence
         if: always()
