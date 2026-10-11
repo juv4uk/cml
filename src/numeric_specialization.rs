@@ -22,7 +22,7 @@
 //! When the entry contract is already a bounded raw machine contract (`RawU64`),
 //! zero boxing or unboxing occurs across the entire function.
 
-use crate::ir::Ir;
+use crate::ir::{Ir, PrimOp};
 use crate::machine_inst::Provenance;
 use crate::x86_lir::{BlockId, LirAluOp, LirFunction, LirInst, LirLowerError, LirTerminator, VReg};
 use std::collections::HashMap;
@@ -288,17 +288,13 @@ fn lower_spec_expr(
                 }
             }
         }
-        Ir::App { func, args }
-            if matches!(func.as_ref(), Ir::Sid(sid)
-                if *sid == sens::sid!(00001100) || *sid == sens::sid!(00001101)) =>
-        {
-            let kind = if *func.as_ref() == Ir::Sid(sens::sid!(00001100)) {
-                NumericAluKind::Add
-            } else {
-                NumericAluKind::Sub
-            };
-            lower_numeric_binary(args, kind, ctx, prov)
-        }
+        // This is a bounded CML machine arithmetic mechanism, never an
+        // interpretation of a historical language byte address. Only
+        // SENS-verified IR admission may authorize a language operation.
+        Ir::Prim { op: PrimOp::Add, args } =>
+            lower_numeric_binary(args, NumericAluKind::Add, ctx, prov),
+        Ir::Prim { op: PrimOp::Sub, args } =>
+            lower_numeric_binary(args, NumericAluKind::Sub, ctx, prov),
         other => Err(LirLowerError::Unsupported(format!(
             "IR form {:?} is not admitted in numeric specialization slice",
             other
