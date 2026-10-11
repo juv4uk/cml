@@ -24,7 +24,7 @@
 
 1. **`scalar-add`**: скалярне 64-бітне додавання `(+ 10 32) -> 42`.
 2. **`counted-loop-sum-1000`**: числовий цикл зі зворотним відліком від 1000 до 0 з акумуляцією суми `-> 500500`.
-3. **`buffer-map-i32`**: неперервний буферний map `(+ x 1)` над `#i32(1 2 3 4 5)` з Compute IR `-> #i32(2 3 4 5 6)`.
+3. **`buffer-map-i32`**: історична 8-бітна мовна прив'язка **не допущена** сучасним SENS. Ланка `cml-compute-cpu` має `BLOCKED_UNVERIFIED_DOMAIN` без виконання й метрик часу; збережено незалежний C-еталон `#i32(2 3 4 5 6)` із його фактичним виміром. Не плутати C-еталон із результатом CML.
 4. **`unsupported-dynamic-fail-closed`**: динамічна операція поза атестованою межею, що перевіряє відмову fail-closed.
 
 ### Як запустити та оновити артефакт
@@ -58,7 +58,7 @@ Key invariants:
 
 1. **`scalar-add`**: scalar 64-bit integer addition `(+ 10 32) -> 42`.
 2. **`counted-loop-sum-1000`**: numeric countdown loop 1000 down to 0 accumulating sum `-> 500500`.
-3. **`buffer-map-i32`**: contiguous i32 buffer map `(+ x 1)` from Compute IR `-> #i32(2 3 4 5 6)`.
+3. **`buffer-map-i32`**: the historical byte-addressed compute call is **NOT admitted** by current exact-domain SENS. CML's compute lane is explicitly `BLOCKED_UNVERIFIED_DOMAIN` with no run/timing; only the independently executed C reference retains its `#i32(2 3 4 5 6)` result and measurement. Never attribute the reference result to CML.
 4. **`unsupported-dynamic-fail-closed`**: unadmitted dynamic operation verifying fail-closed policy.
 
 ### Execution & Reproduction
