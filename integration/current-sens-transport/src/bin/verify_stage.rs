@@ -1,7 +1,7 @@
 //! Compare the independent staged physical corpus against the SAME SENS
 //! canonical reader in an isolated current-domain CML consumer.
 //! This is a transport + admission witness, not a second compiler backend.
-use cml_current_sens_transport::VerifiedPhysicalProgram;
+use cml_current_sens_transport::{VerifiedPhysicalProgram, modern_ir::lower_verified_program};
 use std::{env, fs, path::Path};
 
 fn failure(message: &str) -> ! {
@@ -59,9 +59,18 @@ fn main() {
             {
                 failure("F3 failed exact physical, source or byte saving comparison");
             }
+            // The CML-owned typed AST/IR must be independent of physical codec.
+            // Unsupported language forms must be rejected IDENTICALLY;
+            // never interpret a non-callable D2 list as executable meaning.
+            let a = lower_verified_program(&oracle);
+            let b = lower_verified_program(&candidate);
+            if a != b {
+                failure("F3 and T5 disagree on verified modern AST/IR or rejection");
+            }
+            let ir_status = if a.is_ok() { "ADMITTED" } else { "UNSUPPORTED" };
             println!(
-                "CML_MODERN_STAGE_PASS type=F3 t5_bytes={} f3_bytes={}",
-                t5.len(), f3.len()
+                "CML_MODERN_STAGE_PASS type=F3 t5_bytes={} f3_bytes={} ir={}",
+                t5.len(), f3.len(), ir_status
             );
         }
         _ => failure("usage: verify_stage --t5 <path.sens> | --f3 <path.sens> <path.senc> <trusted_sha256>"),
