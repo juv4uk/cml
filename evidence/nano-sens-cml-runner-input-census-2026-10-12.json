@@ -647,7 +647,7 @@
     ],
     "status": "Version/revision pins recorded; external source checkout/cache bytes and complete dependency closure not measured.",
     "cml_default_build_graph": {
-      "policy": "CML Cargo.toml declares default-features = [] for this workflow; optional cudarc/pollster/wgpu feature trees in Cargo.lock are not active under `cargo test -p cml --lib` without --all-features. `Cargo.lock` has 118 package records for the full feature space; do not mistake that for the active default dependency graph.",
+      "policy": "CML Cargo.toml declares default-features = [] for this workflow; optional cudarc/pollster/wgpu feature trees in Cargo.lock are not active under `cargo test -p cml --lib` without --all-features. `Cargo.lock` has 121 package records for the full feature space; do not mistake that for the active default dependency graph.",
       "active_crates_io_packages": [
         {
           "name": "serde",
@@ -676,8 +676,8 @@
         },
         {
           "name": "syn",
-          "version": "3.0.3",
-          "checksum": "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3"
+          "version": "3.0.4",
+          "checksum": "e6275cddf4610d1775e6d1fe9469b2e77d0f39fd98fb7450901b821e0c53649f"
         },
         {
           "name": "unicode-ident",
@@ -686,7 +686,7 @@
         }
       ],
       "source_bytes": "CML root has no .cargo/config.toml in the pinned tree, so the outer CML `cargo test` resolves these from Cargo's external registry/cache, not from external/sens/.cargo/config.toml. Registry/cache bytes are excluded and not measured here; SENS nested cargo run uses its own vendor-source override separately.",
-      "shared_versions_note": "These seven version/checksum pairs match the vendor packages enumerated by the pinned SENS submodule census, but this does not mean the CML outer Cargo process consumes those vendor directories."
+      "shared_versions_note": "The active CML outer Cargo graph uses syn 3.0.4; the nested SENS `cargo run -p xtask` graph uses syn 3.0.3 from the SENS-local pinned Cargo.lock and vendored source override. Keep these as two distinct external dependency instances. The CML outer dependency source is the external Cargo registry/cache; it does not consume `external/sens/vendor/`."
     },
     "wsm_os_target_git_dependency": {
       "repository": "juv4uk/wsm-target-contract",
@@ -790,5 +790,45 @@
     "runner_sha256": "ea865f2911d7322319f96be0d3a25b555c59c62370dd5bdc25d3bde355c7ead3",
     "runner_on_disk_bytes": 34580920,
     "relation_to_k1_checkpoint": "This follow-up is a distinct CML source checkpoint from the earlier K1 source commit 3320fe3b00a4a099ecb9ff06e22e0be2b1fee499 (runner fe5b6912... / 34,575,192 bytes). Do not compare the runner-size difference as an optimization; each checkpoint is independently measured."
+  },
+  "lockfile_resolution_audit": {
+    "schema": "nano-sens-cml-lockfile-resolution-audit/1",
+    "finding": "The original CML Cargo.lock did not record the SENS 0.41.0 path dependency's serde edge. A `cargo tree --locked` capture failed explicitly because Cargo wanted to update the lockfile; the follow-up graph capture recorded the exact deterministic diff, which was then committed.",
+    "pre_fix": {
+      "cml_commit": "dce7a75b61932e41846f36bf1dc5f2d97a8d11ee",
+      "cargo_lock_git_blob": "7882c2be6e83b26660a1e855d8ce97211620096e",
+      "cargo_lock_bytes": 28600,
+      "failed_locked_graph_run": "https://github.com/juv4uk/cml/actions/runs/38186077832"
+    },
+    "resolved_graph_evidence": {
+      "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186153760",
+      "artifact_id": 11719851914,
+      "artifact_zip_sha256": "1964120459defd1e591ab48c69eeb3996ce2d4ecbfcb51415855943f87f4a38a",
+      "cml_graph_file_bytes": 532,
+      "cml_graph_sha256": "fe4e29d9723e1c31a598d5905024670defad2a4ffce744cd099b84d95c285c29",
+      "sens_xtask_graph_file_bytes": 363,
+      "sens_xtask_graph_sha256": "a11ec08911b104cfb31211d4f82459711d9b5ae8788f043bd8ce60baaff4736a",
+      "lock_resolution_diff_bytes": 1071,
+      "lock_resolution_diff_sha256": "4b975448e568f126da39479453fb3e00575303c369809824ca611a1c13cb3ef8",
+      "observation": "The outer CML graph resolves serde_derive 1.0.229 through syn 3.0.4; nested SENS xtask uses syn 3.0.3."
+    },
+    "corrected_lock": {
+      "commit": "c41704cbbd9e6f0b6c4c12597ab5e50da6ac66a3",
+      "cargo_lock_git_blob": "b9bd778db07efa1a1883665939707612063e2e2c",
+      "cargo_lock_sha256": "95dfac9d0b3db0ce6b1f1ae04be4863c6281fcbc9dca60d53a096c0623908b92",
+      "cargo_lock_bytes": 29360,
+      "additions": [
+        "Add `serde` 1.0.229 with pinned checksum and deps",
+        "Add `serde_core` 1.0.229 with pinned checksum and deps",
+        "Add `serde_derive` 1.0.229 with pinned checksum and deps",
+        "Add the missing `serde` dependency edge to SENS 0.41.0"
+      ]
+    },
+    "follow_up_locked_check": {
+      "cml_commit": "bdf0a0e75ef7ea6cb430c4286cb9352e7d422648",
+      "workflow_change": "The active Cargo graph capture now uses `--locked` for both outer CML and nested SENS graphs and asserts neither lockfile changes during resolution.",
+      "run": "https://github.com/juv4uk/cml/actions/runs/38186316487",
+      "status": "IN_PROGRESS_AT_CENSUS_UPDATE; do not call the locked graph gate green until it finishes successfully."
+    }
   }
 }
