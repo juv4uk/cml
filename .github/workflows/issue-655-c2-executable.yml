@@ -48,6 +48,9 @@ jobs:
       WSM_NUCLEUS_ASM: ${{ github.workspace }}/wsm-my-lisp/asm/nucleus.s
       CARGO_BUILD_JOBS: "2"
       RUST_TEST_THREADS: "1"
+      # Each matrix job gets an empty, isolated Cargo home. After a locked fetch,
+      # all bootstrap/test replay commands run with CARGO_NET_OFFLINE=true.
+      CARGO_HOME: ${{ runner.temp }}/nano-sens-cargo-home-${{ matrix.clean_run }}
     steps:
       - name: Checkout exact C1/C2 lineage
         uses: actions/checkout@v5
@@ -134,6 +137,30 @@ jobs:
             sha256sum "$root/cml-active-cargo-tree.txt" "$root/sens-xtask-active-cargo-tree.txt" "$root/cml-cargo-lock-resolution.diff"
           } > "$root/active-cargo-graph-digests.txt"
           cat "$root/active-cargo-graph-digests.txt"
+      - name: Populate a fresh Cargo home from the exact lockfiles before offline replay
+        env:
+          SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$CARGO_HOME"
+          cml_lock_before="$(git hash-object Cargo.lock)"
+          sens_lock_before="$(git -C external/sens hash-object Cargo.lock)"
+          cargo fetch --locked --manifest-path Cargo.toml
+          (cd external/sens && cargo fetch --locked --manifest-path Cargo.toml)
+          test "$(git hash-object Cargo.lock)" = "$cml_lock_before"
+          test "$(git -C external/sens hash-object Cargo.lock)" = "$sens_lock_before"
+          {
+            echo "cargo_home_policy=per-clean-run isolated CARGO_HOME"
+            echo "cargo_dependency_acquisition=locked cargo fetch from pinned CML and pinned SENS Cargo.lock files"
+            echo "cargo_offline_replay=CARGO_NET_OFFLINE=true for all following C1/C2 and runtime-trace steps; nested cargo inherits offline mode"
+            echo "cargo_home_bytes=measured separately after replay; excluded from runner/seed ELF size"
+            echo "cargo_lockfiles_unchanged_after_fetch=true"
+          } >> "$SENS_SELFHOST_ARTIFACT_DIR/bootstrap-input-manifest.txt"
+          # From this point, Cargo may use only the freshly primed cache/vendor
+          # sources. Non-Cargo tools remain separately identified host inputs.
+          echo "CARGO_NET_OFFLINE=true" >> "$GITHUB_ENV"
+
       - name: Pin CML compiler-source revision
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
@@ -391,6 +418,38 @@ jobs:
           print(json.dumps({k:v for k,v in report.items() if k not in ("runner_test_summary","scope_note")},indent=2))
           if not summary or "189 passed; 0 failed" not in summary[-1]:
             raise SystemExit("BLOCK: trace index has no complete test summary")
+          PY
+
+      - name: Record the isolated Cargo-home footprint outside the seed-size metric
+        if: always()
+        env:
+          SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$SENS_SELFHOST_ARTIFACT_DIR/bootstrap-input-manifest.txt"
+          import hashlib
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["CARGO_HOME"])
+          files = sorted(p for p in root.rglob("*") if p.is_file()) if root.exists() else []
+          total = 0
+          digest = hashlib.sha256()
+          for path in files:
+              rel = path.relative_to(root).as_posix()
+              size = path.stat().st_size
+              total += size
+              file_hash = hashlib.sha256()
+              with path.open("rb") as stream:
+                  for block in iter(lambda: stream.read(1024 * 1024), b""):
+                      file_hash.update(block)
+              digest.update(rel.encode("utf-8") + b"\\0")
+              digest.update(size.to_bytes(8, "big"))
+              digest.update(file_hash.digest())
+          print(f"cargo_home_file_count={len(files)}")
+          print(f"cargo_home_regular_file_bytes={total}")
+          print(f"cargo_home_relative_path_content_digest_sha256={digest.hexdigest()}")
+          print("cargo_home_footprint_role=separately measured dependency cache; not included in Nano-SENS runner ELF bytes or claimed minimum seed total")
           PY
 
       - name: Build pinned lineage and measure seed-v0
