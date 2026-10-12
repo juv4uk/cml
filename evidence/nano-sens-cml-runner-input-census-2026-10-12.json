@@ -782,7 +782,39 @@
       "artifact_sha256": "sha256:c5c93ddf7d73927c6c9e82db03d18e8142552c9e402e22a25490518b076bf2a4",
       "expires_at": "2026-11-10T23:48:03Z"
     },
-    "result": "Both clean-run jobs and compare-two-clean-runs job passed. Both reports byte-identical. Git metadata size differs slightly across clean checkouts and is not used as seed bytes."
+    "result": "Both clean-run jobs and compare-two-clean-runs job passed. Both reports byte-identical. Git metadata size differs slightly across clean checkouts and is not used as seed bytes.",
+    "latest_verified_snapshot": {
+      "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186316487",
+      "cml_source_commit": "bdf0a0e75ef7ea6cb430c4286cb9352e7d422648",
+      "note": "Regular-file lengths inside the absolute Git-dir for each clean checkout. External metadata snapshot only, not included in seed subtotal and not a minimal Git metadata set.",
+      "clean_runs": [
+        {
+          "run": 1,
+          "cml": 33664781,
+          "sens_submodule": 30802943,
+          "wsm_witness": 1810846,
+          "total": 66278570,
+          "runner_sha256": "9b5621ca25334916d044cdbe1c9809f6deb29bc39d62fa8aff1c5527d8b79fc3",
+          "runner_bytes": 34623904
+        },
+        {
+          "run": 2,
+          "cml": 33664797,
+          "sens_submodule": 30802951,
+          "wsm_witness": 1810848,
+          "total": 66278596,
+          "runner_sha256": "9b5621ca25334916d044cdbe1c9809f6deb29bc39d62fa8aff1c5527d8b79fc3",
+          "runner_bytes": 34623904
+        }
+      ],
+      "run1_minus_run2": {
+        "cml": -16,
+        "sens_submodule": -8,
+        "wsm_witness": -2,
+        "total": -26
+      },
+      "full_checkout_metadata_not_minimal": true
+    }
   },
   "follow_up_checkpoint": {
     "cml_commit": "e2f76f63017add8574f6c5224bf3a80857927faf",
@@ -826,9 +858,75 @@
     },
     "follow_up_locked_check": {
       "cml_commit": "bdf0a0e75ef7ea6cb430c4286cb9352e7d422648",
-      "workflow_change": "The active Cargo graph capture now uses `--locked` for both outer CML and nested SENS graphs and asserts neither lockfile changes during resolution.",
-      "run": "https://github.com/juv4uk/cml/actions/runs/38186316487",
-      "status": "IN_PROGRESS_AT_CENSUS_UPDATE; do not call the locked graph gate green until it finishes successfully."
+      "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186316487",
+      "status": "PASS",
+      "clean_runs": 2,
+      "library_test_results": [
+        {
+          "run": 1,
+          "passed": 189,
+          "failed": 0
+        },
+        {
+          "run": 2,
+          "passed": 189,
+          "failed": 0
+        }
+      ],
+      "c1_c2_lineage": "byte-identical; C1 and C2 are both 92,248 bytes and share SHA-256 27b8fbf096cddbb77be2b4bf57cc58bf8b4fac4accc42adbcfbc10d6cd95f375",
+      "size_report_sha256_both_runs": "8b2ec82d1fa57e0811a7c754e05f9fac9966b6caac8708045e1eea85d9b8ed90",
+      "proof_artifact": {
+        "id": 11719214909,
+        "sha256": "sha256:686108e9061d00d74fc0b49459c33f89f39f6bfec247b91e866200a5ffc5e4c0",
+        "expires_at": "2026-11-11T00:00:42Z"
+      },
+      "run_artifacts": [
+        {
+          "run": 1,
+          "id": 11720235435,
+          "sha256": "sha256:175ed686c966526c8e200cdeba9b6d599f0331d4e6ba4bdbb3a6c32d53068cd8",
+          "expires_at": "2026-11-11T00:00:26Z"
+        },
+        {
+          "run": 2,
+          "id": 11719582308,
+          "sha256": "sha256:14cfef7d12f61f5e05fc1a12ad24b9037bea833feba597e654cdb307601bf8a0",
+          "expires_at": "2026-11-11T00:00:30Z"
+        }
+      ],
+      "active_graphs": {
+        "status": "PASS_BYTE_IDENTICAL_ACROSS_TWO_CLEAN_RUNS",
+        "cml_tree_sha256": "fe4e29d9723e1c31a598d5905024670defad2a4ffce744cd099b84d95c285c29",
+        "sens_xtask_tree_sha256": "a11ec08911b104cfb31211d4f82459711d9b5ae8788f043bd8ce60baaff4736a",
+        "graph_digest_manifest_sha256": "3b1d1d6250f969eac2f0c0e2193bafddc3d48fa15ec251646d0859940a76b699",
+        "lockfiles_unchanged": true,
+        "cml_committed_and_resolved_lock_blob": "b9bd778db07efa1a1883665939707612063e2e2c",
+        "sens_committed_and_resolved_lock_blob": "293e933d0fdb78954386243eae431c2826b62a79",
+        "cml_lock_resolution_diff_bytes": 0
+      }
     }
+  },
+  "latest_locked_checkpoint": {
+    "repository": "juv4uk/cml",
+    "source_commit": "bdf0a0e75ef7ea6cb430c4286cb9352e7d422648",
+    "sens_gitlink_commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+    "wsm_witness_commit": "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947",
+    "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186316487",
+    "status": "PASS_TWO_CLEAN_RUNS_AND_CARGO_GRAPH",
+    "runner": {
+      "path": "seed-v0-c0-runner.bin",
+      "sha256": "9b5621ca25334916d044cdbe1c9809f6deb29bc39d62fa8aff1c5527d8b79fc3",
+      "on_disk_bytes": 34623904,
+      "loadable_segment_file_bytes": 6042632,
+      "executable_code_section_bytes": 4147007,
+      "note": "This is a distinct pinned source checkpoint, not an optimization comparison against any other runner."
+    },
+    "cargo_lock": {
+      "git_blob_sha1": "b9bd778db07efa1a1883665939707612063e2e2c",
+      "sha256": "95dfac9d0b3db0ce6b1f1ae04be4863c6281fcbc9dca60d53a096c0623908b92",
+      "bytes": 29360,
+      "tree_resolution": "--locked succeeded; committed/resolved lock blobs equal for CML and SENS."
+    },
+    "static_k1_result": "The K1 static-link+strip C1 variant remains 792,544 bytes vs 92,248-byte dynamic C1; correctness is preserved but no size win."
   }
 }
