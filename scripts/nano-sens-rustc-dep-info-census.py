@@ -325,7 +325,7 @@ def main() -> int:
         "dep_info_file_count": len(depfiles),
         "dep_info_parse_error_count": len(parse_errors),
         "dep_info_parse_errors": parse_errors,
-        "dependency_tokens_resolved_across_depfiles_with_duplicates": depfile_dependency_total,
+        "dependency_path_records_emitted_across_depfiles": depfile_dependency_total,
         "unique_existing_regular_input_files": len(entries),
         "unique_existing_regular_input_bytes_at_census": sum(int(e["bytes_at_census"]) for e in entries),
         "by_classification": dict(sorted(by_class.items())),
