@@ -34,8 +34,9 @@ on:
       - ".github/workflows/issue-655-c2-executable.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # Preserve two-clean-run Nano-SENS evidence while other main commits arrive.
+  # A unique group per commit prevents a later master push from replacing
+  # this pending evidence run before its jobs start.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
