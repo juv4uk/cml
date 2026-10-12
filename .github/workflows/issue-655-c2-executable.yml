@@ -164,6 +164,73 @@ jobs:
             ldd "$SENS_SELFHOST_ARTIFACT_DIR/seed-v0-c0-runner.bin" || true
           } >> "$SENS_SELFHOST_ARTIFACT_DIR/bootstrap-input-manifest.txt"
 
+      - name: Trace runner runtime file and process inputs (audit only; not size metric)
+        shell: bash
+        env:
+          SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
+        run: |
+          set -euo pipefail
+          root="$SENS_SELFHOST_ARTIFACT_DIR"
+          runner="$root/seed-v0-c0-runner.bin"
+          if ! command -v strace >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y strace
+          fi
+          trace_version="$(strace --version | head -n 1)"
+          set +e
+          strace -f -qq -s 4096 -yy -e trace=%file,%process \
+            -o "$root/runtime-file-process-trace.log" \
+            "$runner" --test-threads=1 \
+            > "$root/runtime-trace-runner.stdout-stderr.txt" 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            tail -n 100 "$root/runtime-trace-runner.stdout-stderr.txt"
+            echo "BLOCK: traced runner did not pass" >&2
+            exit "$code"
+          fi
+          grep -q 'test result: ok. 189 passed; 0 failed' "$root/runtime-trace-runner.stdout-stderr.txt" || {
+            tail -n 100 "$root/runtime-trace-runner.stdout-stderr.txt"
+            echo "BLOCK: traced runner did not report the complete 189-test pass" >&2
+            exit 1
+          }
+          python3 - "$root" "$trace_version" <<'PY'
+          import hashlib
+          import json
+          import re
+          import sys
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          trace=(root/"runtime-file-process-trace.log").read_bytes()
+          text=trace.decode("utf-8",errors="replace")
+          lines=text.splitlines()
+          repo_path=re.compile(r"(/home/runner/work/cml/cml/|external/sens/|wsm-my-lisp/|contracts/|\.git/modules/external/sens)")
+          selected=[line for line in lines if repo_path.search(line)]
+          output=(root/"runtime-trace-runner.stdout-stderr.txt").read_text(errors="replace")
+          summary=[line.strip() for line in output.splitlines() if "test result:" in line]
+          runner=(root/"seed-v0-c0-runner.bin").read_bytes()
+          report={
+            "schema":"nano-sens-runtime-file-process-trace/1",
+            "status":"OBSERVED_DYNAMIC_RUNTIME_EVENTS_NOT_A_MINIMUM_CLOSURE_PROOF",
+            "strace_version":sys.argv[2],
+            "runner_sha256":hashlib.sha256(runner).hexdigest(),
+            "trace_sha256":hashlib.sha256(trace).hexdigest(),
+            "trace_bytes":len(trace),
+            "trace_line_count":len(lines),
+            "execve_event_count":sum("execve(" in line for line in lines),
+            "file_event_count":sum(any(token in line for token in ("openat(","openat2(","newfstatat(","statx(","access(","readlink(")) for line in lines),
+            "repository_path_event_count":len(selected),
+            "repository_path_events_sha256":hashlib.sha256(("\n".join(selected)+"\n").encode()).hexdigest(),
+            "runner_test_summary":summary,
+            "size_metric_impact":"none; trace is audit-only and not an input counted in nano-sens-size-report/1",
+            "scope_note":"Trace follows the frozen lib-test runner and its child commands, including nested Cargo/Git/GCC. It records observed system-call events; it is not a proof of minimality and should be interpreted alongside the pinned static source census."
+          }
+          (root/"runtime-file-process-trace-index.json").write_text(json.dumps(report,indent=2)+"\n")
+          print(json.dumps({k:v for k,v in report.items() if k not in ("runner_test_summary","scope_note")},indent=2))
+          if not summary or "189 passed; 0 failed" not in summary[-1]:
+            raise SystemExit("BLOCK: trace index has no complete test summary")
+          PY
+
       - name: Build pinned lineage and measure seed-v0
         env:
           SENS_SELFHOST_ARTIFACT_DIR: ${{ runner.temp }}/nano-sens-selfhost-artifacts
