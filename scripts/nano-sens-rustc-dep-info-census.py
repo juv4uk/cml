@@ -104,34 +104,73 @@ def normalize_display_path(
     return text, "other_external_input"
 
 
-def parse_depfile(depfile: Path, workspace: Path) -> tuple[list[Path], str | None]:
+def resolve_dependency_token(
+    token: str,
+    depfile: Path,
+    workspace: Path,
+    sens_root: Path,
+    wsm_root: Path,
+    cargo_home: Path,
+) -> Path | None:
+    value = Path(token)
+    if value.is_absolute():
+        candidates = [value]
+    else:
+        # rustc dep-info can use paths relative to the Cargo package that emitted
+        # the .d file. Prefer that package root before trying CML's root.
+        if depfile.is_relative_to(sens_root):
+            bases = [sens_root, workspace, wsm_root]
+        elif depfile.is_relative_to(wsm_root):
+            bases = [wsm_root, workspace, sens_root]
+        else:
+            bases = [workspace, sens_root, wsm_root]
+        candidates = [base / value for base in bases]
+        candidates.append(cargo_home / value)
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if resolved.is_file():
+            return resolved
+    return None
+
+
+def parse_depfile(
+    depfile: Path,
+    workspace: Path,
+    sens_root: Path,
+    wsm_root: Path,
+    cargo_home: Path,
+) -> tuple[list[Path], list[str], str | None]:
     raw = depfile.read_text(encoding="utf-8", errors="replace")
     # rustc emits make-style continuations. Workspace and Cargo paths in this
     # workflow contain no spaces, but shlex still decodes escaped tokens.
     raw = re.sub(r"\\\r?\n[ \t]*", " ", raw)
     body = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("#"))
     if ":" not in body:
-        return [], "no target separator ':' found"
+        return [], [], "no target separator ':' found"
     dependencies = body.split(":", 1)[1]
     try:
         tokens = shlex.split(dependencies, comments=False, posix=True)
     except ValueError as exc:
-        return [], f"tokenization failed: {exc}"
+        return [], [], f"tokenization failed: {exc}"
     paths: list[Path] = []
+    unresolved: list[str] = []
+    seen: set[Path] = set()
     for token in tokens:
         if not token or token in ("|", "\\"):
             continue
-        candidate = Path(token)
-        if not candidate.is_absolute():
-            candidate = workspace / candidate
-        try:
-            candidate = candidate.resolve(strict=True)
-        except (OSError, RuntimeError):
-            continue
-        if candidate.is_file():
-            paths.append(candidate)
-    return paths, None
-
+        candidate = resolve_dependency_token(
+            token, depfile, workspace, sens_root, wsm_root, cargo_home
+        )
+        if candidate is not None:
+            if candidate not in seen:
+                paths.append(candidate)
+                seen.add(candidate)
+        else:
+            unresolved.append(token)
+    return paths, unresolved, None
 
 def main() -> int:
     if len(sys.argv) != 2:
@@ -178,40 +217,34 @@ def main() -> int:
     depfile_dependency_total = 0
 
     for depfile in depfiles:
-        dependencies, error = parse_depfile(depfile, workspace)
+        dependencies, unresolved, error = parse_depfile(
+            depfile, workspace, sens_root, wsm_root, cargo_home
+        )
         if error:
             parse_errors.append({
-                "depfile": depfile.as_posix(),
+                "depfile": normalize_display_path(
+                    depfile, workspace, sens_root, wsm_root, cargo_home, target_roots
+                )[0],
                 "error": error,
             })
             continue
         found = 0
-        # Preserve missing path tokens separately; system/sysroot files may
-        # intentionally be external/uninstalled. No token disappears silently.
-        raw = re.sub(r"\\\r?\n[ \t]*", " ", depfile.read_text(encoding="utf-8", errors="replace"))
-        body = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("#"))
-        rhs = body.split(":", 1)[1] if ":" in body else ""
-        try:
-            raw_tokens = shlex.split(rhs, comments=False, posix=True)
-        except ValueError:
-            raw_tokens = []
-        resolved_dependencies = {p.resolve() for p in dependencies}
-        for token in raw_tokens:
-            if not token or token in ("|", "\\"):
-                continue
+        # Preserve unresolved path tokens separately. Normalize roots so the
+        # report can match across isolated clean-run CARGO_HOME directories.
+        for token in unresolved:
             candidate = Path(token)
             if not candidate.is_absolute():
-                candidate = workspace / candidate
-            try:
-                normalized = candidate.resolve(strict=True)
-            except (OSError, RuntimeError):
-                missing_tokens.add(candidate.as_posix())
-                continue
-            if normalized.is_file() and normalized not in resolved_dependencies:
-                # parse_depfile already has the authoritative list for existing
-                # regular files; this branch documents any parsing divergence.
-                missing_tokens.add(normalized.as_posix())
-        depfile_dependency_total += len(dependencies)
+                if depfile.is_relative_to(sens_root):
+                    candidate = sens_root / candidate
+                elif depfile.is_relative_to(wsm_root):
+                    candidate = wsm_root / candidate
+                else:
+                    candidate = workspace / candidate
+            display, _ = normalize_display_path(
+                candidate, workspace, sens_root, wsm_root, cargo_home, target_roots
+            )
+            missing_tokens.add(display)
+        depfile_dependency_total += len(dependencies) + len(unresolved)
         for dep in dependencies:
             display, preliminary_class = normalize_display_path(
                 dep, workspace, sens_root, wsm_root, cargo_home, target_roots
@@ -264,8 +297,8 @@ def main() -> int:
                 depfile.as_posix()
             ),
             "bytes": depfile.stat().st_size,
-            "sha256": sha256(depfile.read_bytes()),
             "resolved_regular_input_token_count": len(dependencies),
+            "unresolved_token_count": len(unresolved),
             "unique_inputs_first_seen_in_this_depfile": found,
         })
 
