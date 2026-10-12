@@ -225,6 +225,167 @@ jobs:
             "size_metric_impact":"none; trace is audit-only and not an input counted in nano-sens-size-report/1",
             "scope_note":"Trace follows the frozen lib-test runner and its child commands, including nested Cargo/Git/GCC. It records observed system-call events; it is not a proof of minimality and should be interpreted alongside the pinned static source census."
           }
+          # Build a per-run census of successful, read-capable openat calls.
+          # Pair unfinished/resumed syscall lines; keep it observational, not a
+          # proof that unobserved files/platform paths are unnecessary.
+          import os
+          import subprocess
+          from collections import defaultdict
+          workspace=Path.cwd().resolve()
+          sens_root=workspace/"external/sens"
+          wsm_root=workspace/"wsm-my-lisp"
+          def git_tree_index(repo):
+            proc=subprocess.run(["git","-C",str(repo),"ls-tree","-r","-l","HEAD"],capture_output=True,text=True,check=True)
+            index={}
+            for row in proc.stdout.splitlines():
+              if "\t" not in row: continue
+              left,rel=row.split("\t",1)
+              fields=left.split()
+              if len(fields)>=4 and fields[1]=="blob":
+                try: size=int(fields[3])
+                except ValueError: continue
+                index[rel]={"git_blob_sha1":fields[2],"git_blob_bytes":size}
+            return index
+          # Nested repositories must be matched before the CML root.
+          repo_trees={
+            "sens":(sens_root,git_tree_index(sens_root)),
+            "wsm-my-lisp":(wsm_root,git_tree_index(wsm_root)),
+            "cml":(workspace,git_tree_index(workspace))
+          }
+          pending={}
+          opened={}
+          def finish_open(pid,call,args,result):
+            if result.strip().startswith("-1"): return
+            m=re.search(r'(?:AT_FDCWD|-?\d+)(?:<([^>]+)>)?,\s*"((?:[^"\\]|\\.)*)",\s*([^,)]*)',args)
+            if not m: return
+            base=m.group(1)
+            rel=m.group(2).replace("\\\\","\\").replace('\\"','"')
+            flags=m.group(3)
+            if "O_DIRECTORY" in flags or "O_WRONLY" in flags or "O_CREAT" in flags or "O_TRUNC" in flags or "O_TMPFILE" in flags:
+              return
+            # openat2 prints flags inside the struct open_how.
+            if call!="openat2" and not any(flag in flags for flag in ("O_RDONLY","O_RDWR","O_PATH")):
+              return
+            fm=re.search(r'=\s*\d+<([^>]+)>',result)
+            if fm:
+              absolute=os.path.normpath(fm.group(1))
+            else:
+              target=rel if rel.startswith("/") else (os.path.join(base,rel) if base else None)
+              if not target: return
+              absolute=os.path.normpath(target)
+            try:
+              relative=Path(absolute).relative_to(workspace).as_posix()
+            except ValueError:
+              return
+            target_path=Path(absolute)
+            if not target_path.is_file(): return
+            record=opened.setdefault(relative,{"open_event_count":0,"open_flags":[]})
+            record["open_event_count"]+=1
+            if flags and flags not in record["open_flags"]: record["open_flags"].append(flags)
+          for line in lines:
+            lm=re.match(r"\s*(\d+)\s+(.*)",line)
+            if not lm: continue
+            pid,body=lm.group(1),lm.group(2)
+            sm=re.match(r"(openat2?)\((.*)\)\s*=\s*(.*)$",body)
+            if sm:
+              call,args,result=sm.group(1),sm.group(2),sm.group(3)
+              if "<unfinished ...>" in result:
+                pending[(pid,call)]=args
+              else:
+                finish_open(pid,call,args,result)
+              continue
+            rm=re.match(r"<\.\.\.\s+(openat2?)\s+resumed>\)(.*)$",body)
+            if rm:
+              call,result=rm.group(1),rm.group(2)
+              args=pending.pop((pid,call),None)
+              if args: finish_open(pid,call,args,result)
+          file_entries=[]
+          vendor_active={"serde","serde_core","serde_derive","proc-macro2","quote","syn","unicode-ident"}
+          for rel,record in sorted(opened.items()):
+            file_path=workspace/rel
+            data=file_path.read_bytes()
+            entry={
+              "path":rel,
+              "bytes_at_trace_end":len(data),
+              "content_sha256_at_trace_end":hashlib.sha256(data).hexdigest(),
+              "open_event_count":record["open_event_count"],
+              "open_flags":sorted(record["open_flags"])
+            }
+            pin=None
+            for repo_name,(repo,index) in repo_trees.items():
+              try:
+                repo_relative=file_path.relative_to(repo).as_posix()
+              except ValueError:
+                continue
+              entry["repository"]=repo_name
+              pin=index.get(repo_relative)
+              if pin:
+                entry.update(pin)
+                entry["tracked_at_pinned_head"]=True
+                blob_sha1=hashlib.sha1(b"blob "+str(len(data)).encode()+b"\0"+data).hexdigest()
+                entry["matches_pinned_git_blob"]=blob_sha1==pin["git_blob_sha1"]
+              else:
+                entry["tracked_at_pinned_head"]=False
+                entry["classification"]="git_metadata_or_generated_or_untracked_path"
+              break
+            if rel.startswith("external/sens/vendor/"):
+              parts=rel[len("external/sens/vendor/"):].split("/")
+              package=parts[0] if parts else ""
+              suffix="/".join(parts[1:])
+              if package in vendor_active:
+                entry["vendor_classification"]="one_of_seven_selected_Cargo_dependency_package_trees"
+              elif suffix in ("Cargo.toml",".cargo-checksum.json"):
+                entry["vendor_classification"]="Cargo_vendor_source_discovery_metadata"
+              else:
+                entry["vendor_classification"]="other_observed_vendor_path"
+            file_entries.append(entry)
+          path_names="\n".join(e["path"] for e in file_entries)+"\n"
+          sens_vendor_index=repo_trees["sens"][1]
+          vendor_tree=[(name,meta) for name,meta in sens_vendor_index.items() if name.startswith("vendor/")]
+          vendor_roots=sorted({name.split("/")[1] for name,_ in vendor_tree})
+          vendor_metadata=[(name,meta) for name,meta in vendor_tree if name.endswith("/Cargo.toml") or name.endswith("/.cargo-checksum.json")]
+          vendor_entries=[e for e in file_entries if e["path"].startswith("external/sens/vendor/")]
+          vendor_active_files=[e for e in vendor_entries if e.get("vendor_classification")=="one_of_seven_selected_Cargo_dependency_package_trees"]
+          vendor_discovery=[e for e in vendor_entries if e.get("vendor_classification")=="Cargo_vendor_source_discovery_metadata"]
+          vendor_report={
+            "source_commit":"d0787a40fcea36501747732aa61b6de19fe29c70",
+            "vendor_root_count":len(vendor_roots),
+            "vendor_tracked_file_count":len(vendor_tree),
+            "vendor_tracked_bytes":sum(meta["git_blob_bytes"] for _,meta in vendor_tree),
+            "all_vendor_roots_Cargo_manifest_and_checksum_files":{
+              "file_count":len(vendor_metadata),
+              "git_tracked_bytes":sum(meta["git_blob_bytes"] for _,meta in vendor_metadata),
+              "meaning":"Cargo successfully opened Cargo.toml and .cargo-checksum.json for all vendor roots in this observed cargo run."
+            },
+            "observed_read_candidates":{
+              "all_vendor_paths":len(vendor_entries),
+              "all_vendor_bytes_at_trace_end":sum(e["bytes_at_trace_end"] for e in vendor_entries),
+              "active_seven_dependency_package_files":len(vendor_active_files),
+              "active_seven_dependency_package_git_bytes":sum(e.get("git_blob_bytes",e["bytes_at_trace_end"]) for e in vendor_active_files),
+              "vendor_source_discovery_metadata_files":len(vendor_discovery),
+              "vendor_source_discovery_metadata_git_bytes":sum(e.get("git_blob_bytes",e["bytes_at_trace_end"]) for e in vendor_discovery)
+            },
+            "limitation":"Dynamic observation of this successful run, not proof that unobserved platform/feature inputs are unnecessary. Full vendor footprint is external checkout metadata; observed paths are counted separately."
+          }
+          path_census={
+            "schema":"nano-sens-runtime-file-open-path-census/1",
+            "status":"OBSERVED_SUCCESSFUL_FILE_OPENS_NOT_A_MINIMUM_CLOSURE_PROOF",
+            "runner_sha256":hashlib.sha256(runner).hexdigest(),
+            "pinned_revisions":{
+              "cml":subprocess.run(["git","rev-parse","HEAD"],capture_output=True,text=True,check=True).stdout.strip(),
+              "sens":subprocess.run(["git","-C","external/sens","rev-parse","HEAD"],capture_output=True,text=True,check=True).stdout.strip(),
+              "wsm-my-lisp":subprocess.run(["git","-C","wsm-my-lisp","rev-parse","HEAD"],capture_output=True,text=True,check=True).stdout.strip()
+            },
+            "unique_successful_repo_path_files":len(file_entries),
+            "path_set_sha256":hashlib.sha256(path_names.encode()).hexdigest(),
+            "files":file_entries,
+            "vendor_source_observation":vendor_report,
+            "scope_note":"Successful read-capable openat/openat2 file paths under three checked-out repositories. Git metadata and generated/untracked paths are classified separately. Directory enumeration, system/toolchain/shared-library files and unsuccessful path probes remain in the raw strace log; this census does not prove minimality."
+          }
+          (root/"runtime-file-open-path-census.json").write_text(json.dumps(path_census,indent=2)+"\n")
+          report["unique_successful_repo_path_files"]=len(file_entries)
+          report["repo_path_set_sha256"]=path_census["path_set_sha256"]
+          report["vendor_observation"]=vendor_report
           (root/"runtime-file-process-trace-index.json").write_text(json.dumps(report,indent=2)+"\n")
           print(json.dumps({k:v for k,v in report.items() if k not in ("runner_test_summary","scope_note")},indent=2))
           if not summary or "189 passed; 0 failed" not in summary[-1]:
