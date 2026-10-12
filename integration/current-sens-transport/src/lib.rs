@@ -9,6 +9,11 @@
 //! CML backends are migrated. A green test here is NOT a green CML production
 //! compiler or a claim of full current CML IR parity.
 
+// Both compilation and optimization share the SAME source modules as root CML.
+#[path = "../../../src/current_exact_model.rs"]
+pub mod current_exact_model;
+#[path = "../../../src/current_exact_optimizer.rs"]
+pub mod current_exact_optimizer;
 pub mod modern_ir;
 
 use sens::{CoreDomainIdentity, CompilerLoweringRole};
