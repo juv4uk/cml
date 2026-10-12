@@ -49,12 +49,22 @@ fn test_corpus_records_mechanism_outcomes_without_semantic_answer_keys() {
         .expect("buffer-map-i32 observation must remain in the corpus");
     assert!(!w3.admitted, "no historical 8-bit code can admit a current domain");
     assert!(w3.verdict_source.contains("SENS current exact-domain law"));
-    let blocked = w3.lanes.iter().find(|lane| lane.lane_name == "cml-compute-cpu")
+    let blocked = w3
+        .lanes
+        .iter()
+        .find(|lane| lane.lane_name == "cml-compute-cpu")
         .expect("the blocked CML lane must be reported, not silently dropped");
     assert_eq!(blocked.status, "BLOCKED_UNVERIFIED_DOMAIN");
     assert!(blocked.runtime.is_none(), "never show unrun CML timings");
-    assert!(blocked.outcome.contains("historical byte addresses rejected"));
-    let reference = w3.lanes.iter().find(|lane| lane.lane_name == "c-gcc-O3-reference")
+    assert!(
+        blocked
+            .outcome
+            .contains("historical byte addresses rejected")
+    );
+    let reference = w3
+        .lanes
+        .iter()
+        .find(|lane| lane.lane_name == "c-gcc-O3-reference")
         .expect("retain the independent C reference baseline");
     assert_eq!(reference.status, "OK");
     assert_eq!(reference.outcome, "#i32(2 3 4 5 6)");
