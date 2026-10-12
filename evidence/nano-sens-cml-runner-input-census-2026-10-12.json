@@ -1270,5 +1270,38 @@
     "trace_comparison_policy": "Raw traces intentionally are not byte-identical; they have differing timing/temp-file/open-event counts. The stable size report, lineage, and Cargo graph fingerprints are byte-identical evidence. Interpret each trace as observed events only.",
     "artifacts_expire_after_30_days": true,
     "note": "The two full raw traces, standard reports, and trace indexes are preserved in the per-clean-run ZIP artifacts above. A per-file input path census generator was added in the next workflow commit; this trace checkpoint predates that path-list enhancement."
+  },
+  "rustc_dep_info_input_census_instrumentation": {
+    "schema": "nano-sens-rustc-dep-info-input-census-instrumentation/1",
+    "status": "IMPLEMENTED; LATEST CLEAN-RUN VALIDATION QUEUED; NO CENSUS NUMBERS CLAIMED YET",
+    "script": {
+      "path": "scripts/nano-sens-rustc-dep-info-census.py",
+      "git_blob_sha1": "954dc96a84cd329342c65ab064b67b3f1a43b59c",
+      "commit": "f01ff979b5626379c99a4cd5c5e890ca962b8a28"
+    },
+    "workflow": {
+      "path": ".github/workflows/issue-655-c2-executable.yml",
+      "relevant_commit": "7dfbcaf9306cd96936d29d984d63e746b33e83df",
+      "final_script_label_commit": "f01ff979b5626379c99a4cd5c5e890ca962b8a28",
+      "run": "https://github.com/juv4uk/cml/actions/runs/38191754506",
+      "run_head": "f01ff979b5626379c99a4cd5c5e890ca962b8a28",
+      "status_at_ledger_update": "QUEUED"
+    },
+    "outputs_per_clean_run": [
+      "rustc-dep-info-input-census.json"
+    ],
+    "proof_gate": [
+      "parse errors must be zero",
+      "all discovered tracked repository inputs must match their pinned Git blob",
+      "normalized dep-info census must be byte-identical across the two independent clean runs",
+      "the census is observational compile-input evidence, not a minimum seed closure proof"
+    ],
+    "scope_notes": [
+      "Enumerates existing regular-file paths on the RHS of compiler-generated Rust .d dep-info files under the fresh CML and SENS target trees.",
+      "Separates tracked CML/SENS/WSM files, generated target outputs, isolated Cargo-home dependencies, host/toolchain source paths, and unresolved dep-info tokens.",
+      "Normalizes repository and Cargo-home roots so per-run temporary directory names do not create false differences.",
+      "Does not claim complete host toolchain, dynamic library, Git-ref/object, or runtime-read closure."
+    ],
+    "last_verified_checkpoint_remains": "latest_verified_checkpoint in this file (K1 run 38186932277); do not advance this pointer until run 38191754506 finishes PASS."
   }
 }
