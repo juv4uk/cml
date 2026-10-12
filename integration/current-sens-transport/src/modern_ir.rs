@@ -8,10 +8,9 @@ use sens::syntax::{Expr, ExprKind};
 
 use crate::VerifiedPhysicalProgram;
 
-// The same Rust SOURCE defines the modern root CML AST/IR and candidate types.
-#[path = "../../../src/current_exact_model.rs"]
-mod shared_current_exact_model;
-pub use shared_current_exact_model::{
+// All current callable semantics, quoted data and target IR come from a
+// single SENS-verified root source module, not a copied candidate compiler.
+pub use crate::current_exact_model::{
     quoted_data, lower, CmlMechanism, ExactQuotedData, ModernAst, ModernIr,
     ModernLowerError, VerifiedProgramIr, VerifiedRole, exact_call, verified_role,
     lower_canonical_t5_bytes,
