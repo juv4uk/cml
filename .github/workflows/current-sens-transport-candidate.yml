@@ -4,6 +4,8 @@ on:
     branches: [master]
     paths:
       - "integration/current-sens-transport/**"
+      - "src/current_exact_optimizer.rs"
+      - "src/current_exact_model.rs"
       - "src/core_profile.rs"
       - "tests/core_profile_request_test.rs"
       - ".github/workflows/current-sens-transport-candidate.yml"
@@ -50,6 +52,7 @@ jobs:
           grep -q CML_MODERN_REGISTRY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           grep -q CML_MODERN_IR_PARITY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           grep -q CML_SENS_OPTIMIZER_ORACLE_PASS "$RUNNER_TEMP/modern-sens-transport.log"
+          grep -q CML_SENS_OPTIMIZER_AST_IR_INTEGRITY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           grep -q CML_ROOT_PHYSICAL_TO_IR_AUTHORITY_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           grep -q CML_ROOT_CURRENT_COVERAGE_PASS "$RUNNER_TEMP/modern-sens-transport.log"
           grep -q CML_ROOT_CURRENT_COVERAGE_NATIVE_UNPROVEN_PASS "$RUNNER_TEMP/modern-sens-transport.log"
