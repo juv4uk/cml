@@ -11,6 +11,7 @@ on:
       - "build.rs"
       - ".cargo/**"
       - "src/**"
+      - "scripts/nano-sens-rustc-dep-info-census.py"
       - "contracts/machine-lowering-boundary.lisp"
       - ".github/workflows/issue-630-c1-driver.yml"
       - ".github/workflows/issue-648-selfhost-c2.yml"
@@ -26,6 +27,7 @@ on:
       - "build.rs"
       - ".cargo/**"
       - "src/**"
+      - "scripts/nano-sens-rustc-dep-info-census.py"
       - "contracts/machine-lowering-boundary.lisp"
       - ".github/workflows/issue-630-c1-driver.yml"
       - ".github/workflows/issue-648-selfhost-c2.yml"
@@ -184,6 +186,8 @@ jobs:
         run: |
           cargo test -j 2 -p cml --lib \
             -- --nocapture --test-threads=1
+          python3 scripts/nano-sens-rustc-dep-info-census.py \
+            "$SENS_SELFHOST_ARTIFACT_DIR/rustc-dep-info-input-census.json"
           runner="$(find target/debug/deps -maxdepth 1 -type f -executable -name 'cml-*' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
           test -n "$runner"
           root="$SENS_SELFHOST_ARTIFACT_DIR"
