@@ -35,7 +35,8 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Preserve two-clean-run Nano-SENS evidence while other main commits arrive.
+  cancel-in-progress: false
 
 jobs:
   c2-executable:
