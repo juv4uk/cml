@@ -186,12 +186,40 @@ jobs:
             -- --nocapture --test-threads=1
           runner="$(find target/debug/deps -maxdepth 1 -type f -executable -name 'cml-*' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
           test -n "$runner"
-          cp "$runner" "$SENS_SELFHOST_ARTIFACT_DIR/seed-v0-c0-runner.bin"
-          sha256sum "$SENS_SELFHOST_ARTIFACT_DIR/seed-v0-c0-runner.bin" >> "$SENS_SELFHOST_ARTIFACT_DIR/bootstrap-input-manifest.txt"
+          root="$SENS_SELFHOST_ARTIFACT_DIR"
+          cp "$runner" "$root/seed-v0-c0-runner-unstripped.bin"
+          cp "$runner" "$root/seed-v0-c0-runner.bin"
+          # The Rust test harness ELF carries per-build GNU build-id and large
+          # non-loadable DWARF/debug/symbol sections. Keep the raw build as
+          # evidence, but measure/run a stripped candidate with no build-id.
+          # This must earn acceptance by re-running the complete 189-test
+          # corpus and by passing the two-clean-run byte-identical report gate.
+          raw_bytes="$(stat -c '%s' "$root/seed-v0-c0-runner-unstripped.bin")"
+          objcopy --strip-all --remove-section=.note.gnu.build-id "$root/seed-v0-c0-runner.bin"
+          if readelf -n "$root/seed-v0-c0-runner.bin" | grep -q 'Build ID:'; then
+            echo "BLOCK: stripped runner still contains a non-reproducible GNU build-id" >&2
+            exit 1
+          fi
+          "$root/seed-v0-c0-runner.bin" --test-threads=1 > "$root/stripped-runner-smoke.stdout-stderr.txt" 2>&1 || {
+            tail -n 100 "$root/stripped-runner-smoke.stdout-stderr.txt"
+            echo "BLOCK: stripped seed candidate failed its full native runner corpus" >&2
+            exit 1
+          }
+          grep -q 'test result: ok. 189 passed; 0 failed' "$root/stripped-runner-smoke.stdout-stderr.txt" || {
+            tail -n 100 "$root/stripped-runner-smoke.stdout-stderr.txt"
+            echo "BLOCK: stripped seed candidate did not pass the complete 189-test corpus" >&2
+            exit 1
+          }
           {
+            echo "seed_runner_strip_policy=objcopy --strip-all --remove-section=.note.gnu.build-id"
+            echo "seed_runner_unstripped_file_bytes=$raw_bytes"
+            echo "seed_runner_stripped_file_bytes=$(stat -c '%s' "$root/seed-v0-c0-runner.bin")"
+            echo "seed_runner_role=measured stripped CML lib-test bootstrap runner; not a minimum-seed claim"
+            echo "seed_runner_stripped_smoke=PASS (189 passed; 0 failed)"
+            sha256sum "$root/seed-v0-c0-runner-unstripped.bin" "$root/seed-v0-c0-runner.bin"
             echo "external_runtime_shared_libraries:"
-            ldd "$SENS_SELFHOST_ARTIFACT_DIR/seed-v0-c0-runner.bin" || true
-          } >> "$SENS_SELFHOST_ARTIFACT_DIR/bootstrap-input-manifest.txt"
+            ldd "$root/seed-v0-c0-runner.bin" || true
+          } >> "$root/bootstrap-input-manifest.txt"
 
       - name: Trace runner runtime file and process inputs (audit only; not size metric)
         shell: bash
@@ -592,7 +620,7 @@ jobs:
           toolchain="$(rustc -Vv | tr '\n' ';') | cargo=$(cargo -V) | gcc=$(gcc -dumpfullversion -dumpversion) | ld=$(ld --version | head -n 1)"
           python3 nano-sens-measure-tools/scripts/measure-nano-sens-size.py \
             --seed "$root/seed-v0-c0-runner.bin" \
-            --seed-role "Operational seed-v0: pinned CML lib-test bootstrap runner that produces C1 and runs C1/C2; includes Rust host/bootstrap compiler code; not a minimum-size claim" \
+            --seed-role "Operational seed-v0 candidate: pinned CML lib-test bootstrap runner, stripped of debug/symbol sections and GNU build-id; complete 189-test corpus re-run after stripping; not a minimum-size claim" \
             --c1-executable "$root/c1-executable.bin" \
             --c2-executable "$root/c2-executable.bin" \
             --c1-static-executable "$root/c1-static-executable.bin" \
@@ -603,7 +631,7 @@ jobs:
             --toolchain "$toolchain" \
             --target "$(gcc -dumpmachine)" \
             --abi-profile "SW1+compiler-evidence-canonical/1" \
-            --build-command "C1/C2 baseline: GCC -Wl,--build-id=none -s; K1: GCC -static -Wl,--build-id=none -s; full CML library corpus passed; baseline and static C1 outputs compared byte-for-byte" \
+            --build-command "CML test runner built by locked cargo test; seed candidate normalized with objcopy --strip-all --remove-section=.note.gnu.build-id; stripped runner must pass all 189 CML library tests; C1/C2 baseline GCC -Wl,--build-id=none -s; K1 static GCC -static -Wl,--build-id=none -s" \
             --out "$root/nano-sens-size-report.json"
 
       - name: Preserve selfhost lineage artifacts for 30 days
