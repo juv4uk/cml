@@ -48,9 +48,6 @@ jobs:
       WSM_NUCLEUS_ASM: ${{ github.workspace }}/wsm-my-lisp/asm/nucleus.s
       CARGO_BUILD_JOBS: "2"
       RUST_TEST_THREADS: "1"
-      # Each matrix job gets an empty, isolated Cargo home. After a locked fetch,
-      # all bootstrap/test replay commands run with CARGO_NET_OFFLINE=true.
-      CARGO_HOME: ${{ runner.temp }}/nano-sens-cargo-home-${{ matrix.clean_run }}
     steps:
       - name: Checkout exact C1/C2 lineage
         uses: actions/checkout@v5
@@ -108,6 +105,11 @@ jobs:
           test -n "$pin"
           test "$build_pin" = "$pin"
           test "$(git -C external/sens rev-parse HEAD)" = "$pin"
+
+      - name: Create an isolated Cargo home for this clean run
+        run: |
+          set -euo pipefail
+          echo "CARGO_HOME=$RUNNER_TEMP/nano-sens-cargo-home-${{ matrix.clean_run }}" >> "$GITHUB_ENV"
 
       - name: Capture active Cargo dependency graphs
         env:
