@@ -784,43 +784,37 @@
     },
     "result": "Both clean-run jobs and compare-two-clean-runs job passed. Both reports byte-identical. Git metadata size differs slightly across clean checkouts and is not used as seed bytes.",
     "latest_verified_snapshot": {
-      "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186651984",
-      "cml_source_commit": "f4f03066993e3fbeb824c9ae6879bc1a1059cbd6",
-      "note": "CML .git includes nested .git/modules/external/sens; prior combined total double-counted that nested SENS metadata. The script has now been corrected to record disjoint CML-exclusive, SENS, and WSM trees. These are external metadata snapshots, not minimal seed refs/objects.",
+      "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186932277",
+      "cml_source_commit": "100f30174f728cf2564ceeb2348f58bd8ac7dd06",
+      "note": "Non-overlapping external checkout Git metadata snapshots: CML excludes nested `.git/modules/external/sens`; SENS and WSM gitdirs are counted once each. Not included in trusted seed and not a minimal Git object/ref set.",
       "clean_runs": [
         {
           "run": 1,
-          "cml_gitdir_including_nested_sens": 33673307,
-          "cml_gitdir_excluding_sens_submodule": 2863872,
-          "sens_submodule_gitdir": 30809435,
-          "wsm_witness_gitdir": 1810848,
-          "raw_overlapping_sum": 66293590,
-          "disjoint_total": 35484155,
-          "overlap_removed": 30809435,
+          "cml_gitdir_excluding_sens_submodule": 2864603,
+          "sens_submodule": 30840152,
+          "wsm_witness": 1810848,
+          "disjoint_total": 35515603,
           "runner_sha256": "6fbbc819eac32253d9eadb5e1dc8e80295bdb0bde9a285076edd8d7fc9e40eb3",
           "runner_bytes": 34623904
         },
         {
           "run": 2,
-          "cml_gitdir_including_nested_sens": 33675259,
-          "cml_gitdir_excluding_sens_submodule": 2863864,
-          "sens_submodule_gitdir": 30811395,
-          "wsm_witness_gitdir": 1810846,
-          "raw_overlapping_sum": 66297500,
-          "disjoint_total": 35486105,
-          "overlap_removed": 30811395,
+          "cml_gitdir_excluding_sens_submodule": 2864595,
+          "sens_submodule": 30844377,
+          "wsm_witness": 1810846,
+          "disjoint_total": 35519818,
           "runner_sha256": "6fbbc819eac32253d9eadb5e1dc8e80295bdb0bde9a285076edd8d7fc9e40eb3",
           "runner_bytes": 34623904
         }
       ],
       "run1_minus_run2": {
         "cml_gitdir_excluding_sens_submodule": 8,
-        "sens_submodule": -1960,
+        "sens_submodule_gitdir": -4225,
         "wsm_witness": 2,
-        "disjoint_total": -1950
+        "disjoint_total": -4215
       },
-      "full_checkout_metadata_not_minimal": true,
-      "overlap_correction": "CML gitdir includes the SENS submodule gitdir, so older field totals that added CML + SENS + WSM were overstated by exactly the sens_submodule number. Correct non-overlapping total is CML gitdir including nested SENS + WSM witness."
+      "no_overlap": true,
+      "full_checkout_metadata_not_minimal": true
     },
     "prior_overlapping_snapshots": [
       {
@@ -900,8 +894,8 @@
       ]
     },
     "follow_up_locked_check": {
-      "cml_commit": "bdf0a0e75ef7ea6cb430c4286cb9352e7d422648",
-      "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186316487",
+      "cml_commit": "100f30174f728cf2564ceeb2348f58bd8ac7dd06",
+      "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186932277",
       "status": "PASS",
       "clean_runs": 2,
       "library_test_results": [
@@ -917,26 +911,12 @@
         }
       ],
       "c1_c2_lineage": "byte-identical; C1 and C2 are both 92,248 bytes and share SHA-256 27b8fbf096cddbb77be2b4bf57cc58bf8b4fac4accc42adbcfbc10d6cd95f375",
-      "size_report_sha256_both_runs": "8b2ec82d1fa57e0811a7c754e05f9fac9966b6caac8708045e1eea85d9b8ed90",
+      "size_report_sha256_both_runs": "5e42feee14a65d33e8e909dbb384276b5255591a7233bac09efbe37fc9635c72",
       "proof_artifact": {
-        "id": 11719214909,
-        "sha256": "sha256:686108e9061d00d74fc0b49459c33f89f39f6bfec247b91e866200a5ffc5e4c0",
-        "expires_at": "2026-11-11T00:00:42Z"
+        "id": 11719573111,
+        "sha256": "sha256:b3c0eb3f5c8114331934b8070da126f9de49ec38eaf84d1aba34a9b91d203302",
+        "expires_at": "2026-11-11T00:10:35Z"
       },
-      "run_artifacts": [
-        {
-          "run": 1,
-          "id": 11720235435,
-          "sha256": "sha256:175ed686c966526c8e200cdeba9b6d599f0331d4e6ba4bdbb3a6c32d53068cd8",
-          "expires_at": "2026-11-11T00:00:26Z"
-        },
-        {
-          "run": 2,
-          "id": 11719582308,
-          "sha256": "sha256:14cfef7d12f61f5e05fc1a12ad24b9037bea833feba597e654cdb307601bf8a0",
-          "expires_at": "2026-11-11T00:00:30Z"
-        }
-      ],
       "active_graphs": {
         "status": "PASS_BYTE_IDENTICAL_ACROSS_TWO_CLEAN_RUNS",
         "cml_tree_sha256": "fe4e29d9723e1c31a598d5905024670defad2a4ffce744cd099b84d95c285c29",
@@ -946,29 +926,30 @@
         "cml_committed_and_resolved_lock_blob": "b9bd778db07efa1a1883665939707612063e2e2c",
         "sens_committed_and_resolved_lock_blob": "293e933d0fdb78954386243eae431c2826b62a79",
         "cml_lock_resolution_diff_bytes": 0
-      }
+      },
+      "result": "Both runs passed and the compare job passed; the disjoint Git metadata meter is included in both preserved manifests."
     }
   },
   "latest_locked_checkpoint": {
     "repository": "juv4uk/cml",
-    "source_commit": "f4f03066993e3fbeb824c9ae6879bc1a1059cbd6",
+    "source_commit": "100f30174f728cf2564ceeb2348f58bd8ac7dd06",
     "sens_gitlink_commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
     "wsm_witness_commit": "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947",
-    "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186651984",
-    "status": "PASS_TWO_CLEAN_RUNS_AND_CARGO_GRAPH",
+    "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186932277",
+    "status": "PASS_TWO_CLEAN_RUNS_AND_CARGO_GRAPH_AND_DISJOINT_GIT_METER",
     "runner": {
       "path": "seed-v0-c0-runner.bin",
       "sha256": "6fbbc819eac32253d9eadb5e1dc8e80295bdb0bde9a285076edd8d7fc9e40eb3",
       "on_disk_bytes": 34623904,
       "loadable_segment_file_bytes": 6042632,
       "executable_code_section_bytes": 4147007,
-      "note": "Distinct pinned CML source checkpoint; same file byte length as preceding checkpoint but a different SHA. Do not compare across source checkpoints as an optimization result."
+      "note": "Same ELF bytes and SHA as the immediately preceding checkpoint; only CML source/provenance head changed. Do not treat differing checkpoint metadata as a size optimization."
     },
     "report": {
       "schema": "nano-sens-size-report/1",
-      "sha256_both_clean_runs": "6b9b820232c6da5d832588bfbfcb71529aff13864b75c1e0449b97d32317795c",
+      "sha256_both_clean_runs": "5e42feee14a65d33e8e909dbb384276b5255591a7233bac09efbe37fc9635c72",
       "status": "MEASURED_WITH_PINNED_SELFHOST_LINEAGE",
-      "lineage_report_sha256": "bfedb7f11d8bb30e15baeae2fb1aaa37b7112dcbee70ae76d8d7595c73a6f756"
+      "lineage_report_sha256": "59ed91c8401d6f2e2a418e77dda40e6470ab03bff965bf417b3e1a3c6a6e1ec5"
     },
     "tests": {
       "clean_run_1": {
@@ -1001,34 +982,149 @@
       "sens_committed_and_resolved_lock_blob": "293e933d0fdb78954386243eae431c2826b62a79"
     },
     "proof_artifact": {
-      "id": 11719792149,
-      "sha256": "sha256:9a72f4dd3e279291bc6100585bcfb62fff962d86f864315e888aeafb67523e7f",
-      "expires_at": "2026-11-11T00:06:22Z"
+      "id": 11719573111,
+      "sha256": "sha256:b3c0eb3f5c8114331934b8070da126f9de49ec38eaf84d1aba34a9b91d203302",
+      "expires_at": "2026-11-11T00:10:35Z"
     },
     "run_artifacts": [
       {
         "run": 1,
-        "id": 11719822143,
-        "sha256": "sha256:d6daf3ffc94f90e3c573e7ee4ab062d9431ac819857ca0d27d49262781f7f278",
-        "expires_at": "2026-11-11T00:05:47Z"
+        "id": 11719922452,
+        "sha256": "sha256:3e124c9832906c9474ab82a9237b9865c2a7e34f44bce1f38e6808158818db92",
+        "expires_at": "2026-11-11T00:10:17Z"
       },
       {
         "run": 2,
-        "id": 11720500118,
-        "sha256": "sha256:488344b6f02252fcb5c0bb7770390ad190ce453ed0cdf2d908d31e12be5ccc5c",
-        "expires_at": "2026-11-11T00:06:11Z"
+        "id": 11720415915,
+        "sha256": "sha256:109f1d0cfeafc9de7046a726eea1c7296fa2111f4ba64afe3a13d1a4e2ef788b",
+        "expires_at": "2026-11-11T00:10:20Z"
       }
     ],
-    "two_clean_run_proof": {
-      "schema": "nano-sens-two-clean-runs-proof/1",
-      "status": "PASS",
-      "clean_runs": 2,
-      "identical_report_sha256": "6b9b820232c6da5d832588bfbfcb71529aff13864b75c1e0449b97d32317795c",
-      "identical_graphs": true,
-      "expires_at": "2026-11-11T00:06:22Z"
+    "git_metadata": {
+      "schema": "nano-sens-disjoint-git-metadata-snapshot/1",
+      "note": "Disjoint regular-file byte counts; CML root .git excludes nested SENS gitdir. These are full checkout metadata snapshots, not minimal seed refs/objects.",
+      "clean_runs": [
+        {
+          "run": 1,
+          "cml_gitdir_excluding_sens_submodule": 2864603,
+          "sens_submodule_gitdir": 30840152,
+          "wsm_witness_gitdir": 1810848,
+          "disjoint_total": 35515603
+        },
+        {
+          "run": 2,
+          "cml_gitdir_excluding_sens_submodule": 2864595,
+          "sens_submodule_gitdir": 30844377,
+          "wsm_witness_gitdir": 1810846,
+          "disjoint_total": 35519818
+        }
+      ],
+      "run1_minus_run2": {
+        "cml_gitdir_excluding_sens_submodule": 8,
+        "sens_submodule_gitdir": -4225,
+        "wsm_witness": 2,
+        "disjoint_total": -4215
+      }
     }
   },
   "latest_verified_checkpoint": {
+    "repository": "juv4uk/cml",
+    "source_commit": "100f30174f728cf2564ceeb2348f58bd8ac7dd06",
+    "sens_gitlink_commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+    "wsm_witness_commit": "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947",
+    "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186932277",
+    "status": "PASS_TWO_CLEAN_RUNS_AND_CARGO_GRAPH_AND_DISJOINT_GIT_METER",
+    "runner": {
+      "path": "seed-v0-c0-runner.bin",
+      "sha256": "6fbbc819eac32253d9eadb5e1dc8e80295bdb0bde9a285076edd8d7fc9e40eb3",
+      "on_disk_bytes": 34623904,
+      "loadable_segment_file_bytes": 6042632,
+      "executable_code_section_bytes": 4147007,
+      "note": "Same ELF bytes and SHA as the immediately preceding checkpoint; only CML source/provenance head changed. Do not treat differing checkpoint metadata as a size optimization."
+    },
+    "report": {
+      "schema": "nano-sens-size-report/1",
+      "sha256_both_clean_runs": "5e42feee14a65d33e8e909dbb384276b5255591a7233bac09efbe37fc9635c72",
+      "status": "MEASURED_WITH_PINNED_SELFHOST_LINEAGE",
+      "lineage_report_sha256": "59ed91c8401d6f2e2a418e77dda40e6470ab03bff965bf417b3e1a3c6a6e1ec5"
+    },
+    "tests": {
+      "clean_run_1": {
+        "passed": 189,
+        "failed": 0
+      },
+      "clean_run_2": {
+        "passed": 189,
+        "failed": 0
+      }
+    },
+    "c1_c2_lineage": {
+      "status": "PASS",
+      "byte_identical_executables": true,
+      "c1_sha256": "27b8fbf096cddbb77be2b4bf57cc58bf8b4fac4accc42adbcfbc10d6cd95f375",
+      "c2_sha256": "27b8fbf096cddbb77be2b4bf57cc58bf8b4fac4accc42adbcfbc10d6cd95f375",
+      "c1_c2_on_disk_bytes": 92248,
+      "static_c1_on_disk_bytes": 792544,
+      "static_c1_output_byte_identical": true,
+      "static_c1_output_sha256": "303d96cd1467fae319fb2dcf2c12e1a73c840bb0a0ecab67f3609ffde411d79a",
+      "conclusion": "K1 correctness witness passes; static-link+strip is not adopted as a size reduction."
+    },
+    "active_cargo_graphs": {
+      "status": "PASS_BYTE_IDENTICAL_ACROSS_TWO_CLEAN_RUNS",
+      "cml_tree_sha256": "fe4e29d9723e1c31a598d5905024670defad2a4ffce744cd099b84d95c285c29",
+      "sens_xtask_tree_sha256": "a11ec08911b104cfb31211d4f82459711d9b5ae8788f043bd8ce60baaff4736a",
+      "graph_digest_manifest_sha256": "3b1d1d6250f969eac2f0c0e2193bafddc3d48fa15ec251646d0859940a76b699",
+      "lockfiles_unchanged": true,
+      "cml_committed_and_resolved_lock_blob": "b9bd778db07efa1a1883665939707612063e2e2c",
+      "sens_committed_and_resolved_lock_blob": "293e933d0fdb78954386243eae431c2826b62a79"
+    },
+    "proof_artifact": {
+      "id": 11719573111,
+      "sha256": "sha256:b3c0eb3f5c8114331934b8070da126f9de49ec38eaf84d1aba34a9b91d203302",
+      "expires_at": "2026-11-11T00:10:35Z"
+    },
+    "run_artifacts": [
+      {
+        "run": 1,
+        "id": 11719922452,
+        "sha256": "sha256:3e124c9832906c9474ab82a9237b9865c2a7e34f44bce1f38e6808158818db92",
+        "expires_at": "2026-11-11T00:10:17Z"
+      },
+      {
+        "run": 2,
+        "id": 11720415915,
+        "sha256": "sha256:109f1d0cfeafc9de7046a726eea1c7296fa2111f4ba64afe3a13d1a4e2ef788b",
+        "expires_at": "2026-11-11T00:10:20Z"
+      }
+    ],
+    "git_metadata": {
+      "schema": "nano-sens-disjoint-git-metadata-snapshot/1",
+      "note": "Disjoint regular-file byte counts; CML root .git excludes nested SENS gitdir. These are full checkout metadata snapshots, not minimal seed refs/objects.",
+      "clean_runs": [
+        {
+          "run": 1,
+          "cml_gitdir_excluding_sens_submodule": 2864603,
+          "sens_submodule_gitdir": 30840152,
+          "wsm_witness_gitdir": 1810848,
+          "disjoint_total": 35515603
+        },
+        {
+          "run": 2,
+          "cml_gitdir_excluding_sens_submodule": 2864595,
+          "sens_submodule_gitdir": 30844377,
+          "wsm_witness_gitdir": 1810846,
+          "disjoint_total": 35519818
+        }
+      ],
+      "run1_minus_run2": {
+        "cml_gitdir_excluding_sens_submodule": 8,
+        "sens_submodule_gitdir": -4225,
+        "wsm_witness": 2,
+        "disjoint_total": -4215
+      }
+    }
+  },
+  "previous_locked_checkpoint": {
     "repository": "juv4uk/cml",
     "source_commit": "f4f03066993e3fbeb824c9ae6879bc1a1059cbd6",
     "sens_gitlink_commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
