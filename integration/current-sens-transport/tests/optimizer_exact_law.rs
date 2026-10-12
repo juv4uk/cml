@@ -1,7 +1,7 @@
 //! Candidate differential tests for a SENS-specific optimizer, never SBCL
 //! semantics. All actual executions go through SENS's canonical T5 oracle.
 use cml_current_sens_transport::{
-    current_exact_model::{CmlMechanism, ExactQuotedData, ModernIr},
+    current_exact_model::{CmlMechanism, ExactQuotedData, ModernAst, ModernIr},
     current_exact_optimizer::{
         optimize_canonical_t5, optimize_exact_ir, replay_optimizer_witness,
         OptimizeError, OptimizePipelineError, RewriteLaw,
@@ -82,6 +82,15 @@ fn unsafe_eager_evaluation_elision_is_not_permitted() {
     // A non-QUOTE operand may fail or have an effect; even an apparently
     // innocent literal is NOT whitelisted as a pure, total expression.
     pair_args[1] = ModernIr::Literal(ExactQuotedData::EmptyList);
+    // Keep AST and IR in correspondence. The O1 input must never be
+    // accepted if a caller silently edits only one of those structures.
+    let ModernAst::Call { args: selector_args, .. } = &mut source_ir.ast[0] else {
+        panic!("selector AST expected");
+    };
+    let ModernAst::Call { args: constructor_args, .. } = &mut selector_args[0] else {
+        panic!("pair AST expected");
+    };
+    constructor_args[1] = ModernAst::Literal(ExactQuotedData::EmptyList);
     let report = optimize_exact_ir(&source_ir).unwrap();
     assert_eq!(report.witnesses.len(), 0);
     assert_eq!(report.original_nodes, report.optimized_nodes);
@@ -97,6 +106,30 @@ fn unsafe_eager_evaluation_elision_is_not_permitted() {
         optimize_exact_ir(&source_ir),
         Err(OptimizeError::RoleTargetMismatch)
     );
+}
+
+#[test]
+fn a_forged_ir_cannot_borrow_the_valid_provenance_of_another_ast() {
+    let (_, _, verified) =
+        compile_exact_source("10 100 10 111 10 001 0 01 10 001 1 01 01 01");
+    let mut forged = verified.clone();
+    let ModernIr::Mechanism { args, .. } = &mut forged.ir[0] else {
+        panic!("selector must be in exact IR");
+    };
+    let ModernIr::Mechanism { args: pair_args, .. } = &mut args[0] else {
+        panic!("pair must be in exact IR");
+    };
+    // Every compiler role and its SHA remain genuine; only a single
+    // subtree of the supplied IR is not derivable from the source AST.
+    pair_args[1] = ModernIr::Literal(ExactQuotedData::EmptyList);
+    assert_eq!(
+        optimize_exact_ir(&forged),
+        Err(OptimizeError::AstIrMismatch),
+    );
+    assert!(replay_optimizer_witness(
+        &verified, &optimize_exact_ir(&verified).unwrap(),
+    ).unwrap());
+    println!("CML_SENS_OPTIMIZER_AST_IR_INTEGRITY_PASS mismatched_ir_rejected=true");
 }
 
 #[test]
