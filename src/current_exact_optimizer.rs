@@ -276,6 +276,30 @@ pub fn replay_optimizer_witness(
     Ok(optimize_exact_ir(source)? == *candidate)
 }
 
+/// Independently replay a claimed optimization against the ORIGINAL canonical
+/// physical T5 bytes, not caller-provided AST/IR metadata. This binds the
+/// purported source digest, role law, IR and ordered rewrite witnesses to the
+/// same actual file bytes and prevents cross-program witness substitution.
+///
+/// A successful replay is a deterministic compiler-integrity check, NOT a
+/// general proof of semantic equivalence. The two admitted rewrites still
+/// require the independent SENS-oracle differential test corpus.
+pub fn replay_optimizer_witness_from_t5(
+    original_physical_t5: &[u8],
+    candidate: &OptimizedProgram,
+) -> Result<bool, OptimizePipelineError> {
+    // No auto-detection of F3. The canonical T5 reader rejects mismatching
+    // formats, truncation and noncanonical bytes before trusting the witness.
+    let original = lower_canonical_t5_bytes(original_physical_t5)
+        .map_err(OptimizePipelineError::InvalidPhysicalOrSemanticSource)?;
+    if candidate.canonical_t5_sha256 != sens::sha256_source(original_physical_t5) {
+        return Ok(false);
+    }
+    let freshly_optimized = optimize_exact_ir(&original)
+        .map_err(OptimizePipelineError::UnsoundOrUnverifiedRewrite)?;
+    Ok(freshly_optimized == *candidate)
+}
+
 /// A typed IR interface can be used from any backend without granting it
 /// permission to change domain semantics; only concrete target selection is
 /// backend-owned. SBCL's IR staging inspires the separation, not the language
