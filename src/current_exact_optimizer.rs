@@ -21,7 +21,7 @@
 //! This module is candidate-only until native CML codegen has its own parity.
 
 use crate::current_exact_model::{
-    lower_canonical_t5_bytes, verified_role, CmlMechanism, ModernIr, ModernLowerError,
+    lower, lower_canonical_t5_bytes, verified_role, CmlMechanism, ModernIr, ModernLowerError,
     VerifiedProgramIr, VerifiedRole,
 };
 use sens::{CompilerLoweringRole, CoreDomainIdentity};
@@ -67,6 +67,8 @@ pub enum OptimizeError {
     UnprovedRole,
     RoleTargetMismatch,
     InvalidArity,
+    /// A caller may not attach a plausible IR to a different admitted AST.
+    AstIrMismatch,
 }
 
 fn require_role(binding: &VerifiedRole, expected: CompilerLoweringRole)
@@ -219,6 +221,15 @@ pub fn optimize_exact_ir(input: &VerifiedProgramIr)
         return Err(OptimizeError::InvalidArity);
     }
     let original_nodes = measure(&input.ir)?;
+    // Do not trust an arbitrary caller-built IR just because each role is
+    // individually genuine. The IR must be EXACTLY the SENS-law lowering
+    // of the AST that accompanies it, in the original root order.
+    for (ast, supplied_ir) in input.ast.iter().zip(&input.ir) {
+        let proved_ir = lower(ast).map_err(|_| OptimizeError::UnprovedRole)?;
+        if &proved_ir != supplied_ir {
+            return Err(OptimizeError::AstIrMismatch);
+        }
+    }
     let mut witnesses = Vec::new();
     let ir: Vec<ModernIr> = input.ir.iter()
         .map(|node| rewrite_verified(node, &mut witnesses)).collect();
