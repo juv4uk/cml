@@ -16,6 +16,8 @@ pub mod coverage;
 pub mod cpu_profile;
 #[cfg(feature = "core1-t5-candidate")]
 pub mod current_exact_model;
+#[cfg(feature = "core1-t5-candidate")]
+pub mod current_exact_optimizer;
 pub mod elf64;
 pub mod exact_q_rep;
 pub mod execution;
