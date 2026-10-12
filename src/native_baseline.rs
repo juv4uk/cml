@@ -793,15 +793,21 @@ mod tests {
             workload.verdict_source.contains("upstream my-lisp")
                 && workload.upstream_witness_ref.contains("test-mylisp-pin")
         }));
-        assert!(report.workloads[2]
-            .verdict_source
-            .contains("SENS current exact-domain law not yet proved"));
-        assert!(report.workloads[2]
-            .upstream_witness_ref
-            .contains("CML migration"));
-        assert!(report.workloads[3]
-            .verdict_source
-            .contains("CML compiler admission policy"));
+        assert!(
+            report.workloads[2]
+                .verdict_source
+                .contains("SENS current exact-domain law not yet proved")
+        );
+        assert!(
+            report.workloads[2]
+                .upstream_witness_ref
+                .contains("CML migration")
+        );
+        assert!(
+            report.workloads[3]
+                .verdict_source
+                .contains("CML compiler admission policy")
+        );
 
         let json = report.to_json();
         assert!(json.contains("\"format_version\": 1"));
