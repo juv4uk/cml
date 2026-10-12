@@ -57,6 +57,36 @@ jobs:
           grep -q CML_PRODUCTION_PROFILE_WIDTH_COLLISION_REJECTED "$RUNNER_TEMP/modern-sens-transport.log"
           test "$(git rev-parse HEAD:external/sens)" != "$SENS_CANDIDATE_SHA"
           echo CML_MODERN_BRIDGE_EXACT_CANDIDATE_PASS
+      - name: Exercise opt-in O1 compiler CLI with strict T5/F3 and digest failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest=integration/current-sens-transport/Cargo.toml
+          sample=external/sens/tests/fixtures/migration-quote-cohort-main/quote-legacy.sens
+          cargo run --manifest-path "$manifest" --quiet --bin optimize_exact -- \
+            --t5 "$sample" | tee "$RUNNER_TEMP/sens-o1-t5.log"
+          grep -q 'SENS_OPT_O1_CANDIDATE_PASS carrier=T5' "$RUNNER_TEMP/sens-o1-t5.log"
+          python3 - "$RUNNER_TEMP/o1-quote.senc" <<'PY'
+          import sys
+          from pathlib import Path
+          Path(sys.argv[1]).write_bytes(bytes([0xf3,0x40,0x60]))
+          PY
+          trusted=19b495e17cd0522c1af4863704b92751df5e5769ee0bfe3c9844aedbc0a57406
+          cargo run --manifest-path "$manifest" --quiet --bin optimize_exact -- \
+            --f3 "$RUNNER_TEMP/o1-quote.senc" "$trusted" \
+            | tee "$RUNNER_TEMP/sens-o1-f3.log"
+          grep -q 'SENS_OPT_O1_CANDIDATE_PASS carrier=F3' "$RUNNER_TEMP/sens-o1-f3.log"
+          if cargo run --manifest-path "$manifest" --quiet --bin optimize_exact -- \
+            --f3 "$RUNNER_TEMP/o1-quote.senc" "$(printf '0%.0s' {1..64})" >/dev/null 2>&1; then
+            echo "BLOCK: optimizer admitted untrusted F3" >&2
+            exit 1
+          fi
+          if cargo run --manifest-path "$manifest" --quiet --bin optimize_exact -- \
+            --t5 "$RUNNER_TEMP/o1-quote.senc" >/dev/null 2>&1; then
+            echo "BLOCK: optimizer guessed F3 as T5" >&2
+            exit 1
+          fi
+          echo SENS_OPT_O1_CLI_FAIL_CLOSED_PASS
       - name: Execute actual root CML coverage CLI against SENS law, verify schema v2
         shell: bash
         run: |
@@ -143,6 +173,8 @@ jobs:
           name: cml-modern-domain-transport-${{ github.sha }}
           path: |
             ${{ runner.temp }}/modern-sens-transport.log
+            ${{ runner.temp }}/sens-o1-t5.log
+            ${{ runner.temp }}/sens-o1-f3.log
             ${{ runner.temp }}/cml-current-coverage.tsv
             ${{ runner.temp }}/production-sens-gitlink.txt
             ${{ runner.temp }}/cml-tiny-manifest.json
