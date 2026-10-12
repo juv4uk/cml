@@ -1122,7 +1122,11 @@
         "wsm_witness": 2,
         "disjoint_total": -4215
       }
-    }
+    },
+    "runtime_trace_run": "https://github.com/juv4uk/cml/actions/runs/38187252311",
+    "runtime_trace_status": "PASS_TWO_TRACES_EACH_WITH_189_TESTS",
+    "runtime_trace_report_sha256": "965701a837f622b7484d20ce3303cda4da9d5b647e4ca3c38535dfe3800e2fe4",
+    "runtime_trace_runner_sha256": "6fbbc819eac32253d9eadb5e1dc8e80295bdb0bde9a285076edd8d7fc9e40eb3"
   },
   "previous_locked_checkpoint": {
     "repository": "juv4uk/cml",
@@ -1202,5 +1206,69 @@
       "identical_graphs": true,
       "expires_at": "2026-11-11T00:06:22Z"
     }
+  },
+  "runtime_trace_checkpoint": {
+    "schema": "nano-sens-runtime-file-process-trace-pair/1",
+    "status": "PASS_TWO_INDEPENDENT_TRACED_RUNS; OBSERVATION_ONLY_NOT_MINIMUM_CLOSURE_PROOF",
+    "cml_source_commit": "e6e0a601c4c2c8398e7ed8f6e460e594b3a02559",
+    "sens_source_commit": "d0787a40fcea36501747732aa61b6de19fe29c70",
+    "wsm_witness_commit": "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947",
+    "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38187252311",
+    "clean_runs": [
+      {
+        "run": 1,
+        "artifact_id": 11719862489,
+        "artifact_sha256": "sha256:88e23e3855c11be3c465c741b26cccfbdca116cd94365fe79e6b263e56bc993a",
+        "expires_at": "2026-11-11T00:16:57Z",
+        "trace_sha256": "ba0da0393566a5bc5096985b3c1f5721a0003cc74c57e3db0f72233e8a8424f1",
+        "trace_bytes": 8914247,
+        "trace_line_count": 58029,
+        "execve_event_count": 1444,
+        "file_event_count": 48447,
+        "repository_path_event_count": 12223,
+        "repository_path_events_sha256": "2f647d109c4f4dbad54db9dbc5fc083cb88503fb8eb405037811928596436d2f",
+        "traced_runner_test_summary": "189 passed; 0 failed",
+        "disjoint_git_metadata_bytes": {
+          "cml_excluding_sens": 2866613,
+          "sens": 30833944,
+          "wsm": 1810846,
+          "total": 35581403
+        }
+      },
+      {
+        "run": 2,
+        "artifact_id": 11719953009,
+        "artifact_sha256": "sha256:a1a2c962cea617b22832b315d66dfefba6fac656cb33f9f4cabd1427d6765846",
+        "expires_at": "2026-11-11T00:16:01Z",
+        "trace_sha256": "a3066530ae2075751af6c1f20060101eeaa88e7b478a066d3f965c2b5403d93d",
+        "trace_bytes": 9014533,
+        "trace_line_count": 58113,
+        "execve_event_count": 1444,
+        "file_event_count": 48915,
+        "repository_path_event_count": 12679,
+        "repository_path_events_sha256": "f7f26e3dbf57e04e6a0dec64b410bb9fbdfbf6fe689eae544447ebcaf7cd9386",
+        "traced_runner_test_summary": "189 passed; 0 failed",
+        "disjoint_git_metadata_bytes": {
+          "cml_excluding_sens": 2866621,
+          "sens": 30846510,
+          "wsm": 1810848,
+          "total": 35583979
+        }
+      }
+    ],
+    "common": {
+      "runner_sha256": "6fbbc819eac32253d9eadb5e1dc8e80295bdb0bde9a285076edd8d7fc9e40eb3",
+      "runner_on_disk_bytes": 34623904,
+      "size_report_sha256_both_runs": "965701a837f622b7484d20ce3303cda4da9d5b647e4ca3c38535dfe3800e2fe4",
+      "lineage_report_sha256": "708ea12e26c9caa2389049236223f96dc640d1b508c2c2096923619fc87d5843",
+      "active_cargo_graphs_byte_identical": true,
+      "tests_per_run": {
+        "passed": 189,
+        "failed": 0
+      }
+    },
+    "trace_comparison_policy": "Raw traces intentionally are not byte-identical; they have differing timing/temp-file/open-event counts. The stable size report, lineage, and Cargo graph fingerprints are byte-identical evidence. Interpret each trace as observed events only.",
+    "artifacts_expire_after_30_days": true,
+    "note": "The two full raw traces, standard reports, and trace indexes are preserved in the per-clean-run ZIP artifacts above. A per-file input path census generator was added in the next workflow commit; this trace checkpoint predates that path-list enhancement."
   }
 }
