@@ -5,7 +5,9 @@ use std::{env, fs, path::Path};
 use cml_current_sens_transport::{
     VerifiedPhysicalProgram,
     modern_ir::lower_verified_program,
-    current_exact_optimizer::{optimize_exact_ir, replay_optimizer_witness},
+    current_exact_optimizer::{
+        optimize_exact_ir, replay_optimizer_witness, replay_optimizer_witness_from_t5,
+    },
 };
 
 fn checked_file(path: &str, extension: &str) -> Result<Vec<u8>, String> {
@@ -63,6 +65,11 @@ fn run() -> Result<(), String> {
         .map_err(|e| format!("rewrite replay rejected: {e:?}"))?
     {
         return Err("candidate IR rewrite witness did not replay".into());
+    }
+    if !replay_optimizer_witness_from_t5(&input.canonical_t5, &output)
+        .map_err(|e| format!("original physical T5 replay rejected: {e:?}"))?
+    {
+        return Err("optimization witness does not belong to this physical T5".into());
     }
     let source_hash = output.canonical_t5_sha256.iter()
         .map(|b| format!("{b:02x}")).collect::<String>();
