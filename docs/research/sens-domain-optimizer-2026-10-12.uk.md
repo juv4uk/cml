@@ -80,6 +80,32 @@ CPU/GPU/FPGA та НЕ економія байтів фізичного T5/F3.
 Тести: integration/current-sens-transport/tests/optimizer_exact_law.rs.
 CI: .github/workflows/current-sens-transport-candidate.yml.
 
+## Відтворення експерименту
+
+Після checkout чинного master CML із точною кандидатною SENS-залежністю:
+
+    cargo test --manifest-path integration/current-sens-transport/Cargo.toml \
+      --test optimizer_exact_law -- --nocapture
+
+    cargo run --manifest-path integration/current-sens-transport/Cargo.toml \
+      --bin optimize_exact -- --t5 program.sens
+
+    cargo run --manifest-path integration/current-sens-transport/Cargo.toml \
+      --bin optimize_exact -- --f3 tiny.senc TRUSTED_PHYSICAL_SHA256
+
+**Важливо:** TRUSTED_PHYSICAL_SHA256 потрібно брати з незалежного
+довіреного / підписаного manifest. Оптимізатор не виводить digest з
+неперевіреного файлу й не визначає F3 автоматично. Команди лише
+аналізують typed IR і друкують rewrite witnesses — не записують
+новий фізичний файл і не генерують native виконуваний код.
+
+[Кандидатний GitHub CI #38188542026](https://github.com/juv4uk/cml/actions/runs/38188542026)
+**SUCCESS**: 7/7 dedicated optimizer tests, D3 HEAD і TAIL диференційно
+порівняні з оракулом SENS, кожне правило 4→1 IR вузлів,
+T5/F3 CLI positive та wrong-SHA/format negative; повний 23 T5 / 9 F3
+корпус лишився green.
+[Першоджерельні журнали і stage-manifest](https://github.com/juv4uk/cml/actions/runs/38188542026/artifacts/11719934985).
+
 ## Подальший розвиток
 
 1. Окремі O0/O1 бенчмарки: вартість аналізу, allocations, IR,
