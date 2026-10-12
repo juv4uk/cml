@@ -255,7 +255,7 @@ jobs:
           pending={}
           opened={}
           def finish_open(pid,call,args,result):
-            if result.strip().startswith("-1") or re.search(r"=\\s*-1\\b",result): return
+            if result.strip().startswith("-1") or re.search(r"=\s*-1\b",result): return
             m=re.search(r'(?:AT_FDCWD|-?\d+)(?:<([^>]+)>)?,\s*"((?:[^"\\]|\\.)*)",\s*([^,)]*)',args)
             if not m: return
             base=m.group(1)
