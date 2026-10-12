@@ -255,7 +255,7 @@ jobs:
           pending={}
           opened={}
           def finish_open(pid,call,args,result):
-            if result.strip().startswith("-1"): return
+            if result.strip().startswith("-1") or re.search(r"=\\s*-1\\b",result): return
             m=re.search(r'(?:AT_FDCWD|-?\d+)(?:<([^>]+)>)?,\s*"((?:[^"\\]|\\.)*)",\s*([^,)]*)',args)
             if not m: return
             base=m.group(1)
@@ -286,13 +286,14 @@ jobs:
             lm=re.match(r"\s*(\d+)\s+(.*)",line)
             if not lm: continue
             pid,body=lm.group(1),lm.group(2)
+            um=re.match(r"(openat2?)\((.*)<unfinished \.\.\.>$",body)
+            if um:
+              pending[(pid,um.group(1))]=um.group(2)
+              continue
             sm=re.match(r"(openat2?)\((.*)\)\s*=\s*(.*)$",body)
             if sm:
               call,args,result=sm.group(1),sm.group(2),sm.group(3)
-              if "<unfinished ...>" in result:
-                pending[(pid,call)]=args
-              else:
-                finish_open(pid,call,args,result)
+              finish_open(pid,call,args,result)
               continue
             rm=re.match(r"<\.\.\.\s+(openat2?)\s+resumed>\)(.*)$",body)
             if rm:
