@@ -786,34 +786,77 @@
     "latest_verified_snapshot": {
       "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38186651984",
       "cml_source_commit": "f4f03066993e3fbeb824c9ae6879bc1a1059cbd6",
-      "note": "Regular-file lengths inside absolute Git-dir for the three clean checkout snapshots. This is a separately measured external metadata snapshot, not included in trusted seed and not a minimal Git object/ref set.",
+      "note": "CML .git includes nested .git/modules/external/sens; prior combined total double-counted that nested SENS metadata. The script has now been corrected to record disjoint CML-exclusive, SENS, and WSM trees. These are external metadata snapshots, not minimal seed refs/objects.",
       "clean_runs": [
         {
           "run": 1,
-          "cml": 33673307,
-          "sens_submodule": 30809435,
-          "wsm_witness": 1810848,
-          "total": 66293590,
+          "cml_gitdir_including_nested_sens": 33673307,
+          "cml_gitdir_excluding_sens_submodule": 2863872,
+          "sens_submodule_gitdir": 30809435,
+          "wsm_witness_gitdir": 1810848,
+          "raw_overlapping_sum": 66293590,
+          "disjoint_total": 35484155,
+          "overlap_removed": 30809435,
           "runner_sha256": "6fbbc819eac32253d9eadb5e1dc8e80295bdb0bde9a285076edd8d7fc9e40eb3",
           "runner_bytes": 34623904
         },
         {
           "run": 2,
-          "cml": 33675259,
-          "sens_submodule": 30811395,
-          "wsm_witness": 1810846,
-          "total": 66297500,
+          "cml_gitdir_including_nested_sens": 33675259,
+          "cml_gitdir_excluding_sens_submodule": 2863864,
+          "sens_submodule_gitdir": 30811395,
+          "wsm_witness_gitdir": 1810846,
+          "raw_overlapping_sum": 66297500,
+          "disjoint_total": 35486105,
+          "overlap_removed": 30811395,
           "runner_sha256": "6fbbc819eac32253d9eadb5e1dc8e80295bdb0bde9a285076edd8d7fc9e40eb3",
           "runner_bytes": 34623904
         }
       ],
       "run1_minus_run2": {
-        "cml": -1952,
+        "cml_gitdir_excluding_sens_submodule": 8,
         "sens_submodule": -1960,
         "wsm_witness": 2,
-        "total": -3910
+        "disjoint_total": -1950
       },
-      "full_checkout_metadata_not_minimal": true
+      "full_checkout_metadata_not_minimal": true,
+      "overlap_correction": "CML gitdir includes the SENS submodule gitdir, so older field totals that added CML + SENS + WSM were overstated by exactly the sens_submodule number. Correct non-overlapping total is CML gitdir including nested SENS + WSM witness."
+    },
+    "prior_overlapping_snapshots": [
+      {
+        "workflow_run": "https://github.com/juv4uk/cml/actions/runs/38185559594",
+        "source_commit": "e2f76f63017add8574f6c5224bf3a80857927faf",
+        "note": "Historical raw CML .git value includes .git/modules/external/sens, so do NOT add the SENS submodule value a second time. disjoint_total counts the top-level CML gitdir once plus the separate WSM checkout.",
+        "clean_runs": [
+          {
+            "run": 1,
+            "cml_gitdir_including_nested_sens": 33586639,
+            "cml_gitdir_excluding_sens_submodule": 2857494,
+            "sens_submodule_gitdir": 30729145,
+            "wsm_witness_gitdir": 1810846,
+            "raw_overlapping_sum": 66126630,
+            "disjoint_total": 35397485,
+            "overlap_removed": 30729145
+          },
+          {
+            "run": 2,
+            "cml_gitdir_including_nested_sens": 33584388,
+            "cml_gitdir_excluding_sens_submodule": 2857502,
+            "sens_submodule_gitdir": 30726886,
+            "wsm_witness_gitdir": 1810848,
+            "raw_overlapping_sum": 66122122,
+            "disjoint_total": 35395236,
+            "overlap_removed": 30726886
+          }
+        ],
+        "invalid_overlapping_totals_superseded": true
+      }
+    ],
+    "census_correction": {
+      "discovered_on": "2026-10-12",
+      "cause": "git -C external/sens rev-parse --absolute-git-dir points into CML .git/modules/external/sens; find on CML's absolute gitdir recursively includes the same nested files.",
+      "action": "Workflow changed in commit 100f30174f728cf2564ceeb2348f58bd8ac7dd06 to exclude sens_gitdir when measuring CML root .git and then measure SENS submodule once separately.",
+      "status": "The new disjoint measurement is pending K1 run 38186932277. Historical snapshots have been recalculated into disjoint totals but should not be treated as minimal Git seed."
     }
   },
   "follow_up_checkpoint": {
