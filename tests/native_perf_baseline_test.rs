@@ -47,7 +47,10 @@ fn test_corpus_records_mechanism_outcomes_without_semantic_answer_keys() {
         .iter()
         .find(|w| w.id == "buffer-map-i32")
         .expect("buffer-map-i32 observation must remain in the corpus");
-    assert!(!w3.admitted, "no historical 8-bit code can admit a current domain");
+    assert!(
+        !w3.admitted,
+        "no historical 8-bit code can admit a current domain"
+    );
     assert!(w3.verdict_source.contains("SENS current exact-domain law"));
     let blocked = w3
         .lanes
