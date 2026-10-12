@@ -75,13 +75,16 @@ jobs:
             echo "external_dependencies=rustc,cargo,gcc,ld,ubuntu-latest; excluded_from_seed_bytes"
             echo "git_metadata_policy=separately_measured_external_checkout_metadata; excluded_from_seed_bytes"
             git_file_bytes() { find "$1" -type f -printf '%s\n' | awk '{ sum += $1 } END { printf "%.0f", sum }'; }
+            git_file_bytes_excluding() { find "$1" -type f ! -path "$2/*" -printf '%s\n' | awk '{ sum += $1 } END { printf "%.0f", sum }'; }
             cml_gitdir="$(git rev-parse --absolute-git-dir)"
             sens_gitdir="$(git -C external/sens rev-parse --absolute-git-dir)"
             wsm_gitdir="$(git -C wsm-my-lisp rev-parse --absolute-git-dir)"
-            echo "cml_git_metadata_regular_file_bytes=$(git_file_bytes "$cml_gitdir")"
+            # SENS's gitdir is nested below CML's .git/modules. Count disjoint trees:
+            # CML excludes that nested directory, then SENS is counted once on its own.
+            echo "cml_git_metadata_regular_file_bytes_excluding_sens_submodule=$(git_file_bytes_excluding "$cml_gitdir" "$sens_gitdir")"
             echo "sens_git_metadata_regular_file_bytes=$(git_file_bytes "$sens_gitdir")"
             echo "wsm_git_metadata_regular_file_bytes=$(git_file_bytes "$wsm_gitdir")"
-            echo "git_metadata_note=filesystem regular-file lengths summed; not the source checkout byte total"
+            echo "git_metadata_note=disjoint checkout gitdir regular-file lengths; CML excludes nested SENS gitdir; external snapshots, not minimal seed refs/objects"
             
             echo "rustc:"
             rustc -Vv
