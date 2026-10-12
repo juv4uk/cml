@@ -673,6 +673,18 @@ jobs:
           assert all(r.get("schema") == "nano-sens-size-report/1" for r in reports)
           assert all(r.get("status") == "MEASURED_WITH_PINNED_SELFHOST_LINEAGE" for r in reports)
           assert raw[0] == raw[1], "two clean-run Nano-SENS reports differ byte-for-byte"
+
+          # The compiler-generated dep-info census is a separate, observational
+          # input ledger. Require the normalized census to reproduce exactly too.
+          census_paths = sorted(Path("artifacts").glob("*/rustc-dep-info-input-census.json"))
+          assert len(census_paths) == 2, f"expected Rust dep-info census from both runs, got {len(census_paths)}"
+          census_raw = [p.read_bytes() for p in census_paths]
+          assert census_raw[0] == census_raw[1], "Rust dep-info input census differs across clean runs"
+          censuses = [json.loads(b) for b in census_raw]
+          assert all(c.get("schema") == "nano-sens-rustc-dep-info-input-census/1" for c in censuses)
+          assert all(c.get("status") == "OBSERVED_CARGO_DEP_INFO_INPUTS_NOT_A_MINIMUM_SEED_CLOSURE_PROOF" for c in censuses)
+          assert all(c.get("dep_info_parse_error_count") == 0 for c in censuses)
+          assert all(not c.get("pinned_blob_mismatches") for c in censuses)
           result = {
               "schema": "nano-sens-two-clean-runs-proof/1",
               "status": "PASS",
@@ -698,6 +710,17 @@ jobs:
               assert graph_raw[0] == graph_raw[1], f"active Cargo graph differs between clean runs: {name}"
               graph_proof[name] = hashlib.sha256(graph_raw[0]).hexdigest()
           result["active_cargo_graphs"] = {"schema": "nano-sens-active-cargo-graphs/1", "byte_identical_across_runs": True, "sha256": graph_proof}
+          result["rustc_dep_info_census"] = {
+              "schema": "nano-sens-rustc-dep-info-census-proof/1",
+              "byte_identical_across_runs": True,
+              "sha256": hashlib.sha256(census_raw[0]).hexdigest(),
+              "dep_info_file_count": censuses[0]["dep_info_file_count"],
+              "unique_existing_regular_input_files": censuses[0]["unique_existing_regular_input_files"],
+              "unique_existing_regular_input_bytes_at_census": censuses[0]["unique_existing_regular_input_bytes_at_census"],
+              "unresolved_or_unreadable_dep_token_count": len(censuses[0]["unresolved_or_unreadable_dep_tokens"]),
+              "by_classification": censuses[0]["by_classification"],
+              "scope": "observed compiler inputs; not a minimum seed closure or a seed-size total"
+          }
           Path("nano-sens-two-clean-runs-proof.json").write_text(
               json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8"
           )
@@ -713,5 +736,6 @@ jobs:
             artifacts/*/compiler-selfhost-lineage-report.json
             artifacts/*/nano-sens-size-report.json
             artifacts/*/bootstrap-input-manifest.txt
+            artifacts/*/rustc-dep-info-input-census.json
           retention-days: 30
           if-no-files-found: error
