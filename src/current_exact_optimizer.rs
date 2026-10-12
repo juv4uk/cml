@@ -21,7 +21,8 @@
 //! This module is candidate-only until native CML codegen has its own parity.
 
 use crate::current_exact_model::{
-    verified_role, CmlMechanism, ModernIr, ModernLowerError, VerifiedProgramIr, VerifiedRole,
+    lower_canonical_t5_bytes, verified_role, CmlMechanism, ModernIr, ModernLowerError,
+    VerifiedProgramIr, VerifiedRole,
 };
 use sens::{CompilerLoweringRole, CoreDomainIdentity};
 
@@ -232,6 +233,25 @@ pub fn optimize_exact_ir(input: &VerifiedProgramIr)
         canonical_t5_sha256: input.canonical_t5_sha256,
         original_nodes, optimized_nodes, ir, witnesses,
     })
+}
+
+/// Operator-facing opt-in entry: physical exact T5 -> canonical SENS-owned
+/// parser + admitted domains -> original verified CML IR -> O1 optimizer.
+/// This can NEVER infer domains from packed bytes or human spellings, and
+/// it does not alter or overwrite the original physical file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OptimizePipelineError {
+    InvalidPhysicalOrSemanticSource(ModernLowerError),
+    UnsoundOrUnverifiedRewrite(OptimizeError),
+}
+
+pub fn optimize_canonical_t5(physical_t5: &[u8])
+    -> Result<OptimizedProgram, OptimizePipelineError>
+{
+    let source = lower_canonical_t5_bytes(physical_t5)
+        .map_err(OptimizePipelineError::InvalidPhysicalOrSemanticSource)?;
+    optimize_exact_ir(&source)
+        .map_err(OptimizePipelineError::UnsoundOrUnverifiedRewrite)
 }
 
 /// Replay against the original SENS-law-verified IR and compare the complete
