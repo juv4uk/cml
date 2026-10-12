@@ -3,7 +3,8 @@
 use cml_current_sens_transport::{
     current_exact_model::{CmlMechanism, ExactQuotedData, ModernIr},
     current_exact_optimizer::{
-        optimize_exact_ir, replay_optimizer_witness, OptimizeError, RewriteLaw,
+        optimize_canonical_t5, optimize_exact_ir, replay_optimizer_witness,
+        OptimizeError, OptimizePipelineError, RewriteLaw,
     },
     modern_ir::lower_verified_program,
     VerifiedPhysicalProgram,
@@ -39,6 +40,7 @@ fn both_verified_selector_laws_reduce_pure_pairs_and_match_the_sens_oracle() {
         assert_eq!(candidate.original_nodes, 4);
         assert_eq!(candidate.optimized_nodes, 1);
         assert!(replay_optimizer_witness(&source_ir, &candidate).unwrap());
+        assert_eq!(optimize_canonical_t5(&t5).unwrap(), candidate);
         assert_eq!(candidate.canonical_t5_sha256, sens::sha256_source(&t5));
         let independent_quote = format!("10 001 {selected} 01");
         let (_small_t5, expected, compiled_quote) = compile_exact_source(&independent_quote);
@@ -128,4 +130,27 @@ fn optimizer_is_conservative_on_the_real_tiny_quote_carrier() {
     assert_eq!(result.original_nodes, result.optimized_nodes);
     assert_eq!(result.ir, ir.ir);
     assert!(replay_optimizer_witness(&ir, &result).unwrap());
+}
+
+#[test]
+fn exact_physical_only_compiler_entry_rejects_f3_as_t5_and_truncated_carriers() {
+    use cml_current_sens_transport::current_exact_optimizer::OptimizePipelineError::*;
+    for bytes in [
+        vec![],
+        vec![0xf3, 0x40, 0x60],
+        vec![0x63, 0x89, 0x06],
+        vec![0xff; 9],
+    ] {
+        assert!(
+            matches!(optimize_canonical_t5(&bytes),
+                Err(InvalidPhysicalOrSemanticSource(_))),
+            "no physical fallback or decoder sniffing permitted for {bytes:02x?}"
+        );
+    }
+    let original = [0x63, 0x89, 0x06, 0xa1];
+    let optimized = optimize_canonical_t5(&original).unwrap();
+    assert_eq!(optimized.canonical_t5_sha256, sens::sha256_source(&original));
+    assert_eq!(optimized.original_nodes, optimized.optimized_nodes);
+    assert!(optimized.witnesses.is_empty());
+    println!("CML_SENS_OPTIMIZER_PHYSICAL_FAIL_CLOSED_PASS no_autodetect=true");
 }
