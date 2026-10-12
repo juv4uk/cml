@@ -85,6 +85,8 @@ def normalize_display_path(
     try:
         rel = resolved.relative_to(cargo_home)
         return f"external-cargo-home/{rel.as_posix()}", "external_cargo_home_source_or_metadata"
+    except ValueError:
+        pass
 
     for target_root in target_roots:
         try:
