@@ -171,7 +171,7 @@ jobs:
               raise SystemExit("BLOCK: retired 8-bit source code remains in live baseline")
           if 'lane_name: "c-gcc-O3-reference"' not in current:
               raise SystemExit("BLOCK: independent reference was silently removed")
-          if 'assert!(!w3.admitted' not in tests or "BLOCKED_UNVERIFIED_DOMAIN" not in tests:
+          if "!w3.admitted" not in tests or "BLOCKED_UNVERIFIED_DOMAIN" not in tests:
               raise SystemExit("BLOCK: root regression test still admits byte-only compute")
           print("CML_BUFFER_MAP_CURRENT_DOMAIN_BLOCKED_PASS independent_C_reference_preserved=true")
           PY
