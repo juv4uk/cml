@@ -1,8 +1,8 @@
 name: Hosted runner routing policy
 
+# Owner 2026-10-13: quarantine GitHub-hosted policy checks while CI contracts are corrected.
+# This check can be inspected manually but must not consume runners on push or PR.
 on:
-  pull_request:
-  push:
   workflow_dispatch:
 
 permissions:
