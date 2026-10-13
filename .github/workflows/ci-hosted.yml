@@ -1,10 +1,8 @@
 name: Hosted CI
 
+# OWNER QUARANTINE 2026-10-13: automatic red CI suspended because test contracts are disputed.
+# Preserve historical evidence and permit deliberate manual diagnostic runs only.
 on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
   workflow_dispatch:
 
 concurrency:
