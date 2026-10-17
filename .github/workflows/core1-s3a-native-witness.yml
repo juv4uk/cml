@@ -61,7 +61,13 @@ jobs:
           printf 'S2 compiler sha256: '
           sha256sum wsm-my-lisp/lib/compiler.lisp | cut -d' ' -f1
 
-          test "$(git -C external/sens rev-parse HEAD)" = "e908b6934f0f9cfdc1bea132af399f636231be39"
+          # external/sens — це build-source provenance, не frozen Core1 input pin.
+          # Джерело істини — сам gitlink у дереві, а не дубльований тут литерал:
+          # дубль застарів (e908b693) і розходився з pin a69f4dd1, бо его треба було
+          # оновлювати вручну щоразу. Guard лишається реальним: він ловить
+          # submodule, checkout-нутий не з gitlink (як локальний file:// bypass у
+          # gpu-cuda-live.yml), але сам більше не може розійтися з authority.
+          test "$(git -C external/sens rev-parse HEAD)" = "$(git rev-parse HEAD:external/sens)"
           test "$(git -C upstream-sens rev-parse HEAD)" = "d359c4885e0609a6c8350daf45de157b40cf48f3"
           test "$(git -C upstream-sens hash-object lib/core1-compiler-prelude.lisp)" = "dfc8f0074464f9f1d2b71a97a9ab4184925ca3a1"
           test "$(git -C wsm-my-lisp rev-parse HEAD)" = "a6bd9747196f2d676ab6883cbb4b84c7fcfc6947"
