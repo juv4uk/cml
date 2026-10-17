@@ -27,6 +27,7 @@ impl EvidenceKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PassDescriptor {
     pub id: &'static str,
+    pub version: u32,
     pub input: &'static str,
     pub output: &'static str,
     /// The equality/safety obligation this pass must eventually discharge.
@@ -45,6 +46,7 @@ pub struct PassDescriptor {
 pub const PASS_MANIFEST: &[PassDescriptor] = &[
     PassDescriptor {
         id: "ast.constant-fold.pratyahara",
+        version: 1,
         input: "parsed-ast",
         output: "folded-ast",
         obligation: "preserve observable meaning while respecting quote as a data barrier",
@@ -52,6 +54,7 @@ pub const PASS_MANIFEST: &[PassDescriptor] = &[
     },
     PassDescriptor {
         id: "ast.semantic-admission",
+        version: 1,
         input: "folded-ast",
         output: "admitted-ast-or-named-error",
         obligation: "admit existing meaning or fail with a named semantic error; never mint meaning",
@@ -59,6 +62,7 @@ pub const PASS_MANIFEST: &[PassDescriptor] = &[
     },
     PassDescriptor {
         id: "ast-to-ir.lower",
+        version: 1,
         input: "admitted-ast",
         output: "cml-ir",
         obligation: "preserve the upstream observable on every supported mechanism",
@@ -66,6 +70,7 @@ pub const PASS_MANIFEST: &[PassDescriptor] = &[
     },
     PassDescriptor {
         id: "ir.tail-self-call",
+        version: 1,
         input: "cml-ir",
         output: "cml-ir-tail",
         obligation: "rewrite only direct self calls in tail position while preserving arguments and control structure",
@@ -92,6 +97,7 @@ mod tests {
                 "duplicate compiler pass id: {}",
                 pass.id
             );
+            assert!(pass.version > 0);
             assert!(!pass.input.is_empty());
             assert!(!pass.output.is_empty());
             assert!(!pass.obligation.is_empty());
