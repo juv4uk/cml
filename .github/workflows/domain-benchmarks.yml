@@ -1,0 +1,109 @@
+name: Domain/compiler mechanism benchmarks
+
+on:
+  pull_request:
+    paths:
+      - "benchmarks/selector-unroll-threshold/**"
+      - "benchmarks/packed-selector-suffix/**"
+      - ".github/workflows/domain-benchmarks.yml"
+  push:
+    branches: [master]
+    paths:
+      - "benchmarks/selector-unroll-threshold/**"
+      - "benchmarks/packed-selector-suffix/**"
+      - ".github/workflows/domain-benchmarks.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: cml-domain-bench-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  selector-unroll-threshold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+
+      - name: Install benchmark tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind gcc binutils
+          gcc --version | head -1
+          valgrind --version
+
+      - name: Run selector unroll threshold
+        run: |
+          rm -rf /tmp/cml-domain-bench
+          python3 benchmarks/selector-unroll-threshold/run.py \
+            --out-dir /tmp/cml-domain-bench/selector-unroll \
+            --calls 20000 \
+            --reps 2
+
+      - name: Publish selector summary
+        if: always()
+        run: |
+          {
+            echo '## Selector unroll threshold'
+            echo
+            echo 'Research-only mechanism evidence; not a production threshold.'
+            echo
+            if test -f /tmp/cml-domain-bench/selector-unroll/summary.tsv; then
+              echo '```text'
+              cat /tmp/cml-domain-bench/selector-unroll/summary.tsv
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cml-selector-unroll-threshold
+          path: /tmp/cml-domain-bench/selector-unroll
+          retention-days: 7
+  packed-selector-suffix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+
+      - name: Install benchmark tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind gcc binutils
+          gcc --version | head -1
+          valgrind --version
+
+      - name: Run packed suffix benchmark
+        run: |
+          rm -rf /tmp/cml-domain-bench-packed
+          python3 benchmarks/packed-selector-suffix/run.py \
+            --out-dir /tmp/cml-domain-bench-packed \
+            --calls 20000 \
+            --reps 2
+
+      - name: Publish packed suffix summary
+        if: always()
+        run: |
+          {
+            echo '## Packed selector suffix'
+            echo
+            echo 'Research-only mechanism evidence; not a production threshold.'
+            echo
+            if test -f /tmp/cml-domain-bench-packed/summary.tsv; then
+              echo '```text'
+              cat /tmp/cml-domain-bench-packed/summary.tsv
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cml-packed-selector-suffix
+          path: /tmp/cml-domain-bench-packed
+          retention-days: 7

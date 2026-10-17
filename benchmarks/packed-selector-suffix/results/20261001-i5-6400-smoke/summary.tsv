@@ -1,0 +1,16 @@
+depth	candidate	net_i_refs_per_call	code_bytes	descriptor_bytes	static_footprint_bytes	primitive_steps	runtime_path_decode_ops
+8	unrolled	33.998	29	0	29	8	0
+8	byte	118.000	52	8	60	8	8
+8	packed	190.001	89	1	90	8	8
+16	unrolled	41.998	57	0	57	16	0
+16	byte	174.000	52	16	68	16	16
+16	packed	285.999	89	2	91	16	16
+32	unrolled	57.998	113	0	113	32	0
+32	byte	286.000	52	32	84	32	32
+32	packed	477.999	89	4	93	32	32
+64	unrolled	89.998	225	0	225	64	0
+64	byte	510.000	52	64	116	64	64
+64	packed	861.999	89	8	97	64	64
+128	unrolled	153.998	449	0	449	128	0
+128	byte	958.000	52	128	180	128	128
+128	packed	1629.997	89	16	105	128	128

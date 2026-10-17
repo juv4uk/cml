@@ -1,0 +1,73 @@
+case_id	candidate	family	semantic_depth	mode	rep	i_refs	tree_steps	root_selections	bits_consumed	generator_apps	registry_lookups	residue_lookups	cache_hits	cache_misses	allocations	allocated_bytes	object_bytes	wire_bits	compiler_phase	machine_insts	code_bytes	loads	stores	branches	calls	spills	corpus_sha	binary_sha	git_sha	guix_channels_sha	cpu	valgrind_version
+selector-depth-0	base	selector	0	execute	1	1994549					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-0	base	selector	0	execute	2	1994549					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-0	base	selector	0	execute	3	1994549					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-0	unrolled	selector	0	execute	1	3344555	0	1	0	0	0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-0	unrolled	selector	0	execute	2	3344555	0	1	0	0	0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-0	unrolled	selector	0	execute	3	3344555	0	1	0	0	0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-0	loop	selector	0	execute	1	4994549	0	1	0	0	0	0	0	0	0	0	0				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-0	loop	selector	0	execute	2	4994549	0	1	0	0	0	0	0	0	0	0	0				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-0	loop	selector	0	execute	3	4994549	0	1	0	0	0	0	0	0	0	0	0				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-1	base	selector	1	execute	1	1994581					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-1	base	selector	1	execute	2	1994581					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-1	base	selector	1	execute	3	1994581					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-1	unrolled	selector	1	execute	1	3344587	1	1	1	1	0	0	0	0	0	0	0				5								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-1	unrolled	selector	1	execute	2	3344587	1	1	1	1	0	0	0	0	0	0	0				5								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-1	unrolled	selector	1	execute	3	3344587	1	1	1	1	0	0	0	0	0	0	0				5								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-1	loop	selector	1	execute	1	5444581	1	1	1	1	0	0	0	0	0	0	1				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-1	loop	selector	1	execute	2	5444581	1	1	1	1	0	0	0	0	0	0	1				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-1	loop	selector	1	execute	3	5444581	1	1	1	1	0	0	0	0	0	0	1				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-2	base	selector	2	execute	1	1994608					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-2	base	selector	2	execute	2	1994608					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-2	base	selector	2	execute	3	1994608					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-2	unrolled	selector	2	execute	1	3394614	2	1	2	2	0	0	0	0	0	0	0				8								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-2	unrolled	selector	2	execute	2	3394614	2	1	2	2	0	0	0	0	0	0	0				8								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-2	unrolled	selector	2	execute	3	3394614	2	1	2	2	0	0	0	0	0	0	0				8								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-2	loop	selector	2	execute	1	5794608	2	1	2	2	0	0	0	0	0	0	2				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-2	loop	selector	2	execute	2	5794608	2	1	2	2	0	0	0	0	0	0	2				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-2	loop	selector	2	execute	3	5794608	2	1	2	2	0	0	0	0	0	0	2				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-4	base	selector	4	execute	1	1994660					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-4	base	selector	4	execute	2	1994660					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-4	base	selector	4	execute	3	1994660					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-4	unrolled	selector	4	execute	1	3494666	4	1	4	4	0	0	0	0	0	0	0				15								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-4	unrolled	selector	4	execute	2	3494666	4	1	4	4	0	0	0	0	0	0	0				15								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-4	unrolled	selector	4	execute	3	3494666	4	1	4	4	0	0	0	0	0	0	0				15								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-4	loop	selector	4	execute	1	6494660	4	1	4	4	0	0	0	0	0	0	4				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-4	loop	selector	4	execute	2	6494660	4	1	4	4	0	0	0	0	0	0	4				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-4	loop	selector	4	execute	3	6494660	4	1	4	4	0	0	0	0	0	0	4				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-8	base	selector	8	execute	1	1994767					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-8	base	selector	8	execute	2	1994767					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-8	base	selector	8	execute	3	1994767					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-8	unrolled	selector	8	execute	1	3694773	8	1	8	8	0	0	0	0	0	0	0				29								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-8	unrolled	selector	8	execute	2	3694773	8	1	8	8	0	0	0	0	0	0	0				29								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-8	unrolled	selector	8	execute	3	3694773	8	1	8	8	0	0	0	0	0	0	0				29								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-8	loop	selector	8	execute	1	7894767	8	1	8	8	0	0	0	0	0	0	8				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-8	loop	selector	8	execute	2	7894767	8	1	8	8	0	0	0	0	0	0	8				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-8	loop	selector	8	execute	3	7894767	8	1	8	8	0	0	0	0	0	0	8				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-16	base	selector	16	execute	1	1994999					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-16	base	selector	16	execute	2	1994999					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-16	base	selector	16	execute	3	1994999					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-16	unrolled	selector	16	execute	1	4095005	16	1	16	16	0	0	0	0	0	0	0				57								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-16	unrolled	selector	16	execute	2	4095005	16	1	16	16	0	0	0	0	0	0	0				57								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-16	unrolled	selector	16	execute	3	4095005	16	1	16	16	0	0	0	0	0	0	0				57								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-16	loop	selector	16	execute	1	10694999	16	1	16	16	0	0	0	0	0	0	16				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-16	loop	selector	16	execute	2	10694999	16	1	16	16	0	0	0	0	0	0	16				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-16	loop	selector	16	execute	3	10694999	16	1	16	16	0	0	0	0	0	0	16				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-32	base	selector	32	execute	1	1995423					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-32	base	selector	32	execute	2	1995423					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-32	base	selector	32	execute	3	1995423					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-32	unrolled	selector	32	execute	1	4895429	32	1	32	32	0	0	0	0	0	0	0				113								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-32	unrolled	selector	32	execute	2	4895429	32	1	32	32	0	0	0	0	0	0	0				113								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-32	unrolled	selector	32	execute	3	4895429	32	1	32	32	0	0	0	0	0	0	0				113								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-32	loop	selector	32	execute	1	16295423	32	1	32	32	0	0	0	0	0	0	32				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-32	loop	selector	32	execute	2	16295423	32	1	32	32	0	0	0	0	0	0	32				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-32	loop	selector	32	execute	3	16295423	32	1	32	32	0	0	0	0	0	0	32				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-64	base	selector	64	execute	1	1996271					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-64	base	selector	64	execute	2	1996271					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-64	base	selector	64	execute	3	1996271					0	0	0	0	0	0	0				4								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-64	unrolled	selector	64	execute	1	6496277	64	1	64	64	0	0	0	0	0	0	0				225								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-64	unrolled	selector	64	execute	2	6496277	64	1	64	64	0	0	0	0	0	0	0				225								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-64	unrolled	selector	64	execute	3	6496277	64	1	64	64	0	0	0	0	0	0	0				225								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-64	loop	selector	64	execute	1	27496271	64	1	64	64	0	0	0	0	0	0	64				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-64	loop	selector	64	execute	2	27496271	64	1	64	64	0	0	0	0	0	0	64				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
+selector-depth-64	loop	selector	64	execute	3	27496271	64	1	64	64	0	0	0	0	0	0	64				52								601f11277f20e32e5d8c6074333d606bfc1ef9c5		Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz	valgrind-3.27.0
